@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import Observation
 
 // Voice notes (§4.4, S05). Speak is press-and-hold; the waveform draws live
 // in your ink; release keeps it, drag away discards. A recording under ~1 s

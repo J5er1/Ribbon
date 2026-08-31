@@ -16,7 +16,7 @@ import SwiftUI
 // so the most conspicuous glass slab in a typical iOS app simply doesn't
 // exist here.
 
-private struct RibbonGlass<S: Shape>: ViewModifier {
+private struct RibbonGlass<S: InsettableShape>: ViewModifier {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     var shape: S
     var interactive: Bool
@@ -43,7 +43,7 @@ private struct RibbonGlass<S: Shape>: ViewModifier {
 extension View {
     /// Ribbon's floating chrome material: system glass tinted toward the
     /// unlit ground, legible mostly by its edge.
-    func ribbonGlass(in shape: some Shape = Capsule(), interactive: Bool = false) -> some View {
+    func ribbonGlass(in shape: some InsettableShape = Capsule(), interactive: Bool = false) -> some View {
         modifier(RibbonGlass(shape: shape, interactive: interactive))
     }
 }

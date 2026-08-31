@@ -167,6 +167,7 @@ struct RootView: View {
 
 extension AppModel {
     /// Onboarded enough to show the room: a person exists. (The room's own
-    /// first-run state handles "no book yet.")
-    var isOnboardedPerson: Bool { me != nil && currentRoom != nil }
+    /// first-run state handles "no book yet," and a person with no rooms
+    /// gets a fresh room of one, not a second onboarding.)
+    var isOnboardedPerson: Bool { me != nil }
 }

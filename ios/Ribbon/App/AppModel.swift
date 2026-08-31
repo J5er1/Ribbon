@@ -94,11 +94,23 @@ final class AppModel {
     // MARK: - Onboarding & rooms
 
     func completeOnboarding(name: String, portraitData: Data?) async {
+        // A person exists once, ever: re-running the thread must never
+        // mint a second identity and orphan what the first one left.
+        if state.me != nil {
+            updateMe(name: name)
+            if let portraitData {
+                await setPortrait(portraitData)
+            }
+            if currentRoom == nil {
+                createRoom(named: nil)
+            }
+            return
+        }
         let personID = UUID()
         var portraitPath: String?
         if let portraitData {
             portraitPath = try? await store.writePortrait(portraitData, personID: personID)
-            if let image = portraitData.flatMap(UIImage.init(data:)) { portraits[personID] = image }
+            if let image = UIImage(data: portraitData) { portraits[personID] = image }
         }
         let person = Person(id: personID, name: name, portraitPath: portraitPath, translation: .bsb)
         state.me = person
@@ -204,7 +216,7 @@ final class AppModel {
     func recordReadingActivity(reading: Reading, at address: VerseAddress) {
         guard let me = state.me,
               let index = state.readings.firstIndex(where: { $0.id == reading.id }),
-              let room = currentRoom
+              let room = state.rooms.first(where: { $0.id == reading.roomID })
         else { return }
         let banked = quietDays(for: room).bankedIntervals
         state.readings[index].handiwork.feed(by: me.id, at: Date(), bankedIntervals: banked)

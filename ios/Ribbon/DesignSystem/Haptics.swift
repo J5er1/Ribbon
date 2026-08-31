@@ -27,7 +27,7 @@ final class Haptics {
             let engine = try CHHapticEngine()
             engine.playsHapticsOnly = true
             engine.resetHandler = { [weak self] in
-                Task { @MainActor in try? self?.engine?.start() }
+                Task { @MainActor in try? await self?.engine?.start() }
             }
             try engine.start()
             self.engine = engine
