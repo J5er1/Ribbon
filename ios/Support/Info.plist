@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDisplayName</key>
+	<string>Ribbon</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Ribbon needs the microphone to record a note.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Ribbon turns voice notes into transcripts, on this phone.</string>
+	<key>UIAppFonts</key>
+	<array>
+		<string>Literata[opsz,wght].ttf</string>
+		<string>Literata-Italic[opsz,wght].ttf</string>
+		<string>AlegreyaSans-Regular.ttf</string>
+		<string>AlegreyaSans-Italic.ttf</string>
+		<string>AlegreyaSans-Medium.ttf</string>
+		<string>AlegreyaSans-Bold.ttf</string>
+		<string>AlegreyaSansSC-Regular.ttf</string>
+		<string>AlegreyaSansSC-Medium.ttf</string>
+	</array>
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIColorName</key>
+		<string>LaunchBackground</string>
+	</dict>
+	<key>UIUserInterfaceStyle</key>
+	<string>Dark</string>
+</dict>
+</plist>
