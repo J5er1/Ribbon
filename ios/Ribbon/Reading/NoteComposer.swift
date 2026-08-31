@@ -95,6 +95,9 @@ struct InkSwatch: View {
 struct WriteComposer: View {
     let verse: VerseAddress
     var initialText: String = ""
+    /// Changes when the note being edited changes, so a switch mid-compose
+    /// starts from that note's own words rather than a stale draft.
+    var identity: String = ""
     var onSave: (String) -> Void
     var onCancel: () -> Void
 
@@ -102,6 +105,10 @@ struct WriteComposer: View {
     @FocusState private var focused: Bool
 
     var body: some View {
+        composerBody.id(identity)
+    }
+
+    private var composerBody: some View {
         VStack(alignment: .leading, spacing: 10) {
             SmallCaps(verse.formatted, size: 12)
             TextField("", text: $text, axis: .vertical)
@@ -209,6 +216,14 @@ struct SpeakControl: View {
                         onDismiss()  // a mis-touch, discarded silently
                     }
                 })
+        .onDisappear {
+            // The composer leaving the screen for any reason — a tap in
+            // the text, the book closing — ends the recording. The mic is
+            // never left hot.
+            if recorder.isRecording {
+                recorder.discard()
+            }
+        }
         .task {
             if let free = LocalStore.freeMegabytes(), free < 20 {
                 storageFull = true

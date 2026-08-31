@@ -33,7 +33,9 @@ struct ReadingScreen: View {
     @State private var chapterLayouts: [Int: ChapterLayout] = [:]
     @State private var chapterFrames: [Int: CGRect] = [:]
     @State private var closing = false
+    @State private var fingerDown = false
     @State private var lastFuelRecord = Date.distantPast
+    @State private var lastPositionSave = Date.distantPast
     @State private var highlightLabel: Highlight?
     @State private var didReachEnd = false
     /// After a follow ends, the form quietly offers "back to where you
@@ -81,9 +83,13 @@ struct ReadingScreen: View {
             } action: { _, offset in
                 // The closing drag: pulled well past the top, the page
                 // settles closed. Always duplicated by the Wave (§11).
-                if offset < -90, !closing {
+                // Only a finger's pull closes — a momentum bounce doesn't.
+                if offset < -90, fingerDown, !closing {
                     close()
                 }
+            }
+            .onScrollPhaseChange { _, newPhase in
+                fingerDown = newPhase == .interacting || newPhase == .tracking
             }
             .onAppear {
                 let position = openAt ?? model.myPosition(in: reading)
@@ -296,6 +302,7 @@ struct ReadingScreen: View {
             WriteComposer(
                 verse: address,
                 initialText: editingNote?.body ?? "",
+                identity: editingNote?.id.uuidString ?? address.formatted,
                 onSave: { body in
                     if let note = editingNote {
                         model.editWrittenNote(note, body: body)
@@ -371,7 +378,7 @@ struct ReadingScreen: View {
             .padding(16)
             .ribbonGlass(in: RoundedRectangle(cornerRadius: 16))
             .onTapGesture { highlightLabel = nil }
-            .task {
+            .task(id: highlight.id) {
                 try? await Task.sleep(for: .seconds(2.6))
                 withAnimation(RibbonMotion.arrive) { highlightLabel = nil }
             }
@@ -473,6 +480,9 @@ struct ReadingScreen: View {
             if openNoteVerse == address {
                 closeNote()
             } else {
+                // Stale geometry from the last open note would place this
+                // one wrong for a frame.
+                noteSlotY[address.chapter] = nil
                 openNoteVerse = address
                 for note in model.notes(in: reading, chapter: address.chapter)
                 where note.verse.verse == address.verse {
@@ -485,6 +495,7 @@ struct ReadingScreen: View {
     private func closeNote() {
         withAnimation(RibbonMotion.settle) {
             openNoteVerse = nil
+            noteSlotY = [:]
         }
     }
 
@@ -524,7 +535,12 @@ struct ReadingScreen: View {
             .filter { $0.value <= yInChapter }
             .max { $0.value < $1.value }?.key ?? 1
         let address = VerseAddress(bookID: reading.bookID, chapter: chapter, verse: verse)
-        model.savePosition(reading: reading, address: address)
+        // Position saves are cheap but not free — a scroll emits geometry
+        // every frame, and the store persists on mutation.
+        if Date().timeIntervalSince(lastPositionSave) > 2 {
+            lastPositionSave = Date()
+            model.savePosition(reading: reading, address: address)
+        }
         if Date().timeIntervalSince(lastFuelRecord) > 25 {
             recordFuel(at: address)
         }

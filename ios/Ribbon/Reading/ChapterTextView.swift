@@ -120,6 +120,9 @@ struct ChapterTextView: UIViewRepresentable {
         storage.addLayoutManager(layoutManager)
         let container = NSTextContainer(size: CGSize(width: 0, height: .greatestFiniteMagnitude))
         container.lineFragmentPadding = 0
+        // The container must follow the view's width or nothing wraps —
+        // TextKit 1 treats a fixed 0 as unbounded.
+        container.widthTracksTextView = true
         layoutManager.addTextContainer(container)
 
         let view = UITextView(frame: .zero, textContainer: container)
@@ -146,15 +149,23 @@ struct ChapterTextView: UIViewRepresentable {
 
     func updateUIView(_ view: UITextView, context: Context) {
         context.coordinator.parent = self
-        let text = Self.attributedText(
-            chapter: chapter, bookName: bookName, theme: theme,
-            liftedVerses: liftedVerses, isFirstChapter: isFirstChapter,
-            showMarginHint: showMarginHint)
-        if !text.isEqual(to: view.attributedText) {
-            view.attributedText = text
+        // Rebuild the page only when something that sets it changed — the
+        // body re-evaluates on every scroll tick, and NSShadow has no
+        // value equality, so an isEqual comparison can't be the gate.
+        let buildKey = [
+            bookName, String(chapter.n), String(describing: theme),
+            liftedVerses.map(String.init(describing:)) ?? "-",
+            String(isFirstChapter), String(showMarginHint),
+        ].joined(separator: "|")
+        if context.coordinator.builtKey != buildKey {
+            context.coordinator.builtKey = buildKey
+            view.attributedText = Self.attributedText(
+                chapter: chapter, bookName: bookName, theme: theme,
+                liftedVerses: liftedVerses, isFirstChapter: isFirstChapter,
+                showMarginHint: showMarginHint)
         }
         if let ink = view.layoutManager as? InkLayoutManager {
-            ink.washes = verseInks.compactMap { verse, inks -> WashSpec? in
+            let washes = verseInks.compactMap { verse, inks -> WashSpec? in
                 guard !inks.isEmpty,
                       let range = Self.characterRange(ofVerse: verse, in: view.attributedText)
                 else { return nil }
@@ -164,6 +175,16 @@ struct ChapterTextView: UIViewRepresentable {
                 }
                 let alpha = min(0.45, Palette.highlightWash + 0.14 * Double(inks.count - 1))
                 return WashSpec(range: range, color: color, alpha: alpha)
+            }.sorted { $0.range.location < $1.range.location }
+            let changed = washes.map(\.range) != ink.washes.map(\.range)
+                || washes.map(\.alpha) != ink.washes.map(\.alpha)
+                || washes.map(\.color) != ink.washes.map(\.color)
+            if changed {
+                ink.washes = washes
+                // The glyphs live in the text container's own drawing pass;
+                // invalidating the view's layer would not repaint them.
+                view.layoutManager.invalidateDisplay(
+                    forGlyphRange: NSRange(location: 0, length: view.layoutManager.numberOfGlyphs))
             }
         }
         // The open note carves space beneath its verse's last line.
@@ -186,8 +207,11 @@ struct ChapterTextView: UIViewRepresentable {
                 }
             }
         }
-        view.textContainer.exclusionPaths = exclusions
-        view.setNeedsDisplay()
+        // Reassigning exclusion paths invalidates layout even when nothing
+        // changed — only touch them on a real change.
+        if view.textContainer.exclusionPaths.map(\.bounds) != exclusions.map(\.bounds) {
+            view.textContainer.exclusionPaths = exclusions
+        }
         context.coordinator.reportLayoutSoon()
     }
 
@@ -203,6 +227,7 @@ struct ChapterTextView: UIViewRepresentable {
     final class Coordinator: NSObject {
         var parent: ChapterTextView
         weak var textView: UITextView?
+        var builtKey: String?
         private var pendingReport = false
 
         init(_ parent: ChapterTextView) {

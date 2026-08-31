@@ -14,7 +14,10 @@ final class VoiceRecorder: NSObject, AVAudioRecorderDelegate {
     private var meterTimer: Timer?
 
     /// Live, normalized peaks while recording — the waveform in your ink.
+    /// Ring-buffered for display; the full take accumulates separately so
+    /// a long note's stored waveform covers the whole recording.
     private(set) var livePeaks: [Float] = []
+    private var allPeaks: [Float] = []
     private(set) var isRecording = false
     /// Set when a system interruption (a call) ended the recording early:
     /// what was captured is kept and offered.
@@ -41,6 +44,7 @@ final class VoiceRecorder: NSObject, AVAudioRecorderDelegate {
         guard !isRecording else { return }
         interrupted = false
         livePeaks = []
+        allPeaks = []
         fileURL = url
         do {
             let session = AVAudioSession.sharedInstance()
@@ -74,7 +78,9 @@ final class VoiceRecorder: NSObject, AVAudioRecorderDelegate {
         // Map -50…0 dB to 0…1 with a gentle floor so silence still draws a
         // thread.
         let level = max(0, min(1, (db + 50) / 50))
-        livePeaks.append(max(0.06, pow(level, 1.6)))
+        let peak = max(0.06, pow(level, 1.6))
+        livePeaks.append(peak)
+        allPeaks.append(peak)
         if livePeaks.count > 600 { livePeaks.removeFirst(livePeaks.count - 600) }
     }
 
@@ -91,7 +97,7 @@ final class VoiceRecorder: NSObject, AVAudioRecorderDelegate {
             try? FileManager.default.removeItem(at: fileURL)
             return nil
         }
-        return (fileURL, Self.downsample(livePeaks, to: 96))
+        return (fileURL, Self.downsample(allPeaks, to: 96))
     }
 
     /// Drag away to discard — the waveform recedes rather than a dialog
@@ -103,6 +109,7 @@ final class VoiceRecorder: NSObject, AVAudioRecorderDelegate {
         recorder = nil
         isRecording = false
         livePeaks = []
+        allPeaks = []
     }
 
     private func stopMetering() {
