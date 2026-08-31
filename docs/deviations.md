@@ -7,18 +7,26 @@ reasoning.
 
 ## From the build book
 
-1. **The app icon's R is set in Literata, not Cesso.** The icon spec
-   (§12.1) is the Cesso R. — ivory R, chartreuse period, on `#0B0B0A`.
-   Cesso is an Adobe face that cannot be embedded, and no outlined R
-   asset exists in the repo (open question §16.12). The composition is
-   exactly the spec; the letterform is Literata's R at high optical size
-   until the Cesso outline is provided. Swapping it is a one-line change
-   in `tools/make_assets.py`.
+1. **The app icon is the true Cesso R.** — resolved. The shipped
+   `AppIcon.png` (and the masters in `mark/ribbon-icon-cesso-2048.png`
+   and `mark/ribbon-wordmark-cesso.png`) were rendered from the real
+   Cesso Regular under the project owner's Adobe Fonts entitlement (web
+   kit `sqw7zeu`, family css name `cesso`): the letterforms were rendered
+   in a headless browser at 2× and downsampled — no font file is
+   embedded or committed, only the rasters, which is the permitted
+   logo-image use. To regenerate: fetch `https://use.typekit.net/sqw7zeu.css`,
+   download its woff2 transiently, render "R." at 620px on a 1024pt
+   `#0B0B0A` canvas (ivory `#F3F0E6` R, chartreuse `#D6E45C` period,
+   `margin-left: 0.02em`), screenshot at 2×, downscale. The woff2 must
+   never be committed. `make_icon()` in `tools/make_assets.py` remains as
+   the entitlement-free fallback (Literata stand-in).
 
-2. **In-app display type is Literata standing in for Cesso.** Same
-   licensing reason. Everywhere the book says "in Cesso" (book name on the
-   room screen, the finishing line, an ember record) currently sets
-   Literata at display sizes via `RibbonType.display`.
+2. **In-app display type is Literata standing in for Cesso.** The icon
+   and wordmark are settled (above), but *live text* in Cesso inside the
+   app would mean bundling the font, which is a different Adobe license —
+   exactly open question §16.12. Everywhere the book says "in Cesso"
+   (book name on the room screen, the finishing line, an ember record)
+   currently sets Literata at display sizes via `RibbonType.display`.
 
 3. **The fire-scale boundary is ~750 words, not ~5,000.** §4.1's stated
    threshold contradicts its own example column (Philippians, Ruth and
