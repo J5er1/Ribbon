@@ -1,0 +1,1356 @@
+<title>Ribbon Build Book</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&family=Alegreya+Sans:ital,wght@0,400;0,500;0,700;1,400&family=Alegreya+Sans+SC:wght@400;500;700&display=swap">
+<style>
+:root{
+  --ground:#0B0B0A; --surface:#131311; --raised:#1C1B17;
+  --ink:#F3F0E6; --muted:#8C897B; --faint:#5D5B52; --rule:#262520;
+  --accent:#D6E45C; --accent-dim:#98A63C; --accent-wash:rgba(214,228,92,.10);
+  --grain:.035;
+  --shadow:0 1px 0 rgba(255,255,255,.03);
+}
+:root:not([data-theme="dark"]){}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    --ground:#F0ECE2; --surface:#FAF7F0; --raised:#E7E2D4;
+    --ink:#17160F; --muted:#6B6759; --faint:#928E80; --rule:#D7D1BF;
+    --accent:#5F6B12; --accent-dim:#7E8A2E; --accent-wash:rgba(95,107,18,.09);
+    --grain:.028;
+    --shadow:0 1px 0 rgba(0,0,0,.03);
+  }
+}
+:root[data-theme="light"]{
+  --ground:#F0ECE2; --surface:#FAF7F0; --raised:#E7E2D4;
+  --ink:#17160F; --muted:#6B6759; --faint:#928E80; --rule:#D7D1BF;
+  --accent:#5F6B12; --accent-dim:#7E8A2E; --accent-wash:rgba(95,107,18,.09);
+  --grain:.028;
+  --shadow:0 1px 0 rgba(0,0,0,.03);
+}
+
+*{box-sizing:border-box}
+body{
+  background:var(--ground); color:var(--ink);
+  font-family:"Alegreya Sans","Helvetica Neue",system-ui,sans-serif;
+  font-size:16.5px; line-height:1.62; margin:0;
+  -webkit-font-smoothing:antialiased;
+}
+body::before{
+  content:""; position:fixed; inset:0; pointer-events:none; z-index:99;
+  opacity:var(--grain);
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.wrap{display:grid; grid-template-columns:236px minmax(0,1fr); gap:0; max-width:1180px; margin:0 auto}
+nav.toc{
+  position:sticky; top:0; align-self:start; height:100vh; overflow-y:auto;
+  padding:44px 26px 60px 22px; border-right:1px solid var(--rule);
+  font-family:"Alegreya Sans SC",Georgia,serif;
+  font-size:13.5px; letter-spacing:.02em;
+}
+nav.toc .brand{display:block; margin-bottom:26px}
+nav.toc .brand b{
+  font-family:Literata,Georgia,serif; font-weight:600; font-size:20px;
+  letter-spacing:-.02em; display:block; color:var(--ink); text-transform:none;
+}
+nav.toc .brand b i{color:var(--accent); font-style:normal}
+nav.toc .brand span{color:var(--faint); font-size:11.5px; letter-spacing:.09em; text-transform:uppercase}
+nav.toc ol{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:1px}
+nav.toc a{
+  display:flex; gap:9px; color:var(--muted); text-decoration:none;
+  padding:3.5px 8px 3.5px 6px; border-radius:2px; line-height:1.35;
+}
+nav.toc a em{color:var(--faint); font-style:normal; font-variant-numeric:tabular-nums; min-width:15px}
+nav.toc a:hover{color:var(--ink); background:var(--accent-wash)}
+nav.toc a.on{color:var(--accent)} nav.toc a.on em{color:var(--accent-dim)}
+nav.toc .sub{padding-left:21px; font-size:12.5px}
+
+main{padding:44px 0 200px 52px; min-width:0}
+.col{max-width:70ch}
+
+h1{
+  font-family:Literata,Georgia,serif; font-weight:600; font-size:44px; line-height:1.06;
+  letter-spacing:-.035em; margin:0 0 6px; text-wrap:balance;
+}
+h1 i{color:var(--accent); font-style:normal}
+.deck{font-size:19px; color:var(--muted); max-width:56ch; margin:0 0 12px; line-height:1.5}
+.meta{
+  font-family:"Alegreya Sans SC",Georgia,serif; font-size:12.5px; letter-spacing:.06em;
+  color:var(--faint); text-transform:uppercase; margin:0 0 40px;
+}
+.meta b{color:var(--accent-dim); font-weight:500}
+
+section{padding-top:52px; scroll-margin-top:20px}
+h2{
+  font-family:Literata,Georgia,serif; font-weight:600; font-size:28px; line-height:1.15;
+  letter-spacing:-.025em; margin:0 0 4px; display:flex; gap:14px; text-wrap:balance;
+}
+h2 em{
+  font-family:"Alegreya Sans SC",Georgia,serif; font-style:normal; font-size:14px;
+  color:var(--accent); letter-spacing:.05em; padding-top:11px; flex:none;
+  font-variant-numeric:tabular-nums;
+}
+h2+.lede{color:var(--muted); font-size:17px; margin:0 0 4px; padding-left:38px; max-width:60ch}
+h3{
+  font-family:Literata,Georgia,serif; font-weight:600; font-size:19.5px; letter-spacing:-.015em;
+  margin:38px 0 8px; padding-bottom:7px; border-bottom:1px solid var(--rule);
+}
+h4{
+  font-family:"Alegreya Sans SC",Georgia,serif; font-weight:500; font-size:14px;
+  letter-spacing:.07em; text-transform:uppercase; color:var(--accent-dim);
+  margin:26px 0 6px;
+}
+p{margin:0 0 13px} p+h3{margin-top:34px}
+a{color:var(--accent); text-decoration-thickness:1px; text-underline-offset:2px}
+strong{font-weight:700; color:var(--ink)}
+em.t{font-style:italic; color:var(--muted)}
+code,.k{
+  font-family:"Alegreya Sans SC",Georgia,serif; font-size:.94em; letter-spacing:.045em;
+  color:var(--accent); background:var(--accent-wash); padding:.5px 5px; border-radius:2px;
+}
+ul,ol{margin:0 0 14px; padding-left:20px} li{margin-bottom:5px}
+ul.tight li,ol.tight li{margin-bottom:2px}
+ul.plain{list-style:none; padding-left:0}
+ul.plain li{padding-left:16px; position:relative}
+ul.plain li::before{content:"—"; position:absolute; left:0; color:var(--faint)}
+
+.rule{height:1px; background:var(--rule); border:0; margin:34px 0}
+
+/* label / body definition grid — the book-index pattern */
+dl.spec{display:grid; grid-template-columns:118px minmax(0,1fr); gap:0 20px; margin:0 0 16px}
+dl.spec dt{
+  font-family:"Alegreya Sans SC",Georgia,serif; font-size:12.5px; letter-spacing:.07em;
+  text-transform:uppercase; color:var(--faint); text-align:right; padding-top:5px;
+  border-top:1px solid var(--rule);
+}
+dl.spec dd{margin:0; padding:4px 0 12px; border-top:1px solid var(--rule)}
+dl.spec dd>ul,dl.spec dd>ol{margin-bottom:0}
+dl.spec dd p:last-child{margin-bottom:0}
+
+/* screen block */
+.screen{margin:34px 0 0}
+.screen>.hd{display:flex; align-items:baseline; gap:12px; margin-bottom:3px; flex-wrap:wrap}
+.screen>.hd .id{
+  font-family:"Alegreya Sans SC",Georgia,serif; font-size:12.5px; letter-spacing:.09em;
+  color:var(--ground); background:var(--accent); padding:1.5px 7px; border-radius:2px;
+  font-weight:500; flex:none;
+}
+.screen>.hd h3{
+  border:0; margin:0; padding:0; font-size:21px;
+}
+.screen>.hd .plat{
+  font-family:"Alegreya Sans SC",Georgia,serif; font-size:12px; letter-spacing:.07em;
+  color:var(--faint); text-transform:uppercase; margin-left:auto;
+}
+.screen>.purpose{color:var(--muted); margin:0 0 12px; font-size:16px}
+
+.law{
+  border-left:2px solid var(--accent); padding:2px 0 2px 18px; margin:22px 0;
+  font-family:Literata,Georgia,serif; font-size:17.5px; line-height:1.45; color:var(--ink);
+}
+.law b{display:block; font-family:"Alegreya Sans SC",Georgia,serif; font-size:12.5px;
+  letter-spacing:.09em; text-transform:uppercase; color:var(--accent); font-weight:500; margin-bottom:3px}
+
+.note{
+  background:var(--surface); border:1px solid var(--rule); border-radius:3px;
+  padding:14px 17px; margin:20px 0; font-size:15.5px; color:var(--muted);
+}
+.note b{color:var(--ink)}
+.note .tag{
+  font-family:"Alegreya Sans SC",Georgia,serif; font-size:12px; letter-spacing:.09em;
+  text-transform:uppercase; color:var(--accent-dim); display:block; margin-bottom:4px;
+}
+
+.tw{overflow-x:auto; margin:16px 0 20px; border-top:1px solid var(--rule)}
+table{border-collapse:collapse; width:100%; font-size:15px; min-width:440px}
+th{
+  font-family:"Alegreya Sans SC",Georgia,serif; font-size:12px; letter-spacing:.08em;
+  text-transform:uppercase; color:var(--faint); text-align:left; font-weight:500;
+  padding:8px 14px 8px 0; vertical-align:bottom; border-bottom:1px solid var(--rule);
+}
+td{padding:8px 14px 8px 0; border-bottom:1px solid var(--rule); vertical-align:top}
+td:first-child{color:var(--ink)}
+tbody tr:hover td{background:var(--accent-wash)}
+table.num td{font-variant-numeric:tabular-nums}
+
+.copy{
+  font-family:Literata,Georgia,serif; font-size:16px; color:var(--ink);
+  background:var(--surface); border:1px solid var(--rule); border-radius:3px;
+  padding:11px 15px; margin:12px 0; line-height:1.5;
+}
+.copy .x{color:var(--muted); text-decoration:line-through; text-decoration-color:var(--faint)}
+
+figure{margin:24px 0; padding:0}
+figure svg{display:block; max-width:100%; height:auto}
+figcaption{
+  font-family:"Alegreya Sans SC",Georgia,serif; font-size:12.5px; letter-spacing:.05em;
+  color:var(--faint); margin-top:9px; text-transform:uppercase;
+}
+
+.cols2{display:grid; grid-template-columns:1fr 1fr; gap:0 34px}
+@media (max-width:900px){
+  .wrap{grid-template-columns:1fr}
+  nav.toc{position:static; height:auto; border-right:0; border-bottom:1px solid var(--rule); padding:26px 22px}
+  nav.toc ol{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:0}
+  nav.toc .sub{display:none}
+  main{padding:30px 22px 120px}
+  h1{font-size:33px}
+  dl.spec{grid-template-columns:1fr; gap:0}
+  dl.spec dt{text-align:left; border-top:1px solid var(--rule); padding-bottom:0}
+  dl.spec dd{border-top:0; padding-top:1px}
+  .cols2{grid-template-columns:1fr}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important; transition:none!important}}
+a:focus-visible,summary:focus-visible{outline:2px solid var(--accent); outline-offset:2px; border-radius:2px}
+</style>
+
+<div class="wrap">
+<nav class="toc">
+  <span class="brand"><b>Ribbon<i>.</i></b><span>Build book</span></span>
+  <ol id="toc"></ol>
+</nav>
+<main><div class="col">
+
+<h1>The Ribbon build book<i>.</i></h1>
+<p class="deck">Every screen, every state, every gesture — and the reasoning underneath each one, so the next person to touch this can tell an intention from an accident.</p>
+<p class="meta">Draft one · 31 August 2026 · iOS first · <b>Companion to the brand brief, not a replacement for it</b></p>
+
+<section id="s0">
+<h2><em>00</em>How to read this</h2>
+<p class="lede">What this document decides, what it inherits, and what it deliberately leaves open.</p>
+
+<p>The brand brief settled the name, the positioning, the voice, and the never-ship list. Since it was written, four things changed and this document follows the newer decisions: the wordmark is <strong>Cesso</strong>, not Fraunces; the palette is <strong>chartreuse on true black with ivory</strong>, not crimson and lamp; the mark is <strong>the Wave</strong>; the app icon is the Cesso <strong>R.</strong> with the ribbon living inside the app. Where the brief and this document disagree on those four, this document wins. Everywhere else — especially the never-ship list and the product vocabulary — the brief still governs.</p>
+
+<p>Three kinds of statement appear here, and they are marked differently on purpose:</p>
+
+<dl class="spec">
+<dt>Law</dt><dd>A rule that generates other decisions. Breaking one doesn't cost a screen, it costs the product. Marked with a chartreuse rule down the left.</dd>
+<dt>Decision</dt><dd>A call made here that could reasonably have gone another way. Stated plainly, with the reasoning attached so it can be argued with later.</dd>
+<dt>Open</dt><dd>Genuinely unresolved. Collected in §16 rather than quietly settled. If you find me deciding one of these in passing, that's a bug in the document.</dd>
+</dl>
+
+<p>Screens carry stable codes (<span class="k">S01</span>–<span class="k">S26</span>). Use them in tickets, in Figma frame names, in commit messages. They will outlive this document's section numbering.</p>
+</section>
+
+<section id="s1">
+<h2><em>01</em>The product, in one page</h2>
+<p class="lede">Everything below is downstream of these six sentences. When a decision feels arbitrary, come back here.</p>
+
+<p><strong>What it is.</strong> Ribbon is an app for reading the Bible with one person, or a few — a partner on the same couch, or a friend four time zones away. It does three things: it lets you see who else is reading while you read, it holds the notes you leave each other in the margin, and it keeps one warm shared object alive instead of a streak.</p>
+
+<p><strong>Who it's for,</strong> in order: couples, then friend groups and small studies of three to six, then youth leaders running a group.</p>
+
+<p><strong>The promise.</strong> You will never be reading alone, and you will never be behind.</p>
+
+<p><strong>The feeling.</strong> A room, not a program. Warm, dim, unhurried, and occupied by someone else.</p>
+
+<div class="law"><b>Law 1 · The promise generates the product</b>“You will never be behind” is not marketing. It forbids reading plans, schedules, pace, catch-up, and every number that could be read as a shortfall. Any feature that could make a person feel late has already failed, no matter how well it tests.</div>
+
+<div class="law"><b>Law 2 · A fire reports a state, never a count</b>No counts, fractions, percentages, day tallies, or progress bars anywhere near a handiwork — in the app, in a widget, in a notification, in a screenshot, in the App Store listing. A countable goal is an accusation; it tells you exactly how much is missing and whose absence it was.</div>
+
+<div class="note"><span class="tag">The distinction that keeps Law 2 usable</span><b>Addresses are not scores.</b> “Mark 4:9” is an address. “Chapter 6” is an address. “6 of 16 chapters,” “68%,” “12 days,” “3 books this year” are scores. Verse numbers, chapter numbers, and dates are all fine and always have been — the brief sets verse numbers in small caps precisely so they can exist without shouting. What is forbidden is any figure that answers <em class="t">how much is left</em> or <em class="t">how often did you</em>. When in doubt, ask whether a person could feel accused by the number. If yes, cut it.</div>
+
+<p><strong>What it is not.</strong> Not a habit tracker with a cross on it. Not a study platform. Not a social network — no feed, no follower count, no strangers, no discovery. It has no opinion about anyone's theology and no interest in their consistency.</p>
+
+<div class="law"><b>Law 3 · The hesitant partner must be able to install this</b>Someone who is unsure about the Bible has to be able to put Ribbon on their home screen without it being a statement, and open it without feeling recruited. This governs the icon, the App Store screenshots, the onboarding copy, the notification text on a lock screen, and every default that could be read as a nudge toward piety.</div>
+</section>
+
+<section id="s2">
+<h2><em>02</em>What this document decides</h2>
+<p class="lede">Nine structural calls, made here, with the reasoning attached. Argue with the reasoning, not the conclusion.</p>
+
+<h3>2.1 &nbsp;There is no tab bar</h3>
+<p>The room <em class="t">is</em> the app. Everything else is a push or a sheet off it. A tab bar would put four permanent competing destinations at the bottom of a product whose entire emotional claim is that it is one warm place — and it would hand iOS a glass slab in the most conspicuous position on the screen. Rooms are switched from the room's own name, not from a tab.</p>
+<p>This is a real cost: no tab bar means discoverability of the shelf and settings rests on scroll and on one sheet. Accepted. Ribbon has six destinations, not fifteen.</p>
+
+<h3>2.2 &nbsp;There is no reading plan, no schedule, and no pace</h3>
+<p>Direct consequence of Law 1. You read where you read. The handiwork responds to the room's reading, not to a calendar. Two people who want to stay together do it by <em class="t">following</em> each other (§4.2), not by a plan telling them both where to be on Tuesday.</p>
+<p>This is the single largest departure from every competitor, and it is also the largest product risk: plans are how most people think Bible apps work, and some will bounce off the absence. The answer to “where do we start?” is a good book chooser (<span class="k">S13</span>), not a plan.</p>
+
+<h3>2.3 &nbsp;The group is called a <em class="t">room</em></h3>
+<p>The brief's emotional target — “a room, not a program” — hands us the noun. It is already on the approved word list, it is warm, it is not churchy, and it survives being said out loud by a hesitant partner (“I'm in a room with Ruth” is fine; “I'm in a Bible study group” is a commitment). Alternatives considered: <em class="t">table</em> (too Eucharistic), <em class="t">circle</em> (too therapy), <em class="t">company</em> (too corporate). Logged as an open question anyway — see §16 — because it is a hard word to change later.</p>
+
+<h3>2.4 &nbsp;A person can be in several rooms, and rooms don't know about each other</h3>
+<p>A couple's room and a Thursday study are different rooms with different handiworks, different shelves, different ink assignments, and separate notification settings. Nothing crosses between them. Notes you leave your wife are not visible to your small group, and there is no aggregate “your reading” view anywhere in the product — that view would be a score.</p>
+
+<h3>2.5 &nbsp;Scripture is never locked</h3>
+<p>Not by a lapsed subscription, not by being offline, not by a room going quiet. If a subscription ends, the room is <strong>paused</strong> — presence stops and new notes can't be left — but every word of Scripture and every note already left stays readable forever. See §14.3.</p>
+
+<h3>2.6 &nbsp;Translation is a personal setting, not a room setting</h3>
+<p>You read the Berean, Ruth reads the WEB, and her note still lands on verse 9 because notes pin to verse addresses, not to text offsets. Both launch translations share versification, so this is nearly free at launch and becomes a real engineering constraint the day a differently-versified translation is added. Better to design for it now.</p>
+<p>The detail that makes it feel authored: when Ruth's note quotes the verse, it renders <strong>in Ruth's translation</strong>, in small type, so you see the words she was looking at.</p>
+
+<h3>2.7 &nbsp;Presence is faces, not cursors</h3>
+<p>The app is touch-first, so there is no cursor to share and a text caret would be a lie. Presence is a portrait, half-emerged from the right edge of the screen, and its whole job is to say <em class="t">someone is here</em> before it says anything else.</p>
+
+<h3>2.8 &nbsp;The campfire ships first, and it is one of several</h3>
+<p>The handiwork is the general mechanic: a single shared object a room completes together. The campfire ships first because it is abstract, and losing an abstract thing hurts less than losing something countable like a pane of glass or a section of a painting. Mosaic, stained glass, and the painting follow once the fire has proven the mechanic. The code should say <span class="k">handiwork</span> everywhere and <span class="k">fire</span> only in the campfire's own module.</p>
+<p><strong>The test every future handiwork has to pass:</strong> it may not be assembled from discrete countable units. A mosaic of tiles or a window of panes fails Law 2 the moment somebody counts the empty ones — so a mosaic has to spread as a field of colour rather than arrive tile by tile, and a window has to deepen rather than fill. If a handiwork can't be drawn that way, it doesn't ship, however good the idea sounded.</p>
+
+<h3>2.9 &nbsp;One handiwork per book, sized by the book</h3>
+<p>Philemon's fire is small. Isaiah's is large. Size is set once from the book's word count and never changes during the read — because a growing size would be a progress bar wearing a costume. What accumulates instead is the bed of coals (§4.1).</p>
+</section>
+
+<section id="s3">
+<h2><em>03</em>The object model</h2>
+<p class="lede">The nouns, what owns what, and the three relationships that carry the whole product.</p>
+
+<div class="tw"><table>
+<thead><tr><th>Object</th><th>Is</th><th>Owns</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><strong>Person</strong></td><td>An account</td><td>Portrait, name, translation, notification prefs, memberships</td><td>Portrait is close to required — presence is faces. Skipping gives a monogram in their ink.</td></tr>
+<tr><td><strong>Room</strong></td><td>2–6 people</td><td>Name, members, ink assignments, current reading, shelf, subscription</td><td>The app's root. A person may hold several; they never interact.</td></tr>
+<tr><td><strong>Membership</strong></td><td>Person × Room</td><td>Ink, joined date, per-room notification prefs, quiet flag</td><td>Ink lives here, not on Person — you're teal in one room and ochre in another.</td></tr>
+<tr><td><strong>Reading</strong></td><td>A book, in a room</td><td>Handiwork, notes, highlights, cards, per-person position</td><td>The active unit. A room has one open reading at a time.</td></tr>
+<tr><td><strong>Handiwork</strong></td><td>The shared object</td><td>Kind, size, coal bed, state, last-fed time</td><td>Campfire at launch. Becomes an Ember on completion.</td></tr>
+<tr><td><strong>Note</strong></td><td>Voice or written</td><td>Author, verse address, body or audio, transcript, found-by set</td><td>Always “left,” never “posted.” Being found later is the emotional beat.</td></tr>
+<tr><td><strong>Highlight</strong></td><td>Verse range + ink</td><td>Author, range, ink</td><td>Ink semantics change at three people — see §4.5.</td></tr>
+<tr><td><strong>Card</strong></td><td>A reflection</td><td>Question, one answer per member, sealed/open/set-down</td><td>Opens only when every member has answered.</td></tr>
+<tr><td><strong>Ember</strong></td><td>A finished reading</td><td>Book, date range, every note, highlight and card</td><td>Immutable. The keepsake book is made from a shelf of these.</td></tr>
+<tr><td><strong>Quiet day</strong></td><td>A marked day</td><td>Person, room, local date</td><td>Declared by a person. Never inferred by the app.</td></tr>
+</tbody></table></div>
+
+<h4>The three relationships that matter</h4>
+<ul>
+<li><strong>Ink lives on membership.</strong> Everything about identity-by-color follows from this. A person has no single color; a person has a color <em class="t">in a room</em>.</li>
+<li><strong>Position is per-person, per-reading.</strong> There is no shared “where we are.” Two people in Mark are simply in two places in Mark, and that is not a problem to be solved.</li>
+<li><strong>Notes belong to the reading, not the person.</strong> When someone leaves a room their notes stay by default, because they were left for you. See §6.8.</li>
+</ul>
+</section>
+
+<section id="s4">
+<h2><em>04</em>The mechanics</h2>
+<p class="lede">Nine systems. Each one is described here once, in full, and referenced by every screen that touches it.</p>
+
+<h3>4.1 &nbsp;The handiwork, and the fire</h3>
+
+<p>A handiwork is one shared object per book, kept alive by everyone in the room. The campfire is the first kind. It has exactly four states and no numbers.</p>
+
+<div class="tw"><table>
+<thead><tr><th>State</th><th>Means</th><th>Reads as</th><th>Entered when</th></tr></thead>
+<tbody>
+<tr><td><strong>Catching</strong></td><td>Just started, or just restarted after a long quiet</td><td>Small, low, a few licks, working at it</td><td>The reading opens, or fuel arrives after a long quiet. It is also where a fire that subsides on its own comes to rest</td></tr>
+<tr><td><strong>Burning</strong></td><td>Someone has been reading</td><td>Full, active, irregular flicker</td><td>Fuel within the last ~36 hours from any one person</td></tr>
+<tr><td><strong>Steady</strong></td><td>The room has been reading <em class="t">together</em></td><td>Broad, even, a wide warm throw, almost calm</td><td>Fuel from two or more people within the same ~36-hour window</td></tr>
+<tr><td><strong>Banked</strong></td><td>Deliberately kept low and warm</td><td>Coals under ash, a dim glow, no flame</td><td><strong>Only</strong> when someone marks a quiet day. Banked is an act, never a lapse</td></tr>
+</tbody></table></div>
+
+<h4>Fuel, air, and subsiding</h4>
+<ul>
+<li><strong>Fuel</strong> is reading. Any member reading any passage feeds the fire. It never matters who, or where in the book.</li>
+<li><strong>Air</strong> is overlap. Two or more people feeding within the same window is what lifts <em class="t">burning</em> to <em class="t">steady</em>. This is the only place in the product where togetherness is mechanically rewarded, and the return is a mood, not a bonus.</li>
+<li><strong>Subsiding</strong> is time. Without fuel the fire eases down through the states over days. It never goes out, it never resets, and it never says why. <strong>Its floor is catching, never banked</strong> — a fire nobody tended is not the same object as a fire somebody banked, and drawing them alike would turn an act of care into the look of neglect.</li>
+</ul>
+
+<div class="law"><b>Law 4 · The coal bed remembers, the flame reports the moment</b>The fire's <strong>size</strong> is fixed by the book at the start and never changes. Its <strong>state</strong> is recent activity only. What accumulates over a long read is the <strong>bed of coals</strong> beneath — deepening, throwing a wider warm light. Coals are the one thing that may grow, because nobody can look at a bed of coals and compute how much is left. Progress through the book is shown by the text itself and nowhere else.</div>
+
+<div class="note"><span class="tag">Why the thresholds are vague on purpose</span>“~36 hours” is deliberately not a day. A 24-hour boundary manufactures a midnight deadline, and a deadline is a count you can be late for. A 36-hour window means someone who reads at 10 p.m. Monday and 9 a.m. Wednesday never experiences a lapse, and nobody in the room ever knows there was a threshold at all. <b>Never surface the window in copy, in a tooltip, or in support docs.</b></div>
+
+<h4>The fire at three scales</h4>
+<p>Size is derived from word count at the moment a reading opens, mapped into three drawn sizes rather than a continuous scale — a continuous scale invites comparison, three sizes read as a fact about the book.</p>
+<div class="tw"><table class="num">
+<thead><tr><th>Scale</th><th>Roughly</th><th>Examples</th><th>Frame height on the room screen</th></tr></thead>
+<tbody>
+<tr><td><strong>Small</strong></td><td>Under ~5,000 words</td><td>Philemon, Jude, 2 John, Obadiah</td><td>~120 pt</td></tr>
+<tr><td><strong>Medium</strong></td><td>~5,000–20,000</td><td>Philippians, Ruth, James, Mark</td><td>~180 pt</td></tr>
+<tr><td><strong>Large</strong></td><td>Over ~20,000</td><td>Isaiah, Psalms, Genesis, Jeremiah</td><td>~240 pt</td></tr>
+</tbody></table></div>
+
+<h3>4.2 &nbsp;Presence</h3>
+
+<p>The form emerges partway from the <strong>right edge</strong> of the reading screen. Left edge is the gutter and belongs to notes; right edge belongs to people. That split governs <em class="t">the reading surface</em>, on every platform and at every width; elsewhere in the app portraits sit where the layout wants them.</p>
+
+<figure>
+<svg viewBox="0 0 620 240" role="img" aria-label="Diagram of the reading screen showing the note gutter at the left edge and the presence form emerging from the right edge">
+<rect x="60" y="10" width="300" height="220" rx="12" fill="none" stroke="currentColor" stroke-opacity=".22"/>
+<g stroke="currentColor" stroke-opacity=".26" stroke-width="1">
+<line x1="105" y1="46" x2="330" y2="46"/><line x1="105" y1="62" x2="316" y2="62"/>
+<line x1="105" y1="78" x2="330" y2="78"/><line x1="105" y1="94" x2="292" y2="94"/>
+<line x1="105" y1="118" x2="330" y2="118"/><line x1="105" y1="134" x2="322" y2="134"/>
+<line x1="105" y1="150" x2="330" y2="150"/><line x1="105" y1="166" x2="270" y2="166"/>
+<line x1="105" y1="190" x2="330" y2="190"/><line x1="105" y1="206" x2="300" y2="206"/>
+</g>
+<rect x="105" y="112" width="150" height="12" fill="#D6E45C" fill-opacity=".2"/>
+<circle cx="88" cy="62" r="3.6" fill="#D6E45C"/>
+<circle cx="88" cy="118" r="3.6" fill="none" stroke="#D6E45C" stroke-width="1.4"/>
+<line x1="96" y1="30" x2="96" y2="215" stroke="currentColor" stroke-opacity=".13" stroke-dasharray="2 4"/>
+<path d="M336 88 h24 a0 0 0 010 0 v64 a0 0 0 010 0 h-24 a26 26 0 010-64 z" fill="none" stroke="#D6E45C" stroke-width="1.4"/>
+<circle cx="349" cy="120" r="11" fill="#D6E45C" fill-opacity=".22" stroke="#D6E45C" stroke-width="1"/>
+<g font-family="Alegreya Sans SC, Georgia, serif" font-size="11.5" letter-spacing=".08em" fill="currentColor" fill-opacity=".55">
+<text x="0" y="66" >THE GUTTER</text>
+<text x="0" y="80">notes only</text>
+<line x1="0" y1="55" x2="84" y2="55" stroke="currentColor" stroke-opacity=".2"/>
+<text x="394" y="112">THE PRESENCE FORM</text>
+<text x="394" y="126">people only</text>
+<line x1="394" y1="101" x2="530" y2="101" stroke="currentColor" stroke-opacity=".2"/>
+<text x="152" y="20">THE MEASURE</text>
+</g>
+</svg>
+<figcaption>Left edge: notes. Right edge: people. Nothing crosses.</figcaption>
+</figure>
+
+<h4>The form's five states</h4>
+<dl class="spec">
+<dt>Nobody here</dt><dd>The form is <strong>absent</strong>. Not greyed, not a placeholder, not “no one is reading.” Absence is the honest rendering of absence, and a placeholder would be a small daily reminder that you are alone.</dd>
+<dt>Someone here</dt><dd>A soft lozenge, roughly 44&nbsp;×&nbsp;64&nbsp;pt, about half off-screen, carrying their portrait. It eases out over 400&nbsp;ms with a soft haptic when they arrive.</dd>
+<dt>Several here</dt><dd>The lozenge becomes a short vertical stack you can flick through — one person at a time in the frame, with a hairline of the next one behind. Never a row of shrinking avatars.</dd>
+<dt>Following</dt><dd>The followed person's portrait takes a thin ring in their ink, and a hairline chartreuse thread runs down the screen's right edge. Your scroll is theirs.</dd>
+<dt>Reading quietly</dt><dd>You have made yourself invisible. Others see nothing at all; you see a small closed shape at the edge so you never forget. It stays tappable <strong>even when you are alone</strong> — otherwise a person whose partner logs off is stranded invisible with no way back to the toggle.</dd>
+</dl>
+
+<h4>Following, and leaving</h4>
+<ul>
+<li><strong>Tap a portrait to follow.</strong> If they are in Mark 6 and you are in Mark 2, you go to Mark 6 — with a page-fly transition, no confirmation dialog, because a dialog here would make joining someone feel like a commitment.</li>
+<li><strong>Any scroll of your own breaks the follow,</strong> with a gentle rubber-band on the first gesture so it never happens by accident. No modal, no “stop following?” — you just have your own scroll back.</li>
+<li><strong>Getting back.</strong> After a follow ends, the form quietly offers <span class="k">back to where you were</span> for about two minutes, then forgets.</li>
+<li><strong>Being followed</strong> is visible but small: their portrait tucks against yours, and one line of small caps reads <em class="t">Ruth is with you</em>. No count of followers, ever.</li>
+</ul>
+
+<h4>Reading quietly</h4>
+<p>A per-session toggle in the expanded panel: <span class="k">read quietly</span>. You see everyone; nobody sees you. Your own form stays on screen as a small closed shape so you never forget you're invisible — the alternative is a person who thinks they're present for weeks and isn't.</p>
+<p>This exists for Law 3. A hesitant partner needs to be able to open the book without an audience, and “I can slip in without being watched” is what makes the first week survivable.</p>
+
+<h4>Idle and away</h4>
+<p>After roughly four minutes with no scroll, a present person's portrait dims by about 40% and the form's edge softens — <em class="t">here, but still</em>. They are not removed. Backgrounding the app removes them after a short grace so a glance at a text message doesn't read as leaving.</p>
+
+<h3>4.3 &nbsp;Thinking of you</h3>
+<p>The most loaded feature in the product, and it must be nearly invisible. From the expanded presence panel, press and hold a person's portrait: it fills with your ink over about 700&nbsp;ms; release completes it. They get a single soft haptic and a notification carrying nothing but your name.</p>
+<ul>
+<li><strong>No message, no emoji, no reaction picker.</strong> The whole meaning is that it is contentless.</li>
+<li><strong>No count</strong> of taps sent or received, in either direction.</li>
+<li><strong>Repeats collapse.</strong> Several taps inside a few minutes become one delivery, so it can't be spammed and there's no rate-limit message to write.</li>
+<li>Haptic on the receiving end is a single soft transient with a short decay — the brief's “tap on the shoulder.” It is the only thing in the app permitted to feel fast.</li>
+</ul>
+
+<h3>4.4 &nbsp;Notes left</h3>
+
+<p>A note is a voice memo or a written thought pinned to a verse. Always <em class="t">left</em>, never posted, shared, or sent.</p>
+
+<h4>Marks in the gutter</h4>
+<dl class="spec">
+<dt>Voice</dt><dd>A solid dot, 6&nbsp;pt, in the author's ink.</dd>
+<dt>Written</dt><dd>An open ring, 6&nbsp;pt, 1.4&nbsp;pt stroke, in the author's ink.</dd>
+<dt>Unfound</dt><dd>The mark breathes — opacity 0.65 → 1.0 over 4&nbsp;s, eased both ways. Slow enough that it never reads as an alert.</dd>
+<dt>Found</dt><dd>Steady at 55% opacity. It does not disappear; the record stays.</dd>
+<dt>Yours</dt><dd>Same shapes, never breathing. You do not need to be told about your own note.</dd>
+<dt>Stacked</dt><dd>Up to three marks stack vertically on one verse; beyond that, three marks plus a small centred dot triplet. Tapping opens the whole stack.</dd>
+<dt>Pending</dt><dd>Composed offline: the mark appears immediately as a hairline outline in your ink, and fills in when it lands. No spinner, no toast, no retry button.</dd>
+</dl>
+
+<h4>Opening a note</h4>
+<p>Tapping a mark <strong>expands the note inline</strong>. The line height opens and the note unfurls beneath the verse, indented to the measure, the author's portrait small at the left. Never a modal, never a bottom sheet — a sheet takes you out of the room and this is the one moment where staying in it matters most.</p>
+<p>A voice note draws a thin waveform in the author's ink and plays in place. Beneath it, the transcript, muted, collapsed by default, expandable. Transcripts are not optional: they are how the deaf read this app, and how anyone finds a note again six months later.</p>
+
+<h4>Leaving a note</h4>
+<ol class="tight">
+<li>Long-press a verse. It lifts about 2&nbsp;pt with a soft shadow — the verse becomes a physical thing you're holding.</li>
+<li>A small toolbar rises at the bottom: <strong>highlight</strong> (with the ink swatches), <strong>write</strong>, <strong>speak</strong>.</li>
+<li><strong>Speak</strong> is press-and-hold. The waveform draws in your ink as you talk. Release to keep; drag away to discard, with the waveform receding rather than a confirmation.</li>
+<li><strong>Write</strong> opens a composer sized to the note, growing as you type. No formatting toolbar. No title field.</li>
+</ol>
+
+<h3>4.5 &nbsp;Ink</h3>
+<p>Ink is a highlight color. Its meaning changes with the size of the room, and the transition between the two meanings is a moment worth designing.</p>
+
+<div class="tw"><table>
+<thead><tr><th>Room</th><th>How ink works</th><th>Why</th></tr></thead>
+<tbody>
+<tr><td><strong>Two people</strong></td><td>Both draw from the whole palette freely, choosing per highlight</td><td>Color is expressive — this one's a promise, this one's a question. With two people you always know who made a mark, so color is free to mean something else.</td></tr>
+<tr><td><strong>Three or more</strong></td><td>Each person picks one ink; every highlight they make is that color</td><td>Color becomes identity, because with five people in a chapter you can no longer tell whose mark is whose by elimination.</td></tr>
+</tbody></table></div>
+
+<h4>The transition</h4>
+<p>When a third person joins, the two existing members are asked to pick their ink — as an invitation, not an interruption, sitting on the room screen until answered. Existing highlights are <strong>never recolored.</strong> One line of small caps under them explains it:</p>
+<div class="copy">These keep their colors. They're from when the room was two.</div>
+<p>If the room drops back to two, ink stays assigned. Nothing is taken away, and the free palette returns only if someone asks for it in settings.</p>
+
+<h4>Rendering</h4>
+<p>A highlight is a translucent wash at ~24%, bleeding about 2&nbsp;pt past the glyph box, with slightly irregular top and bottom edges so it reads as ink soaking into paper rather than a filled rectangle. Overlapping highlights <strong>blend</strong> — multiply, not stack — so two people marking the same verse produces a third color, which is the correct emotional result.</p>
+<p>The eight inks are the brief's, unchanged. Chartreuse is <strong>not</strong> among them and never becomes selectable: it is the brand's, not the user's.</p>
+
+<h3>4.6 &nbsp;The cards</h3>
+<p>Reflection questions that open once everyone has answered. They sit at the end of a chapter, below the last verse.</p>
+<dl class="spec">
+<dt>Sealed</dt><dd>The question is visible. Your answer field is open. One line below: <em class="t">This opens when everyone has answered.</em> <strong>Never</strong> “Ruth hasn't answered yet” — naming the person who hasn't turns the card into an accusation.</dd>
+<dt>Answered</dt><dd>Your answer is saved and visible only to you. You can edit it right up until the card opens.</dd>
+<dt>Opening</dt><dd>When the last answer lands, the card turns over slowly — 480&nbsp;ms, ease-out, no bounce — and everyone's answers are there together. The room gets one notification: <em class="t">The cards are open.</em></dd>
+<dt>Set down</dt><dd>Any member can retire a sealed card for the room. It leaves without ceremony and doesn't come back. This is the pressure valve that lets a card wait forever without becoming a debt.</dd>
+<dt>Never</dt><dd>A sealed card has no expiry, no reminder after N days, no “nudge Ruth” button. It waits. Waiting is the feature.</dd>
+</dl>
+<p>Questions are written by Ribbon, one or two per chapter, in the brief's voice: short, concrete, second person, answerable in a sentence. <em class="t">“What did you notice that the other one probably didn't?”</em> works. <em class="t">“How is God calling you to grow?”</em> is exactly the register to avoid. Authorship at scale is an open question — §16.</p>
+
+<h3>4.7 &nbsp;Quiet days</h3>
+<p>The grace mechanic. <strong>Marked by a person, never detected by the app.</strong></p>
+<ul>
+<li>Marking a quiet day <strong>banks the fire for the room</strong> and pauses subsiding.</li>
+<li>The room sees who did it: <em class="t">Ruth banked the fire.</em> It is an act of care, performed in public — not an excuse filed in private.</li>
+<li>Available from the room screen and from a notification's long-press actions. Never surfaced <em class="t">after</em> a lapse, which would make it an apology.</li>
+<li>No limit, no ledger, no “quiet days remaining.” A counted grace is not grace.</li>
+</ul>
+
+<h3>4.8 &nbsp;The shelf, and embers</h3>
+<p>Finishing a book turns its handiwork into an <strong>ember</strong>. The shelf is every ember the room has, in a row, each the size its fire was.</p>
+<p><strong>Answering the brief's open question:</strong> the shelf does not draw a shelf. The embers sit on a shared baseline with a faint warm bloom beneath them — light on a surface implies the surface. If that proves too subtle in testing, the fallback is a single hairline rule at 12% opacity, and nothing heavier.</p>
+<p>Tapping an ember opens that reading's record (<span class="k">S11</span>): the book, the date range, every note left, every highlight, every card the room opened. Immutable. This is what the printed keepsake is made from.</p>
+
+<h3>4.9 &nbsp;Time, days, and zones</h3>
+<p>A couple four time zones apart must never be told they are a day behind because of the date line.</p>
+<ul>
+<li><strong>Subsiding runs on elapsed hours since the room's last fuel,</strong> not on calendar days. There is no midnight, anywhere, for anyone.</li>
+<li><strong>A quiet day is marked in the marker's local day,</strong> and displayed to everyone else as “today” or “yesterday” relative to <em class="t">their</em> clock.</li>
+<li><strong>Timestamps are relative and coarse</strong> — <em class="t">this morning</em>, <em class="t">last night</em>, <em class="t">Tuesday</em> — never “14 hours ago,” which is a count, and never a wall-clock time that would reveal that someone was awake at 3 a.m.</li>
+<li>Date ranges on an ember record are absolute (<em class="t">March – June</em>) because they are addresses in time, not durations.</li>
+</ul>
+</section>
+
+<section id="s5">
+<h2><em>05</em>Navigation</h2>
+<p class="lede">Six destinations, one root, no tabs. Everything is a push off the room or a sheet over it.</p>
+
+<figure>
+<svg viewBox="0 0 620 300" role="img" aria-label="Navigation map: the Room is the root, with pushes to Reading, Shelf, Person and Rooms, and sheets for the composer, cards and settings">
+<g font-family="Alegreya Sans SC, Georgia, serif" font-size="12" letter-spacing=".05em">
+<rect x="232" y="16" width="152" height="40" rx="4" fill="#D6E45C" fill-opacity=".14" stroke="#D6E45C" stroke-width="1.2"/>
+<text x="308" y="34" text-anchor="middle" fill="currentColor">THE ROOM</text>
+<text x="308" y="47" text-anchor="middle" fill="currentColor" fill-opacity=".5" font-size="10.5">S01 · the root</text>
+
+<g stroke="currentColor" stroke-opacity=".28" fill="none">
+<path d="M308 56 v22 h-208 v20"/><path d="M308 56 v22 h-70 v20"/>
+<path d="M308 56 v22 h70 v20"/><path d="M308 56 v22 h208 v20"/>
+</g>
+
+<g fill="none" stroke="currentColor" stroke-opacity=".3">
+<rect x="42" y="98" width="116" height="38" rx="4"/><rect x="180" y="98" width="116" height="38" rx="4"/>
+<rect x="320" y="98" width="116" height="38" rx="4"/><rect x="458" y="98" width="116" height="38" rx="4"/>
+</g>
+<g text-anchor="middle" fill="currentColor">
+<text x="100" y="115">READING</text><text x="100" y="128" fill-opacity=".45" font-size="10.5">S02</text>
+<text x="238" y="115">THE SHELF</text><text x="238" y="128" fill-opacity=".45" font-size="10.5">S10</text>
+<text x="378" y="115">A PERSON</text><text x="378" y="128" fill-opacity=".45" font-size="10.5">S12</text>
+<text x="516" y="115">ROOMS</text><text x="516" y="128" fill-opacity=".45" font-size="10.5">S14 · sheet</text>
+</g>
+
+<g stroke="currentColor" stroke-opacity=".2" fill="none" stroke-dasharray="3 3">
+<path d="M100 136 v24 h-38 v20"/><path d="M100 136 v24 h38 v20"/>
+<path d="M238 136 v46"/>
+</g>
+<g fill="none" stroke="currentColor" stroke-opacity=".22">
+<rect x="8" y="182" width="108" height="34" rx="4"/><rect x="126" y="182" width="108" height="34" rx="4"/>
+<rect x="184" y="228" width="108" height="34" rx="4"/>
+</g>
+<g text-anchor="middle" fill="currentColor" fill-opacity=".72">
+<text x="62" y="203">PASSAGE END</text><text x="180" y="203">NOTE · CARDS</text>
+<text x="238" y="249">AN EMBER</text>
+</g>
+<text x="62" y="215" text-anchor="middle" fill="currentColor" fill-opacity=".4" font-size="10.5">S03</text>
+<text x="180" y="215" text-anchor="middle" fill="currentColor" fill-opacity=".4" font-size="10.5">S04–S09 · inline</text>
+<text x="238" y="261" text-anchor="middle" fill="currentColor" fill-opacity=".4" font-size="10.5">S11</text>
+
+<text x="8" y="288" fill="currentColor" fill-opacity=".45" font-size="10.5">SOLID = PUSH · DASHED = OPENS IN PLACE · NO TAB BAR ON ANY PLATFORM</text>
+</g>
+</svg>
+<figcaption>The room is the app. Everything else hangs off it.</figcaption>
+</figure>
+
+<h4>The rules</h4>
+<ul>
+<li><strong>Cold start goes to the room</strong> you were last in. No splash screen, no “welcome back,” no interstitial. The app opening on the room is the app saying nothing, which is correct.</li>
+<li><strong>The only chrome on the room screen is the room's name,</strong> top-left, in small caps. Tapping it opens the rooms sheet. That is the entire navigation bar.</li>
+<li><strong>The reading screen has no top bar and no back button.</strong> Two ways out, both at the bottom: the Wave mark, and a downward drag from scroll-top that settles like a book closing.</li>
+<li><strong>Sheets are for things you finish and dismiss</strong> — the composer, settings, the rooms list, the book chooser. Pushes are for places you go.</li>
+<li><strong>Nothing in the app opens a modal alert</strong> except destructive confirmations (leaving a room, deleting an account) and system permission prompts.</li>
+</ul>
+</section>
+
+<section id="s6">
+<h2><em>06</em>Workflows</h2>
+<p class="lede">Twelve journeys, end to end, including the ones that go wrong.</p>
+
+<h3>6.1 &nbsp;First run to first read</h3>
+<p>The whole thing is four decisions and no tour. There is no carousel, no feature walkthrough, and no stack of permission prompts at launch.</p>
+<ol>
+<li><strong>Open.</strong> The Wave mark, and one line: <em class="t">Read it together.</em> It holds for about 900&nbsp;ms and then dissolves into the first question. This is the only branded moment in the product.</li>
+<li><strong>“Who's reading with you?”</strong> Two answers: <span class="k">Start a room</span> and <span class="k">I have an invite</span>. No third option, no sign-in-first wall — account creation happens inside whichever path you pick.</li>
+<li><strong>Your name and portrait.</strong> The portrait is asked for with a reason attached — <em class="t">They'll see your face when you're reading.</em> — because that is true and it is the only reason that would persuade someone. Skipping gives a monogram in your ink, and the app never asks again.</li>
+<li><strong>Invite them.</strong> A link, into the system share sheet. Copy: <em class="t">Send this to the person you're reading with.</em> No contact-list permission. No “find friends.” No suggested people.</li>
+<li><strong>Pick a book, and start.</strong> You can read alone immediately while the invite is out. The fire catches with one person. The presence form is simply absent, and nothing comments on that.</li>
+</ol>
+<h4>The one-time hint</h4>
+<p>At the top of your first passage, one line in small caps that never appears again:</p>
+<div class="copy">Notes go in the margin. Hold a verse to leave one.</div>
+<h4>When permissions get asked</h4>
+<ul class="tight">
+<li><strong>Notifications:</strong> after the first note is left <em class="t">or</em> found — never at launch. In context: <em class="t">Tell you when Ruth leaves a note?</em></li>
+<li><strong>Microphone:</strong> the first time press-and-hold-to-speak is used.</li>
+<li><strong>Camera / photos:</strong> only if the portrait picker is opened.</li>
+</ul>
+
+<h3>6.2 &nbsp;The daily read — the core loop</h3>
+<p>The loop this product lives or dies on. It should take one tap to enter and never require a decision.</p>
+<ol class="tight">
+<li>Open the app → the room. The fire is the first thing on screen, in whatever state it's in.</li>
+<li>One control: <span class="k">Continue in Mark</span>. Tap.</li>
+<li>Reading opens at your position, not the room's. The presence form is out if anyone is there.</li>
+<li>You read. Marks in the gutter show what was left while you were gone.</li>
+<li>End of chapter → the passage end (<span class="k">S03</span>): the cards if there are any, <span class="k">Mark 7</span>, and the way out.</li>
+<li>Close the book. The room again — the fire has moved, quietly, without announcing it.</li>
+</ol>
+<div class="note"><span class="tag">The thing to protect in this loop</span>Nothing may be inserted between opening the app and reading. No “what's new,” no streak card, no verse of the day, no re-engagement prompt, no rating request positioned at the moment of completion. The fastest path from launch to Scripture is the product.</div>
+
+<h3>6.3 &nbsp;Leaving a note, and finding one</h3>
+<p>Two halves of one workflow, days apart. The asymmetry is the point.</p>
+<div class="cols2">
+<div>
+<h4>Leaving</h4>
+<ol class="tight">
+<li>Long-press a verse; it lifts.</li>
+<li>Toolbar: highlight, write, speak.</li>
+<li>Compose. Voice draws its waveform live.</li>
+<li>Release or save. The mark appears in the gutter immediately.</li>
+<li><strong>No confirmation.</strong> No “note left!” toast. It's in the margin; you can see it.</li>
+</ol>
+</div>
+<div>
+<h4>Finding</h4>
+<ol class="tight">
+<li>A notification, or nothing at all.</li>
+<li>The room lists it: <em class="t">Ruth left you a note at Mark 4:9.</em></li>
+<li>Tap → reading opens at that verse, the mark breathing.</li>
+<li>Tap the mark → the note unfurls in place.</li>
+<li>The mark settles to found. Ruth is not told you read it.</li>
+</ol>
+</div>
+</div>
+<div class="note"><span class="tag">Decision</span><b>There are no read receipts.</b> A read receipt turns a gift into a transaction and makes the un-found note into an unanswered message. The author sees only that the note exists.</div>
+
+<h3>6.4 &nbsp;Opening the cards</h3>
+<ol class="tight">
+<li>You reach the end of a chapter. A sealed card sits below the last verse.</li>
+<li>You answer. It saves. The card stays sealed. You may edit until it opens.</li>
+<li>Days pass. Nothing nags — no reminder, no badge, no “Ruth is waiting.”</li>
+<li>The last answer lands. The card turns over, slowly, and everyone gets one notification: <em class="t">The cards are open.</em></li>
+<li>Open cards live on in the ember record forever.</li>
+</ol>
+<p><strong>Escape hatch:</strong> anyone may <span class="k">set down</span> a sealed card, for the room, at any time. It leaves quietly.</p>
+
+<h3>6.5 &nbsp;Finishing a book</h3>
+<p>The one place in the product that gets to feel like an event — and it still has no confetti, no badge, and no number.</p>
+<ol class="tight">
+<li>The last verse of the last chapter. Below it, more space than usual.</li>
+<li>The fire, drawn large, one last time — and then it settles into an ember over about 2.5&nbsp;s. The flame goes down; the light stays.</li>
+<li>One line, in Cesso: <em class="t">Mark.</em> Below it, the date range in small caps.</li>
+<li>Two ways on: <span class="k">Put it on the shelf</span>, and <span class="k">Start another</span>.</li>
+<li>Everyone in the room is notified — this is the one notification that goes to people who weren't there.</li>
+</ol>
+<div class="copy">You finished Mark together.</div>
+<p><strong>Not:</strong> <span class="x">You've completed your 4th book! 🔥 12-day streak!</span></p>
+
+<h3>6.6 &nbsp;Starting a new fire</h3>
+<p>The book chooser (<span class="k">S13</span>) is the most conventional screen in the app and should stay that way — this is navigation, not atmosphere.</p>
+<ul class="tight">
+<li>Books in canonical order, grouped, with a quiet search field that matches references and text.</li>
+<li>Each book shows its <strong>fire size</strong>, drawn, as the honest way of saying how long it is. No word counts, no reading-time estimates — “Isaiah, about 14 hours” is a commitment you can fail.</li>
+<li>A short list at the top: <em class="t">Good places to start together</em> — Mark, Ruth, Philippians, John, Psalms. Editorial, not algorithmic.</li>
+<li>Books already on the shelf are marked with their ember and can be read again; a second reading gets its own fire and its own ember.</li>
+</ul>
+
+<h3>6.7 &nbsp;A third person joins</h3>
+<ol class="tight">
+<li>An existing member invites someone. Any member can invite — a room isn't owned.</li>
+<li>They accept. The room is now three.</li>
+<li>The two originals get an invitation on the room screen to pick an ink. Not a blocking dialog; it waits.</li>
+<li>The newcomer picks from what's left during their onboarding.</li>
+<li>Existing highlights keep their colors, with the one-line explanation.</li>
+<li>The handiwork is untouched. The fire doesn't reset, and the newcomer doesn't “start behind” — there is nothing to be behind.</li>
+</ol>
+<p><strong>Six is the ceiling.</strong> At six, invite is disabled with a plain reason: <em class="t">A room holds six. Start another for the rest.</em> The ceiling exists because presence stops meaning anything past six faces and because eight inks minus brand reserve leaves no room for growth.</p>
+
+<h3>6.8 &nbsp;Someone leaves, or a room ends</h3>
+<p>The hardest workflow in the product, because a couples app has to handle a breakup with dignity.</p>
+<dl class="spec">
+<dt>Leaving</dt><dd>A member can leave any room. One confirmation, plainly worded, no guilt: <em class="t">Leave this room? You'll keep the books on your shelf.</em></dd>
+<dt>Their notes</dt><dd>One question at the moment of leaving, defaulting to <strong>leave them</strong>: <em class="t">Leave your notes behind?</em> They were left for the other person. Taking them back should be possible and should never be the default.</dd>
+<dt>Their highlights</dt><dd>Stay, always. A highlight is a mark on a shared page, not a possession.</dd>
+<dt>The room after</dt><dd>Keeps its shelf and its fire. If one person remains, it becomes a room of one and reading continues. It is never auto-deleted, and it is never renamed to something sad.</dd>
+<dt>Closing a room</dt><dd>Requires everyone to agree, or 30 days of silence plus one member's request. On close, every member gets an export of the whole shelf — notes, highlights, cards — as a readable file. No dark pattern, no retention offer, no “are you sure? you'll lose everything.”</dd>
+<dt>Account deletion</dt><dd>Removes the person everywhere. Notes left follow the same “leave them behind?” question, asked once, at deletion.</dd>
+</dl>
+
+<h3>6.9 &nbsp;Subscribing, lapsing, restoring</h3>
+<p>See §14 for the model. The workflows:</p>
+<ul class="tight">
+<li><strong>Subscribing</strong> happens from the shelf after the first book is finished, or from settings at any time. One person pays; the room is entitled. The other person never sees a paywall, ever, and never learns whether they are the payer.</li>
+<li><strong>Lapsing:</strong> the room is <strong>paused</strong> — presence off, new notes off. Reading, existing notes, highlights and the shelf all stay. The copy names no one: <em class="t">The room is paused. It can be started again any time.</em></li>
+<li><strong>Restoring</strong> is one tap and everything returns, including the fire in the state it was in. Nothing was deleted.</li>
+<li><strong>Payment failure</strong> gets a grace window before quiet, and the message states what did <em class="t">not</em> happen: <em class="t">The card was declined. Nothing changed in your room.</em></li>
+</ul>
+
+<h3>6.10 &nbsp;New device, lost account, offline</h3>
+<ul class="tight">
+<li><strong>Sign-in</strong> is a passkey where available, an emailed code otherwise. No passwords. No “sign in with” buttons that leak the app's name into a third-party account list — that matters for Law 3.</li>
+<li><strong>New device:</strong> sign in, rooms restore, books re-download on Wi-Fi in the background. The shelf is available immediately; text follows.</li>
+<li><strong>Offline reading</strong> is a first-class case. Downloaded books read normally. The presence form is absent. Notes queue with hairline marks. There is no offline banner, because the app being usable is not news.</li>
+<li><strong>Lost access entirely:</strong> email recovery, and the room's other members can re-invite you into the same membership so your ink and your notes reattach rather than duplicating.</li>
+</ul>
+
+<h3>6.11 &nbsp;Youth ministry and groups</h3>
+<ul class="tight">
+<li>A leader creates rooms and invites into them; there is no roster, no dashboard, and no attendance view — that would be a count of the most sensitive kind.</li>
+<li>A leader sees their own rooms exactly as any member does.</li>
+<li>Billing is per-leader for N rooms, and members never see it.</li>
+<li><strong>Minors:</strong> a room containing anyone under 13 disables voice notes' transcription upload and requires an adult member. This needs legal review before launch — flagged in §16.</li>
+</ul>
+
+<h3>6.12 &nbsp;What Ribbon never does</h3>
+<ul class="plain">
+<li>Never notifies anyone about someone's absence, inactivity, or lapse.</li>
+<li>Never shows a person their own consistency, in any form.</li>
+<li>Never compares two people in a room.</li>
+<li>Never asks for a rating at a moment of emotional completion.</li>
+<li>Never sends a re-engagement notification. If you stop opening it, it stops speaking.</li>
+<li>Never puts a numeric badge on the app icon.</li>
+</ul>
+</section>
+
+<section id="s7">
+<h2><em>07</em>Every screen</h2>
+<p class="lede">Twenty-six surfaces. Each one: what it's for, what's on it, what you can do to it, and every state it can be in.</p>
+
+<div class="note"><span class="tag">Reading a screen block</span><b>Anatomy</b> is top-to-bottom. <b>Gestures</b> are exhaustive — if a gesture isn't listed, it isn't supported. <b>States</b> covers first-run, empty, loading, offline, error, and the edge cases specific to that screen. <b>Copy</b> gives exact strings; where a string is wrong on purpose it's struck through.</div>
+
+<div class="screen">
+<div class="hd"><span class="id">S01</span><h3>The room</h3><span class="plat">Root · all platforms</span></div>
+<p class="purpose">Where the app opens, and the only permanent destination. Its job is to show the fire, say who's here, and get you into the book in one tap.</p>
+<dl class="spec">
+<dt>Anatomy</dt><dd>
+<ol class="tight">
+<li><strong>Room name</strong>, top-left, small caps, muted. The only chrome. Tap → <span class="k">S14</span>.</li>
+<li><strong>Presence line.</strong> Portraits of whoever is in the book right now, small, left-aligned. If nobody, one line of last activity instead: <em class="t">Ruth read this morning.</em></li>
+<li><strong>The handiwork</strong>, centred, at its book's scale, breathing on a 3.4&nbsp;s irregular loop.</li>
+<li><strong>Book name</strong> in Cesso beneath it; <strong>state</strong> in small caps beneath that — <span class="k">CATCHING</span> · <span class="k">BURNING</span> · <span class="k">STEADY</span> · <span class="k">BANKED</span>.</li>
+<li><strong>The way in.</strong> One wide control: <em class="t">Continue in Mark</em>.</li>
+<li><strong>What's waiting.</strong> Zero to four rows, each with an ink dot. Notes left for you, cards open, an ink to pick. Never a count, never a badge.</li>
+<li><strong>The shelf</strong>, below the fold. Scroll down for embers.</li>
+<li><strong>Mark a quiet day</strong>, small caps, at the very bottom. Always present, never emphasised.</li>
+</ol></dd>
+<dt>Gestures</dt><dd>Vertical scroll · tap room name → rooms · tap fire → nothing (deliberately inert; it is an object, not a button) · tap a waiting row → jumps to that note or card · tap an ember → <span class="k">S11</span> · tap a portrait → <span class="k">S12</span> · pull-to-refresh: none, the room is live.</dd>
+<dt>First run</dt><dd>No book chosen. The fire's place holds nothing; in its place, <em class="t">Pick something to read together</em> and the chooser. The shelf is absent, not empty-stated.</dd>
+<dt>Room of one</dt><dd>Invite still out. Presence line absent. Everything else works. One quiet row: <em class="t">The invite is still out.</em> — the state, not the person; no nudge button beyond <span class="k">Send it again</span>.</dd>
+<dt>Loading</dt><dd>The room renders from cache instantly. The fire's state and presence fill in without a skeleton — a skeleton flashing on the app's front door reads as instability.</dd>
+<dt>Offline</dt><dd>Fire renders in its last known state, dimmed by ~8%. Presence line absent. No banner. The way-in works if the book is downloaded; if not, the control reads <em class="t">Mark will finish downloading on Wi-Fi</em> and is inert.</dd>
+<dt>Paused room</dt><dd>Subscription lapsed. Fire stays in its true state, presence off, waiting rows gone. One row: <em class="t">The room is paused. It can be started again any time.</em></dd>
+<dt>Copy</dt><dd>
+<div class="copy">Continue in Mark<br><span style="color:var(--muted)">Ruth read this morning</span><br><span style="color:var(--muted)">Ruth left you a note at Mark 4:9</span><br><span style="color:var(--muted)">The cards are open</span><br><span class="x">You're on a 12-day streak! Keep it going 🔥</span></div></dd>
+</dl>
+</div>
+
+<div class="screen">
+<div class="hd"><span class="id">S02</span><h3>Reading</h3><span class="plat">Full-screen cover · the product</span></div>
+<p class="purpose">The surface everything else exists to protect. No top bar, no back button, no toolbar until you ask for one.</p>
+<dl class="spec">
+<dt>Anatomy</dt><dd>
+<ol class="tight">
+<li><strong>Running head</strong> — book and chapter in small caps at ~40% opacity, set into the text block and scrolling with it. Not a bar. This is how a printed book tells you where you are, and it satisfies “no top bar” honestly rather than by technicality.</li>
+<li><strong>The gutter</strong>, left, ~28&nbsp;pt wide. Note marks only.</li>
+<li><strong>Scripture</strong> in Literata, measure ~38–42 characters on phone, generous leading (1.72), verse numbers in small caps superscript at ~45% opacity.</li>
+<li><strong>Highlights</strong> as 24% washes with soft bleed.</li>
+<li><strong>The presence form</strong>, right edge.</li>
+<li><strong>The way out</strong> — the Wave mark, ~20&nbsp;pt, muted ivory, centred at the bottom edge. Nothing else down there.</li>
+</ol></dd>
+<dt>Gestures</dt><dd>Vertical scroll · <strong>long-press a verse</strong> → lift + toolbar (<span class="k">S05</span>/<span class="k">S06</span>) · <strong>drag across verses</strong> → extend a selection · <strong>tap a gutter mark</strong> → the note unfurls (<span class="k">S04</span>) · <strong>tap the presence form</strong> → follow · <strong>drag the form left</strong> → expanded panel (<span class="k">S07</span>) · <strong>drag down from scroll-top</strong> → closes, with the page settling · <strong>tap the Wave</strong> → closes · <strong>double-tap</strong>: nothing, reserved.</dd>
+<dt>Not supported</dt><dd>Horizontal page-turn (it fights following, and it breaks continuous scroll for long chapters) · pinch to zoom (text size lives in settings and in Dynamic Type) · edge-swipe back (this is a cover, not a push — the closing gesture replaces it).</dd>
+<dt>First run</dt><dd>The one-time hint line above the first verse. Dismissed by scrolling past it. Never returns.</dd>
+<dt>Loading</dt><dd>Text is local or it isn't shown. If a chapter is genuinely fetching, the running head appears and the body fades in over 320&nbsp;ms — no skeleton lines, which read as fake text.</dd>
+<dt>Offline</dt><dd>Identical, minus presence. New notes get hairline marks. Nothing announces the state.</dd>
+<dt>Following</dt><dd>Chartreuse hairline down the right edge; scroll is driven. First self-scroll rubber-bands, second breaks the follow.</dd>
+<dt>Being followed</dt><dd>The follower's portrait tucks against the form. One line, once, in small caps: <em class="t">Ruth is with you.</em></dd>
+<dt>Paused room</dt><dd>Reading is untouched. Long-press shows only <span class="k">highlight</span>, greyed, with one line: <em class="t">New notes need the room started again.</em></dd>
+<dt>Edge cases</dt><dd>A chapter with a great many notes on one verse (stack, then triplet) · a verse longer than the screen (marks pin to the first line) · largest Dynamic Type (measure narrows to ~24 characters, gutter holds its width, presence form shrinks to portrait-only) · a psalm with poetic line breaks (indentation preserved; the measure gets a hanging indent, never a horizontal scroll).</dd>
+</dl>
+</div>
+
+<div class="screen">
+<div class="hd"><span class="id">S03</span><h3>Passage end</h3><span class="plat">Inline, below the last verse</span></div>
+<p class="purpose">The end of a chapter. The one place with more than one thing to do.</p>
+<dl class="spec">
+<dt>Anatomy</dt><dd>Generous space after the last verse — roughly three lines' worth · a hairline rule at the measure's width · the card, sealed or open (<span class="k">S08</span>/<span class="k">S09</span>) · <em class="t">Mark 7</em>, the continue control · the Wave mark, larger here than at the screen edge, as the deliberate close.</dd>
+<dt>Gestures</dt><dd>Tap continue → next chapter loads inline, running head changes, scroll continues · tap the Wave → close · keep scrolling → next chapter loads anyway (continuous), the control being a shortcut rather than a gate.</dd>
+<dt>End of book</dt><dd>Replaced entirely by the finishing sequence — §6.5. The continue control is gone; there is nowhere to continue to.</dd>
+<dt>No card</dt><dd>Not every chapter has one. When there's none, nothing occupies its space and the rule sits directly above the continue control.</dd>
+<dt>Copy</dt><dd><div class="copy">Mark 7<br><span style="color:var(--muted)">Close the book</span></div></dd>
+</dl>
+</div>
+
+<div class="screen">
+<div class="hd"><span class="id">S04</span><h3>A note, open</h3><span class="plat">Inline in the text · never a sheet</span></div>
+<p class="purpose">Reading what someone left. The single most important emotional moment in the app.</p>
+<dl class="spec">
+<dt>Anatomy</dt><dd>The verse's line height opens over 400&nbsp;ms · the note unfurls beneath, indented to the measure · author's portrait, 22&nbsp;pt, at the left · relative time in small caps (<em class="t">last night</em>) · the body: written text in Alegreya Sans, or a waveform in the author's ink with a play control · transcript beneath a voice note, muted, collapsed · if the note quotes the verse, the quote renders in <strong>the author's translation</strong>, small.</dd>
+<dt>Gestures</dt><dd>Tap the mark again → collapses · tap play → plays in place, scrubbing by dragging the waveform · long-press your own note → edit or take back · swipe: nothing.</dd>
+<dt>States</dt><dd><strong>Playing:</strong> the waveform fills left-to-right in the ink; no timer, no duration readout — a duration is a count and it makes people self-conscious about how long they talked. <strong>Transcribing:</strong> a fresh voice note shows <em class="t">Transcript coming</em> until it lands. <strong>Failed transcription:</strong> the note plays fine; the transcript line reads <em class="t">No transcript for this one.</em> and offers <span class="k">Try again</span>. <strong>Taken back:</strong> the mark and the note vanish with no tombstone.</dd>
+</dl>
+</div>
+
+<div class="screen">
+<div class="hd"><span class="id">S05</span><h3>Leaving a note</h3><span class="plat">Inline toolbar + composer</span></div>
+<p class="purpose">Writing or speaking to one specific verse.</p>
+<dl class="spec">
+<dt>Toolbar</dt><dd>Rises from the bottom after the long-press, ~52&nbsp;pt tall: <strong>the ink swatches</strong> (eight, or your one), <strong>write</strong>, <strong>speak</strong>. Dismissed by tapping anywhere in the text.</dd>
+<dt>Write</dt><dd>A composer sized to its content, growing as you type, anchored above the keyboard. No formatting controls, no title, no character limit shown. Save is a single control; there is no draft state and no autosave message.</dd>
+<dt>Speak</dt><dd>Press and hold. The waveform draws live in your ink. Release keeps it. Drag away discards — the waveform recedes rather than a dialog appearing. A very short recording (under ~1&nbsp;s) is discarded silently as a mis-touch.</dd>
+<dt>States</dt><dd><strong>No mic permission:</strong> the speak control asks once, in context, then routes to Settings if refused — and never asks again. <strong>Offline:</strong> both work; the mark appears hairline. <strong>Recording interrupted</strong> by a call: what was captured is kept and offered, not thrown away. <strong>Storage full:</strong> <em class="t">There's no room on this phone for the recording.</em> — with the actual number of megabytes needed, which is a count about a device, not about a person, and therefore fine.</dd>
+</dl>
+</div>
+
+<div class="screen">
+<div class="hd"><span class="id">S06</span><h3>Highlighting</h3><span class="plat">Inline</span></div>
+<p class="purpose">Marking text, in ink.</p>
+<dl class="spec">
+<dt>Two people</dt><dd>Eight swatches. Pick per highlight. The last-used ink is pre-selected so the common case is one tap.</dd>
+<dt>Three or more</dt><dd>One swatch — yours. The row collapses to a single control that applies immediately.</dd>
+<dt>Extending</dt><dd>Drag handles at both ends of the selection, snapping to verse boundaries by default and to word boundaries when dragged slowly.</dd>
+<dt>Removing</dt><dd>Tap an existing highlight → a small label naming who made it, and <span class="k">remove</span> if it's yours. You cannot remove someone else's mark.</dd>
+<dt>Overlap</dt><dd>Two inks over the same words blend to a third color. This is desirable and must survive both themes — check every one of the 28 pairs against the ground before ship.</dd>
+</dl>
+</div>
+
+<div class="screen">
+<div class="hd"><span class="id">S07</span><h3>Presence, expanded</h3><span class="plat">Over the reading surface</span></div>
+<p class="purpose">Who's here, where they are, and the one gesture that says you're thinking of them.</p>
+<dl class="spec">
+<dt>Opening</dt><dd>Drag the form left, or tap and hold it. It grows from the lozenge into a panel ~200&nbsp;pt wide, still anchored to the right edge, still leaving the text visible beside it.</dd>
+<dt>Anatomy</dt><dd>One row per present person: portrait, name, and where they are (<em class="t">Mark 6</em>) in small caps · a ring on whoever you're following · <span class="k">read quietly</span> at the bottom · nothing else.</dd>
+<dt>Gestures</dt><dd>Tap a row → follow · press and hold a portrait → thinking of you, filling over 700&nbsp;ms · drag right or tap the text → collapse.</dd>
+<dt>States</dt><dd><strong>Alone:</strong> the panel can't be opened, because the form isn't there — unless you are reading quietly, in which case your own closed shape still opens it, so the toggle is never out of reach. <strong>Reading quietly:</strong> your own row shows as a closed shape with <em class="t">only you can see you</em>. <strong>Someone idle:</strong> their portrait at 60%, position line reads <em class="t">here, but still</em>. <strong>Offline:</strong> unavailable, with no explanation offered.</dd>
+</dl>
+</div>
+
+<div class="screen">
+<div class="hd"><span class="id">S08</span><h3>A card, sealed</h3><span class="plat">Passage end</span></div>
+<p class="purpose">A question everyone answers before anyone reads the answers.</p>
+<dl class="spec">
+<dt>Anatomy</dt><dd>The question in Literata, generously set · your answer field, open, no placeholder text beyond a single hairline · one line beneath: <em class="t">This opens when everyone has answered.</em> · <span class="k">set it down</span>, small caps, low contrast.</dd>
+<dt>Rules</dt><dd>Never names who hasn't answered · never shows how many have · no expiry, no reminder, no nudge · your own answer is editable until the moment it opens.</dd>
+<dt>States</dt><dd><strong>Unanswered</strong> (field open) · <strong>answered</strong> (your answer shown, tap to edit, plus the waiting line) · <strong>offline</strong> (answer saves locally, syncs later, no difference visible) · <strong>room of one</strong> (a card in a room of one opens on your answer — it can't wait for nobody).</dd>
+<dt>Copy</dt><dd><div class="copy">What did you notice that the other one probably didn't?<br><span style="color:var(--muted)">This opens when everyone has answered.</span><br><span class="x">Waiting on Ruth · 1 of 2 answered</span></div></dd>
+</dl>
+</div>
+
+<div class="screen">
+<div class="hd"><span class="id">S09</span><h3>A card, open</h3><span class="plat">Passage end · and the ember record</span></div>
+<p class="purpose">Reading each other's answers.</p>
+<dl class="spec">
+<dt>Opening</dt><dd>A slow turn over 480&nbsp;ms, ease-out, no bounce. If the reader is on the screen when the last answer lands, it turns live. If not, it is simply open when they arrive.</dd>
+<dt>Anatomy</dt><dd>The question · every answer, each with its author's portrait and ink · no ordering by time, no “first to answer,” no reactions, no replies. A card is a moment, not a thread.</dd>
+<dt>After</dt><dd>Open cards remain in place in the chapter and are copied into the ember record when the book is finished.</dd>
+</dl>
+</div>
+
+<div class="screen">
+<div class="hd"><span class="id">S10</span><h3>The shelf</h3><span class="plat">Below the room, and its own screen</span></div>
+<p class="purpose">Every book this room has read, as embers.</p>
+<dl class="spec">
+<dt>Anatomy</dt><dd>Embers on a shared baseline with a faint warm bloom beneath — no drawn shelf · each at the size its fire was · wrapping into rows, oldest first, left to right · the book's name in small caps beneath each · at the end, <span class="k">Start another</span>.</dd>
+<dt>Gestures</dt><dd>Tap an ember → <span class="k">S11</span> · scroll · nothing else. No sorting, no filtering, no list view — a shelf you can sort is a database.</dd>
+<dt>Empty</dt><dd>Absent entirely until the first book is finished. There is no “your shelf is empty” state, because an empty shelf is a reproach.</dd>
+<dt>One ember</dt><dd>A single ember, alone, at real size. This is the moment the keepsake idea first appears: <em class="t">One day this is a book.</em></dd>
+<dt>Many</dt><dd>Above roughly twenty, rows compress vertically but embers never shrink below their true scale — the whole point is that Isaiah looks like Isaiah.</dd>
+</dl>
+</div>
+
+<div class="screen">
+<div class="hd"><span class="id">S11</span><h3>An ember</h3><span class="plat">Push</span></div>
+<p class="purpose">One finished book's complete record. Immutable, and the source of the printed keepsake.</p>
+<dl class="spec">
+<dt>Anatomy</dt><dd>The ember, large · the book in Cesso · the date range in small caps (<em class="t">March – June</em>) · who read it, as portraits · every note left, in verse order, each openable in place · every highlight, as quoted verses in their inks · every card the room opened · at the bottom, <span class="k">Read it again</span> and — later — <span class="k">Make this a book</span>.</dd>
+<dt>Gestures</dt><dd>Scroll · tap a note → opens in place · tap a quoted verse → opens the reading at that verse · share: <strong>plain text only</strong> — a verse and its reference, or one of <em class="t">your own</em> notes. Never rendered as an image, because a serif quote card built to be screenshotted is on the never-ship list; and never someone else's note, because it was left for you and not for the internet.</dd>
+<dt>States</dt><dd><strong>A book with no notes</strong> — possible and not a failure. Shows the highlights and the cards; if there is nothing at all, one line: <em class="t">You read this one straight through.</em> <strong>A departed member's notes</strong> render normally, with their portrait; nothing marks them as gone.</dd>
+</dl>
+</div>
+
+<div class="screen">
+<div class="hd"><span class="id">S12</span><h3>A person</h3><span class="plat">Push, from a portrait</span></div>
+<p class="purpose">Someone in this room. Not a profile — there is nothing to follow, nothing to score.</p>
+<dl class="spec">
+<dt>Anatomy</dt><dd>Portrait, large · name · their ink · what they've left in this room, in verse order · nothing else. No join date, no activity, no “last seen” beyond the room's own presence line.</dd>
+<dt>Yourself</dt><dd>The same screen plus <span class="k">change your ink</span> and <span class="k">leave this room</span>.</dd>
+<dt>Never</dt><dd>No counts of anything they've done. No comparison. No mutual-rooms list.</dd>
+</dl>
+</div>
+
+<div class="screen">
+<div class="hd"><span class="id">S13</span><h3>The book chooser</h3><span class="plat">Sheet</span></div>
+<p class="purpose">Starting a fire. Deliberately the most conventional screen in the app.</p>
+<dl class="spec">
+<dt>Anatomy</dt><dd><em class="t">Good places to start together</em> — five editorial picks (Mark, Ruth, Philippians, John, Psalms) · then all 66 in canonical order, grouped by section, each with its fire drawn at scale · a quiet search field matching book names, references, and text.</dd>
+<dt>Rules</dt><dd>The drawn fire is the only length indicator. <strong>No word counts, no chapter counts, no reading-time estimates</strong> — “about 14 hours” is a commitment a person can fail.</dd>
+<dt>States</dt><dd><strong>Already on the shelf:</strong> the ember shows beside the name; choosing it again starts a fresh fire and a second ember. <strong>Not downloaded:</strong> selectable; download starts and reading opens as soon as the first chapter lands. <strong>Search with no result:</strong> <em class="t">Nothing matches that.</em> and the list stays visible beneath.</dd>
+</dl>
+</div>
+
+<div class="screen">
+<div class="hd"><span class="id">S14</span><h3>Rooms</h3><span class="plat">Sheet, from the room name</span></div>
+<p class="purpose">Switching between rooms, and making a new one.</p>
+<dl class="spec">
+<dt>Anatomy</dt><dd>One row per room: its name, its members' portraits, and its fire drawn small in its current state · the current room marked with a chartreuse hairline · <span class="k">Start a room</span> · <span class="k">You</span> at the bottom, which is how settings is reached.</dd>
+<dt>Gestures</dt><dd>Tap a room → switch, sheet dismisses, room screen cross-fades over 320&nbsp;ms · swipe a row: nothing (leaving a room is deliberate, and lives in <span class="k">S12</span>).</dd>
+<dt>States</dt><dd><strong>One room</strong> — the common case; the sheet still opens and shows one row plus the two controls. <strong>Paused room</strong> — its fire is drawn in whatever state it actually holds, never banked, and one line reads <em class="t">paused</em>. <strong>Many rooms</strong> — scrolls; no folders, no reordering.</dd>
+</dl>
+</div>
+
+<div class="screen">
+<div class="hd"><span class="id">S15</span><h3>Making a room, and inviting</h3><span class="plat">Sheet</span></div>
+<p class="purpose">Two steps that should feel like one.</p>
+<dl class="spec">
+<dt>Anatomy</dt><dd>A name field, optional, placeheld with the members' first names once they join · then the invite: a link, into the system share sheet, with copy that assumes one person.</dd>
+<dt>Rules</dt><dd>No contact-list permission, ever · no email-address field · no “invite by username” · the link is the whole mechanism.</dd>
+<dt>States</dt><dd><strong>Invite pending:</strong> the room screen shows one quiet line and <span class="k">Send it again</span>. <strong>Link expired</strong> (after 30 days): the accepting side sees <em class="t">This invite has expired. Ask for a new one.</em> <strong>Room full:</strong> invite disabled with <em class="t">A room holds six. Start another for the rest.</em></dd>
+<dt>Copy</dt><dd><div class="copy">Send this to the person you're reading with.<br><span class="x">Invite your friends to join your spiritual journey!</span></div></dd>
+</dl>
+</div>
+
+<div class="screen">
+<div class="hd"><span class="id">S16</span><h3>Accepting an invite</h3><span class="plat">Deep link · web and app</span></div>
+<p class="purpose">The most important conversion surface in the product, and the one Law 3 governs hardest.</p>
+<dl class="spec">
+<dt>App installed</dt><dd>The link opens the app directly into: who invited you, their portrait, the room's name, and one control — <span class="k">Join</span>. Then name and portrait. Then you're in the room.</dd>
+<dt>App not installed</dt><dd>The link opens the <strong>web</strong> version of the same screen, and you can join and read <em class="t">immediately, in the browser</em>, without installing anything. The app is offered afterwards, once, and never insisted on. This is the single most important decision on this screen: an invite that demands an install before showing anything is an invite a hesitant partner declines.</dd>
+<dt>Tone</dt><dd>The screen shows a person, not a product. It does not explain Ribbon's features, does not mention the Bible in the first line, and does not use the word “devotional” anywhere.</dd>
+<dt>Copy</dt><dd><div class="copy">Jacob wants to read with you.<br><span style="color:var(--muted)">Ribbon · read it together</span><br><span class="x">Join Jacob's Bible study group and start your 30-day devotional journey!</span></div></dd>
+<dt>States</dt><dd>Expired · room full · already a member (goes straight in) · signed in as someone else (offers to switch, does not silently join).</dd>
+</dl>
+</div>
+
+<div class="screen">
+<div class="hd"><span class="id">S17</span><h3>Onboarding</h3><span class="plat">A thread, not a screen</span></div>
+<p class="purpose">Four questions, no tour. Detailed in §6.1.</p>
+<dl class="spec">
+<dt>Sequence</dt><dd>Mark and tagline (900&nbsp;ms) → start or accept → name and portrait → invite → book → read.</dd>
+<dt>Skippable</dt><dd>Portrait (gives a monogram) · room name (derived from names) · invite (readable alone immediately).</dd>
+<dt>Not skippable</dt><dd>Name. Presence needs something to show.</dd>
+<dt>Never</dt><dd>A feature carousel · a “what brings you here?” survey · a denominational question · a notification pre-prompt · an account wall before anything is visible.</dd>
+</dl>
+</div>
+
+<div class="screen">
+<div class="hd"><span class="id">S18</span><h3>You</h3><span class="plat">Sheet, from rooms</span></div>
+<p class="purpose">Account and app-wide settings. Deliberately buried two taps deep.</p>
+<dl class="spec">
+<dt>Anatomy</dt><dd>Portrait and name (editable in place) · <strong>Text</strong> → <span class="k">S20</span> · <strong>Notifications</strong> → <span class="k">S19</span> · <strong>Downloads</strong> → <span class="k">S21</span> · <strong>Plan</strong> → <span class="k">S22</span> · sign out · delete account · version, small caps, at the bottom.</dd>
+<dt>Not here</dt><dd>No theme picker at launch — dark is the product, and a light mode arrives only when the paper palette is resolved (§16). No accent picker: chartreuse is the brand's, not the user's. No “app icon” picker.</dd>
+</dl>
+</div>
+
+<div class="screen">
+<div class="hd"><span class="id">S19</span><h3>Notifications</h3><span class="plat">Push, per room</span></div>
+<p class="purpose">The setting screen that decides whether people keep this app.</p>
+<dl class="spec">
+<dt>Per room, not global</dt><dd>You want everything from your wife and almost nothing from the Thursday study. Global settings would force one answer to two different questions.</dd>
+<dt>The four switches</dt><dd>
+<ul class="tight">
+<li><strong>Notes left for you</strong> — default on.</li>
+<li><strong>The cards open</strong> — default on.</li>
+<li><strong>When they open the book</strong> — <em class="t">default off.</em> This is the killer feature for couples and the creepiest one for a study; opt-in per room is the only defensible default.</li>
+<li><strong>Thinking of you</strong> — default on.</li>
+</ul></dd>
+<dt>The one with no switch</dt><dd><em class="t">You finished Mark together.</em> Once per book, to everyone in the room including whoever wasn't there when it happened. It has no switch because it fires a handful of times a year at most, and because learning your room finished a book without you is the opposite of an absence notification — it is an invitation back.</dd>
+<dt>Not offered</dt><dd>Anything about absence, lapses, streaks, reminders to read, daily prompts, or “Ruth hasn't read today.” These switches don't exist because the notifications don't exist.</dd>
+<dt>Quiet hours</dt><dd>One per person, applying to every room, defaulting to 10&nbsp;p.m.–6&nbsp;a.m. local. <em class="t">Thinking of you</em> is the only thing permitted to arrive silently inside them, as a haptic on an already-woken device.</dd>
+</dl>
+</div>
+
+<div class="screen">
+<div class="hd"><span class="id">S20</span><h3>Text and translation</h3><span class="plat">Push</span></div>
+<dl class="spec">
+<dt>Anatomy</dt><dd>Translation (Berean Standard, World English at launch) · text size, as a slider previewing live over real Scripture, not lorem · line spacing, three steps · red-letter on/off, default off.</dd>
+<dt>Rules</dt><dd>Translation is personal, not shared (§2.6) · changing it never moves your position or breaks a note's anchor · the preview shows the verse you were last reading, which is a small thing and the kind of small thing this product is made of.</dd>
+</dl>
+</div>
+
+<div class="screen">
+<div class="hd"><span class="id">S21</span><h3>Downloads</h3><span class="plat">Push</span></div>
+<dl class="spec">
+<dt>Anatomy</dt><dd>Translations held on this device, with sizes in megabytes · <span class="k">Keep everything on this phone</span>, default on for the current translation only · voice notes: kept on device for the current reading, streamed thereafter.</dd>
+<dt>Note</dt><dd>Megabytes are a fine number: they measure a device, not a person. This is the boundary of Law 2 and it's worth stating so nobody over-applies the rule into unusability.</dd>
+</dl>
+</div>
+
+<div class="screen">
+<div class="hd"><span class="id">S22</span><h3>Plan</h3><span class="plat">Push</span></div>
+<dl class="spec">
+<dt>Anatomy</dt><dd>What the room has · what it costs · who pays, shown only to the payer · <span class="k">Start the room again</span> if paused · manage in the store.</dd>
+<dt>Rules</dt><dd>A non-paying member sees the plan state but never learns who pays, and never sees a price. Money is invisible to the person who was invited.</dd>
+</dl>
+</div>
+
+<div class="screen">
+<div class="hd"><span class="id">S23</span><h3>Search</h3><span class="plat">Inside the chooser, and the ember record</span></div>
+<p class="purpose">Finding a verse, or finding something someone said.</p>
+<dl class="spec">
+<dt>Two searches, deliberately separate</dt><dd><strong>Scripture search</strong> lives in the book chooser and matches references and text. <strong>Note search</strong> lives on the shelf (<span class="k">S10</span>) and covers every reading the room has done, the one open right now included — the shelf is the room's whole memory, not only its finished books.</dd>
+<dt>Why separate</dt><dd>One universal search bar at the top of the app would be a piece of chrome on the front door, and it would make the app feel like a database. Each search sits where the thing being searched lives.</dd>
+<dt>States</dt><dd>Empty query (recent references only, no history of what you searched) · no results · offline (Scripture search works on downloaded text; note search works on cached notes and says nothing about the rest).</dd>
+</dl>
+</div>
+
+<div class="screen">
+<div class="hd"><span class="id">S24</span><h3>Widgets and Live Activity</h3><span class="plat">iOS and Android</span></div>
+<dl class="spec">
+<dt>Small widget</dt><dd>The fire, at its state, on the unlit ground. The book's name in small caps. Nothing else. No numbers — this is the surface most likely to have a count smuggled into it, and it is the one where a count would be seen most often.</dd>
+<dt>Lock screen</dt><dd>Circular: the fire alone. Inline: the book name and state, in small caps.</dd>
+<dt>Live Activity</dt><dd>Runs while someone else in the room is reading: their portrait and <em class="t">Ruth is reading Mark.</em> It ends when they leave. This is the best single argument for the product on a lock screen and it costs nothing to build well.</dd>
+<dt>Never</dt><dd>A numeric app-icon badge, under any circumstance, on any platform.</dd>
+</dl>
+</div>
+
+<div class="screen">
+<div class="hd"><span class="id">S25</span><h3>Failure surfaces</h3><span class="plat">All platforms</span></div>
+<p class="purpose">Every error the product can produce, and what it says. The voice rule holds here hardest: say the true small thing, name what did not happen, never apologise.</p>
+<div class="tw"><table>
+<thead><tr><th>Situation</th><th>What the app says</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td>Offline while reading</td><td>Nothing</td><td>Presence recedes; notes queue with hairline marks</td></tr>
+<tr><td>Note failed to send</td><td>Nothing, until it's been hours</td><td>Retries silently; then the mark stays hairline and tapping it offers <span class="k">send it now</span></td></tr>
+<tr><td>Sign-in code wrong</td><td><em class="t">That code didn't work. Try again, or send a new one.</em></td><td>Field stays filled; new-code control right there</td></tr>
+<tr><td>Card declined</td><td><em class="t">The card was declined. Nothing changed in your room.</em></td><td>Grace window before the room is paused</td></tr>
+<tr><td>Book won't download</td><td><em class="t">Mark isn't downloaded yet. It'll finish on Wi-Fi.</em></td><td>Resumes automatically; reading works for landed chapters</td></tr>
+<tr><td>Invite expired</td><td><em class="t">This invite has expired. Ask for a new one.</em></td><td>No auto-request, no email capture</td></tr>
+<tr><td>Room full</td><td><em class="t">A room holds six. Start another for the rest.</em></td><td>Offers to start one</td></tr>
+<tr><td>Server unreachable</td><td><em class="t">Can't reach Ribbon right now.</em></td><td>Everything downloaded still works; no full-screen error page ever replaces readable Scripture</td></tr>
+<tr><td>Mic refused</td><td><em class="t">Ribbon needs the microphone to record a note.</em></td><td>One route to Settings, then never asked again</td></tr>
+</tbody></table></div>
+<div class="note"><span class="tag">The rule for every error string</span><b>No “oops,” no “sorry,” no “something went wrong,” no exclamation points, no error codes in the user-facing line.</b> Name what happened, name what didn't, offer the one action that helps. If there is no action, say less.</div>
+</div>
+
+<div class="screen">
+<div class="hd"><span class="id">S26</span><h3>The site</h3><span class="plat">Web only — detail in §12.3</span></div>
+<dl class="spec">
+<dt>Pages</dt><dd>Home · the three mechanics (one page, three sections, not three pages) · for groups and ministries · pricing · the invite/accept screen (<span class="k">S16</span>) · account · privacy and terms · a single support page.</dd>
+<dt>Never on the site</dt><dd>Cookie banner (because there are no non-essential cookies) · chat widget · newsletter modal · testimonial carousel · app-store badges above the fold · stock photography of anyone praying.</dd>
+</dl>
+</div>
+</section>
+
+<section id="s8">
+<h2><em>08</em>The state checklist</h2>
+<p class="lede">These are the defaults. Every screen inherits all eleven, and the blocks above name only where a screen <em class="t">departs</em> from them — a state a screen doesn't mention takes the answer below, rather than having been forgotten.</p>
+<div class="tw"><table>
+<thead><tr><th>State</th><th>The question</th><th>Ribbon's default answer</th></tr></thead>
+<tbody>
+<tr><td><strong>First run</strong></td><td>Never seen before?</td><td>One line of instruction, once, then never again</td></tr>
+<tr><td><strong>Empty</strong></td><td>Nothing here yet?</td><td>Usually <em class="t">absent</em> rather than empty-stated — an empty state is a reproach</td></tr>
+<tr><td><strong>Loading</strong></td><td>Waiting on the network?</td><td>Render from cache; fade content in; no skeletons</td></tr>
+<tr><td><strong>Offline</strong></td><td>No network?</td><td>Presence gone, everything else works, no banner</td></tr>
+<tr><td><strong>Error</strong></td><td>Something failed?</td><td>Name it, name what's intact, one action</td></tr>
+<tr><td><strong>Alone</strong></td><td>Room of one, or nobody present?</td><td>Silence. Never a line about being alone</td></tr>
+<tr><td><strong>Paused</strong></td><td>Subscription lapsed?</td><td>Read everything, write nothing, no one named</td></tr>
+<tr><td><strong>Overflow</strong></td><td>Six people, many notes, longest text?</td><td>Stack, then collapse; never shrink below legibility</td></tr>
+<tr><td><strong>Largest type</strong></td><td>AX5 / 200% font scale?</td><td>Measure narrows, gutter holds, form becomes portrait-only</td></tr>
+<tr><td><strong>Reduce motion</strong></td><td>Motion sensitivity on?</td><td>Fire holds a state instead of flickering; morphs become cross-fades</td></tr>
+<tr><td><strong>Reduce transparency</strong></td><td>iOS accessibility?</td><td>Glass becomes a solid raised surface — see §12.1</td></tr>
+</tbody></table></div>
+<p>Three of these are never a screen's business to restate: <strong>error</strong>, <strong>reduce motion</strong> and <strong>reduce transparency</strong> are settled system-wide in §9.1, §11 and §12.1, and no screen departs from them. The screen where a silent departure would cost the most — <span class="k">S24</span>, the widgets and the Live Activity — has none, which is why it lists none. If you are building a screen and find yourself wanting to depart from any of the eleven, that departure belongs in the screen block, in writing.</p>
+</section>
+
+<section id="s9">
+<h2><em>09</em>Motion, texture, sound</h2>
+<p class="lede">Everything breathes rather than snaps. One thing is allowed to be fast.</p>
+
+<h3>9.1 &nbsp;Motion tokens</h3>
+<div class="tw"><table class="num">
+<thead><tr><th>Token</th><th>Duration</th><th>Curve</th><th>Used for</th></tr></thead>
+<tbody>
+<tr><td><span class="k">arrive</span></td><td>320 ms</td><td>ease-out</td><td>Presence appearing, sheets, cross-fades between rooms</td></tr>
+<tr><td><span class="k">settle</span></td><td>400 ms</td><td>ease-out</td><td>Notes unfurling, the book closing, screen pushes</td></tr>
+<tr><td><span class="k">open</span></td><td>480 ms</td><td>ease-out</td><td>Cards turning, the presence panel expanding</td></tr>
+<tr><td><span class="k">become</span></td><td>2,500 ms</td><td>ease-in-out</td><td>Fire → ember, once per book</td></tr>
+<tr><td><span class="k">flicker</span></td><td>3,400 ms</td><td>irregular loop</td><td>The fire's breath. Never synchronised across elements</td></tr>
+<tr><td><span class="k">tap</span></td><td>90 ms</td><td>linear</td><td>Thinking-of-you haptic only. The single fast thing in the product</td></tr>
+</tbody></table></div>
+<p><strong>No bounce. No spring overshoot. No parallax. No scroll-linked animation on the reading surface</strong> — text that moves at a different rate from its own container is nauseating at 6:40 in the morning.</p>
+
+<h3>9.2 &nbsp;Texture</h3>
+<p>A tileable paper grain sits over the ground at <strong>3.5% opacity in dark, 2.8% in light</strong>. This matters more than usual: at #0B0B0A a flat fill reads as switched-off app chrome, and the grain is the entire difference between a near-black screen and an unlit room. Ship it as a 140&nbsp;px tile, applied above the ground and below all content, never over Scripture glyphs themselves.</p>
+
+<h3>9.3 &nbsp;Haptics</h3>
+<ul class="tight">
+<li><strong>Someone arrives:</strong> one soft transient, low intensity.</li>
+<li><strong>Verse lifts on long-press:</strong> one soft transient, the moment it lifts, not on touch-down.</li>
+<li><strong>Thinking of you, sending:</strong> a rising texture over the 700&nbsp;ms hold, completing with a single sharp-soft transient on release.</li>
+<li><strong>Thinking of you, receiving:</strong> one transient with a short decay — the tap on the shoulder.</li>
+<li><strong>Cards opening:</strong> nothing. It is a visual moment and a haptic would cheapen it.</li>
+<li><strong>Everything else:</strong> nothing. No selection ticks, no success thumps, no error buzz.</li>
+</ul>
+
+<h3>9.4 &nbsp;Sound</h3>
+<p><strong>Ribbon makes no sound it wasn't asked to make.</strong> The only audio in the product is voice-note playback and, later, the audio Bible. No chimes, no whooshes, no fire crackle — an ambient loop would be the single fastest way to make this app feel like a meditation product.</p>
+</section>
+
+<section id="s10">
+<h2><em>10</em>The copy system</h2>
+<p class="lede">Words are the cheapest place to lose this brand and the cheapest place to prove it.</p>
+
+<h3>10.1 &nbsp;The rules</h3>
+<ul class="tight">
+<li>Short sentences. Second person. Active voice.</li>
+<li>Say the true small thing instead of the big warm thing. <em class="t">“Ruth left you a note at verse 4”</em> beats <em class="t">“Deepen your spiritual connection.”</em></li>
+<li>No exclamation points, anywhere, including in the store listing.</li>
+<li>Grace is expressed by the interface being unbothered, not by the interface reassuring you.</li>
+<li>Never name the person who hasn't done a thing.</li>
+<li>A control says exactly what happens. <span class="k">Close the book</span> closes the book.</li>
+</ul>
+
+<h3>10.2 &nbsp;The word list</h3>
+<div class="cols2">
+<div><h4>Use</h4><p>together · beside · quiet · unhurried · keep · tend · leave · notice · room · banked · steady · found · left · shelf · ink · card · fire · ember</p></div>
+<div><h4>Never</h4><p>streak · don't break the chain · accountability partner · engagement · daily challenge · crush it · level up · unlock · rewards · devotional journey · spiritual walk · community · you missed yesterday · get back on track</p></div>
+</div>
+
+<h3>10.3 &nbsp;Notification strings, in full</h3>
+<p>There are six. There will never be a seventh that is about absence.</p>
+<div class="copy">
+Ruth left you a note at Mark 4:9<br>
+Ruth left you a note<span style="color:var(--muted)"> — when several land at once</span><br>
+The cards are open<br>
+Ruth is reading Mark<span style="color:var(--muted)"> — opt-in, per room</span><br>
+Ruth<span style="color:var(--muted)"> — thinking of you; the name is the entire payload</span><br>
+You finished Mark together
+</div>
+<p><strong>Lock-screen test.</strong> Every one of these has to be safe on a locked phone on a desk in an office, seen by a colleague. None of them names the Bible except by book, none says “devotional,” and none reveals that a person did or didn't do something. That test is Law 3 in operation.</p>
+
+<h3>10.4 &nbsp;Naming, in the stores</h3>
+<p>Subtitle: <em class="t">Read it together.</em> Not <em class="t">Bible reading for couples and groups.</em> The category is obvious from the screenshots; the subtitle's job is tone. First screenshot is the reading surface with a note open — the product, not a feature list. No screenshot contains a number.</p>
+</section>
+
+<section id="s11">
+<h2><em>11</em>Accessibility</h2>
+<p class="lede">A long-form reading app has no excuse. These are requirements, not enhancements.</p>
+<dl class="spec">
+<dt>Type scaling</dt><dd>Full Dynamic Type through AX5 on iOS and 200% font scale on Android, with the measure reflowing rather than truncating. Literata's optical size axis tracks the scale. Nothing in the reading surface uses a fixed point size.</dd>
+<dt>Contrast</dt><dd>Ivory #F3F0E6 on #0B0B0A and chartreuse #D6E45C on #0B0B0A both clear AAA comfortably. The risks are the <strong>muted</strong> and <strong>faint</strong> tones and the eight inks at 24% wash — every ink must be verified against both grounds for the text <em class="t">under</em> the wash, not the wash itself.</dd>
+<dt>Color is never alone</dt><dd>Note type is carried by shape (dot vs ring), not color. Person identity in a gutter mark is carried by the accessibility label, since a 6&nbsp;pt ink dot cannot be the only signal of who left a note.</dd>
+<dt>Screen readers</dt><dd>The fire's label must obey Law 2: <em class="t">“The fire is steady.”</em> Never <em class="t">“80 percent complete.”</em> Verse-by-verse navigation with rotor/local context. Gutter marks announce as <em class="t">“Note from Ruth, verse 9, not yet found.”</em> A <strong>stack</strong> announces by author and never by count — <em class="t">“Notes from Ruth and Jacob, verse 9”</em> — because “three notes” is a number the reader never asked for, and Law 2's hardest leaks are the ones only a screen reader says out loud.</dd>
+<dt>Voice notes</dt><dd>Transcripts are mandatory, not a setting. A voice-only note is unreadable to a deaf member and unfindable to everyone in six months.</dd>
+<dt>Motor</dt><dd>Every gesture has a tap equivalent. Long-press duration is adjustable via the system setting. The closing drag is always duplicated by the Wave mark.</dd>
+<dt>Reduce motion</dt><dd>The fire holds a state instead of flickering. Morphs become cross-fades. The card turn becomes a fade. The thinking-of-you fill becomes an instant state change with the haptic intact.</dd>
+<dt>Reduce transparency</dt><dd>iOS: glass becomes an opaque raised surface at <span class="k">--raised</span>, keeping the same geometry. Never a mid-grey fallback.</dd>
+</dl>
+</section>
+
+<section id="s12">
+<h2><em>12</em>The three skins</h2>
+<p class="lede">One product, three native accents. The object model, the copy, and every law above are identical; what changes is the material.</p>
+
+<div class="law"><b>Law 5 · Native chrome, Ribbon content</b>The platform owns the way things move, morph, and respond to touch. Ribbon owns everything inside the reading measure, the fire, the ink, and every word. Where the two conflict, the platform wins on <em>chrome</em> and Ribbon wins on <em>content</em> — and there is no third category, so any argument about who wins is really an argument about which of the two a thing is.</div>
+
+<h3>12.1 &nbsp;iOS — Liquid Glass, tinted to near-invisible</h3>
+<p><strong>Target:</strong> iOS 26+, SwiftUI. <strong>Stance:</strong> use the real system material so we inherit the specular edge, the refraction, the interactive response, and every accessibility fallback for free — then tint it so far toward the unlit ground that it reads as <em class="t">depth</em> rather than as glass.</p>
+
+<div class="note"><span class="tag">The one place we knowingly go against Apple</span>Apple's guidance says tint should carry semantic meaning, not decoration. Ribbon tints for brand: a near-black warm tint at high strength on <span class="k">.regular</span>. On a #0B0B0A ground with paper grain, what survives is the specular edge and a faint lensing of whatever chartreuse sits beneath — which is precisely the goal. <b>This is a deliberate deviation and should be written down as one</b>, because a future reviewer will read it as a mistake.</div>
+
+<h4>Where glass appears — and where it never does</h4>
+<div class="tw"><table>
+<thead><tr><th>Surface</th><th>Glass?</th><th>Treatment</th></tr></thead>
+<tbody>
+<tr><td>The presence form and its panel</td><td><strong>Yes</strong></td><td>The ideal case: it floats over content and morphs between two shapes. <span class="k">GlassEffectContainer</span> + <span class="k">glassEffectID</span> for the lozenge→panel morph. <strong>The panel is capped to the space outside the measure</strong>; where the screen is too narrow, the measure insets and the text moves rather than the glass covering it. Glass never lies over a verse — including here, which is the one place it would be easy to let it.</td></tr>
+<tr><td>The long-press toolbar</td><td>Yes</td><td><span class="k">.regular</span>, capsule, <span class="k">.interactive()</span></td></tr>
+<tr><td>Sheets — rooms, chooser, settings</td><td>Yes</td><td>System sheet materials, tinted to match</td></tr>
+<tr><td>The way out (Wave mark)</td><td>Yes, barely</td><td>A capsule so dark it is legible only by its edge</td></tr>
+<tr><td><strong>Scripture</strong></td><td><strong>Never</strong></td><td>Apple's own rule — glass is the navigation layer, content stays primary. Convenient alignment with the brief's never-ship list.</td></tr>
+<tr><td><strong>The fire, the shelf, embers</strong></td><td><strong>Never</strong></td><td>These are objects in the room, not controls floating above it</td></tr>
+<tr><td><strong>Room background</strong></td><td><strong>Never</strong></td><td>Glass floats over a ground; it does not replace one</td></tr>
+<tr><td>Tab bar</td><td>—</td><td>There is no tab bar (§2.1), so the most conspicuous glass slab in a typical iOS 26 app simply doesn't exist here</td></tr>
+</tbody></table></div>
+
+<h4>Implementation notes</h4>
+<ul class="tight">
+<li>Wrap every group of glass elements in a single <span class="k">GlassEffectContainer</span> — separate containers cause glass to sample glass, and the result reads as a smudge.</li>
+<li><span class="k">.clear</span> is wrong for us: it requires a media-rich background plus a dimming layer plus bold foreground content. We have none of those. <span class="k">.regular</span> throughout.</li>
+<li>Honour <span class="k">accessibilityReduceTransparency</span> by swapping to <span class="k">.identity</span> and painting <span class="k">--raised</span> underneath. Test this path as a first-class design, not a fallback.</li>
+<li>Soften or hide the automatic scroll-edge effect on the reading view — there is no top bar for it to separate the text from, so it reads as an unexplained smudge at the top of a page.</li>
+<li>Use <span class="k">matchedTransitionSource</span> + <span class="k">.navigationTransition(.zoom)</span> for ember → ember record. It is the one place the system's morph is exactly the right metaphor: the ember grows into its own record.</li>
+<li><strong>Motion split:</strong> glass may morph with system spring physics — it is a material behaving as a material. Everything Ribbon draws obeys §9.1. That line is defensible and it should be stated in the code review checklist.</li>
+</ul>
+
+<h4>Platform surfaces</h4>
+<ul class="tight">
+<li><strong>App icon:</strong> the Cesso <em class="t">R.</em> — ivory R, chartreuse period, on #0B0B0A. Three of the four iOS 26 variants: default, dark, and tinted. <strong>No clear variant.</strong> A glass R. was drawn and cut: the brief bans glow, bevel and gradient behind the mark, and the tinted-to-near-invisible argument that earns glass its place on floating chrome does not reach an icon sitting on a stranger's home screen.</li>
+<li><strong>Widgets and Live Activity:</strong> <span class="k">S24</span>.</li>
+<li><strong>Haptics:</strong> Core Haptics patterns, not <span class="k">UIImpactFeedbackGenerator</span> presets — the thinking-of-you tap needs a custom envelope and the presets are all too eager.</li>
+<li><strong>Billing:</strong> StoreKit 2, room-level entitlement verified server-side so the non-paying member's device never needs a receipt.</li>
+<li><strong>Fonts:</strong> Literata and the Alegreya Sans family bundled. Cesso ships as outlined vector only — it is an Adobe Font and cannot be embedded as a webfont or an app font.</li>
+</ul>
+
+<h3>12.2 &nbsp;Android — Material 3 Expressive</h3>
+<p><strong>Target:</strong> Android 16+ (API 36), Jetpack Compose, Material 3 Expressive. <strong>Stance:</strong> take the shape system and the motion physics, decline the color system.</p>
+
+<div class="note"><span class="tag">The deliberate deviation on Android</span><b>Ribbon opts out of dynamic color.</b> Material You would repaint the app from the user's wallpaper, and Ribbon's entire visual argument is one accent on one ground. A Ribbon tinted lavender because someone's wallpaper is lavender is not Ribbon. Ship a fixed color scheme and set <span class="k">isDynamicColor = false</span> explicitly rather than by omission, so nobody turns it on later thinking it was an oversight.</div>
+
+<div class="tw"><table>
+<thead><tr><th>M3 Expressive feature</th><th>Ribbon's use</th></tr></thead>
+<tbody>
+<tr><td>Shape system + morphing</td><td><strong>Yes, heavily.</strong> The presence form's lozenge→panel morph and the fire→ember transition are exactly what shape morphing is for.</td></tr>
+<tr><td>Physics-based motion</td><td><strong>Yes, damped.</strong> Use the spatial spring tokens with damping near critical, so motion is physical but never overshoots. This is the Android answer to the same tension iOS has.</td></tr>
+<tr><td>Docked / floating toolbars</td><td>Only for the long-press toolbar. The way out stays the Wave mark, custom.</td></tr>
+<tr><td>Button groups, split buttons, FAB menu</td><td><strong>No.</strong> A FAB on this app would be wrong — there is no primary create action floating over a list, there is a book.</td></tr>
+<tr><td>Loading indicator</td><td>No. Nothing in Ribbon should be visibly loading (§8).</td></tr>
+<tr><td>Bottom navigation</td><td><strong>No.</strong> No tabs on any platform.</td></tr>
+<tr><td>Ripple</td><td>Replaced with a soft state layer at low opacity. <strong>No bounded ripple over Scripture</strong> — a ripple across a verse is exactly the “interface” feeling Literata is there to prevent.</td></tr>
+<tr><td>Predictive back</td><td>Yes — the room peels in behind the closing book. This is one place Android's system gesture is better than what we'd design.</td></tr>
+<tr><td>Edge-to-edge</td><td>Mandatory. Gesture nav assumed; three-button nav gets extra bottom inset so the Wave never sits under the bar.</td></tr>
+</tbody></table></div>
+<ul class="tight">
+<li><strong>Typography:</strong> M3E's emphasized type roles map to Literata (display, body-large in reading) and Alegreya Sans (everything else). Small caps come from Alegreya Sans SC as a real face, not a <span class="k">textTransform</span>.</li>
+<li><strong>Haptics:</strong> <span class="k">VibrationEffect.Composition</span> for the thinking-of-you tap; the constants are too blunt.</li>
+<li><strong>Widgets:</strong> Glance, same content as iOS.</li>
+<li><strong>Billing:</strong> Play Billing, room-level entitlement, same server verification.</li>
+</ul>
+
+<h3>12.3 &nbsp;Web — custom, and bookish</h3>
+<p><strong>Job:</strong> marketing and a real reading surface on one domain. <strong>Stance:</strong> this is the one platform with no native language to honour, so it goes furthest toward the printed book — which is also what makes it the right place for the hesitant partner to land from an invite link without installing anything (<span class="k">S16</span>).</p>
+
+<h4>The reading page</h4>
+<ul class="tight">
+<li>Single column, ~68 characters, centred, with real margins. The running head sits fixed at the top in small caps at low opacity — on desktop that is bookish rather than chrome, and it is the one place the mobile “no top bar” rule relaxes.</li>
+<li><strong>No position indicator of Ribbon's own.</strong> A drawn fore-edge — a page block at the right, showing roughly how far through you are — was designed and cut. A graphic whose only job is to report how much is left is a progress bar with the numerals removed, and it would have put a non-person element on the edge that belongs to people. The browser's own scrollbar stays, because it is the operating system's chrome and not Ribbon's report on you. Beyond that, position is shown by the text.</li>
+<li>Presence keeps the right edge, as a narrow persistent rail rather than an emerging form, because a desktop window has the width to spare and nothing to gain from hiding it.</li>
+<li>The gutter keeps the left edge, with room for the marks to sit further out than on a phone.</li>
+</ul>
+
+<h4>Keyboard</h4>
+<div class="tw"><table>
+<thead><tr><th>Key</th><th>Does</th></tr></thead>
+<tbody>
+<tr><td><span class="k">J</span> / <span class="k">K</span> or arrows</td><td>Move by verse</td></tr>
+<tr><td><span class="k">Space</span></td><td>Page down</td></tr>
+<tr><td><span class="k">N</span></td><td>Leave a written note on the current verse</td></tr>
+<tr><td><span class="k">H</span></td><td>Highlight the current verse; number keys pick an ink when the room is two</td></tr>
+<tr><td><span class="k">F</span></td><td>Follow, or stop following</td></tr>
+<tr><td><span class="k">/</span></td><td>Search Scripture</td></tr>
+<tr><td><span class="k">Esc</span></td><td>Close the book — with the same settling animation, because the friction is emotional, not mechanical</td></tr>
+</tbody></table></div>
+
+<h4>The site</h4>
+<ul class="tight">
+<li><strong>Home:</strong> the hero is the reading surface itself, live, with a note unfurling — not a phone mockup on a gradient. The thesis is the product.</li>
+<li><strong>One page for the three mechanics</strong>, three sections deep, each demonstrated rather than described.</li>
+<li><strong>Groups and ministries:</strong> plain, practical, priced.</li>
+<li><strong>Pricing:</strong> one table, no annual/monthly toggle theatre, no “most popular” badge.</li>
+<li><strong>Performance:</strong> the reading page is server-rendered, text-first, and readable before any script runs. Presence arrives over a socket and degrades to nothing.</li>
+<li><strong>Focus states</strong> are a chartreuse hairline ring — never the browser default, never removed.</li>
+<li><strong>Absent by policy:</strong> cookie banner, chat widget, newsletter modal, testimonial carousel, exit-intent popup.</li>
+</ul>
+</section>
+
+<section id="s13">
+<h2><em>13</em>Data, sync, privacy</h2>
+<dl class="spec">
+<dt>Sync model</dt><dd>Notes, highlights, cards and positions are last-write-wins per object, which is safe because objects are single-author. Highlights on the same range by different people are separate objects and never conflict.</dd>
+<dt>Presence</dt><dd>The live signal is ephemeral and socket-only. Three things behind it <em class="t">do</em> persist, and naming them exactly is the point: a <strong>rolling fuel window</strong> — who fed the fire within roughly the last 36 hours, discarded after; <strong>one last-read stamp per person per room</strong>, which renders as <em class="t">this morning</em> and never as a clock time; and <strong>quiet-day marks</strong>. Nothing older than that is kept anywhere. The cap is what makes a consistency report impossible — not the absence of data, but the absence of history.</dd>
+<dt>Offline</dt><dd>Downloaded Scripture is local and complete. Notes queue with local IDs and reconcile on reconnect. Voice audio uploads on Wi-Fi by default.</dd>
+<dt>Voice notes</dt><dd>Stored encrypted; transcripts generated server-side at launch. On-device transcription is the better privacy answer and is an open question on cost and quality (§16).</dd>
+<dt>What is never collected</dt><dd>Reading duration. Session counts. Wall-clock times. Any per-person reading record older than the rolling window above. Anything that could be assembled into a picture of a person's devotional consistency — including in analytics, including aggregated. If the data doesn't exist, nobody can be asked for it and no future product manager can build a streak from it.</dd>
+<dt>Analytics</dt><dd>Product analytics limited to anonymous funnel events with no per-person reading history. No third-party SDK gets note content, verse addresses, or portraits.</dd>
+<dt>Export</dt><dd>Any member can export their room's whole shelf at any time, as a readable file, without asking anyone. Closing a room triggers it automatically for everyone.</dd>
+</dl>
+</section>
+
+<section id="s14">
+<h2><em>14</em>Money</h2>
+<h3>14.1 &nbsp;The model</h3>
+<ul class="tight">
+<li><strong>~$8 a month covers a room of two.</strong> One person pays; the room is entitled. The other never sees a paywall and never learns who pays.</li>
+<li><strong>Rooms of three to six:</strong> a flat monthly per room, priced above the pair.</li>
+<li><strong>Youth ministry:</strong> per leader, for N rooms, invoiced.</li>
+<li><strong>The first book is free, all the way through.</strong> Not a 7-day trial — a trial makes the clock the thing you're aware of, and a clock is a count. You read a whole book together, you get the ember, and the ask lands on the shelf, after the value.</li>
+</ul>
+<h3>14.2 &nbsp;Where the ask appears</h3>
+<p>Exactly two places: the shelf, after the first ember, and Plan (<span class="k">S22</span>). Never in the reading surface, never at passage end, never after finishing a chapter, never as an interstitial, never as a badge.</p>
+<h3>14.3 &nbsp;Lapsing</h3>
+<p>A lapsed room is <strong>paused</strong>: presence stops, new notes stop. Reading, every existing note, every highlight and the whole shelf stay, forever. Scripture is never locked (§2.5). The copy names nobody:</p>
+<div class="copy">The room is paused. It can be started again any time.</div>
+<p>No countdown, no “you'll lose your data in 30 days,” no retention offer at cancellation, no dark pattern anywhere in the flow. The product's whole claim is patience; the billing flow is where that claim is actually tested.</p>
+</section>
+
+<section id="s15">
+<h2><em>15</em>What ships when</h2>
+<div class="tw"><table>
+<thead><tr><th>Phase</th><th>Contains</th><th>Proves</th></tr></thead>
+<tbody>
+<tr><td><strong>One — iOS</strong></td><td>Room, reading, presence, notes (voice + written), ink, the campfire, quiet days, shelf and embers, rooms of two, BSB + WEB, the web invite/accept and web reading</td><td>That two people will read together, and that presence is worth the build</td></tr>
+<tr><td><strong>Two</strong></td><td>Cards, rooms of three to six with ink identity, group pricing, notifications settings in full, widgets and Live Activity</td><td>That the mechanic survives a group, where most couple-apps break</td></tr>
+<tr><td><strong>Three — Android</strong></td><td>Full parity, Material 3 Expressive</td><td>—</td></tr>
+<tr><td><strong>Four</strong></td><td>The second handiwork (mosaic or stained glass), full web reading, youth ministry plans</td><td>That “handiwork” is a system and not just a campfire</td></tr>
+<tr><td><strong>Horizon</strong></td><td>Synced audio Bible · plain-English historical and original-language context per verse · the printed keepsake book made from a shelf · NKJV and other licensed translations</td><td>—</td></tr>
+</tbody></table></div>
+<p><strong>Note on phase one's scope:</strong> web reading is in phase one only for the invite path (<span class="k">S16</span>). A partner must be able to read <em class="t">something</em> in a browser the moment they tap the link, because requiring an install before showing anything is where Law 3 is most likely to be lost.</p>
+</section>
+
+<section id="s16">
+<h2><em>16</em>Open questions</h2>
+<p class="lede">Not decided here on purpose. Each one changes something structural.</p>
+<div class="tw"><table>
+<thead><tr><th>#</th><th>Question</th><th>Blocks</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><strong>The light palette.</strong> Olive #5F6B12 on paper is proposed and unresolved. Dark is the hero, but a light mode is a real need for daylight reading and for accessibility, and “no light mode” is not a shippable answer past phase two.</td><td>Any light-mode work; the ink set's light values</td></tr>
+<tr><td>2</td><td><strong>The Wave's rounding</strong> — W1 through W6. Everything drawn in this document assumes a mark exists; nothing assumes which.</td><td>Icon, widgets, the way out, the site</td></tr>
+<tr><td>3</td><td><strong>Is the group a “room”?</strong> Decided in §2.3 and logged anyway, because it is in every string and hard to change after launch.</td><td>All copy</td></tr>
+<tr><td>4</td><td><strong>Who writes the cards?</strong> Ribbon-authored per chapter is 1,189 chapters of writing. Options: launch with cards on the five starter books only; let a room write its own; a mix. Currently unresolved and it gates phase two.</td><td>Phase two</td></tr>
+<tr><td>5</td><td><strong>Voice transcription</strong> — on-device (private, cheaper at scale, worse) vs server (better, a per-minute cost, and a privacy story to write).</td><td>Phase one cost model</td></tr>
+<tr><td>6</td><td><strong>Which handiwork is second,</strong> and whether a room chooses its kind or the app assigns one per book.</td><td>Phase four; the handiwork abstraction's shape</td></tr>
+<tr><td>7</td><td><strong>Minors and voice notes.</strong> A room with anyone under 13 needs a legal answer on transcription and audio storage before youth ministry ships.</td><td>Youth plans</td></tr>
+<tr><td>8</td><td><strong>NKJV and other licensed translations</strong> — timeline, cost, and whether per-translation licensing survives the pricing.</td><td>Horizon</td></tr>
+<tr><td>9</td><td><strong>Trademark on “Ribbon.”</strong> Demand testing is happening before spend; the answer changes how much of this identity is safe to build on.</td><td>Everything, eventually</td></tr>
+<tr><td>10</td><td><strong>Does the free first book work?</strong> It might be too generous (a couple reads Philemon and pays nothing) or exactly right. Consider requiring a medium or large book for the free read, which is a rule that would need to be invisible.</td><td>Pricing</td></tr>
+<tr><td>11</td><td><strong>Web reading depth in phase one.</strong> Full parity is a large build; the invite path needs only reading and notes. Where exactly the line falls is unsettled.</td><td>Phase one scope</td></tr>
+<tr><td>12</td><td><strong>Cesso licensing for app embedding.</strong> Outlined vector covers the wordmark and icon. If Cesso is ever needed as live text in-app, that is a different Adobe license and needs checking now, not later.</td><td>Any in-app Cesso beyond the mark</td></tr>
+<tr><td>13</td><td><strong>How many rooms a youth-ministry plan covers.</strong> §6.11 and §14.1 both say “N rooms” and neither sets N. It needs a number before the plan can be sold, and the number has to survive a leader who runs eight small groups.</td><td>Youth plans</td></tr>
+</tbody></table></div>
+</section>
+
+<section id="s17">
+<h2><em>17</em>The review checklist</h2>
+<p class="lede">Run every screen past these before it ships. In this order.</p>
+<ol>
+<li><strong>Is there a number anywhere near a handiwork?</strong> Count, fraction, percentage, day tally, streak, “x of y.” In the UI, in a widget, in a notification, in a screenshot, in an accessibility label. If yes, it does not ship.</li>
+<li><strong>Could a person feel accused by anything on this screen?</strong> Including by absence, by an empty state, by a name attached to something not done.</li>
+<li><strong>Would a person unsure about the Bible still be comfortable with this on their lock screen?</strong></li>
+<li><strong>Does the fire feel warm and unhurried,</strong> rather than gamified?</li>
+<li><strong>Does it hold at the largest type size,</strong> with six people, on the longest chapter?</li>
+<li><strong>Is anything from the never-ship list present?</strong> A cross in the mark, a cartoon flame, a gradient hero, glass over content, confetti, badges, trophies, a numeric icon badge, a church-bulletin layout.</li>
+<li><strong>Does every string pass the voice rules?</strong> No exclamation points. No apologies. Nobody named for something undone.</li>
+<li><strong>Is it obviously made by a person</strong> rather than assembled from platform defaults?</li>
+</ol>
+<div class="law"><b>The last word</b>Everything in this document is downstream of one sentence: <em>a room, not a program.</em> When a decision here turns out to be wrong — and some will — replace it with whatever better serves that sentence, and leave the reasoning behind for whoever comes next.</div>
+</section>
+
+</div></main>
+</div>
+<script>
+(function(){
+  var titles = [];
+  document.querySelectorAll("main section").forEach(function(s){
+    var h = s.querySelector("h2");
+    if(!h) return;
+    var num = h.querySelector("em") ? h.querySelector("em").textContent : "";
+    var txt = h.textContent.replace(num,"").trim();
+    titles.push({id:s.id, num:num, txt:txt});
+  });
+  var ol = document.getElementById("toc");
+  titles.forEach(function(t){
+    var li = document.createElement("li");
+    li.innerHTML = '<a href="#'+t.id+'"><em>'+t.num+'</em><span>'+t.txt+'</span></a>';
+    ol.appendChild(li);
+  });
+  var links = Array.prototype.slice.call(ol.querySelectorAll("a"));
+  var secs = titles.map(function(t){return document.getElementById(t.id);});
+  var obs = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if(!e.isIntersecting) return;
+      var i = secs.indexOf(e.target);
+      links.forEach(function(a,j){ a.classList.toggle("on", j===i); });
+    });
+  }, {rootMargin:"-10% 0px -80% 0px", threshold:0});
+  secs.forEach(function(s){ obs.observe(s); });
+})();
+</script>
