@@ -346,7 +346,7 @@ struct ChapterTextView: UIViewRepresentable {
         // opacity, set into the text block. Not a bar.
         let headStyle = NSMutableParagraphStyle()
         headStyle.paragraphSpacing = em * 1.6
-        let head = chapter.n == 1 ? bookName : "\(bookName) \(chapter.n)"
+        let head = "\(bookName) \(chapter.n)"
         result.append(NSAttributedString(
             string: head + "\n",
             attributes: [
