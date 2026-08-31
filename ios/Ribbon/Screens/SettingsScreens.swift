@@ -64,7 +64,6 @@ struct YouSheet: View {
             }
             .scrollIndicators(.hidden)
             .room()
-            .toolbarVisibility(.hidden, for: .navigationBar)
         }
         .presentationBackground(Palette.ground)
         .confirmationDialog(
@@ -154,7 +153,6 @@ struct TextSettingsScreen: View {
         }
         .scrollIndicators(.hidden)
         .room()
-        .toolbarVisibility(.hidden, for: .navigationBar)
     }
 
     /// The live preview: the verse you were last reading, in your
@@ -202,7 +200,6 @@ struct NotificationSettingsScreen: View {
         }
         .scrollIndicators(.hidden)
         .room()
-        .toolbarVisibility(.hidden, for: .navigationBar)
     }
 
     private func roomSection(_ room: Room) -> some View {
@@ -301,7 +298,6 @@ struct DownloadsScreen: View {
         }
         .scrollIndicators(.hidden)
         .room()
-        .toolbarVisibility(.hidden, for: .navigationBar)
     }
 
     private func bundledMegabytes(_ translation: TranslationID) -> Int {
@@ -344,6 +340,5 @@ struct PlanScreen: View {
         }
         .scrollIndicators(.hidden)
         .room()
-        .toolbarVisibility(.hidden, for: .navigationBar)
     }
 }

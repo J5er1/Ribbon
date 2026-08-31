@@ -33,7 +33,7 @@ enum RibbonType {
     }
 
     static func uiMedium(_ size: CGFloat = 17) -> Font {
-        .custom("\(sans) Medium", size: size, relativeTo: .body)
+        .custom("AlegreyaSans-Medium", size: size, relativeTo: .body)
     }
 
     /// True small caps. Set strings in normal sentence case; the face does

@@ -80,7 +80,6 @@ struct PersonScreen: View {
         }
         .scrollIndicators(.hidden)
         .room()
-        .toolbarVisibility(.hidden, for: .navigationBar)
         .confirmationDialog(Copy.leaveRoomConfirm, isPresented: $confirmLeave, titleVisibility: .visible) {
             Button(Copy.leaveThisRoom, role: .destructive) { askAboutNotes = true }
         }

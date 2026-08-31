@@ -232,6 +232,7 @@ struct ReadingScreen: View {
                         onEdit: { editingNote = note; composer = .write(note.verse) })
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.leading, 36)
             .padding(.trailing, 26)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in

@@ -45,12 +45,17 @@ actor SupabaseClient {
 
     // MARK: Auth — an emailed code, no passwords (§6.10)
 
+    private struct OTPBody: Encodable {
+        let email: String
+        let createUser: Bool
+    }
+
     /// Sends the sign-in code. The email field never leaks into a
     /// third-party account list — this is first-party mail.
     func sendCode(to email: String) async throws {
         try await post(
             path: "auth/v1/otp",
-            body: ["email": email, "create_user": true],
+            body: OTPBody(email: email, createUser: true),
             authenticated: false)
     }
 
@@ -71,7 +76,8 @@ actor SupabaseClient {
     func refresh() async throws {
         guard let session else { throw SupabaseError.notSignedIn }
         let data = try await post(
-            path: "auth/v1/token?grant_type=refresh_token",
+            path: "auth/v1/token",
+            query: [URLQueryItem(name: "grant_type", value: "refresh_token")],
             body: ["refresh_token": session.refreshToken],
             authenticated: false)
         self.session = try JSONDecoder().decode(SupabaseSession.self, from: data)
@@ -142,8 +148,14 @@ actor SupabaseClient {
     // MARK: Plumbing
 
     @discardableResult
-    private func post(path: String, body: some Encodable, authenticated: Bool) async throws -> Data {
-        var request = URLRequest(url: base.appending(path: path))
+    private func post(
+        path: String, query: [URLQueryItem] = [], body: some Encodable, authenticated: Bool
+    ) async throws -> Data {
+        var url = base.appending(path: path)
+        if !query.isEmpty {
+            url = url.appending(queryItems: query)
+        }
+        var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.httpBody = try Self.encoder.encode(AnyEncodable(body))
         if authenticated {

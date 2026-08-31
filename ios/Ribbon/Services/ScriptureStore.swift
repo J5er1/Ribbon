@@ -95,18 +95,26 @@ final class ScriptureStore: @unchecked Sendable {
 
     /// "Mark 4:9", "mark 4", "1 john 3:2"
     static func parseReference(_ query: String) -> VerseAddress? {
-        let pattern = /^(.+?)\s+(\d+)(?::(\d+))?$/
-        guard let match = query.firstMatch(of: pattern) else { return nil }
-        let name = String(match.1).trimmingCharacters(in: .whitespaces)
+        let parts = query.split(separator: " ")
+        guard parts.count >= 2, let last = parts.last else { return nil }
+        let numbers = last.split(separator: ":")
+        guard let chapter = numbers.first.flatMap({ Int($0) }) else { return nil }
+        var verse = 1
+        if numbers.count == 2 {
+            guard let v = Int(numbers[1]) else { return nil }
+            verse = v
+        } else if numbers.count > 2 {
+            return nil
+        }
+        let name = parts.dropLast().joined(separator: " ")
         guard
+            !name.isEmpty,
             let book = Bible.books.first(where: {
                 $0.name.localizedCaseInsensitiveCompare(name) == .orderedSame
                     || $0.name.lowercased().hasPrefix(name.lowercased())
             })
         else { return nil }
-        let chapter = Int(match.2) ?? 1
         guard chapter >= 1, chapter <= book.chapterCount else { return nil }
-        let verse = match.3.flatMap { Int($0) } ?? 1
         return VerseAddress(bookID: book.id, chapter: chapter, verse: verse)
     }
 }

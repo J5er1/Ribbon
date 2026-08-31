@@ -10,6 +10,8 @@ struct InviteSheet: View {
     @Environment(\.dismiss) private var dismiss
     let room: Room
 
+    @State private var invite: Invite?
+
     var body: some View {
         VStack(spacing: 22) {
             Spacer()
@@ -25,14 +27,15 @@ struct InviteSheet: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
 
-                let invite = model.createInvite(for: room)
-                ShareLink(item: invite.url()) {
-                    Text("Send the invite")
-                        .font(RibbonType.uiMedium(17))
-                        .foregroundStyle(Palette.ground)
-                        .padding(.horizontal, 28)
-                        .padding(.vertical, 13)
-                        .background(Palette.chartreuse, in: Capsule())
+                if let invite {
+                    ShareLink(item: invite.url()) {
+                        Text("Send the invite")
+                            .font(RibbonType.uiMedium(17))
+                            .foregroundStyle(Palette.ground)
+                            .padding(.horizontal, 28)
+                            .padding(.vertical, 13)
+                            .background(Palette.chartreuse, in: Capsule())
+                    }
                 }
             }
             Spacer()
@@ -40,6 +43,11 @@ struct InviteSheet: View {
         .frame(maxWidth: .infinity)
         .room()
         .presentationBackground(Palette.ground)
+        .onAppear {
+            if !model.roomIsFull {
+                invite = model.createInvite(for: room)
+            }
+        }
     }
 }
 

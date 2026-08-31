@@ -30,9 +30,8 @@ private struct RibbonGlass<S: Shape>: ViewModifier {
                 .background(Palette.raised, in: shape)
                 .overlay(shape.strokeBorder(Palette.rule, lineWidth: 1))
         } else if #available(iOS 26.0, *) {
-            content.glassEffect(
-                .regular.tint(Palette.ground.opacity(0.72)).interactive(interactive),
-                in: shape)
+            let tinted = Glass.regular.tint(Palette.ground.opacity(0.72))
+            content.glassEffect(interactive ? tinted.interactive() : tinted, in: shape)
         } else {
             content
                 .background(.ultraThinMaterial, in: shape)

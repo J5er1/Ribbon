@@ -143,6 +143,8 @@ struct OnboardingFlow: View {
         }
     }
 
+    @State private var invite: Invite?
+
     private var inviteStep: some View {
         VStack(spacing: 24) {
             Spacer()
@@ -152,8 +154,8 @@ struct OnboardingFlow: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 44)
 
-            if let room = model.currentRoom {
-                ShareLink(item: model.createInvite(for: room).url()) {
+            if let invite {
+                ShareLink(item: invite.url()) {
                     Text("Send the invite")
                         .font(RibbonType.uiMedium(17))
                         .foregroundStyle(Palette.ground)
@@ -171,6 +173,11 @@ struct OnboardingFlow: View {
             QuietControl(title: Copy.inviteLater) { onDone() }
             Spacer()
             Spacer()
+        }
+        .onAppear {
+            if let room = model.currentRoom {
+                invite = model.createInvite(for: room)
+            }
         }
     }
 }

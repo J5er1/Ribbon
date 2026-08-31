@@ -121,7 +121,6 @@ struct EmberRecordScreen: View {
         }
         .scrollIndicators(.hidden)
         .room()
-        .toolbarVisibility(.hidden, for: .navigationBar)
     }
 }
 
