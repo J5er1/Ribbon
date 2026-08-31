@@ -10,11 +10,15 @@ import RibbonCore
 // height and unfurl in place (S04) — never a modal, never a sheet.
 
 /// What the reading surface needs to know to set a chapter.
-struct ReadingTheme {
+struct ReadingTheme: Equatable {
     var fontSize: CGFloat
     var lineHeightMultiple: CGFloat
     var redLetter: Bool
-    /// The gutter, left, ~28 pt. Note marks only (§4.2).
+    /// Carried so a system type-size change re-sets the page (the fonts
+    /// themselves scale through UIFontMetrics).
+    var dynamicTypeSize: DynamicTypeSize = .large
+    /// The gutter, left, ~28 pt. Note marks only (§4.2). The gutter holds
+    /// its width at every type size (§08).
     var gutterWidth: CGFloat = 28
     var trailingMargin: CGFloat = 26
 }
@@ -218,19 +222,46 @@ struct ChapterTextView: UIViewRepresentable {
             guard let view = textView, let text = view.attributedText, text.length > 0 else { return }
             var layout = ChapterLayout()
             var seen = Set<Int>()
+            var verseText: [Int: String] = [:]
+            var verseRect: [Int: CGRect] = [:]
             text.enumerateAttribute(.ribbonVerse, in: NSRange(location: 0, length: text.length)) { value, range, _ in
-                guard let verse = value as? Int, !seen.contains(verse) else { return }
-                seen.insert(verse)
+                guard let verse = value as? Int else { return }
                 let glyphRange = view.layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
                 guard glyphRange.length > 0 else { return }
-                var lineRange = NSRange()
-                let lineRect = view.layoutManager.lineFragmentRect(
-                    forGlyphAt: glyphRange.location, effectiveRange: &lineRange)
-                layout.verseFirstLineY[verse] = lineRect.midY + view.textContainerInset.top
+                if !seen.contains(verse) {
+                    seen.insert(verse)
+                    var lineRange = NSRange()
+                    let lineRect = view.layoutManager.lineFragmentRect(
+                        forGlyphAt: glyphRange.location, effectiveRange: &lineRange)
+                    layout.verseFirstLineY[verse] = lineRect.midY + view.textContainerInset.top
+                }
+                let rect = view.layoutManager.boundingRect(forGlyphRange: glyphRange, in: view.textContainer)
+                    .offsetBy(dx: view.textContainerInset.left, dy: view.textContainerInset.top)
+                verseRect[verse] = verseRect[verse].map { $0.union(rect) } ?? rect
+                verseText[verse, default: ""] += (text.attributedSubstring(from: range).string)
             }
             layout.height = view.sizeThatFits(
                 CGSize(width: view.bounds.width, height: .greatestFiniteMagnitude)).height
+            rebuildAccessibilityElements(on: view, verseText: verseText, verseRect: verseRect)
             parent.onLayout(layout)
+        }
+
+        /// Verse-by-verse VoiceOver navigation (§11): one element per
+        /// verse, so a swipe moves by verse — and the label obeys Law 2
+        /// ("Verse nine." then the words; never a position report).
+        private func rebuildAccessibilityElements(
+            on view: UITextView, verseText: [Int: String], verseRect: [Int: CGRect]
+        ) {
+            var elements: [UIAccessibilityElement] = []
+            for verse in verseText.keys.sorted() {
+                guard let rect = verseRect[verse], let body = verseText[verse] else { continue }
+                let element = UIAccessibilityElement(accessibilityContainer: view)
+                element.accessibilityFrameInContainerSpace = rect
+                element.accessibilityLabel = "Verse \(verse). \(body.trimmingCharacters(in: .whitespacesAndNewlines))"
+                elements.append(element)
+            }
+            view.isAccessibilityElement = false
+            view.accessibilityElements = elements
         }
 
         func verse(at point: CGPoint) -> Int? {

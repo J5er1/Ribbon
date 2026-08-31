@@ -71,8 +71,12 @@ struct YouSheet: View {
             // deletion. Leaving them is never not the default.
             Copy.leaveNotesQuestion, isPresented: $confirmDelete, titleVisibility: .visible
         ) {
-            Button("Delete, and leave them", role: .destructive) { model.deleteAccount() }
-            Button("Delete, and take them back", role: .destructive) { model.deleteAccount() }
+            Button("Delete, and leave them", role: .destructive) {
+                model.deleteAccount(keepNotesBehind: true)
+            }
+            Button("Delete, and take them back", role: .destructive) {
+                model.deleteAccount(keepNotesBehind: false)
+            }
         }
     }
 

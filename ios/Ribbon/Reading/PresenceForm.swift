@@ -13,15 +13,23 @@ import RibbonCore
 
 struct PresenceForm: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let room: Room
     var onFollow: (PresentPerson) -> Void
 
     @State private var expanded = false
-    @State private var frontIndex = 0
     @State private var holdTarget: UUID?
     @State private var holdProgress: CGFloat = 0
+    /// "Ruth is with you" appears once per follower, then rests.
+    @State private var announcedFollowers: Set<UUID> = []
 
     private var people: [PresentPerson] { model.presentPeople }
+
+    /// Someone whose scroll is yours: their portrait tucks against the form.
+    private var follower: PresentPerson? {
+        guard let me = model.me?.id else { return nil }
+        return people.first { $0.followingPersonID == me }
+    }
 
     var body: some View {
         Group {
@@ -79,18 +87,42 @@ struct PresenceForm: View {
     }
 
     private func lozenge(_ person: PresentPerson, stacked: Bool) -> some View {
-        ZStack(alignment: .trailing) {
-            if stacked {
-                // A hairline of the next one behind.
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(Palette.raised)
+        VStack(alignment: .trailing, spacing: 6) {
+            ZStack(alignment: .trailing) {
+                if stacked {
+                    // A hairline of the next one behind.
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(Palette.raised)
+                        .frame(width: 44, height: 64)
+                        .offset(x: 5, y: 8)
+                        .opacity(0.6)
+                }
+                portrait(person)
                     .frame(width: 44, height: 64)
-                    .offset(x: 5, y: 8)
-                    .opacity(0.6)
+                    .ribbonGlass(in: RoundedRectangle(cornerRadius: 20))
+                // Being followed is visible but small: their portrait tucks
+                // against yours (§4.2).
+                if let follower {
+                    PortraitView(
+                        person: model.person(follower.id),
+                        ink: model.membership(of: follower.id, in: room.id)?.ink,
+                        size: 20,
+                        image: model.portrait(follower.id))
+                    .offset(x: -30, y: 24)
+                }
             }
-            portrait(person)
-                .frame(width: 44, height: 64)
-                .ribbonGlass(in: RoundedRectangle(cornerRadius: 20))
+            if let follower, !announcedFollowers.contains(follower.id) {
+                SmallCaps(
+                    Copy.isWithYou(firstName(model.person(follower.id)?.name ?? follower.name)),
+                    size: 11)
+                    .padding(.trailing, 18)
+                    .task {
+                        try? await Task.sleep(for: .seconds(4))
+                        withAnimation(RibbonMotion.arrive) {
+                            _ = announcedFollowers.insert(follower.id)
+                        }
+                    }
+            }
         }
         .accessibilityLabel(presenceLabel(person, othersCount: people.count - 1))
     }
@@ -188,7 +220,12 @@ struct PresenceForm: View {
             if pressing {
                 holdTarget = person.id
                 Haptics.shared.beginThinkingOfYouHold()
-                withAnimation(RibbonMotion.inkFill) { holdProgress = 1 }
+                if reduceMotion {
+                    // An instant state change with the haptic intact (§11).
+                    holdProgress = 1
+                } else {
+                    withAnimation(RibbonMotion.inkFill) { holdProgress = 1 }
+                }
             } else if holdTarget == person.id {
                 Haptics.shared.cancelThinkingOfYouHold()
                 holdTarget = nil

@@ -42,23 +42,28 @@ enum RibbonType {
         .custom(sansSC, size: size, relativeTo: .footnote)
     }
 
-    // UIKit faces for the reading surface (TextKit).
+    // UIKit faces for the reading surface (TextKit), scaled through
+    // UIFontMetrics so the page follows Dynamic Type all the way through
+    // AX5 — nothing in the reading surface uses a fixed point size (§11).
     static func uiScripture(_ size: CGFloat) -> UIFont {
-        UIFont(name: "Literata", size: size)
+        let base = UIFont(name: "Literata", size: size)
             ?? UIFont(name: "Literata-Regular", size: size)
             ?? .systemFont(ofSize: size, weight: .regular)
+        return UIFontMetrics(forTextStyle: .body).scaledFont(for: base)
     }
 
     static func uiSmallCaps(_ size: CGFloat) -> UIFont {
-        UIFont(name: "AlegreyaSansSC-Regular", size: size)
+        let base = UIFont(name: "AlegreyaSansSC-Regular", size: size)
             ?? UIFont(name: "Alegreya Sans SC", size: size)
             ?? .systemFont(ofSize: size, weight: .medium)
+        return UIFontMetrics(forTextStyle: .footnote).scaledFont(for: base)
     }
 
     static func uiSans(_ size: CGFloat) -> UIFont {
-        UIFont(name: "AlegreyaSans-Regular", size: size)
+        let base = UIFont(name: "AlegreyaSans-Regular", size: size)
             ?? UIFont(name: "Alegreya Sans", size: size)
             ?? .systemFont(ofSize: size)
+        return UIFontMetrics(forTextStyle: .body).scaledFont(for: base)
     }
 }
 

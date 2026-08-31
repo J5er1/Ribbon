@@ -69,12 +69,17 @@ struct EmberRecordScreen: View {
                             end: reading.finishedAt ?? reading.startedAt),
                         size: 13)
                     HStack(spacing: -6) {
+                        // Who read it, as portraits — and a portrait goes
+                        // to its person (S12).
                         ForEach(model.members(of: Room(id: reading.roomID, createdAt: .now))) { membership in
-                            PortraitView(
-                                person: model.person(membership.personID),
-                                ink: membership.ink,
-                                size: 30,
-                                image: model.portrait(membership.personID))
+                            NavigationLink(value: PersonRoute(personID: membership.personID, roomID: reading.roomID)) {
+                                PortraitView(
+                                    person: model.person(membership.personID),
+                                    ink: membership.ink,
+                                    size: 30,
+                                    image: model.portrait(membership.personID))
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
                     .padding(.top, 6)

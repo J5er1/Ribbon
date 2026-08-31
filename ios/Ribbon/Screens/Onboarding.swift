@@ -13,6 +13,7 @@ struct OnboardingFlow: View {
     enum Step {
         case mark
         case who
+        case fromInvite
         case name
         case invite
     }
@@ -31,6 +32,9 @@ struct OnboardingFlow: View {
                     .transition(.opacity)
             case .who:
                 whoStep
+                    .transition(.opacity)
+            case .fromInvite:
+                fromInviteStep
                     .transition(.opacity)
             case .name:
                 nameStep
@@ -71,10 +75,8 @@ struct OnboardingFlow: View {
                 WayInButton(title: Copy.startARoom) {
                     withAnimation(RibbonMotion.settle) { step = .name }
                 }
-                // Accepting an invite (S16) arrives with the deep-link
-                // path; the answer here routes to the same name step.
                 QuietControl(title: Copy.haveAnInvite) {
-                    withAnimation(RibbonMotion.settle) { step = .name }
+                    withAnimation(RibbonMotion.settle) { step = .fromInvite }
                 }
             }
             .padding(.horizontal, 56)
@@ -132,6 +134,25 @@ struct OnboardingFlow: View {
             Spacer()
         }
         .onAppear { nameFocused = true }
+    }
+
+    // The honest answer until the deep-link path lands (S16): the link
+    // itself is the way in, and this screen says so rather than quietly
+    // starting a room of your own.
+    private var fromInviteStep: some View {
+        VStack(spacing: 22) {
+            Spacer()
+            Text("Open the link they sent you. It brings you straight into their room.")
+                .font(RibbonType.ui(17))
+                .foregroundStyle(Palette.text)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 48)
+            QuietControl(title: "Start a room instead") {
+                withAnimation(RibbonMotion.settle) { step = .name }
+            }
+            Spacer()
+            Spacer()
+        }
     }
 
     private func advanceFromName() {

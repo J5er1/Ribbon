@@ -32,11 +32,20 @@ struct RibbonApp: App {
     }
 }
 
+/// A push to someone in a room (S12) — from a portrait, anywhere.
+struct PersonRoute: Hashable {
+    var personID: UUID
+    var roomID: UUID
+}
+
 struct RootView: View {
     @Environment(AppModel.self) private var model
 
     @State private var onboarding = false
     @State private var openReading: Reading?
+    /// Where the reading should open, when a row or a quoted verse named a
+    /// place (§6.3, S11). Nil means your own position.
+    @State private var openTarget: VerseAddress?
     @State private var showRooms = false
     @State private var showYou = false
     @State private var showNewRoom = false
@@ -62,7 +71,8 @@ struct RootView: View {
             NavigationStack(path: $navigationPath) {
                 RoomScreen(
                     room: room,
-                    onOpenReading: { reading in
+                    onOpenReading: { reading, target in
+                        openTarget = target
                         withAnimation(RibbonMotion.arrive) { openReading = reading }
                     },
                     onOpenRooms: { showRooms = true })
@@ -70,11 +80,31 @@ struct RootView: View {
                     if let reading = model.state.readings.first(where: { $0.id == readingID }) {
                         EmberRecordScreen(
                             reading: reading,
-                            onOpenVerse: { _ in },
+                            onOpenVerse: { verse in
+                                // A quoted verse opens the reading at that
+                                // verse (S11) — the finished book's own
+                                // pages, not a copy.
+                                openTarget = verse
+                                withAnimation(RibbonMotion.arrive) { openReading = reading }
+                            },
                             onReadAgain: { bookID in
                                 navigationPath = NavigationPath()
                                 let new = model.startReading(bookID: bookID, in: room)
+                                openTarget = nil
                                 withAnimation(RibbonMotion.arrive) { openReading = new }
+                            })
+                    }
+                }
+                .navigationDestination(for: PersonRoute.self) { route in
+                    if let personRoom = model.state.rooms.first(where: { $0.id == route.roomID }) {
+                        PersonScreen(
+                            personID: route.personID,
+                            room: personRoom,
+                            onOpenVerse: { verse in
+                                if let reading = model.openReading(in: personRoom) {
+                                    openTarget = verse
+                                    withAnimation(RibbonMotion.arrive) { openReading = reading }
+                                }
                             })
                     }
                 }
@@ -88,11 +118,14 @@ struct RootView: View {
                     ReadingScreen(
                         room: room,
                         reading: reading,
+                        openAt: openTarget,
                         onClose: {
                             withAnimation(RibbonMotion.settle) { openReading = nil }
+                            openTarget = nil
                         },
                         onFinished: {
                             withAnimation(RibbonMotion.settle) { openReading = nil }
+                            openTarget = nil
                         })
                     .transition(.asymmetric(
                         insertion: .opacity,

@@ -8,8 +8,12 @@ import RibbonCore
 
 struct ReadingScreen: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let room: Room
     let reading: Reading
+    /// A named place to open at (a waiting row's note, a quoted verse) —
+    /// nil opens at your own position.
+    var openAt: VerseAddress?
     var onClose: () -> Void
     var onFinished: () -> Void
 
@@ -32,7 +36,14 @@ struct ReadingScreen: View {
     @State private var lastFuelRecord = Date.distantPast
     @State private var highlightLabel: Highlight?
     @State private var didReachEnd = false
-    @State private var followBackOffer: VerseAddress?
+    /// After a follow ends, the form quietly offers "back to where you
+    /// were" for about two minutes, then forgets (§4.2).
+    @State private var followBackOffer: (address: VerseAddress, until: Date)?
+    /// Ignore self-originated (programmatic) scrolls when deciding whether
+    /// a scroll of your own breaks a follow.
+    @State private var programmaticScrollUntil = Date.distantPast
+    /// Asks the ScrollViewReader to go somewhere, from outside its closure.
+    @State private var scrollCommand: Int?
 
     enum ComposerState: Equatable {
         case toolbar
@@ -75,11 +86,21 @@ struct ReadingScreen: View {
                 }
             }
             .onAppear {
-                let position = model.myPosition(in: reading)
+                let position = openAt ?? model.myPosition(in: reading)
                 if position.chapter > 1 {
+                    programmaticScrollUntil = Date().addingTimeInterval(1.5)
                     proxy.scrollTo(position.chapter, anchor: .top)
                 }
                 recordFuel()
+            }
+            .onChange(of: scrollCommand) { _, command in
+                if let command {
+                    programmaticScrollUntil = Date().addingTimeInterval(1.5)
+                    withAnimation(RibbonMotion.settle) {
+                        proxy.scrollTo(command, anchor: .top)
+                    }
+                    scrollCommand = nil
+                }
             }
         }
         .overlay(alignment: .trailing) {
@@ -109,7 +130,8 @@ struct ReadingScreen: View {
                     theme: ReadingTheme(
                         fontSize: model.settings.scriptureSize,
                         lineHeightMultiple: model.settings.lineHeightMultiple,
-                        redLetter: model.settings.redLetter),
+                        redLetter: model.settings.redLetter,
+                        dynamicTypeSize: dynamicTypeSize),
                     verseInks: verseInks(chapter: n),
                     liftedVerses: liftedChapter == n ? lifted.map { $0.verses } : nil,
                     openNote: openNote(in: n),
@@ -207,10 +229,13 @@ struct ReadingScreen: View {
         }
 
         private var accessibilityLabel: String {
+            // §11, exactly: "Note from Ruth, verse 9, not yet found." A
+            // stack announces by author and never by count.
             let names = notes.compactMap { model.person($0.authorID)?.name }
             let unfound = notes.contains { !$0.foundBy.contains(model.me?.id ?? UUID()) && $0.authorID != model.me?.id }
             let who = names.isEmpty ? "you" : Set(names).sorted().joined(separator: " and ")
-            return "Notes from \(who), verse \(notes.first?.verse.verse ?? 0)\(unfound ? ", not yet found" : "")"
+            let noun = notes.count == 1 ? "Note" : "Notes"
+            return "\(noun) from \(who), verse \(notes.first?.verse.verse ?? 0)\(unfound ? ", not yet found" : "")"
         }
     }
 
@@ -294,18 +319,30 @@ struct ReadingScreen: View {
             .padding(.horizontal, 40)
             .padding(.bottom, 14)
         case nil:
-            // The way out: the Wave, ~20 pt, muted ivory, centred at the
-            // bottom edge. Nothing else down there.
-            Button(action: close) {
-                WaveMark(color: Palette.text.opacity(0.55))
-                    .frame(width: 20, height: 20)
-                    .padding(.horizontal, 26)
-                    .padding(.vertical, 9)
-                    .ribbonGlass(in: Capsule())
+            VStack(spacing: 10) {
+                // After a follow ends: the quiet offer back, for about two
+                // minutes, then it forgets (§4.2).
+                if let offer = followBackOffer,
+                   Date() < offer.until,
+                   model.followingPersonID == nil {
+                    QuietControl(title: Copy.backToWhereYouWere) {
+                        scrollCommand = offer.address.chapter
+                        followBackOffer = nil
+                    }
+                }
+                // The way out: the Wave, ~20 pt, muted ivory, centred at
+                // the bottom edge. Nothing else down there.
+                Button(action: close) {
+                    WaveMark(color: Palette.text.opacity(0.55))
+                        .frame(width: 20, height: 20)
+                        .padding(.horizontal, 26)
+                        .padding(.vertical, 9)
+                        .ribbonGlass(in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Copy.closeTheBook)
             }
-            .buttonStyle(.plain)
             .padding(.bottom, 6)
-            .accessibilityLabel(Copy.closeTheBook)
         }
     }
 
@@ -369,8 +406,14 @@ struct ReadingScreen: View {
             .padding(.top, 16)
             Spacer().frame(height: 80)
         }
-        .onAppear {
-            guard !didReachEnd else { return }
+        .onGeometryChange(for: Bool.self) { proxy in
+            // Finishing means reaching the end (§6.5), not a lazy stack
+            // prefetching it: the sequence counts only once it is actually
+            // inside the viewport.
+            let viewportHeight = proxy.bounds(of: .scrollView)?.height ?? 800
+            return proxy.frame(in: .scrollView).minY < viewportHeight * 0.85
+        } action: { visible in
+            guard visible, !didReachEnd else { return }
             didReachEnd = true
             if !reading.isFinished {
                 model.finishReading(reading)
@@ -449,8 +492,11 @@ struct ReadingScreen: View {
         // Tap a portrait to follow — a page-fly, no confirmation dialog
         // (§4.2). With no live presence roster this is unreachable; the
         // mechanics are here for when the socket is.
+        followBackOffer = (model.myPosition(in: reading), Date().addingTimeInterval(120))
         model.followingPersonID = person.id
-        followBackOffer = model.myPosition(in: reading)
+        if let position = person.position {
+            scrollCommand = position.chapter
+        }
     }
 
     private func close() {
@@ -465,8 +511,13 @@ struct ReadingScreen: View {
 
     private func trackReading(chapter: Int, frame: CGRect) {
         // The chapter whose top has crossed the upper third is where you
-        // are. Any scroll of your own breaks a follow.
+        // are.
         guard frame.minY < 240, frame.maxY > 240 else { return }
+        // Any scroll of your own breaks the follow — no modal, no "stop
+        // following?", you just have your own scroll back (§4.2).
+        if model.followingPersonID != nil, Date() > programmaticScrollUntil {
+            model.followingPersonID = nil
+        }
         let layout = chapterLayouts[chapter]
         let yInChapter = 240 - frame.minY
         let verse = layout?.verseFirstLineY

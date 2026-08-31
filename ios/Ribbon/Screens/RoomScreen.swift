@@ -8,7 +8,7 @@ import RibbonCore
 struct RoomScreen: View {
     @Environment(AppModel.self) private var model
     let room: Room
-    var onOpenReading: (Reading) -> Void
+    var onOpenReading: (Reading, VerseAddress?) -> Void
     var onOpenRooms: () -> Void
 
     @State private var showChooser = false
@@ -39,21 +39,22 @@ struct RoomScreen: View {
                 shelfSection
                     .padding(.top, 44)
 
-                // Mark a quiet day — always present, never emphasised.
-                HStack {
-                    Spacer()
+                // Mark a quiet day — always present, never emphasised. The
+                // room sees who banked the fire (§4.7): an act of care,
+                // performed in public, above the control rather than in
+                // place of it.
+                VStack(spacing: 12) {
                     if let quiet = model.activeQuietDay(in: room),
                        let name = model.person(quiet.personID)?.name {
                         SmallCaps(Copy.bankedTheFire(firstName(name)), size: 12)
-                    } else {
-                        QuietControl(title: Copy.markAQuietDay) {
-                            withAnimation(RibbonMotion.settle) {
-                                model.markQuietDay(in: room)
-                            }
+                    }
+                    QuietControl(title: Copy.markAQuietDay) {
+                        withAnimation(RibbonMotion.settle) {
+                            model.markQuietDay(in: room)
                         }
                     }
-                    Spacer()
                 }
+                .frame(maxWidth: .infinity)
                 .padding(.top, 56)
                 .padding(.bottom, 40)
             }
@@ -64,7 +65,7 @@ struct RoomScreen: View {
             BookChooserSheet(room: room) { bookID in
                 showChooser = false
                 let reading = model.startReading(bookID: bookID, in: room)
-                onOpenReading(reading)
+                onOpenReading(reading, nil)
             }
         }
     }
@@ -88,18 +89,25 @@ struct RoomScreen: View {
 
     @ViewBuilder
     private var presenceLine: some View {
-        let present = model.presentPeople
+        let present = room.isPaused ? [] : model.presentPeople
         HStack(spacing: 8) {
             if !present.isEmpty {
+                // Tap a portrait → S12.
                 ForEach(present.prefix(6)) { person in
-                    PortraitView(
-                        person: model.person(person.id),
-                        ink: model.membership(of: person.id, in: room.id)?.ink,
-                        size: 24,
-                        image: model.portrait(person.id))
+                    NavigationLink(value: PersonRoute(personID: person.id, roomID: room.id)) {
+                        PortraitView(
+                            person: model.person(person.id),
+                            ink: model.membership(of: person.id, in: room.id)?.ink,
+                            size: 24,
+                            image: model.portrait(person.id))
+                    }
+                    .buttonStyle(.plain)
                 }
-            } else if let line = model.lastReadLine(in: room) {
-                SmallCaps(line, size: 12)
+            } else if let last = model.lastReader(in: room) {
+                NavigationLink(value: PersonRoute(personID: last.personID, roomID: room.id)) {
+                    SmallCaps(last.line, size: 12)
+                }
+                .buttonStyle(.plain)
             }
             // Alone: silence. Never a line about being alone (§08).
         }
@@ -140,20 +148,29 @@ struct RoomScreen: View {
 
     // MARK: The way in
 
+    // Scripture is never locked (§2.5): a paused room keeps its way in —
+    // the pause line is added, the waiting rows go.
     @ViewBuilder
     private var wayIn: some View {
-        if room.isPaused {
-            Text(Copy.roomPaused)
-                .font(RibbonType.ui(15))
-                .foregroundStyle(Palette.muted)
-                .frame(maxWidth: .infinity)
-        } else if let reading, let book = Bible.book(id: reading.bookID) {
+        if let reading, let book = Bible.book(id: reading.bookID) {
             let hasRead = model.state.positions.contains {
                 $0.readingID == reading.id && $0.personID == model.me?.id
             }
             WayInButton(title: hasRead ? Copy.continueIn(book.name) : Copy.begin(book.name)) {
-                onOpenReading(reading)
+                onOpenReading(reading, nil)
             }
+            if room.isPaused {
+                Text(Copy.roomPaused)
+                    .font(RibbonType.ui(15))
+                    .foregroundStyle(Palette.muted)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 14)
+            }
+        } else if room.isPaused {
+            Text(Copy.roomPaused)
+                .font(RibbonType.ui(15))
+                .foregroundStyle(Palette.muted)
+                .frame(maxWidth: .infinity)
         } else {
             WayInButton(title: Copy.pickABook) { showChooser = true }
         }
@@ -163,13 +180,16 @@ struct RoomScreen: View {
 
     @ViewBuilder
     private var waitingRows: some View {
-        let waiting = model.waitingNotes(in: room)
+        // Paused: waiting rows gone (S01) — the pause line stands alone.
+        let waiting = room.isPaused ? [] : model.waitingNotes(in: room)
         let memberCount = model.members(of: room).count
         VStack(alignment: .leading, spacing: 14) {
             ForEach(waiting.prefix(4)) { note in
                 if let author = model.person(note.authorID) {
                     Button {
-                        if let reading { onOpenReading(reading) }
+                        // Jumps to that note (§6.3): the reading opens at
+                        // its verse, the mark breathing.
+                        if let reading { onOpenReading(reading, note.verse) }
                     } label: {
                         HStack(spacing: 10) {
                             InkDot(ink: model.membership(of: note.authorID, in: room.id)?.ink ?? .clay)

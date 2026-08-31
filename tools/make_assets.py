@@ -2,10 +2,10 @@
 """Generate Ribbon's built assets:
 
   1. The paper grain tile (§9.2) — per-pixel noise is seamlessly tileable.
-  2. The app icon placeholder — the W6 Wave on the unlit ground, rasterized
-     from mark/ribbon-mark-on-black-square.svg geometry. (The build book's
-     icon is the Cesso R.; Cesso is an Adobe font and no R asset exists in
-     the repo yet, so the Wave stands in. See docs/deviations.md.)
+  2. The app icon — the R.: ivory R, chartreuse period, on the unlit ground
+     (build book §12.1). The brand's R is Cesso, an Adobe face that cannot
+     be embedded, so the R is set in Literata until the Cesso outline is
+     provided. See docs/deviations.md.
   3. WaveMarkShape.generated.swift — the Wave's two ribbon paths as Swift
      data, so the in-app mark (the way out, onboarding) is drawn natively
      at any size with the knockout done in code.

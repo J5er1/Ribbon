@@ -16,6 +16,9 @@ struct PresentPerson: Identifiable, Hashable, Sendable {
     var scrollFraction: Double
     /// ~4 minutes with no scroll: "here, but still." Dimmed, never removed.
     var isIdle: Bool
+    /// Who they are following, if anyone — how "Ruth is with you" knows
+    /// to appear (§4.2). Never a count of followers.
+    var followingPersonID: UUID?
 }
 
 enum PresenceEvent: Sendable {

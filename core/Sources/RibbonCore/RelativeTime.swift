@@ -37,17 +37,30 @@ public enum RibbonClock {
         // Within the last six days: the weekday, the way a person says it.
         if let weekAgo = calendar.date(byAdding: .day, value: -6, to: now), date >= weekAgo {
             let weekday = calendar.component(.weekday, from: date)
-            return calendar.standaloneWeekdaySymbols[weekday - 1]
+            return Self.weekdayNames[weekday - 1]
         }
 
         // Older: the month — an address, not a distance.
-        let month = calendar.standaloneMonthSymbols[calendar.component(.month, from: date) - 1]
+        let month = Self.monthNames[calendar.component(.month, from: date) - 1]
         if calendar.isDate(date, equalTo: now, toGranularity: .year) {
             return month
         }
         let year = calendar.component(.year, from: date)
         return "\(month) \(year)"
     }
+
+    // The phrases are product copy, not locale output — they must read the
+    // same on every device and every CI box (a stripped-down ICU renders
+    // "M03" for March, which is both wrong and a leaked numeral).
+    // Localization, when it comes, goes through strings files like all
+    // other copy.
+    private static let weekdayNames = [
+        "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday",
+    ]
+    private static let monthNames = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December",
+    ]
 
     /// The date range on an ember record: "March – June", or "March" when a
     /// book was read within one month, with years only when the range
@@ -57,8 +70,8 @@ public enum RibbonClock {
         end: Date,
         calendar: Calendar = .current
     ) -> String {
-        let startMonth = calendar.standaloneMonthSymbols[calendar.component(.month, from: start) - 1]
-        let endMonth = calendar.standaloneMonthSymbols[calendar.component(.month, from: end) - 1]
+        let startMonth = Self.monthNames[calendar.component(.month, from: start) - 1]
+        let endMonth = Self.monthNames[calendar.component(.month, from: end) - 1]
         let startYear = calendar.component(.year, from: start)
         let endYear = calendar.component(.year, from: end)
 

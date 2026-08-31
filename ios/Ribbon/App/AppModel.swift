@@ -233,16 +233,17 @@ final class AppModel {
     }
 
     /// The room's last activity line ("Ruth read this morning") — from the
-    /// one last-read stamp the rolling record keeps (§13).
-    func lastReadLine(in room: Room) -> String? {
+    /// one last-read stamp the rolling record keeps (§13). The line is a
+    /// person, so tapping it goes to them (S12).
+    func lastReader(in room: Room) -> (personID: UUID, line: String)? {
         guard let reading = openReading(in: room) ?? shelf(of: room).last,
               let lastFuel = reading.handiwork.lastFuelAt
         else { return nil }
         guard let feeder = reading.handiwork.recentFuel.last.map(\.personID),
               let person = person(feeder), person.id != state.me?.id
         else { return nil }
-        return Copy.readRecently(person.name.split(separator: " ").first.map(String.init) ?? person.name,
-                                 RibbonClock.phrase(for: lastFuel))
+        let name = person.name.split(separator: " ").first.map(String.init) ?? person.name
+        return (person.id, Copy.readRecently(name, RibbonClock.phrase(for: lastFuel)))
     }
 
     /// Marking a quiet day (§4.7) banks the fire for the room. The room
@@ -440,7 +441,13 @@ final class AppModel {
         persist()
     }
 
-    func deleteAccount() {
+    /// Account deletion (§6.8). The notes question is asked once, at
+    /// deletion, and the answer travels with the remote delete when sync
+    /// exists; locally both paths clear this device.
+    func deleteAccount(keepNotesBehind: Bool) {
+        // TODO(sync): pass keepNotesBehind to the backend's delete so notes
+        // either stay for the room (default) or leave with the person.
+        _ = keepNotesBehind
         state = AppState()
         portraits = [:]
         persist()

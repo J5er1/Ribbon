@@ -56,11 +56,27 @@ reasoning.
    boundaries when dragged slowly" — the current drag snaps to verse
    boundaries only, which is also the stated default.
 
-9. **Following, live presence, and thinking-of-you are fully built against
+9. **Following, live presence, and thinking-of-you are built against
    `PresenceService`, whose only shipping implementation is the honest
    local one (nobody is ever present).** The Supabase Realtime channel
-   client is the next backend step; the UI states (including reading
-   quietly, idle, the follow thread, back-to-where-you-were) exist now.
+   client is the next backend step. The UI states exist: reading quietly,
+   idle, the follow thread, being-followed ("Ruth is with you", once, with
+   the tucked portrait), follow-break on your own scroll, and the
+   two-minute back-to-where-you-were offer. Not built: the rubber-band on
+   the first self-scroll of a follow (the first scroll breaks it
+   directly), and the page-fly transition (a plain settle scroll stands
+   in).
+
+9a. **Your own S12 is reachable only where your portrait renders** (an
+   ember record's who-read-it row; the presence line shows others, not
+   you). S01's "tap a portrait → S12" is wired everywhere a portrait
+   appears in a navigation context — presence-line portraits, the
+   last-reader line, ember records — but a room-of-one has no surface
+   showing your own portrait until its first ember. Change-ink and
+   leave-room therefore have no route in a fresh room of one. Accepted for
+   now: change-ink only matters at three members (when the invitation row
+   ships with phase two's ink transition), and leaving your only room is
+   an edge the book itself routes through room closing (phase two).
 
 10. **Remote sync is dark** (`SupabaseConfig.remoteEnabled = false`). The
     schema is applied to the live project and the typed client exists;

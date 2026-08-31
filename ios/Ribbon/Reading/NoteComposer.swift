@@ -29,29 +29,35 @@ struct LeaveToolbar: View {
             HStack(spacing: 14) {
                 // Two people: eight swatches, pick per highlight, last-used
                 // pre-selected. Three or more: one swatch — yours (§4.5).
+                // Paused: only highlight shows, greyed and inert — the room
+                // reads everything and writes nothing (S02, §08).
                 if let mine = model.inkForNewHighlight(in: room) {
-                    InkSwatch(ink: mine, isSelected: true) { onHighlight(mine) }
+                    InkSwatch(ink: mine, isSelected: !roomPaused) {
+                        if !roomPaused { onHighlight(mine) }
+                    }
+                    .opacity(roomPaused ? 0.35 : 1)
                 } else {
                     ForEach(Ink.allCases, id: \.self) { ink in
-                        InkSwatch(ink: ink, isSelected: ink == model.lastUsedInk) {
-                            onHighlight(ink)
+                        InkSwatch(ink: ink, isSelected: !roomPaused && ink == model.lastUsedInk) {
+                            if !roomPaused { onHighlight(ink) }
                         }
+                        .opacity(roomPaused ? 0.35 : 1)
                     }
                 }
 
-                Rectangle().fill(Palette.rule).frame(width: 1, height: 20)
+                if !roomPaused {
+                    Rectangle().fill(Palette.rule).frame(width: 1, height: 20)
 
-                Button(action: onWrite) {
-                    SmallCaps(Copy.write, size: 13, color: roomPaused ? Palette.rule : Palette.text)
-                }
-                .buttonStyle(.plain)
-                .disabled(roomPaused)
+                    Button(action: onWrite) {
+                        SmallCaps(Copy.write, size: 13, color: Palette.text)
+                    }
+                    .buttonStyle(.plain)
 
-                Button(action: onSpeak) {
-                    SmallCaps(Copy.speak, size: 13, color: roomPaused ? Palette.rule : Palette.text)
+                    Button(action: onSpeak) {
+                        SmallCaps(Copy.speak, size: 13, color: Palette.text)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
-                .disabled(roomPaused)
             }
             .padding(.horizontal, 18)
             .frame(height: 52)
@@ -142,10 +148,17 @@ struct SpeakControl: View {
     @Environment(AppModel.self) private var model
     @State private var draggedAway = false
     @State private var deniedRoute = false
+    @State private var storageFull = false
 
     var body: some View {
         VStack(spacing: 10) {
-            if deniedRoute {
+            if storageFull {
+                // S25: a count about a device, not about a person.
+                Text(Copy.noRoomOnPhone(5))
+                    .font(RibbonType.ui(15))
+                    .foregroundStyle(Palette.text)
+                    .multilineTextAlignment(.center)
+            } else if deniedRoute {
                 // Refused once: one route to Settings, then never asked
                 // again (S25).
                 Text(Copy.micNeeded)
@@ -197,6 +210,10 @@ struct SpeakControl: View {
                     }
                 })
         .task {
+            if let free = LocalStore.freeMegabytes(), free < 20 {
+                storageFull = true
+                return
+            }
             if recorder.microphoneUndecided {
                 let granted = await recorder.requestAccess()
                 if !granted {
