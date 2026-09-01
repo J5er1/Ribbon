@@ -233,17 +233,26 @@ actor SupabaseClient {
         return e
     }()
 
+    /// PostgREST timestamps carry fractional seconds, which the plain
+    /// .iso8601 strategy refuses; GoTrue's don't. Accept both.
+    /// nonisolated(unsafe) is honest here: ISO8601DateFormatter is
+    /// documented thread-safe, and these are set once and never mutated.
+    nonisolated(unsafe) private static let fractionalTimestamp: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+    nonisolated(unsafe) private static let wholeTimestamp: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+
     static let decoder: JSONDecoder = {
         let d = JSONDecoder()
-        // PostgREST timestamps carry fractional seconds, which the plain
-        // .iso8601 strategy refuses; GoTrue's don't. Accept both.
-        let fractional = ISO8601DateFormatter()
-        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let whole = ISO8601DateFormatter()
-        whole.formatOptions = [.withInternetDateTime]
         d.dateDecodingStrategy = .custom { decoder in
             let raw = try decoder.singleValueContainer().decode(String.self)
-            if let date = fractional.date(from: raw) ?? whole.date(from: raw) {
+            if let date = fractionalTimestamp.date(from: raw) ?? wholeTimestamp.date(from: raw) {
                 return date
             }
             throw DecodingError.dataCorrupted(.init(

@@ -403,7 +403,7 @@ final class AppModel {
     @discardableResult
     func leaveVoiceNote(audioURL: URL, waveform: [Float], at verse: VerseAddress, in reading: Reading) -> Note {
         guard let me = state.me else { fatalError("note before person") }
-        var note = Note(
+        let note = Note(
             readingID: reading.id, authorID: me.id, verse: verse,
             kind: .voice, audioPath: audioURL.lastPathComponent,
             waveform: waveform, transcriptState: .pending, createdAt: Date())
@@ -600,8 +600,10 @@ final class AppModel {
     /// translation and portrait win here; the push that follows then
     /// carries the reconciled values.
     private func reconcileOwnProfile() async {
-        guard let remote, let existing = try? await remote.fetchOwnProfile(),
-              let row = existing, var me = state.me
+        // try? flattens the optionals: nil is "no profile" and "couldn't
+        // ask" alike, and both mean this device's values stand.
+        guard let remote, let row = try? await remote.fetchOwnProfile(),
+              var me = state.me
         else { return }
         me.name = row.name
         me.translation = TranslationID(rawValue: row.translation)
