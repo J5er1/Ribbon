@@ -15,7 +15,7 @@ struct InviteSheet: View {
     var body: some View {
         VStack(spacing: 22) {
             Spacer()
-            if model.roomIsFull {
+            if model.isFull(room) {
                 Text(Copy.roomHoldsSix)
                     .font(RibbonType.ui(16))
                     .foregroundStyle(Palette.text)
@@ -44,7 +44,7 @@ struct InviteSheet: View {
         .room()
         .presentationBackground(Palette.ground)
         .onAppear {
-            if !model.roomIsFull {
+            if !model.isFull(room) {
                 invite = model.createInvite(for: room)
             }
         }
@@ -76,12 +76,15 @@ struct NewRoomSheet: View {
                 dismiss()
                 onCreated(room)
             }
-            Spacer()
         }
         .padding(24)
         .padding(.top, 20)
+        .padding(.bottom, 12)
         .room()
         .presentationBackground(Palette.ground)
         .presentationDetents([.medium])
+        // iPad ignores detents; fitted keeps this from becoming a mostly
+        // empty form sheet around one field and one button.
+        .presentationSizing(.fitted)
     }
 }

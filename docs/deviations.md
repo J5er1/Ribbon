@@ -7,19 +7,17 @@ reasoning.
 
 ## From the build book
 
-1. **The app icon is the true Cesso R.** — resolved. The shipped
-   `AppIcon.png` (and the masters in `mark/ribbon-icon-cesso-2048.png`
-   and `mark/ribbon-wordmark-cesso.png`) were rendered from the real
-   Cesso Regular under the project owner's Adobe Fonts entitlement (web
-   kit `sqw7zeu`, family css name `cesso`): the letterforms were rendered
-   in a headless browser at 2× and downsampled — no font file is
-   embedded or committed, only the rasters, which is the permitted
-   logo-image use. To regenerate: fetch `https://use.typekit.net/sqw7zeu.css`,
-   download its woff2 transiently, render "R." at 620px on a 1024pt
-   `#0B0B0A` canvas (ivory `#F3F0E6` R, chartreuse `#D6E45C` period,
-   `margin-left: 0.02em`), screenshot at 2×, downscale. The woff2 must
-   never be committed. `make_icon()` in `tools/make_assets.py` remains as
-   the entitlement-free fallback (Literata stand-in).
+1. **The app icon is the Wave, not the R.** — changed by the owner's
+   call (September 2026). The build book's §12.1 icon was the Cesso R.;
+   the shipped `AppIcon.png` is now the mark itself — the W6 Wave,
+   chartreuse on the unlit ground, the same composition as
+   `mark/ribbon-mark-on-black-square.svg` — regenerated any time by
+   `make_icon()` in `tools/make_assets.py` from the mark's own path
+   data, no font entitlement involved. The Cesso masters
+   (`mark/ribbon-icon-cesso-2048.png`, `mark/ribbon-wordmark-cesso.png`,
+   rendered under the project owner's Adobe Fonts entitlement, recipe in
+   this ledger's history) remain in `mark/` as the brand's lettermark
+   and wordmark for surfaces that want type, e.g. the web pages.
 
 2. **In-app display type is Literata standing in for Cesso.** The icon
    and wordmark are settled (above), but *live text* in Cesso inside the
@@ -86,27 +84,57 @@ reasoning.
    ships with phase two's ink transition), and leaving your only room is
    an edge the book itself routes through room closing (phase two).
 
-10. **Remote sync is dark** (`SupabaseConfig.remoteEnabled = false`). The
-    schema is applied to the live project and the typed client exists;
-    the sign-in thread (emailed code, §6.10) and the sync engine are the
-    next piece of work. The app is local-first by design either way.
+10. **The sign-in thread is wired; the sync engine is half-lit.**
+    (September 2026.) `SupabaseConfig.remoteEnabled = true`: accounts are
+    an emailed code (§6.10, `RemoteSync` + Keychain session), invites are
+    registered with the backend when handed out, links open the app
+    (universal link `readribbon.app/i/…` + `ribbon://` fallback, with a
+    paste-the-link fallback in onboarding), `accept_invite` runs from the
+    S16 join flow, and the **room surface** syncs both ways — rooms,
+    memberships, profiles + portraits, readings, fires, the rolling fuel
+    window, quiet days — so a couple on two phones sees one room, one
+    fire, one shelf, and steady can genuinely happen. Still local-only:
+    notes, highlights, positions, note-founds, and voice audio (their
+    sync, with pending marks and storage transfer, is the full engine —
+    the next piece of work), and live presence (deviation 9). On first
+    sign-in the local person adopts the account's id everywhere
+    (`adoptRemoteIdentity`); fuel-window person ids age out on their own
+    rather than being rewritten.
 
 11. **Phase-two surfaces are absent, per §15**: cards (S08/S09 — model and
     schema exist, no UI), notifications delivery (S19 stores per-room
     switches locally; there is no push infrastructure yet), widgets and
     Live Activity (S24), rooms of three-plus ink-transition moment
     (model supports it; the invitation row on S01 is not yet built),
-    StoreKit (S22 shows the model's promise only), and the web
-    invite/accept + web reading (S16/S26).
+    StoreKit (S22 shows the model's promise only), and the web *join*
+    (S16's browser half — the app-side join is built, deviation 10; the
+    web page still previews and reads only).
 
-12. **The app installs on iPad, with the phone's layout.** The book designs
-    phone screens; the project originally targeted iPhone only. TestFlight
-    offers builds only to devices a build targets, and the first real
-    tester's only device is an iPad — so the target now includes iPad
-    (all orientations there; the phone stays portrait-only). The layouts
-    are fluid and read fine wide, but a considered iPad reading surface
-    (margins, columns, the note card at size) is its own design pass,
-    not this.
+12. **iPad is a considered surface now, one readable column wide.** The
+    book designs phone screens; the target includes iPad (all
+    orientations there; the phone stays portrait-only). The September
+    2026 pass: Scripture and every full-bleed screen hold a centered
+    readable measure (`readableColumn`, ~620 pt; the reading page 680) so
+    lines stay lines and the way-in stays a button; the fire draws 1.45×
+    in a regular-width room — the frame is still fixed by the book's
+    scale, and relative sizes are untouched (Law 4 governs what a fire
+    may *become*, not what canvas it's drawn for); small sheets are
+    `.fitted` instead of iPad's empty form-sheet default; the reading
+    position's "upper third" derives from the live viewport instead of a
+    phone-sized constant; Esc closes the book and ⌘↩ leaves a note on a
+    hardware keyboard; pointer hover responds on the room's controls; and
+    the copy's "this phone" reads "this iPad" by device idiom. Every
+    quiet control and both Waves out of the book now meet the 44 pt touch
+    minimum — on iPad the way out was effectively Pencil-only, which is
+    how the defect was found.
+
+13. **Settings are one tap from the room, by the owner's call.** S18
+    buries You two taps deep (room name → rooms sheet → You) on purpose;
+    the owner overruled it. Your portrait sits in the room header,
+    top-right, and opens You directly; the rooms sheet's You row stays.
+    You also now carries the current room's own controls — name it,
+    change your ink, leave — because a fresh room of one had no route to
+    them at all (the second half of deviation 9a, now closed).
 
 ## Licensed translations (decided: API.Bible)
 

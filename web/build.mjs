@@ -227,4 +227,35 @@ writeFileSync(
 );
 cpSync(join(here, "invite.js"), join(dist, "invite.js"));
 
+// Universal links: an invite link opens the app when it's installed
+// (S16). Apple fetches this file from the domain; the app declares the
+// domain in its associated-domains entitlement. The team ID rides an env
+// var so the repo never hard-codes it — set RIBBON_APPLE_TEAM_ID in the
+// Vercel project.
+const teamID = process.env.RIBBON_APPLE_TEAM_ID ?? "TEAMID";
+if (teamID === "TEAMID") {
+  console.warn(
+    "RIBBON_APPLE_TEAM_ID is not set — apple-app-site-association is built with a placeholder and universal links will not work.",
+  );
+}
+mkdirSync(join(dist, ".well-known"), { recursive: true });
+writeFileSync(
+  join(dist, ".well-known", "apple-app-site-association"),
+  JSON.stringify(
+    {
+      applinks: {
+        apps: [],
+        details: [
+          {
+            appIDs: [`${teamID}.bible.ribbon.app`],
+            components: [{ "/": "/i/*", comment: "Invites open in the app." }],
+          },
+        ],
+      },
+    },
+    null,
+    2,
+  ),
+);
+
 console.log(`built ${pageCount} chapter pages into dist/`);

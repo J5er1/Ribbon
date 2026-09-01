@@ -9,6 +9,7 @@ import RibbonCore
 @main
 struct RibbonApp: App {
     @State private var model: AppModel?
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
@@ -26,6 +27,20 @@ struct RibbonApp: App {
             .task {
                 if model == nil {
                     model = await AppModel.load()
+                    // The room renders from local state instantly; the
+                    // backend catches up behind it.
+                    await model?.refreshFromRemote()
+                }
+            }
+            // An invite link, tapped: readribbon.app/i/<token> via the
+            // associated domain, ribbon://i/<token> as the plain-scheme
+            // fallback (S16).
+            .onOpenURL { url in
+                model?.handleInviteURL(url)
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active, let model {
+                    Task { await model.refreshFromRemote() }
                 }
             }
         }
@@ -49,6 +64,11 @@ struct RootView: View {
     @State private var showRooms = false
     @State private var showYou = false
     @State private var showNewRoom = false
+    /// A just-created room whose invite half is due (S15 — naming and
+    /// inviting are two steps that should feel like one).
+    @State private var inviteRoom: Room?
+    /// The finishing sequence's "Start another" lands in the chooser (S13).
+    @State private var chooserRequested = false
     @State private var navigationPath = NavigationPath()
 
     var body: some View {
@@ -71,11 +91,13 @@ struct RootView: View {
             NavigationStack(path: $navigationPath) {
                 RoomScreen(
                     room: room,
+                    chooserRequested: $chooserRequested,
                     onOpenReading: { reading, target in
                         openTarget = target
                         withAnimation(RibbonMotion.arrive) { openReading = reading }
                     },
-                    onOpenRooms: { showRooms = true })
+                    onOpenRooms: { showRooms = true },
+                    onYou: { showYou = true })
                 .navigationDestination(for: UUID.self) { readingID in
                     if let reading = model.state.readings.first(where: { $0.id == readingID }) {
                         EmberRecordScreen(
@@ -100,8 +122,11 @@ struct RootView: View {
                         PersonScreen(
                             personID: route.personID,
                             room: personRoom,
-                            onOpenVerse: { verse in
-                                if let reading = model.openReading(in: personRoom) {
+                            onOpenVerse: { verse, readingID in
+                                // The note names its reading — a finished
+                                // book's note opens that book, not the
+                                // open one.
+                                if let reading = model.state.readings.first(where: { $0.id == readingID }) {
                                     openTarget = verse
                                     withAnimation(RibbonMotion.arrive) { openReading = reading }
                                 }
@@ -126,6 +151,11 @@ struct RootView: View {
                         onFinished: {
                             withAnimation(RibbonMotion.settle) { openReading = nil }
                             openTarget = nil
+                        },
+                        onStartAnother: {
+                            withAnimation(RibbonMotion.settle) { openReading = nil }
+                            openTarget = nil
+                            chooserRequested = true
                         })
                     .transition(.asymmetric(
                         insertion: .opacity,
@@ -147,10 +177,24 @@ struct RootView: View {
                     })
             }
             .sheet(isPresented: $showNewRoom) {
-                NewRoomSheet { _ in }
+                // Naming and inviting are two steps that should feel like
+                // one (S15) — the invite sheet follows the naming sheet.
+                NewRoomSheet { room in inviteRoom = room }
+            }
+            .sheet(item: $inviteRoom) { newRoom in
+                InviteSheet(room: newRoom)
+                    .presentationDetents([.medium])
             }
             .sheet(isPresented: $showYou) {
                 YouSheet()
+            }
+            .sheet(item: pendingInviteBinding) { pending in
+                // A tapped invite while already onboarded: the join flow
+                // rides over the room (S16).
+                JoinFlow(token: pending.token, onDone: {
+                    pendingInviteBinding.wrappedValue = nil
+                })
+                .presentationBackground(Palette.ground)
             }
         } else {
             // A person with no rooms (left their last one): a fresh room of
@@ -162,6 +206,14 @@ struct RootView: View {
                     }
                 }
         }
+    }
+
+    /// The pending invite, bindable for the sheet without dragging
+    /// @Bindable through the environment.
+    private var pendingInviteBinding: Binding<PendingInvite?> {
+        Binding(
+            get: { model.pendingInvite },
+            set: { model.pendingInvite = $0 })
     }
 }
 

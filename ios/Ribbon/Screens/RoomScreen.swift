@@ -8,8 +8,12 @@ import RibbonCore
 struct RoomScreen: View {
     @Environment(AppModel.self) private var model
     let room: Room
+    /// Set from outside when "Start another" at a finishing should land
+    /// in the chooser (S13).
+    @Binding var chooserRequested: Bool
     var onOpenReading: (Reading, VerseAddress?) -> Void
     var onOpenRooms: () -> Void
+    var onYou: () -> Void
 
     @State private var showChooser = false
     @State private var showInviteShare = false
@@ -19,6 +23,8 @@ struct RoomScreen: View {
 
     var body: some View {
         ScrollView {
+            // One readable column: the phone layout, centered, instead of
+            // a way-in capsule as wide as an iPad.
             VStack(alignment: .leading, spacing: 0) {
                 header
                 presenceLine
@@ -58,9 +64,16 @@ struct RoomScreen: View {
                 .padding(.top, 56)
                 .padding(.bottom, 40)
             }
+            .readableColumn()
         }
         .scrollIndicators(.hidden)
         .room()
+        .onChange(of: chooserRequested) { _, requested in
+            if requested {
+                chooserRequested = false
+                showChooser = true
+            }
+        }
         .sheet(isPresented: $showChooser) {
             BookChooserSheet(room: room) { bookID in
                 showChooser = false
@@ -76,13 +89,28 @@ struct RoomScreen: View {
         HStack {
             Button(action: onOpenRooms) {
                 SmallCaps(model.displayName(of: room), size: 14)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityHint("Opens your rooms")
             Spacer()
+            // Your own portrait, top-right — settings one tap away, from
+            // anywhere the room is. (A departure from S18's two-taps-deep;
+            // written down in docs/deviations.md.)
+            Button(action: onYou) {
+                PortraitView(
+                    person: model.me, ink: nil, size: 28,
+                    image: model.me.flatMap { model.portrait($0.id) })
+                .frame(width: 44, height: 44, alignment: .trailing)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Copy.you)
+            .accessibilityHint("Your account and settings")
         }
         .padding(.horizontal, 24)
-        .padding(.top, 12)
+        .padding(.top, 4)
     }
 
     // MARK: Presence line

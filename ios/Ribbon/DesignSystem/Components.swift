@@ -97,13 +97,18 @@ struct WayInButton: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 15)
                 .background(Palette.chartreuse, in: Capsule())
+                .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        .hoverEffect(.lift)
     }
 }
 
 /// A quiet, low-emphasis text control — small caps, muted: "Mark a quiet
-/// day", "set it down", "Send it again".
+/// day", "set it down", "Send it again". Quiet in emphasis, not in touch:
+/// the visible text stays small, the tappable area meets the 44 pt
+/// minimum (a finger's tap is a blunt thing; a control that only a Pencil
+/// can hit is broken).
 struct QuietControl: View {
     var title: String
     var action: () -> Void
@@ -111,8 +116,11 @@ struct QuietControl: View {
     var body: some View {
         Button(action: action) {
             SmallCaps(title, size: 13, color: Palette.muted)
+                .frame(minHeight: 44)
+                .contentShape(Rectangle().inset(by: -8))
         }
         .buttonStyle(.plain)
+        .hoverEffect(.highlight)
     }
 }
 
@@ -120,5 +128,16 @@ struct QuietControl: View {
 struct HairlineRule: View {
     var body: some View {
         Rectangle().fill(Palette.rule).frame(height: 1)
+    }
+}
+
+extension View {
+    /// One readable column, centered. The book designs phone screens; on
+    /// an iPad the same layouts otherwise stretch edge to edge — 150-plus
+    /// character Scripture lines, a way-in capsule a thousand points wide.
+    /// A no-op at phone widths, so nothing branches on size class.
+    func readableColumn(maxWidth: CGFloat = 620) -> some View {
+        frame(maxWidth: maxWidth)
+            .frame(maxWidth: .infinity)
     }
 }

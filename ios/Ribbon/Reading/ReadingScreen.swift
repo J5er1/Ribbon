@@ -16,6 +16,9 @@ struct ReadingScreen: View {
     var openAt: VerseAddress?
     var onClose: () -> Void
     var onFinished: () -> Void
+    /// "Start another" at the finishing (§6.5) — lands in the chooser
+    /// (S13), not back on the room's way-in.
+    var onStartAnother: () -> Void
 
     // Composition state
     @State private var lifted: VerseRange?
@@ -34,6 +37,10 @@ struct ReadingScreen: View {
     @State private var chapterFrames: [Int: CGRect] = [:]
     @State private var closing = false
     @State private var fingerDown = false
+    /// The live viewport height — "the upper third" must mean this
+    /// screen's third, not a phone's (a hardcoded 240 misplaces the
+    /// position by half a screen on a 13" iPad).
+    @State private var viewportHeight: CGFloat = 800
     @State private var lastFuelRecord = Date.distantPast
     @State private var lastPositionSave = Date.distantPast
     @State private var highlightLabel: Highlight?
@@ -82,6 +89,10 @@ struct ReadingScreen: View {
                     finishingSection
                 }
                 .padding(.top, 26)
+                // The measure: Scripture holds a readable line length on
+                // any canvas — the reading surface is the product, and a
+                // 150-character line is not reading.
+                .readableColumn(maxWidth: 680)
             }
             .scrollIndicators(.hidden)
             .onScrollGeometryChange(for: CGFloat.self) { geometry in
@@ -93,6 +104,11 @@ struct ReadingScreen: View {
                 if offset < -90, fingerDown, !closing {
                     close()
                 }
+            }
+            .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                geometry.containerSize.height
+            } action: { _, height in
+                if height > 0 { viewportHeight = height }
             }
             .onScrollPhaseChange { _, newPhase in
                 fingerDown = newPhase == .interacting || newPhase == .tracking
@@ -252,7 +268,7 @@ struct ReadingScreen: View {
                     }
                 }
             }
-            .contentShape(Rectangle().inset(by: -10))
+            .contentShape(Rectangle().inset(by: -16))
             .onTapGesture(perform: onTap)
             .accessibilityElement()
             .accessibilityLabel(accessibilityLabel)
@@ -350,6 +366,7 @@ struct ReadingScreen: View {
                 onDismiss: clearLift)
             .padding(.horizontal, 40)
             .padding(.bottom, 14)
+            .readableColumn()
         case nil:
             VStack(spacing: 10) {
                 // After a follow ends: the quiet offer back, for about two
@@ -363,15 +380,22 @@ struct ReadingScreen: View {
                     }
                 }
                 // The way out: the Wave, ~20 pt, muted ivory, centred at
-                // the bottom edge. Nothing else down there.
+                // the bottom edge. Nothing else down there. The glass
+                // capsule stays small; the touch target doesn't — a
+                // finger must be able to close the book (44 pt minimum).
                 Button(action: close) {
                     WaveMark(color: Palette.text.opacity(0.55))
                         .frame(width: 20, height: 20)
                         .padding(.horizontal, 26)
                         .padding(.vertical, 9)
                         .ribbonGlass(in: Capsule())
+                        .frame(minWidth: 88, minHeight: 52)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .hoverEffect(.lift)
+                // Esc closes the book on a hardware keyboard.
+                .keyboardShortcut(.cancelAction)
                 .accessibilityLabel(Copy.closeTheBook)
             }
             .padding(.bottom, 6)
@@ -431,7 +455,7 @@ struct ReadingScreen: View {
                     onFinished()
                 }
                 QuietControl(title: Copy.startAnother) {
-                    onFinished()
+                    onStartAnother()
                 }
             }
             .padding(.horizontal, 60)
@@ -548,14 +572,15 @@ struct ReadingScreen: View {
     private func trackReading(chapter: Int, frame: CGRect) {
         // The chapter whose top has crossed the upper third is where you
         // are.
-        guard frame.minY < 240, frame.maxY > 240 else { return }
+        let threshold = viewportHeight * 0.3
+        guard frame.minY < threshold, frame.maxY > threshold else { return }
         // Any scroll of your own breaks the follow — no modal, no "stop
         // following?", you just have your own scroll back (§4.2).
         if model.followingPersonID != nil, Date() > programmaticScrollUntil {
             model.followingPersonID = nil
         }
         let layout = chapterLayouts[chapter]
-        let yInChapter = 240 - frame.minY
+        let yInChapter = threshold - frame.minY
         let verse = layout?.verseFirstLineY
             .filter { $0.value <= yInChapter }
             .max { $0.value < $1.value }?.key ?? 1
@@ -598,11 +623,17 @@ struct PassageEndView: View {
                 Text(nextChapterTitle)
                     .font(RibbonType.uiMedium(17))
                     .foregroundStyle(Palette.text)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle().inset(by: -8))
             }
             .buttonStyle(.plain)
+            // The Wave is drawn at 28 pt; its touch target is not (the
+            // pencil-only close on iPad was exactly this).
             Button(action: onClose) {
                 WaveMark(color: Palette.text.opacity(0.45))
                     .frame(width: 28, height: 28)
+                    .frame(width: 72, height: 52)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Copy.closeTheBook)

@@ -128,14 +128,20 @@ struct WriteComposer: View {
                     onSave(trimmed)
                 } label: {
                     SmallCaps("leave it", size: 13, color: Palette.chartreuse)
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle().inset(by: -8))
                 }
                 .buttonStyle(.plain)
+                // ⌘↩ leaves the note — the convention a hardware-keyboard
+                // iPad reader expects.
+                .keyboardShortcut(.return, modifiers: .command)
             }
         }
         .padding(16)
         .background(Palette.surface, in: RoundedRectangle(cornerRadius: 14))
         .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Palette.rule, lineWidth: 1))
         .padding(.horizontal, 16)
+        .readableColumn()
         .onAppear {
             text = initialText
             focused = true

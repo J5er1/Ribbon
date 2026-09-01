@@ -129,6 +129,25 @@ public struct Handiwork: Codable, Hashable, Sendable {
         self.lastCoalCreditAt = nil
     }
 
+    /// Rebuilding a fire from the backend's stored row (sync). The engine's
+    /// own feeding rules produced these values on some device; this restores
+    /// them without re-deriving. `banked` is not restorable state — banking
+    /// lives on quiet days, never on the fire — so it clamps to catching.
+    public init(
+        kind: Kind = .campfire, scale: FireScale, coalDepth: Double,
+        lastFuelAt: Date?, restartAt: Date?, stateAtLastFuel: FireState,
+        recentFuel: [FuelEvent] = []
+    ) {
+        self.kind = kind
+        self.scale = scale
+        self.coalDepth = min(1, max(0, coalDepth))
+        self.lastFuelAt = lastFuelAt
+        self.restartAt = restartAt
+        self.stateAtLastFuel = stateAtLastFuel == .banked ? .catching : stateAtLastFuel
+        self.recentFuel = recentFuel
+        self.lastCoalCreditAt = lastFuelAt
+    }
+
     // MARK: - Reading the fire
 
     /// The state a glance reports. `bankedIntervals` are the merged banked

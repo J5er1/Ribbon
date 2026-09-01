@@ -7,6 +7,12 @@ import RibbonCore
 // same objects later. Cold start renders from this state instantly — no
 // splash, no skeleton (§05).
 
+/// The join a tapped invite link is waiting to run (S16).
+struct PendingInvite: Identifiable, Equatable {
+    let token: UUID
+    var id: UUID { token }
+}
+
 @MainActor
 @Observable
 final class AppModel {
@@ -14,6 +20,12 @@ final class AppModel {
     let store: LocalStore
     let scripture = ScriptureStore.shared
     let presence: PresenceService
+    /// The backend, when configured (SupabaseConfig.remoteEnabled). Nil
+    /// means fully local — every remote call below is best-effort and
+    /// nothing blocks reading.
+    private(set) var remote: RemoteSync?
+    /// Set by an opened invite link; RootView and onboarding watch it.
+    var pendingInvite: PendingInvite?
 
     /// Who is in the book right now (empty means the form is absent).
     private(set) var presentPeople: [PresentPerson] = []
@@ -37,6 +49,9 @@ final class AppModel {
         let state = await store.load()
         let model = AppModel(state: state, store: store, presence: LocalPresenceService())
         await model.loadPortraits()
+        if SupabaseConfig.remoteEnabled {
+            model.remote = await RemoteSync.restore()
+        }
         return model
     }
 
@@ -93,7 +108,9 @@ final class AppModel {
 
     // MARK: - Onboarding & rooms
 
-    func completeOnboarding(name: String, portraitData: Data?) async {
+    /// `startRoom: false` is the joiner's path (S16): the person exists
+    /// first, the room they land in is the one the invite names.
+    func completeOnboarding(name: String, portraitData: Data?, startRoom: Bool = true) async {
         // A person exists once, ever: re-running the thread must never
         // mint a second identity and orphan what the first one left.
         if state.me != nil {
@@ -101,7 +118,7 @@ final class AppModel {
             if let portraitData {
                 await setPortrait(portraitData)
             }
-            if currentRoom == nil {
+            if startRoom, currentRoom == nil {
                 createRoom(named: nil)
             }
             return
@@ -114,7 +131,9 @@ final class AppModel {
         }
         let person = Person(id: personID, name: name, portraitPath: portraitPath, translation: .bsb)
         state.me = person
-        createRoom(named: nil)
+        if startRoom {
+            createRoom(named: nil)
+        }
         persist()
     }
 
@@ -139,18 +158,42 @@ final class AppModel {
     func createInvite(for room: Room) -> Invite {
         guard let me = state.me else { fatalError("invite before person") }
         // Reuse a live invite rather than minting link after link.
+        let invite: Invite
         if let existing = state.invites.first(where: { $0.roomID == room.id && $0.expiresAt > Date() }) {
-            return existing
+            invite = existing
+        } else {
+            invite = Invite(roomID: room.id, createdBy: me.id, createdAt: Date())
+            state.invites.append(invite)
+            persist()
         }
-        let invite = Invite(roomID: room.id, createdBy: me.id, createdAt: Date())
-        state.invites.append(invite)
-        persist()
+        // The link only works once the backend knows it — push it (and the
+        // room, in case this room predates sign-in) whenever it's handed
+        // out.
+        if let remote, remote.isSignedIn {
+            let membership = myMembership(in: room)
+            Task {
+                try? await remote.push(room: room)
+                if let membership { try? await remote.push(membership: membership) }
+                try? await remote.push(invite: invite)
+            }
+        }
         return invite
     }
 
-    var roomIsFull: Bool {
-        guard let room = currentRoom else { return false }
-        return members(of: room).count >= Room.capacity
+    func isFull(_ room: Room) -> Bool {
+        members(of: room).count >= Room.capacity
+    }
+
+    /// Naming a room after the fact (S15's naming half, reachable later).
+    func renameRoom(_ room: Room, to name: String?) {
+        guard let i = state.rooms.firstIndex(where: { $0.id == room.id }) else { return }
+        let trimmed = name?.trimmingCharacters(in: .whitespaces)
+        state.rooms[i].name = (trimmed?.isEmpty ?? true) ? nil : trimmed
+        persist()
+        if let remote, remote.isSignedIn {
+            let updated = state.rooms[i]
+            Task { try? await remote.push(room: updated) }
+        }
     }
 
     /// Leaving (§6.8): one confirmation, plainly worded, no guilt. Notes
@@ -167,6 +210,11 @@ final class AppModel {
         state.rooms.removeAll { $0.id == room.id }  // local copy of a departed room
         state.currentRoomID = state.rooms.first?.id
         persist()
+        if let remote, remote.isSignedIn {
+            let roomID = room.id
+            let personID = me.id
+            Task { try? await remote.deleteMembership(roomID: roomID, personID: personID) }
+        }
     }
 
     func pickInk(_ ink: Ink, in room: Room) {
@@ -175,6 +223,10 @@ final class AppModel {
         else { return }
         state.memberships[index].ink = ink
         persist()
+        if let remote, remote.isSignedIn {
+            let membership = state.memberships[index]
+            Task { try? await remote.push(membership: membership) }
+        }
     }
 
     // MARK: - Readings and the fire
@@ -199,7 +251,13 @@ final class AppModel {
             handiwork: Handiwork(scale: scale))
         state.readings.append(reading)
         persist()
+        pushReadingRemote(reading)
         return reading
+    }
+
+    private func pushReadingRemote(_ reading: Reading) {
+        guard let remote, remote.isSignedIn else { return }
+        Task { try? await remote.push(reading: reading) }
     }
 
     func quietDays(for room: Room) -> [QuietDay] {
@@ -222,7 +280,22 @@ final class AppModel {
         state.readings[index].handiwork.feed(by: me.id, at: Date(), bankedIntervals: banked)
         savePosition(reading: reading, address: address)
         persist()
+        // The other phone learns of this feeding through the rolling
+        // window — steady needs to know two people fed the same fire. One
+        // push per credited event, and the fire row rides along.
+        if let remote, remote.isSignedIn,
+           let event = state.readings[index].handiwork.recentFuel.last,
+           event.personID == me.id, event.at != lastPushedFuelAt {
+            lastPushedFuelAt = event.at
+            let updated = state.readings[index]
+            Task {
+                try? await remote.push(fuel: event, readingID: updated.id)
+                try? await remote.push(reading: updated)
+            }
+        }
     }
+
+    private var lastPushedFuelAt = Date.distantPast
 
     func savePosition(reading: Reading, address: VerseAddress) {
         guard let me = state.me else { return }
@@ -268,6 +341,9 @@ final class AppModel {
         }) else { return }
         state.quietDays.append(day)
         persist()
+        if let remote, remote.isSignedIn {
+            Task { try? await remote.push(quietDay: day) }
+        }
     }
 
     func activeQuietDay(in room: Room, at now: Date = Date()) -> QuietDay? {
@@ -279,6 +355,7 @@ final class AppModel {
         guard let index = state.readings.firstIndex(where: { $0.id == reading.id }) else { return }
         state.readings[index].finishedAt = Date()
         persist()
+        pushReadingRemote(state.readings[index])
     }
 
     // MARK: - Notes
@@ -449,11 +526,18 @@ final class AppModel {
     func setTranslation(_ translation: TranslationID) {
         state.me?.translation = translation
         persist()
+        pushProfileRemote()
     }
 
     func updateMe(name: String) {
         state.me?.name = name
         persist()
+        pushProfileRemote()
+    }
+
+    private func pushProfileRemote(portraitData: Data? = nil) {
+        guard let remote, remote.isSignedIn, let me = state.me else { return }
+        Task { try? await remote.push(profile: me, portraitData: portraitData) }
     }
 
     func markMarginHintSeen() {
@@ -466,11 +550,267 @@ final class AppModel {
     /// exists; locally both paths clear this device.
     func deleteAccount(keepNotesBehind: Bool) {
         // TODO(sync): pass keepNotesBehind to the backend's delete so notes
-        // either stay for the room (default) or leave with the person.
+        // either stay for the room (default) or leave with the person —
+        // deleting the auth user needs a service-role edge function, which
+        // ships with the full sync engine.
         _ = keepNotesBehind
+        Task { await remote?.signOut() }
         state = AppState()
         portraits = [:]
         persist()
+    }
+
+    // MARK: - The account and the room surface of sync (§6.10, S16)
+
+    var isSignedIn: Bool { remote?.isSignedIn ?? false }
+    var accountEmail: String? { remote?.email }
+
+    func sendSignInCode(to email: String) async throws {
+        guard let remote else { throw SupabaseError.notSignedIn }
+        try await remote.sendCode(to: email)
+    }
+
+    /// Verifying the emailed code is account creation and sign-in both.
+    /// The local person adopts the account's identity — one person, ever,
+    /// even across the local-first-then-signed-in seam.
+    func verifySignInCode(email: String, code: String) async throws {
+        guard let remote else { throw SupabaseError.notSignedIn }
+        let uid = try await remote.verify(email: email, code: code)
+        adoptRemoteIdentity(uid)
+        await pushLocalGraph()
+        await refreshFromRemote()
+    }
+
+    func signOutRemote() async {
+        await remote?.signOut()
+    }
+
+    /// A person exists once, ever. Before sign-in their id was minted on
+    /// this device; the account's id replaces it everywhere it appears.
+    /// (The fuel window's person ids age out on their own within ~36 h —
+    /// at worst a just-adopted fire counts its own reader twice, briefly.)
+    private func adoptRemoteIdentity(_ uid: UUID) {
+        guard var me = state.me, me.id != uid else { return }
+        let old = me.id
+        me.id = uid
+        state.me = me
+        if let image = portraits.removeValue(forKey: old) { portraits[uid] = image }
+        for i in state.memberships.indices where state.memberships[i].personID == old {
+            state.memberships[i].personID = uid
+        }
+        for i in state.notes.indices {
+            if state.notes[i].authorID == old { state.notes[i].authorID = uid }
+            if state.notes[i].foundBy.remove(old) != nil { state.notes[i].foundBy.insert(uid) }
+        }
+        for i in state.highlights.indices where state.highlights[i].authorID == old {
+            state.highlights[i].authorID = uid
+        }
+        for i in state.positions.indices where state.positions[i].personID == old {
+            state.positions[i].personID = uid
+        }
+        for i in state.quietDays.indices where state.quietDays[i].personID == old {
+            state.quietDays[i].personID = uid
+        }
+        for i in state.invites.indices where state.invites[i].createdBy == old {
+            state.invites[i].createdBy = uid
+        }
+        persist()
+    }
+
+    /// Everything this device can honestly claim on the backend: my
+    /// profile and portrait, my rooms and membership, live invites, the
+    /// readings and their fires, my quiet days.
+    func pushLocalGraph() async {
+        guard let remote, remote.isSignedIn, let me = state.me else { return }
+        var portraitData: Data?
+        if let path = me.portraitPath {
+            portraitData = try? Data(contentsOf: await store.portraitFileURL(path))
+        }
+        try? await remote.push(profile: me, portraitData: portraitData)
+        for room in state.rooms {
+            try? await remote.push(room: room)
+            if let mine = myMembership(in: room) {
+                try? await remote.push(membership: mine)
+            }
+            for invite in state.invites where invite.roomID == room.id && invite.expiresAt > Date() {
+                try? await remote.push(invite: invite)
+            }
+            for reading in state.readings where reading.roomID == room.id {
+                try? await remote.push(reading: reading)
+            }
+            for day in quietDays(for: room) where day.personID == me.id {
+                try? await remote.push(quietDay: day)
+            }
+        }
+    }
+
+    /// Pull every room I'm in and fold it into local state. Called on
+    /// launch, on foreground, and after joining.
+    func refreshFromRemote() async {
+        guard let remote, remote.isSignedIn else { return }
+        guard let graph = try? await remote.pullRooms() else { return }
+        merge(graph)
+    }
+
+    /// Accepting an invite (S16): join on the backend, pull the room,
+    /// land in it. The database enforces expiry and the six-person cap.
+    func joinRoom(inviteToken: UUID) async throws -> UUID {
+        guard let remote, remote.isSignedIn else { throw SupabaseError.notSignedIn }
+        let roomID = try await remote.acceptInvite(token: inviteToken)
+        await refreshFromRemote()
+        state.currentRoomID = roomID
+        persist()
+        return roomID
+    }
+
+    func handleInviteURL(_ url: URL) {
+        guard let token = Self.inviteToken(from: url) else { return }
+        pendingInvite = PendingInvite(token: token)
+    }
+
+    /// https://readribbon.app/i/<token> or ribbon://i/<token>.
+    static func inviteToken(from url: URL) -> UUID? {
+        let parts = url.pathComponents.filter { $0 != "/" }
+        let host = url.host()?.lowercased()
+        guard host == "readribbon.app" || url.scheme?.lowercased() == "ribbon" else { return nil }
+        guard parts.first == "i" || host == "i", let last = parts.last else { return nil }
+        return UUID(uuidString: last)
+    }
+
+    /// The onboarding paste field takes whatever they have — the link, or
+    /// just the code out of it.
+    static func inviteToken(fromPasted text: String) -> UUID? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let url = URL(string: trimmed), let token = inviteToken(from: url) {
+            return token
+        }
+        let pattern = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+        if let range = trimmed.range(of: pattern, options: .regularExpression) {
+            return UUID(uuidString: String(trimmed[range]))
+        }
+        return nil
+    }
+
+    private func merge(_ graph: RoomGraph) {
+        guard let me = state.me else { return }
+
+        for row in graph.rooms {
+            if let i = state.rooms.firstIndex(where: { $0.id == row.id }) {
+                state.rooms[i].name = row.name
+                state.rooms[i].isPaused = row.isPaused
+            } else {
+                state.rooms.append(
+                    Room(id: row.id, name: row.name, createdAt: row.createdAt, isPaused: row.isPaused))
+            }
+        }
+
+        for row in graph.memberships {
+            let ink = row.ink.flatMap(Ink.init(rawValue:))
+            if let i = state.memberships.firstIndex(where: {
+                $0.roomID == row.roomId && $0.personID == row.personId
+            }) {
+                // My ink is authored here; everyone else's is authored
+                // there.
+                if row.personId != me.id { state.memberships[i].ink = ink }
+                state.memberships[i].joinedAt = row.joinedAt
+            } else {
+                state.memberships.append(Membership(
+                    id: row.id, roomID: row.roomId, personID: row.personId,
+                    ink: ink, joinedAt: row.joinedAt))
+            }
+        }
+
+        for row in graph.profiles where row.id != me.id {
+            let translation = TranslationID(rawValue: row.translation)
+            var person = state.people[row.id]
+                ?? Person(id: row.id, name: row.name, translation: translation)
+            person.name = row.name
+            person.translation = translation
+            state.people[row.id] = person
+            if portraits[row.id] == nil, row.portraitPath != nil {
+                fetchRemotePortrait(row.id)
+            }
+        }
+
+        for row in graph.quietDays {
+            guard !state.quietDays.contains(where: {
+                $0.roomID == row.roomId && $0.personID == row.personId && $0.localDate == row.localDate
+            }) else { continue }
+            state.quietDays.append(QuietDay(
+                id: row.id, roomID: row.roomId, personID: row.personId,
+                localDate: row.localDate, timeZoneID: row.timeZone, markedAt: row.markedAt))
+        }
+
+        let fires = Dictionary(uniqueKeysWithValues: graph.fires.map { ($0.readingId, $0) })
+        let fuelByReading = Dictionary(grouping: graph.fuelEvents, by: \.readingId)
+        for row in graph.readings {
+            let events = (fuelByReading[row.id] ?? [])
+                .map { FuelEvent(personID: $0.personId, at: $0.at) }
+            if let i = state.readings.firstIndex(where: { $0.id == row.id }) {
+                if state.readings[i].finishedAt == nil {
+                    state.readings[i].finishedAt = row.finishedAt
+                }
+                state.readings[i].handiwork = Self.mergedHandiwork(
+                    local: state.readings[i].handiwork, remote: fires[row.id], events: events)
+            } else {
+                let scale = FireScale(rawValue: row.scale) ?? .medium
+                var handiwork = Handiwork(scale: scale)
+                if let fire = fires[row.id] {
+                    handiwork = Handiwork(
+                        scale: scale, coalDepth: fire.coalDepth,
+                        lastFuelAt: fire.lastFuelAt, restartAt: fire.restartAt,
+                        stateAtLastFuel: FireState(rawValue: fire.stateAtLastFuel) ?? .catching,
+                        recentFuel: Self.pruned(events))
+                }
+                state.readings.append(Reading(
+                    id: row.id, roomID: row.roomId, bookID: row.bookId,
+                    startedAt: row.startedAt, finishedAt: row.finishedAt,
+                    handiwork: handiwork))
+            }
+        }
+
+        persist()
+    }
+
+    /// Two devices fed the same fire: keep the later feeding's read of
+    /// the state, the deeper bed, and the union of the window's fuel — so
+    /// a fire fed by two people on two phones still finds its way to
+    /// steady on the next feeding.
+    private static func mergedHandiwork(
+        local: Handiwork, remote row: RemoteSync.FireRow?, events: [FuelEvent]
+    ) -> Handiwork {
+        var union = Set(local.recentFuel)
+        union.formUnion(events)
+        let localLast = local.lastFuelAt ?? .distantPast
+        let remoteLast = row?.lastFuelAt ?? .distantPast
+        let laterIsRemote = row != nil && remoteLast > localLast
+        let last = max(localLast, remoteLast)
+        return Handiwork(
+            scale: local.scale,
+            coalDepth: max(local.coalDepth, row?.coalDepth ?? 0),
+            lastFuelAt: last == .distantPast ? nil : last,
+            restartAt: laterIsRemote ? row?.restartAt : local.restartAt,
+            stateAtLastFuel: laterIsRemote
+                ? (FireState(rawValue: row?.stateAtLastFuel ?? "") ?? .catching)
+                : local.stateAtLastFuel,
+            recentFuel: pruned(Array(union)))
+    }
+
+    private static func pruned(_ events: [FuelEvent]) -> [FuelEvent] {
+        let cutoff = Date().addingTimeInterval(-FireTuning.standard.fuelWindowHours * 3600)
+        return events.filter { $0.at >= cutoff }.sorted { $0.at < $1.at }
+    }
+
+    private func fetchRemotePortrait(_ personID: UUID) {
+        guard let remote else { return }
+        Task {
+            guard let data = await remote.fetchPortrait(personID: personID) else { return }
+            if let path = try? await store.writePortrait(data, personID: personID) {
+                state.people[personID]?.portraitPath = path
+                if let image = UIImage(data: data) { portraits[personID] = image }
+                persist()
+            }
+        }
     }
 
     // MARK: - Portraits
@@ -494,6 +834,7 @@ final class AppModel {
             state.me = me
             if let image = UIImage(data: data) { portraits[me.id] = image }
             persist()
+            pushProfileRemote(portraitData: data)
         }
     }
 }

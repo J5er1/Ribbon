@@ -4,5 +4,13 @@
   "cleanUrls": true,
   "rewrites": [
     { "source": "/i/:token", "destination": "/invite.html" }
+  ],
+  "headers": [
+    {
+      "source": "/.well-known/apple-app-site-association",
+      "headers": [
+        { "key": "Content-Type", "value": "application/json" }
+      ]
+    }
   ]
 }

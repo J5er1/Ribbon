@@ -4,12 +4,23 @@
 <dict>
 	<key>CFBundleDisplayName</key>
 	<string>Ribbon</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>bible.ribbon.app.invite</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>ribbon</string>
+			</array>
+		</dict>
+	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Ribbon needs the microphone to record a note.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Ribbon turns voice notes into transcripts, on this phone.</string>
+	<string>Ribbon turns voice notes into transcripts, on this device.</string>
 	<key>UIAppFonts</key>
 	<array>
 		<string>Literata[opsz,wght].ttf</string>
