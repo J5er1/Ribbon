@@ -438,12 +438,12 @@ final class AppModel {
         persist()
     }
 
-    /// What the translation picker offers: the bundled two always, and
-    /// each licensed translation once its edition is configured on the
-    /// proxy (§16.8 — NKJV first, two more undecided).
+    /// What the translation picker offers: the bundled two always, plus
+    /// the licensed editions (NKJV, NIV, NASB 1995 — §16.8, decided).
+    /// Streaming needs no account: the proxy is public-read behind the
+    /// publishable key, so licensed translations don't wait for sync.
     var availableTranslations: [Translation] {
-        TranslationRegistry.bundled
-            + TranslationRegistry.licensed.filter { $0.isConfigured && SupabaseConfig.remoteEnabled }
+        TranslationRegistry.bundled + TranslationRegistry.licensed.filter(\.isConfigured)
     }
 
     func setTranslation(_ translation: TranslationID) {

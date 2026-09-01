@@ -127,10 +127,19 @@ gated off until the account and licenses exist:
   verse-presence differences behave exactly like the BSB/WEB ones already
   do.
 
-Still needed to light it up: an API.Bible account, the NKJV license
-approval on it (Thomas Nelson reviews these), the two remaining version
-choices, then `supabase secrets set API_BIBLE_KEY=…` and the editions'
-bibleIDs in `TranslationRegistry`.
+**Lit up (September 2026):** the API.Bible account exists with the Open
+Book plan, `API_BIBLE_KEY` is set as the function secret, and the three
+licensed editions are decided and wired with their catalog ids — NKJV
+(`63097d2a0a2f7db3-01`), NIV 2011 (`78a9f6124f344018-01`), NASB 1995
+(`b8ee27bcd1cae43a-01`). All three verified fetching through the proxy;
+all three carry words-of-Jesus markup. The converter was validated
+against the live payloads (verse markers are tags named "verse" whose
+own items repeat the number — the converter classifies by name, never by
+type, and never walks a marker's subtree).
+
+**Domain:** invite links point at `readribbon.app` — the domain the room
+owns. The brief's `ribbon.bible` was not acquired; the brief stands as
+written, this ledger records the difference.
 
 ## Small product calls made here
 

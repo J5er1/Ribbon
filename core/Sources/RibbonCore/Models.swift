@@ -285,8 +285,11 @@ public struct Invite: Codable, Hashable, Identifiable, Sendable {
         self.expiresAt = createdAt.addingTimeInterval(TimeInterval(Invite.lifetimeDays) * 24 * 3600)
     }
 
+    /// The link is the whole mechanism (S15). The domain is the one the
+    /// room owns: readribbon.app (the brief's ribbon.bible was not
+    /// acquired).
     public func url() -> URL {
-        URL(string: "https://ribbon.bible/i/\(id.uuidString.lowercased())")!
+        URL(string: "https://readribbon.app/i/\(id.uuidString.lowercased())")!
     }
 }
 

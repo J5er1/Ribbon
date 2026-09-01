@@ -23,6 +23,8 @@ public struct TranslationID: RawRepresentable, Hashable, Sendable {
     public static let bsb = TranslationID(rawValue: "bsb")
     public static let web = TranslationID(rawValue: "web")
     public static let nkjv = TranslationID(rawValue: "nkjv")
+    public static let niv = TranslationID(rawValue: "niv")
+    public static let nasb = TranslationID(rawValue: "nasb")
 }
 
 extension TranslationID: Codable {
@@ -100,19 +102,27 @@ public enum TranslationRegistry {
         id: .web, displayName: "World English", fullName: "World English Bible",
         source: .bundled, redLetter: true)
 
-    /// NKJV via API.Bible. The bibleID is filled in when Thomas Nelson's
-    /// license is approved on the API.Bible account; until then the
-    /// translation is registered but unavailable, and never shown.
+    // The three licensed editions, live on the room's API.Bible account
+    // (Open Book plan) and served through the bible-proxy. The bibleIDs
+    // are catalog identifiers, not secrets. All three carry words-of-Jesus
+    // markup.
     public static let nkjv = Translation(
         id: .nkjv, displayName: "New King James", fullName: "New King James Version",
-        source: .apiBible(bibleID: ""), redLetter: false)
+        source: .apiBible(bibleID: "63097d2a0a2f7db3-01"), redLetter: true)
+
+    public static let niv = Translation(
+        id: .niv, displayName: "New International", fullName: "New International Version (2011)",
+        source: .apiBible(bibleID: "78a9f6124f344018-01"), redLetter: true)
+
+    public static let nasb = Translation(
+        id: .nasb, displayName: "New American Standard", fullName: "New American Standard Bible (1995)",
+        source: .apiBible(bibleID: "b8ee27bcd1cae43a-01"), redLetter: true)
 
     /// Shipped in the app, whole.
     public static let bundled: [Translation] = [bsb, web]
 
-    /// Licensed, streamed. Two more slots are planned and undecided —
-    /// they join this list the day they are chosen.
-    public static let licensed: [Translation] = [nkjv]
+    /// Licensed, streamed.
+    public static let licensed: [Translation] = [nkjv, niv, nasb]
 
     public static let all: [Translation] = bundled + licensed
 

@@ -82,33 +82,39 @@ public enum APIBibleContent {
         }
 
         mutating func walkItems(_ items: [Any]) {
+            // The live feed's node shape (verified against the real NKJV/
+            // NIV/NASB payloads): text nodes are {type:"text", text},
+            // everything else is {type:"tag", name, attrs.style}. A verse
+            // marker is name "verse" with attrs.number — and its own items
+            // repeat the number as text, so a marker's subtree is never
+            // walked.
             for item in items {
                 guard let object = item as? [String: Any] else { continue }
-                let type = (object["type"] as? String) ?? (object["name"] as? String) ?? ""
+                let name = object["name"] as? String
+                let type = object["type"] as? String
                 let attrs = object["attrs"] as? [String: Any]
                 let style = attrs?["style"] as? String
 
-                switch type {
-                case "verse":
-                    if let raw = (attrs?["number"] as? String) ?? (attrs?["sid"] as? String),
-                       let number = Int(raw.prefix(while: \.isNumber)) {
-                        pendingVerse = number
-                    }
-                case "text":
+                if type == "text" {
                     if let text = object["text"] as? String {
                         push(text)
                     }
-                case "char", "tag":
-                    if let style, APIBibleContent.skippedStyles.contains(style) {
-                        continue  // a footnote or cross-reference subtree
-                    }
-                    let isRed = style == "wj"
-                    if isRed { redLetterDepth += 1 }
-                    walkItems(object["items"] as? [Any] ?? [])
-                    if isRed { redLetterDepth -= 1 }
-                default:
-                    walkItems(object["items"] as? [Any] ?? [])
+                    continue
                 }
+                if name == "verse" || style == "v" {
+                    if let raw = attrs?["number"] as? String,
+                       let number = Int(raw.prefix(while: \.isNumber)) {
+                        pendingVerse = number
+                    }
+                    continue
+                }
+                if let style, APIBibleContent.skippedStyles.contains(style) {
+                    continue  // a footnote or cross-reference subtree
+                }
+                let isRed = style == "wj"
+                if isRed { redLetterDepth += 1 }
+                walkItems(object["items"] as? [Any] ?? [])
+                if isRed { redLetterDepth -= 1 }
             }
         }
 
