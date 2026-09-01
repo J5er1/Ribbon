@@ -73,6 +73,14 @@ actor SupabaseClient {
         self.session = session
     }
 
+    func signOut() {
+        session = nil
+    }
+
+    /// The live session, for persisting across launches (Keychain — the
+    /// tokens are credentials, not state).
+    var currentSession: SupabaseSession? { session }
+
     func refresh() async throws {
         guard let session else { throw SupabaseError.notSignedIn }
         let data = try await post(
@@ -100,9 +108,16 @@ actor SupabaseClient {
     }
 
     /// Upsert rows; last-write-wins per object is safe because objects are
-    /// single-author (§13).
-    func upsert(into table: String, rows: some Encodable) async throws {
-        var request = URLRequest(url: base.appending(path: "rest/v1/\(table)"))
+    /// single-author (§13). `onConflict` names a unique constraint's
+    /// columns when the merge key isn't the primary key (memberships merge
+    /// on room_id,person_id — a joiner's row was minted server-side with
+    /// its own id).
+    func upsert(into table: String, rows: some Encodable, onConflict: String? = nil) async throws {
+        var url = base.appending(path: "rest/v1/\(table)")
+        if let onConflict {
+            url = url.appending(queryItems: [URLQueryItem(name: "on_conflict", value: onConflict)])
+        }
+        var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.httpBody = try Self.encoder.encode(rows)
         try apply(headers: &request)
@@ -120,9 +135,15 @@ actor SupabaseClient {
         _ = try await run(request)
     }
 
-    /// Call a database function (used for accept_invite, close_room).
+    /// Call a database function (used for accept_invite).
     func rpc(_ function: String, body: [String: String]) async throws -> Data {
         try await post(path: "rest/v1/rpc/\(function)", body: body, authenticated: true)
+    }
+
+    /// Call an anon-callable function (invite_preview — the join screen
+    /// shows who is inviting before any account exists).
+    func rpcAnon(_ function: String, body: [String: String]) async throws -> Data {
+        try await post(path: "rest/v1/rpc/\(function)", body: body, authenticated: false)
     }
 
     // MARK: Storage — voice notes, room-scoped paths
@@ -143,6 +164,34 @@ actor SupabaseClient {
         try apply(headers: &request)
         let data = try await run(request)
         try data.write(to: destination, options: .atomic)
+    }
+
+    // MARK: Storage — portraits, one per person (presence is faces, §2.7)
+
+    func uploadPortrait(personID: UUID, data: Data) async throws {
+        let path = "storage/v1/object/portraits/\(personID.uuidString.lowercased()).jpg"
+        var request = URLRequest(url: base.appending(path: path))
+        request.httpMethod = "POST"
+        request.httpBody = data
+        try apply(headers: &request)
+        request.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
+        request.setValue("true", forHTTPHeaderField: "x-upsert")
+        _ = try await run(request)
+    }
+
+    func downloadPortrait(personID: UUID) async throws -> Data {
+        let path = "storage/v1/object/authenticated/portraits/\(personID.uuidString.lowercased()).jpg"
+        var request = URLRequest(url: base.appending(path: path))
+        try apply(headers: &request)
+        return try await run(request)
+    }
+
+    func deletePortrait(personID: UUID) async throws {
+        let path = "storage/v1/object/portraits/\(personID.uuidString.lowercased()).jpg"
+        var request = URLRequest(url: base.appending(path: path))
+        request.httpMethod = "DELETE"
+        try apply(headers: &request)
+        _ = try await run(request)
     }
 
     // MARK: Plumbing
@@ -192,9 +241,32 @@ actor SupabaseClient {
         return e
     }()
 
+    /// PostgREST timestamps carry fractional seconds, which the plain
+    /// .iso8601 strategy refuses; GoTrue's don't. Accept both.
+    /// nonisolated(unsafe) is honest here: ISO8601DateFormatter is
+    /// documented thread-safe, and these are set once and never mutated.
+    nonisolated(unsafe) private static let fractionalTimestamp: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+    nonisolated(unsafe) private static let wholeTimestamp: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+
     static let decoder: JSONDecoder = {
         let d = JSONDecoder()
-        d.dateDecodingStrategy = .iso8601
+        d.dateDecodingStrategy = .custom { decoder in
+            let raw = try decoder.singleValueContainer().decode(String.self)
+            if let date = fractionalTimestamp.date(from: raw) ?? wholeTimestamp.date(from: raw) {
+                return date
+            }
+            throw DecodingError.dataCorrupted(.init(
+                codingPath: decoder.codingPath,
+                debugDescription: "Unrecognized timestamp: \(raw)"))
+        }
         d.keyDecodingStrategy = .convertFromSnakeCase
         return d
     }()

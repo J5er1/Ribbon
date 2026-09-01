@@ -61,9 +61,15 @@ python3 tools/usfx_to_json.py .
 The live Supabase project is `ribbon` (`noyccfkaotuvhhaoccck`,
 us-east-1). The schema in `supabase/migrations` is applied; row-level
 security enforces the product's privacy posture structurally — see the
-comments in the migration. The app is local-first and fully usable with no
-account; remote sync turns on in `SupabaseConfig` once the sign-in thread
-ships.
+comments in the migration. The app is local-first and fully usable with
+no account. The sign-in thread is wired (emailed code, `RemoteSync`):
+invites register with the backend, invite links open the app and run the
+S16 join flow, and the room surface — rooms, members, profiles,
+readings, fires, quiet days — syncs both ways. Notes, highlights and
+positions still travel with the full sync engine, which is the next
+piece of work (`docs/deviations.md` §10). Universal links need
+`RIBBON_APPLE_TEAM_ID` set in the Vercel project so the web build emits
+a real `apple-app-site-association`.
 
 ## Licensed translations
 
@@ -78,10 +84,11 @@ bibleID in `TranslationRegistry`. Details in docs/deviations.md.
 
 ## What's built, what's next
 
-Phase one (§15) is in place end to end for a room of one on-device: the
-room and its fire, reading, notes (voice with on-device transcripts +
-written), ink and highlights with real blending, quiet days, finishing a
-book, the shelf and ember records, the chooser, onboarding, and settings.
-The presence system is fully built against a service interface whose live
-(socket) implementation is the next piece of work, together with sign-in
-and sync. `docs/deviations.md` is the honest ledger.
+Phase one (§15) is in place end to end: the room and its fire, reading,
+notes (voice with on-device transcripts + written), ink and highlights
+with real blending, quiet days, finishing a book, the shelf and ember
+records, the chooser, onboarding, and settings — and a room of two is now
+reachable for real: accounts (emailed code), invites that open the app,
+the S16 join flow, and two-way sync of the room surface. The presence
+socket and the content half of sync (notes, highlights, positions) are
+the next piece of work. `docs/deviations.md` is the honest ledger.

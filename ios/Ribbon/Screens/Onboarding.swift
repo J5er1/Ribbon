@@ -10,18 +10,21 @@ struct OnboardingFlow: View {
     @Environment(AppModel.self) private var model
     var onDone: () -> Void
 
-    enum Step {
+    enum Step: Equatable {
         case mark
         case who
         case fromInvite
         case name
         case invite
+        case join(UUID)
     }
 
     @State private var step: Step = .mark
     @State private var name = ""
     @State private var portraitItem: PhotosPickerItem?
     @State private var portraitData: Data?
+    @State private var pastedInvite = ""
+    @State private var pasteMissed = false
     @FocusState private var nameFocused: Bool
 
     var body: some View {
@@ -42,11 +45,33 @@ struct OnboardingFlow: View {
             case .invite:
                 inviteStep
                     .transition(.opacity)
+            case .join(let token):
+                JoinFlow(
+                    token: token,
+                    onDone: onDone,
+                    onStartInstead: {
+                        // Declining the join forgets it — otherwise the
+                        // pending token re-presents the join over the
+                        // room they start instead.
+                        model.pendingInvite = nil
+                        withAnimation(RibbonMotion.settle) { step = .name }
+                    })
+                .id(token)
+                .transition(.opacity)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: 420)
+        .frame(maxWidth: .infinity)
         .room()
         .preferredColorScheme(.dark)
+        // A tapped invite link is the strongest possible statement of
+        // intent — it wins over whatever step was showing (S16).
+        .onChange(of: model.pendingInvite, initial: true) { _, pending in
+            if let pending {
+                withAnimation(RibbonMotion.settle) { step = .join(pending.token) }
+            }
+        }
     }
 
     // The mark, and one line. It holds for about 900 ms and then dissolves.
@@ -136,9 +161,9 @@ struct OnboardingFlow: View {
         .onAppear { nameFocused = true }
     }
 
-    // The honest answer until the deep-link path lands (S16): the link
-    // itself is the way in, and this screen says so rather than quietly
-    // starting a room of your own.
+    // The link is the whole mechanism (S15): opening it lands here via
+    // the universal link — and pasting it works when the link was sent
+    // somewhere this device can't tap it from.
     private var fromInviteStep: some View {
         VStack(spacing: 22) {
             Spacer()
@@ -147,12 +172,48 @@ struct OnboardingFlow: View {
                 .foregroundStyle(Palette.text)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 48)
+            TextField(
+                "", text: $pastedInvite,
+                prompt: Text(Copy.pasteInvitePrompt).foregroundStyle(Palette.muted))
+                .font(RibbonType.ui(16))
+                .foregroundStyle(Palette.text)
+                .multilineTextAlignment(.center)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(Palette.surface, in: RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Palette.rule, lineWidth: 1))
+                .padding(.horizontal, 48)
+                .submitLabel(.go)
+                .onSubmit(acceptPasted)
+                .onChange(of: pastedInvite) { _, text in
+                    // A pasted link is complete the moment it lands —
+                    // don't make them find a go button.
+                    pasteMissed = false
+                    if AppModel.inviteToken(fromPasted: text) != nil { acceptPasted() }
+                }
+            if pasteMissed {
+                Text(Copy.thatLinkIsntAnInvite)
+                    .font(RibbonType.ui(14))
+                    .foregroundStyle(Palette.muted)
+            }
             QuietControl(title: "Start a room instead") {
                 withAnimation(RibbonMotion.settle) { step = .name }
             }
             Spacer()
             Spacer()
         }
+    }
+
+    private func acceptPasted() {
+        guard let token = AppModel.inviteToken(fromPasted: pastedInvite) else {
+            if !pastedInvite.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                pasteMissed = true
+            }
+            return
+        }
+        withAnimation(RibbonMotion.settle) { step = .join(token) }
     }
 
     private func advanceFromName() {
@@ -175,7 +236,22 @@ struct OnboardingFlow: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 44)
 
-            if let invite {
+            if model.remote != nil, !model.isSignedIn {
+                // A link handed out signed-out is a dead link — the
+                // account happens here, where it's honestly needed. The
+                // quiet ways past (pick a book, invite later) stand.
+                Text(Copy.inviteNeedsSignIn)
+                    .font(RibbonType.ui(15))
+                    .foregroundStyle(Palette.muted)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 48)
+                SignInInline(onSignedIn: {
+                    if let room = model.currentRoom {
+                        invite = model.createInvite(for: room)
+                    }
+                })
+                .padding(.horizontal, 40)
+            } else if let invite {
                 ShareLink(item: invite.url()) {
                     Text("Send the invite")
                         .font(RibbonType.uiMedium(17))

@@ -2,11 +2,11 @@
 """Generate Ribbon's built assets:
 
   1. The paper grain tile (§9.2) — per-pixel noise is seamlessly tileable.
-  2. The app icon fallback — the R. composition (build book §12.1) set in
-     Literata. The SHIPPED AppIcon.png is the true Cesso render made under
-     the project owner's Adobe Fonts entitlement (recipe in
-     docs/deviations.md §1); running make_icon() overwrites it with this
-     entitlement-free stand-in, so re-run the Cesso recipe afterwards.
+  2. The app icon — the Wave (W6) on the unlit ground, the same
+     composition as mark/ribbon-mark-on-black-square.svg, rendered from
+     the path data below with the knockout done as an erase stroke. (The
+     Cesso R. and wordmark masters remain in mark/ for brand use; the
+     icon is the mark — docs/deviations.md §1.)
   3. WaveMarkShape.generated.swift — the Wave's two ribbon paths as Swift
      data, so the in-app mark (the way out, onboarding) is drawn natively
      at any size with the knockout done in code.
@@ -82,39 +82,25 @@ def make_grain():
 
 
 def make_icon():
-    """The app icon: the R. — ivory R, chartreuse period, on the unlit
-    ground (build book §12.1). No glow, no bevel, no gradient. The brand's
-    R. is set in Cesso, an Adobe face that cannot be embedded here, so the
-    R is set in Literata as a stand-in until the Cesso outline is provided
-    (docs/deviations.md)."""
-    from PIL import ImageFont
-
+    """The app icon: the Wave (W6), chartreuse on the unlit ground — the
+    mark itself, matching mark/ribbon-mark-on-black-square.svg. No glow,
+    no bevel, no gradient. The knockout where the front ribbon crosses the
+    back one is an erase stroke, exactly as the SVG's mask does it."""
     big = 4096
+    scale = big / 64.0  # the mark's 64×64 design grid
     img = Image.new("RGB", (big, big), GROUND)
     draw = ImageDraw.Draw(img)
 
-    font_path = os.path.join(ROOT, "ios", "Ribbon", "Resources", "Fonts", "Literata[opsz,wght].ttf")
-    font = ImageFont.truetype(font_path, int(big * 0.62))
-    try:
-        # Display cut: optical size up, weight just above regular.
-        font.set_variation_by_axes([72, 440])
-    except Exception:
-        pass
+    front = [(x * scale, y * scale) for x, y in flatten(parse_path(FRONT))]
+    back = [(x * scale, y * scale) for x, y in flatten(parse_path(BACK))]
 
-    ivory = (243, 240, 230)
-    r_box = draw.textbbox((0, 0), "R", font=font)
-    dot_box = draw.textbbox((0, 0), ".", font=font)
-    r_w = r_box[2] - r_box[0]
-    r_h = r_box[3] - r_box[1]
-    # The period gets its own spacing decision (brief §6): tucked closer
-    # than the default sidebearing.
-    gap = int(big * 0.008)
-    dot_w = dot_box[2] - dot_box[0]
-    total_w = r_w + gap + dot_w
-    x = (big - total_w) // 2 - r_box[0]
-    y = (big - r_h) // 2 - r_box[1]
-    draw.text((x, y), "R", font=font, fill=ivory)
-    draw.text((x + r_box[0] + r_w + gap - dot_box[0], y), ".", font=font, fill=CHARTREUSE)
+    # Back ribbon first; then the knockout — occlusion, not transparency:
+    # a ground-colored stroke of the front outline; the front ribbon last,
+    # unmasked, covering the inner half of its own stroke.
+    draw.polygon(back, fill=CHARTREUSE)
+    draw.line(front + [front[0]], fill=GROUND,
+              width=int(round(KNOCKOUT_WIDTH * scale)), joint="curve")
+    draw.polygon(front, fill=CHARTREUSE)
 
     icon_dir = os.path.join(ROOT, "ios", "Ribbon", "Resources", "Assets.xcassets", "AppIcon.appiconset")
     os.makedirs(icon_dir, exist_ok=True)

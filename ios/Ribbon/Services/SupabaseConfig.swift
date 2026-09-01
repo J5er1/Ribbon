@@ -11,8 +11,10 @@ enum SupabaseConfig {
     static let url = URL(string: "https://noyccfkaotuvhhaoccck.supabase.co")!
     static let publishableKey = "sb_publishable_ZokpZ0nlXW2IQfNDGnvNKQ_mPF63qGU"
 
-    /// Remote sync is dark until the sign-in thread ships; the app is
-    /// local-first either way, and flipping this on is the last step of
-    /// wiring accounts, not the first.
-    static let remoteEnabled = false
+    /// The sign-in thread is wired: accounts (emailed code), invites,
+    /// joining, and the room surface — rooms, members, profiles, readings,
+    /// fires, quiet days. Notes, highlights and positions still travel
+    /// with the full sync engine, which is the next piece of work
+    /// (docs/deviations.md). The app is local-first either way.
+    static let remoteEnabled = true
 }

@@ -8,12 +8,18 @@ import RibbonCore
 
 struct EmberView: View {
     var scale: FireScale
-    /// Diameter relative to the fire the ember was. The whole point of the
-    /// shelf is that Isaiah looks like Isaiah.
-    var size: CGFloat { scale.frameHeight * 0.30 }
 
     @State private var seed = Double.random(in: 0..<1000)
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    /// Diameter relative to the fire the ember was. The whole point of the
+    /// shelf is that Isaiah looks like Isaiah — and on iPad the ember
+    /// carries the fire's same 1.45× (CampfireView), so the finishing
+    /// settle doesn't shrink mid-become.
+    var size: CGFloat {
+        scale.frameHeight * 0.30 * (sizeClass == .regular ? 1.45 : 1)
+    }
 
     var body: some View {
         Group {
@@ -83,24 +89,43 @@ struct EmberView: View {
 
 /// The finishing sequence's centerpiece (§6.5): the fire, drawn large one
 /// last time, settling into an ember over ~2.5 s. The flame goes down; the
-/// light stays.
+/// light stays. It goes down the way a real fire does — through smaller:
+/// the steady fire gives way to a few last licks before the ember, so the
+/// settling reads as subsiding, not a projector cross-fade. The coal beds
+/// of the two fires share their seeded geometry, so what actually changes
+/// under the cross-fade is only the flame. Same machinery as before — one
+/// piece of state and one task; the licks are just a middle value of it.
 struct FireBecomesEmber: View {
     var scale: FireScale
     var coalDepth: Double
-    @State private var became = false
+    /// 0 = the fire as it was, 1 = the last licks, 2 = the ember.
+    @State private var settling = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
             CampfireView(state: .steady, scale: scale, coalDepth: coalDepth)
-                .opacity(became ? 0 : 1)
+                .opacity(settling == 0 ? 1 : 0)
+            CampfireView(state: .catching, scale: scale, coalDepth: coalDepth)
+                .opacity(settling == 1 ? 1 : 0)
             EmberView(scale: scale)
-                .opacity(became ? 1 : 0)
+                .opacity(settling == 2 ? 1 : 0)
         }
-        .animation(reduceMotion ? .easeInOut(duration: 0.4) : RibbonMotion.become, value: became)
+        .animation(
+            reduceMotion
+                ? .easeInOut(duration: 0.4)
+                : .easeInOut(duration: RibbonMotion.becomeDuration * 0.44),
+            value: settling)
         .task {
             try? await Task.sleep(for: .milliseconds(600))
-            became = true
+            if reduceMotion {
+                // One quiet cross-fade; the intermediate flare is motion.
+                settling = 2
+                return
+            }
+            settling = 1
+            try? await Task.sleep(for: .milliseconds(1100))
+            settling = 2
         }
         .accessibilityElement()
         .accessibilityLabel("The fire settles into an ember.")

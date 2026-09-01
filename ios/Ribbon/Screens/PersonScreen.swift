@@ -10,7 +10,9 @@ struct PersonScreen: View {
     @Environment(\.dismiss) private var dismiss
     let personID: UUID
     let room: Room
-    var onOpenVerse: (VerseAddress) -> Void
+    /// The verse and the reading it lives in — a finished book's note
+    /// opens that book (S12), not the open one.
+    var onOpenVerse: (VerseAddress, UUID) -> Void
 
     @State private var confirmLeave = false
     @State private var askAboutNotes = false
@@ -20,9 +22,13 @@ struct PersonScreen: View {
     private var isMe: Bool { personID == model.me?.id }
     private var membership: Membership? { model.membership(of: personID, in: room.id) }
 
+    /// What they've left in this room — the whole room, not only the open
+    /// reading — in verse order (S12).
     private var theirNotes: [Note] {
-        guard let reading = model.openReading(in: room) else { return [] }
-        return model.notes(in: reading).filter { $0.authorID == personID }
+        let readingIDs = Set(model.state.readings.filter { $0.roomID == room.id }.map(\.id))
+        return model.state.notes
+            .filter { readingIDs.contains($0.readingID) && $0.authorID == personID }
+            .sorted { $0.verse < $1.verse }
     }
 
     var body: some View {
@@ -47,7 +53,7 @@ struct PersonScreen: View {
                     VStack(alignment: .leading, spacing: 12) {
                         ForEach(theirNotes) { note in
                             Button {
-                                onOpenVerse(note.verse)
+                                onOpenVerse(note.verse, note.readingID)
                             } label: {
                                 HStack(spacing: 10) {
                                     NoteMark(
@@ -76,7 +82,7 @@ struct PersonScreen: View {
                 }
                 Spacer(minLength: 60)
             }
-            .frame(maxWidth: .infinity)
+            .readableColumn()
         }
         .scrollIndicators(.hidden)
         .room()
@@ -121,9 +127,13 @@ struct InkPickerSheet: View {
                         model.pickInk(ink, in: room)
                         dismiss()
                     } label: {
+                        // 30 pt drawn, ~44 pt tappable — widening the
+                        // frames instead would overflow a 375 pt phone
+                        // (8 × 44 + gaps).
                         Circle()
                             .fill(ink.color.opacity(isTaken ? 0.2 : 1))
                             .frame(width: 30, height: 30)
+                            .contentShape(Rectangle().inset(by: -7))
                             .overlay {
                                 if ink == mine {
                                     Circle().strokeBorder(Palette.text.opacity(0.8), lineWidth: 1.6)
@@ -133,14 +143,18 @@ struct InkPickerSheet: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(isTaken)
-                    .accessibilityLabel("\(ink.displayName)\(isTaken ? ", taken" : "")")
+                    .accessibilityLabel(
+                        "\(ink.displayName)\(ink == mine ? ", yours" : "")\(isTaken ? ", taken" : "")")
                 }
             }
-            Spacer()
+            .padding(.bottom, 34)
         }
         .frame(maxWidth: .infinity)
         .room()
         .presentationBackground(Palette.ground)
         .presentationDetents([.height(220)])
+        // iPad ignores detents; without this the eight swatches sit at
+        // the top of a vast empty form sheet.
+        .presentationSizing(.fitted)
     }
 }

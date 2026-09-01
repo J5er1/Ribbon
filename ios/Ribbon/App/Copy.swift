@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 // Every user-facing string, in one place, so the voice rules (§10) can be
 // audited: short sentences, second person, no exclamation points, never
@@ -80,10 +81,27 @@ enum Copy {
     static let you = "You"
     static let paused = "paused"
     static let roomName = "Room name"
+    static let nameThisRoom = "Name this room"
     static let roomHoldsSix = "A room holds six. Start another for the rest."
+    /// The same fact, said to the person arriving — "the rest" are the
+    /// inviter's people, not theirs.
+    static let roomFullForJoiner = "This room is full. Ask them to start another."
     static let inviteExpired = "This invite has expired. Ask for a new one."
     static func wantsToReadWithYou(_ name: String) -> String { "\(name) wants to read with you." }
     static let join = "Join"
+    static let someoneWantsToReadWithYou = "Someone wants to read with you."
+    static let inviteNeedsSignIn = "Sign in first, so the link can bring them to your room."
+    static let pasteInvitePrompt = "Paste the link they sent you"
+    static let thatLinkIsntAnInvite = "That doesn't look like an invite link."
+
+    // Sign-in (§6.10) — an emailed code, no passwords. The account exists
+    // for one reason, said plainly.
+    static let accountReason = "An account carries your room between phones."
+    static let yourEmail = "Your email"
+    static let sendTheCode = "Send the code"
+    static let codeOnItsWay = "A code is on its way to your email."
+    static let theCode = "The code"
+    static let signIn = "Sign in"
 
     // Settings (S18–S22)
     static let textAndTranslation = "Text"
@@ -101,9 +119,16 @@ enum Copy {
     static let whenTheyOpenTheBook = "When they open the book"
     static let thinkingOfYou = "Thinking of you"
     static let quietHours = "Quiet hours"
-    static let onThisPhone = "On this phone"
-    static let keepEverything = "Keep everything on this phone"
-    static let voiceNotesPolicy = "Voice notes stay on this phone for the current reading."
+    /// "Phone" is the concrete noun the voice wants — but on an iPad it is
+    /// simply wrong, so the noun follows the device. The one place idiom,
+    /// not size class, is the right test. (MainActor because UIDevice is;
+    /// every caller is a view.)
+    @MainActor static var deviceNoun: String {
+        UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "phone"
+    }
+    @MainActor static var onThisPhone: String { "On this \(deviceNoun)" }
+    @MainActor static var keepEverything: String { "Keep everything on this \(deviceNoun)" }
+    @MainActor static var voiceNotesPolicy: String { "Voice notes stay on this \(deviceNoun) for the current reading." }
     static let startTheRoomAgain = "Start the room again"
     static let firstBookFree = "The first book is free, all the way through."
     static let manageInStore = "Manage in the App Store"
@@ -115,10 +140,10 @@ enum Copy {
     static func bookNotDownloaded(_ book: String) -> String { "\(book) isn't downloaded yet. It'll finish on Wi-Fi." }
     static let serverUnreachable = "Can't reach Ribbon right now."
     static let micNeeded = "Ribbon needs the microphone to record a note."
-    static func noRoomOnPhone(_ megabytes: Int) -> String {
+    @MainActor static func noRoomOnPhone(_ megabytes: Int) -> String {
         // A count about a device, not about a person — the boundary of
         // Law 2, stated so nobody over-applies the rule into unusability.
-        "There's no room on this phone for the recording. It needs about \(megabytes) MB."
+        "There's no room on this \(deviceNoun) for the recording. It needs about \(megabytes) MB."
     }
 
     // Notifications (§10.3) — there are six. There will never be a seventh

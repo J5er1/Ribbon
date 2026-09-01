@@ -123,6 +123,7 @@ struct EmberRecordScreen: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 30)
             }
+            .readableColumn()
         }
         .scrollIndicators(.hidden)
         .room()
