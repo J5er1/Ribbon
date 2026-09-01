@@ -305,6 +305,14 @@ final class RemoteSync {
         var joinedAt: Date
     }
 
+    struct InviteRow: Codable {
+        var id: UUID
+        var roomId: UUID
+        var createdBy: UUID
+        var createdAt: Date
+        var expiresAt: Date
+    }
+
     struct ReadingRow: Codable {
         var id: UUID
         var roomId: UUID
