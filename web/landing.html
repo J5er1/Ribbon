@@ -24,7 +24,6 @@
   --raised:      #1D1A13;
   --ink:         #F3F0E6;
   --muted:       #8E8271;
-  --faint:       #5D5B52;
   --rule:        #292118;
   --accent:      #D6E45C;
   --accent-dim:  #98A63C;
@@ -162,7 +161,6 @@ p { margin: 0; }
 }
 
 .quiet { color: var(--muted); }
-.faint { color: var(--faint); }
 
 /* ---------------------------------------------------------- page skeleton */
 
@@ -266,7 +264,7 @@ section[id] { scroll-margin-top: 5rem; }
   font-family: var(--caps);
   font-size: .84rem;
   letter-spacing: .1em;
-  color: rgba(243, 240, 230, .4);
+  color: rgba(243, 240, 230, .55);
   margin: 0 0 1.9rem;
 }
 
@@ -319,7 +317,7 @@ section[id] { scroll-margin-top: 5rem; }
   background-image: linear-gradient(
     var(--wash-edge) 0 6%, var(--wash-at) 22% 78%, var(--wash-edge) 94% 100%);
   background-repeat: no-repeat;
-  background-size: 0% 100%;
+  background-size: 100% 100%;
   background-position: 0 0;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
@@ -329,13 +327,19 @@ section[id] { scroll-margin-top: 5rem; }
   border-radius: .34em .28em .3em .36em;
   transition: background-size var(--open) var(--ease);
 }
-.wash.inked { background-size: 100% 100%; }
+html.js .wash { background-size: 0% 100%; }
+html.js .wash.inked { background-size: 100% 100%; }
 /* Two inks on the same verse deepen to 38%, the way the app blends them. */
 .wash.doubled { --wash-at: color-mix(in srgb, var(--wash-ink) 38%, transparent); }
 
 /* ------------------------------------------------------------ the gutter */
 
 /* Left edge is the gutter and belongs to notes. Nothing else lives here. */
+.surface p { position: relative; }
+
+/* The mark hangs in the margin of the verse it belongs to — placed by the
+   text itself rather than measured, so it is right before any script runs
+   and stays right at every width. */
 .gutter-mark {
   appearance: none;
   -webkit-appearance: none;
@@ -344,17 +348,21 @@ section[id] { scroll-margin-top: 5rem; }
   background: none;
   cursor: pointer;
   position: absolute;
-  left: 1.35rem;
+  left: -1.75rem;
+  top: .62em;
   width: 6px;
   height: 6px;
   border-radius: 50%;
+  opacity: .65;
+}
+.gutter-mark.voice   { background: var(--mark-ink, var(--teal)); }
+.gutter-mark.written { border: 1.4px solid var(--mark-ink, var(--teal)); }
+html.js .gutter-mark {
   opacity: 0;
   transform: translateY(-2px);
   transition: opacity var(--settle) var(--ease), transform var(--settle) var(--ease);
 }
-.gutter-mark.voice   { background: var(--mark-ink, var(--teal)); }
-.gutter-mark.written { border: 1.4px solid var(--mark-ink, var(--teal)); }
-.gutter-mark.shown   { opacity: .65; transform: translateY(0); }
+html.js .gutter-mark.shown { opacity: .65; transform: none; }
 
 /* Unfound marks breathe — 0.65 to 1.0 over 4s, eased both ways, slow enough
    that it never reads as an alert. Your own marks never breathe. */
@@ -367,13 +375,13 @@ section[id] { scroll-margin-top: 5rem; }
 /* Tapping a mark expands the note inline: the line height opens and the note
    unfurls beneath the verse, indented to the measure, the author's portrait
    small at the left. Never a modal, never a bottom sheet. */
-.note {
-  display: grid;
+.note { display: grid; grid-template-rows: 1fr; }
+html.js .note {
   grid-template-rows: 0fr;
   opacity: 0;
   transition: grid-template-rows var(--open) var(--ease), opacity var(--open) var(--ease);
 }
-.note.open { grid-template-rows: 1fr; opacity: 1; }
+html.js .note.open { grid-template-rows: 1fr; opacity: 1; }
 .note-inner { overflow: hidden; }
 .note-body {
   display: flex;
@@ -442,11 +450,13 @@ section[id] { scroll-margin-top: 5rem; }
   flex-direction: column;
   align-items: flex-end;
   gap: .5rem;
+}
+html.js .presence-form {
   transform: translateX(100%);
   opacity: 0;
   transition: transform var(--settle) var(--ease), opacity var(--settle) var(--ease);
 }
-.presence-form.here { transform: translateX(0); opacity: 1; }
+html.js .presence-form.here { transform: translateX(0); opacity: 1; }
 
 .lozenge {
   position: relative;
@@ -591,7 +601,7 @@ html.js .draw-rule.arrived { transform: scaleX(1); }
   font-family: var(--caps);
   font-size: .78rem;
   letter-spacing: .09em;
-  color: var(--faint);
+  color: var(--muted);
   margin-top: 1rem;
   text-align: center;
 }
@@ -747,11 +757,15 @@ html.js .draw-rule.arrived { transform: scaleX(1); }
   padding: .72rem var(--gutter);
   background: color-mix(in srgb, var(--ground) 94%, transparent);
   border-bottom: 1px solid var(--rule);
+}
+/* With a script it arrives once you have left the reading surface; without
+   one it is simply there. */
+html.js .masthead {
   transform: translateY(-100%);
   opacity: 0;
   transition: transform var(--settle) var(--ease), opacity var(--settle) var(--ease);
 }
-.masthead.shown { transform: none; opacity: 1; }
+html.js .masthead.shown { transform: none; opacity: 1; }
 .masthead-brand { display: flex; align-items: center; gap: .6rem; }
 .masthead-brand .wave { width: 19px; height: 19px; }
 .masthead-brand b {
@@ -765,6 +779,23 @@ html.js .draw-rule.arrived { transform: scaleX(1); }
 .masthead .way-in { padding: .48rem 1.15rem; font-size: .92rem; }
 @media (max-width: 46rem) {
   .masthead nav .sc { display: none; }
+}
+
+/* The thread down the right edge — the app's own idiom for "your scroll is
+   being followed", borrowed here as the page's only progress indicator. A
+   hairline, chartreuse, chrome and nothing more. */
+.page-thread {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 1px;
+  height: 100svh;
+  background: var(--accent);
+  opacity: .5;
+  transform: scaleY(0);
+  transform-origin: top;
+  z-index: 85;
+  pointer-events: none;
 }
 
 /* =================================================================== hero
@@ -921,7 +952,7 @@ html.js .draw-rule.arrived { transform: scaleX(1); }
   font-family: var(--caps);
   font-size: .68rem;
   letter-spacing: .08em;
-  color: var(--faint);
+  color: var(--muted);
   min-height: 8.5rem;
 }
 .edge-law > div { display: grid; place-items: center; padding: .9rem .3rem; text-align: center; }
@@ -933,6 +964,8 @@ html.js .draw-rule.arrived { transform: scaleX(1); }
 <script>document.documentElement.classList.add("js");</script>
 
 <a class="skip sc" href="#thesis">Skip to what Ribbon is</a>
+
+<div class="page-thread" id="page-thread" aria-hidden="true"></div>
 
 <header class="masthead" id="masthead">
   <a class="masthead-brand" href="#top">
@@ -1529,7 +1562,7 @@ html.js .draw-rule.arrived { transform: scaleX(1); }
     <a class="sc" href="#pricing">Pricing</a>
     <a class="sc" href="#groups">Groups</a>
   </nav>
-  <p class="sc faint" style="flex-basis:100%">
+  <p class="sc" style="flex-basis:100%">
     No cookie banner, because there are no non-essential cookies. No chat widget,
     no newsletter modal, no exit-intent popup. Nothing here counts anything about you.
   </p>
@@ -1601,15 +1634,17 @@ html.js .draw-rule.arrived { transform: scaleX(1); }
 .fire-show { display: grid; justify-items: center; }
 .fire-show .fire-frame { height: 300px; max-width: 40rem; }
 
-/* One line per state, in the same place, cross-fading as the fire changes. */
-.fire-lines { position: relative; min-height: 5.2rem; }
-.fire-lines p {
+/* One line per state. With a script driving the fire they share one place and
+   cross-fade; without one they are simply a list of the four states. */
+.fire-lines { display: flex; flex-direction: column; gap: .7rem; }
+html.js .fire-lines { display: block; position: relative; min-height: 5.2rem; }
+html.js .fire-lines p {
   position: absolute;
   inset: 0;
   opacity: 0;
   transition: opacity var(--settle) var(--ease);
 }
-.fire-lines p.on { opacity: 1; }
+html.js .fire-lines p.on { opacity: 1; }
 #fire-scroll-hint { transition: opacity var(--settle) var(--ease); }
 
 @media (max-width: 62rem) {
@@ -2234,6 +2269,21 @@ html.js .draw-rule.arrived { transform: scaleX(1); }
      fire answers to the room as you move through the section. Progress is
      read inside a frame, never during the scroll event, and nothing is
      written unless the state has actually changed. */
+
+  const pageThread = document.getElementById("page-thread");
+  let threadQueued = false;
+  function readThread() {
+    threadQueued = false;
+    if (!pageThread) return;
+    const doc = document.documentElement;
+    const total = doc.scrollHeight - window.innerHeight;
+    const p = total > 0 ? Math.min(1, Math.max(0, window.scrollY / total)) : 0;
+    pageThread.style.transform = "scaleY(" + p.toFixed(4) + ")";
+  }
+  const onThread = () => { if (!threadQueued) { threadQueued = true; requestAnimationFrame(readThread); } };
+  window.addEventListener("scroll", onThread, { passive: true });
+  window.addEventListener("resize", onThread, { passive: true });
+  readThread();
 
   const fireTrack = document.getElementById("fire-track");
   const fireHero = document.getElementById("fire-hero");
