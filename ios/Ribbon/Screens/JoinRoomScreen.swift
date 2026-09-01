@@ -9,6 +9,7 @@ import RibbonCore
 
 struct JoinFlow: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
     let token: UUID
     /// Joined; the room is current. The caller decides what "arriving"
     /// looks like.
@@ -35,6 +36,9 @@ struct JoinFlow: View {
     @State private var code = ""
     @State private var errorLine: String?
     @State private var sendingCode = false
+    /// Set down mid-join (the sheet swiped away): the join completes —
+    /// they did join — but arriving must not happen underneath them.
+    @State private var wasSetDown = false
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -64,6 +68,10 @@ struct JoinFlow: View {
                         .padding(.horizontal, 44)
                     if let onStartInstead {
                         QuietControl(title: "Start a room instead", action: onStartInstead)
+                    } else {
+                        // Presented over the room: a dead end still needs
+                        // its own way out, not only the swipe.
+                        QuietControl(title: "Close") { dismiss() }
                     }
                 }
             }
@@ -74,6 +82,7 @@ struct JoinFlow: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .room()
         .task { await loadPreview() }
+        .onDisappear { wasSetDown = true }
     }
 
     // MARK: Steps
@@ -300,8 +309,10 @@ struct JoinFlow: View {
         phase = .joining
         Task {
             do {
-                _ = try await model.joinRoom(inviteToken: token)
+                let roomID = try await model.joinRoom(inviteToken: token)
                 model.pendingInvite = nil
+                guard !wasSetDown else { return }
+                model.switchRoom(to: roomID)
                 onDone()
             } catch {
                 phase = .dead(deadLine(for: error))

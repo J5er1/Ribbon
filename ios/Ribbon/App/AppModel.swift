@@ -698,14 +698,14 @@ final class AppModel {
         merge(graph)
     }
 
-    /// Accepting an invite (S16): join on the backend, pull the room,
-    /// land in it. The database enforces expiry and the six-person cap.
+    /// Accepting an invite (S16): join on the backend and pull the room.
+    /// The caller decides whether to land in it — a join whose screen was
+    /// set down mid-flight still joins, but must not switch the room
+    /// underneath whatever the person is doing now.
     func joinRoom(inviteToken: UUID) async throws -> UUID {
         guard let remote, remote.isSignedIn else { throw SupabaseError.notSignedIn }
         let roomID = try await remote.acceptInvite(token: inviteToken)
         await refreshFromRemote()
-        state.currentRoomID = roomID
-        persist()
         return roomID
     }
 
