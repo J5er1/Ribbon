@@ -76,10 +76,13 @@ struct RoomsSheet: View {
                 if let reading = model.openReading(in: room) {
                     // A paused room's fire is drawn in whatever state it
                     // actually holds — never banked by a lapse (S14).
-                    CampfireGlyph(
-                        state: model.fireState(of: reading),
-                        scale: reading.handiwork.scale,
-                        height: 22)
+                    //
+                    // No scale: here the fire says what state a room is in,
+                    // not how long its book is. Rooms are being compared
+                    // with each other, and a fire that shrank because the
+                    // room happens to be in Philemon would read as a
+                    // smaller room, not a shorter book.
+                    CampfireGlyph(state: model.fireState(of: reading), height: 22)
                 }
             }
             .padding(.vertical, 8)
