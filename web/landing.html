@@ -296,9 +296,12 @@ section[id] { scroll-margin-top: 5rem; }
 
 /* A verse the surface is holding — long-pressed, lifted about 2px with a
    soft shadow. The verse becomes a physical thing you're holding. */
-.verse { transition: text-shadow var(--arrive) var(--ease); }
+.verse { transition: text-shadow var(--arrive) var(--ease), transform var(--arrive) var(--ease); }
 .verse.lifted {
-  text-shadow: 0 3px 8px rgba(0, 0, 0, .7);
+  /* The app lifts a held verse about 2pt and drops a soft shadow under it:
+     the verse becomes a physical thing you are holding. */
+  transform: translateY(-2px);
+  text-shadow: 0 4px 10px rgba(0, 0, 0, .85);
 }
 
 /* --------------------------------------------------------- the ink wash */
@@ -2145,7 +2148,9 @@ html.js .fire-lines p.on { opacity: 1; }
   function stopCycling() {
     if (presenceTimer) { clearInterval(presenceTimer); presenceTimer = null; }
   }
+  let tookOver = false;
   demo.chips.forEach((chip) => chip.addEventListener("click", () => {
+    tookOver = true;
     stopCycling();
     showPresence(chip.dataset.state);
   }));
@@ -2153,7 +2158,8 @@ html.js .fire-lines p.on { opacity: 1; }
   if (demo.form && !reduce.matches) {
     const watch = new IntersectionObserver((entries) => {
       if (entries[0].isIntersecting) {
-        if (!presenceTimer) presenceTimer = setInterval(cyclePresence, 3400);
+        /* Once someone has driven it themselves, it stays theirs. */
+        if (!presenceTimer && !tookOver) presenceTimer = setInterval(cyclePresence, 3400);
       } else stopCycling();
     }, { threshold: 0.4 });
     watch.observe(document.getElementById("presence-demo"));
