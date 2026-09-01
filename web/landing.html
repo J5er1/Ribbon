@@ -1872,6 +1872,58 @@ html.js .fire-lines p.on { opacity: 1; transition: opacity 240ms var(--ease) 160
     banked:   [],
   };
 
+  const LIVELINESS = { catching: 0.8, burning: 1.0, steady: 0.35, banked: 0.3 };
+
+  /* The same tongues, padded to three slots — left, centre, right — so two
+     states can be lerped slot against slot. Catching keeps its two licks on
+     the outside, which leaves the centre empty: that is where burning's tall
+     tongue comes up from nothing as the fire builds. */
+  const TONGUE_SLOTS = {
+    catching: [TONGUES.catching[0], null, TONGUES.catching[1]],
+    burning:  TONGUES.burning,
+    steady:   TONGUES.steady,
+    banked:   [null, null, null],
+  };
+
+  const mix = (a, b, k) => a + (b - a) * k;
+  const ease = (k) => (k <= 0 ? 0 : k >= 1 ? 1 : k * k * (3 - 2 * k));
+
+  /* A state resolved into the numbers that draw it. Named states resolve
+     once and are shared; a blend of two makes a fresh one per frame. */
+  const specs = {};
+  function fireSpec(name) {
+    if (specs[name]) return specs[name];
+    const th = THROW[name] || THROW.burning;
+    return (specs[name] = {
+      r0: th.r[0], r1: th.r[1], o: th.o,
+      live: LIVELINESS[name] != null ? LIVELINESS[name] : 1,
+      ash: name === "banked" ? 1 : 0,
+      tongues: TONGUE_SLOTS[name] || TONGUE_SLOTS.burning,
+    });
+  }
+
+  /* Two states, one shape. Every number lerps. A slot one side hasn't got
+     grows from nothing where the other side puts it, so a tongue catches or
+     dies down in place instead of appearing. */
+  function blendFire(a, b, k) {
+    if (k <= 0) return a;
+    if (k >= 1) return b;
+    const tongues = [];
+    for (let i = 0; i < 3; i++) {
+      const p = a.tongues[i], q = b.tongues[i];
+      if (!p && !q) { tongues.push(null); continue; }
+      const from = p || [q[0], 0, 0, q[3]];
+      const to   = q || [p[0], 0, 0, p[3]];
+      tongues.push([mix(from[0], to[0], k), mix(from[1], to[1], k),
+                    mix(from[2], to[2], k), mix(from[3], to[3], k)]);
+    }
+    return {
+      r0: mix(a.r0, b.r0, k), r1: mix(a.r1, b.r1, k), o: mix(a.o, b.o, k),
+      live: mix(a.live, b.live, k), ash: mix(a.ash, b.ash, k),
+      tongues,
+    };
+  }
+
   /* The five coals sit still; only their warmth moves. */
   const COALS = [
     { x:  0.181186, y: 0.181186, r: 1.090593 },
@@ -1881,18 +1933,20 @@ html.js .fire-lines p.on { opacity: 1; transition: opacity 240ms var(--ease) 160
     { x: -0.587346, y: 0.051349, r: 1.049749 },
   ];
 
+  /* `state` is a name, or a resolved spec when something is moving between
+     two of them. */
   function drawFire(ctx, w, h, t, state, coalDepth) {
+    const f = typeof state === "string" ? fireSpec(state) : state;
     const baseY = h * 0.88;
     const cx = w / 2;
     const footprint = Math.min(w * 0.6, h * 1.05);
-    const spec = THROW[state] || THROW.burning;
 
     /* The warm throw — a radial bloom behind everything, squashed so it
        reads as light on a ground rather than a ball. */
-    const R = footprint * (spec.r[0] + spec.r[1] * coalDepth) * (1 + 0.05 * breath(t, 0.13));
+    const R = footprint * (f.r0 + f.r1 * coalDepth) * (1 + 0.05 * breath(t, 0.13));
     let g = ctx.createRadialGradient(cx, baseY, 0, cx, baseY, Math.max(R, 0.01));
-    g.addColorStop(0, rgba(C.flameCore, spec.o));
-    g.addColorStop(0.5, rgba(C.flameDeep, spec.o * 0.4));
+    g.addColorStop(0, rgba(C.flameCore, f.o));
+    g.addColorStop(0.5, rgba(C.flameDeep, f.o * 0.4));
     g.addColorStop(1, rgba(C.flameDeep, 0));
     ctx.fillStyle = g;
     ellipse(ctx, cx, baseY - R * 0.62 + R * 0.525, R, R * 0.525);
@@ -1900,9 +1954,8 @@ html.js .fire-lines p.on { opacity: 1; transition: opacity 240ms var(--ease) 160
     /* The coal bed — the one thing that may grow. */
     const bedW = footprint * (0.5 + 0.42 * coalDepth);
     const bedH = footprint * (0.1 + 0.05 * coalDepth);
-    const bedGlow = state === "banked"
-      ? 0.5 + 0.08 * breath(t / 2.6, 0.71)
-      : 0.75 + 0.1 * breath(t, 0.44);
+    const bedGlow = mix(0.75 + 0.1 * breath(t, 0.44),
+                        0.5 + 0.08 * breath(t / 2.6, 0.71), f.ash);
     g = ctx.createRadialGradient(cx, baseY, 0, cx, baseY, Math.max(bedW / 2, 0.01));
     g.addColorStop(0, rgba(C.coal, 0.9 * bedGlow));
     g.addColorStop(0.5, rgba(C.coalDim, 0.8 * bedGlow));
@@ -1914,24 +1967,27 @@ html.js .fire-lines p.on { opacity: 1; transition: opacity 240ms var(--ease) 160
       const c = COALS[i];
       const r = footprint * 0.022 * c.r;
       const ember = 0.45 + 0.25 * breath(t / 1.7, i * 0.618);
-      ctx.fillStyle = rgba(C.flameDeep, ember * (state === "banked" ? 0.7 : 1));
+      ctx.fillStyle = rgba(C.flameDeep, ember * (1 - 0.3 * f.ash));
       ellipse(ctx, cx + c.x * bedW * 0.3, baseY - bedH * 0.1 + c.y * bedH * 0.18, r, r);
     }
 
-    /* Banked: coals under ash, a dim glow, no flame. */
-    if (state === "banked") {
+    /* Banked: coals going under ash. It draws over the bed and under the
+       tongues, so a fire being covered dims and dies down at once. */
+    if (f.ash > 0.002) {
       const aw = bedW * 1.12, ah = bedH * 1.28;
       const top = baseY - ah / 2;
       g = ctx.createLinearGradient(cx, top, cx, top + ah);
-      g.addColorStop(0, rgba(C.text, 0.10));
-      g.addColorStop(1, rgba(C.muted, 0.16));
+      g.addColorStop(0, rgba(C.text, 0.10 * f.ash));
+      g.addColorStop(1, rgba(C.muted, 0.16 * f.ash));
       ctx.fillStyle = g;
       ellipse(ctx, cx, baseY, aw / 2, ah / 2);
-      return;
     }
 
-    const liveliness = state === "steady" ? 0.35 : (state === "catching" ? 0.8 : 1.0);
-    for (const [tx, th, tw, phase] of (TONGUES[state] || TONGUES.burning)) {
+    const liveliness = f.live;
+    for (const tongue of f.tongues) {
+      if (!tongue) continue;
+      const [tx, th, tw, phase] = tongue;
+      if (th < 0.004 || tw < 0.004) continue;
       const sway = breath(t, phase) * 0.05 * liveliness;
       const rise = 1 + breath(t * 1.13, phase + 0.3) * 0.14 * liveliness;
       const baseX = cx + tx * footprint;
@@ -2021,7 +2077,8 @@ html.js .fire-lines p.on { opacity: 1; transition: opacity 240ms var(--ease) 160
     } else if (item.kind === "glyph") {
       drawFire(ctx, item.w, item.h, 402.7, item.state, 0.3);
     } else {
-      drawFire(ctx, item.w, item.h, now + item.seed, item.state, item.coal);
+      drawFire(ctx, item.w, item.h, now + item.seed,
+               item.spec ? item.spec(now) : item.state, item.coal);
     }
     item.dirty = false;
   }
@@ -2371,9 +2428,40 @@ html.js .fire-lines p.on { opacity: 1; transition: opacity 240ms var(--ease) 160
        would turn an act of care into the look of neglect. */
     const STOPS = [
       [0.30, "catching"],
-      [0.66, "burning"],
+      [0.78, "burning"],
       [1.01, "steady"],
     ];
+    /* The shape moves between the stops and rests at them. Each morph
+       finishes exactly where the word changes, so the fire has already
+       become the thing by the time it is named — then it holds, and starts
+       growing again. Only the coal bed moves the whole way. */
+    const MORPHS = [
+      ["catching", "burning", 0.08, 0.30],
+      ["burning",  "steady",  0.48, 0.78],
+    ];
+    function ladderAt(p) {
+      for (const [from, to, a, b] of MORPHS) {
+        if (p <= a) return fireSpec(from);
+        if (p < b) return blendFire(fireSpec(from), fireSpec(to), ease((p - a) / (b - a)));
+      }
+      return fireSpec("steady");
+    }
+
+    /* Banking is off the ladder — it is an act, not a place the scroll can
+       reach — so it runs on its own clock over the shape the scroll left. */
+    const BANK_S = 0.9;
+    const clock = () => performance.now() / 1000;
+    let ladder = fireSpec("catching");
+    let bankAt = -1e9, bankFrom = 0, bankTo = 0;
+    const bankAmount = (now) =>
+      reduce.matches ? bankTo
+                     : bankFrom + (bankTo - bankFrom) * ease((now - bankAt) / BANK_S);
+
+    item.spec = (now) => {
+      const k = bankAmount(now);
+      return k <= 0.002 ? ladder : blendFire(ladder, fireSpec("banked"), k);
+    };
+
     const quietBtn = document.getElementById("fire-quiet");
     let quietHold = false;
     let shown = null;
@@ -2395,11 +2483,14 @@ html.js .fire-lines p.on { opacity: 1; transition: opacity 240ms var(--ease) 160
 
       let state = "steady";
       for (const [edge, name] of STOPS) { if (p < edge) { state = name; break; } }
+
+      /* Reduced motion gets the four states and nothing between them: the
+         shape is held, and the scroll only chooses which one is held. */
+      ladder = reduce.matches ? fireSpec(state) : ladderAt(p);
       if (quietHold) state = "banked";
 
       if (state !== shown) {
         shown = state;
-        item.state = state;
         fireHero.setAttribute("aria-label", "The fire is " + state + ".");
         fireStateLine.textContent = state;
         fireStateLine.classList.toggle("lit", state !== "banked");
@@ -2413,8 +2504,14 @@ html.js .fire-lines p.on { opacity: 1; transition: opacity 240ms var(--ease) 160
     if (quietBtn) {
       quietBtn.addEventListener("click", () => {
         quietHold = !quietHold;
+        /* Take up from wherever the last one got to, so a fire caught
+           halfway under does not jump before it comes back out. */
+        bankFrom = bankAmount(clock());
+        bankTo = quietHold ? 1 : 0;
+        bankAt = clock();
         quietBtn.textContent = quietHold ? "Read again" : "Mark a quiet day";
         readFire();
+        schedule();
       });
     }
 
