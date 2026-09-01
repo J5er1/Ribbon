@@ -16,6 +16,7 @@ struct YouSheet: View {
     @State private var name = ""
     @State private var portraitItem: PhotosPickerItem?
     @State private var confirmDelete = false
+    @FocusState private var nameFocused: Bool
 
     var body: some View {
         NavigationStack {
@@ -44,6 +45,8 @@ struct YouSheet: View {
                             TextField("", text: $name)
                                 .font(RibbonType.ui(18))
                                 .foregroundStyle(Palette.text)
+                                .focused($nameFocused)
+                                .onAppear { nameFocused = true }
                                 .onSubmit {
                                     let trimmed = name.trimmingCharacters(in: .whitespaces)
                                     if !trimmed.isEmpty { model.updateMe(name: trimmed) }
@@ -120,6 +123,7 @@ private struct RoomSection: View {
     @State private var showInkPicker = false
     @State private var confirmLeave = false
     @State private var askAboutNotes = false
+    @FocusState private var roomNameFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -130,6 +134,8 @@ private struct RoomSection: View {
                     prompt: Text(Copy.roomName).foregroundStyle(Palette.muted))
                     .font(RibbonType.ui(16))
                     .foregroundStyle(Palette.text)
+                    .focused($roomNameFocused)
+                    .onAppear { roomNameFocused = true }
                     .onSubmit {
                         model.renameRoom(room, to: roomName)
                         editingRoomName = false

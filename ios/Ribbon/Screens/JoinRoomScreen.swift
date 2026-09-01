@@ -39,7 +39,10 @@ struct JoinFlow: View {
     /// Set down mid-join (the sheet swiped away): the join completes —
     /// they did join — but arriving must not happen underneath them.
     @State private var wasSetDown = false
-    @FocusState private var focused: Bool
+    /// One field per step — a shared Bool doesn't reliably carry focus
+    /// from a disappearing field to an appearing one.
+    enum Field { case name, email, code }
+    @FocusState private var focused: Field?
 
     var body: some View {
         VStack(spacing: 24) {
@@ -146,7 +149,7 @@ struct JoinFlow: View {
                 .font(RibbonType.ui(20))
                 .foregroundStyle(Palette.text)
                 .multilineTextAlignment(.center)
-                .focused($focused)
+                .focused($focused, equals: .name)
                 .padding(.horizontal, 40)
                 .submitLabel(.done)
                 .onSubmit(advanceFromName)
@@ -154,7 +157,7 @@ struct JoinFlow: View {
                 .padding(.horizontal, 80)
                 .opacity(name.trimmingCharacters(in: .whitespaces).isEmpty ? 0.3 : 1)
         }
-        .onAppear { focused = true }
+        .onAppear { focused = .name }
     }
 
     private var emailStep: some View {
@@ -171,7 +174,7 @@ struct JoinFlow: View {
                 .keyboardType(.emailAddress)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-                .focused($focused)
+                .focused($focused, equals: .email)
                 .padding(.horizontal, 40)
                 .submitLabel(.send)
                 .onSubmit(sendCode)
@@ -188,7 +191,7 @@ struct JoinFlow: View {
                 QuietControl(title: "Start a room instead", action: onStartInstead)
             }
         }
-        .onAppear { focused = true }
+        .onAppear { focused = .email }
     }
 
     private var codeStep: some View {
@@ -204,7 +207,7 @@ struct JoinFlow: View {
                 .multilineTextAlignment(.center)
                 .keyboardType(.numberPad)
                 .textContentType(.oneTimeCode)
-                .focused($focused)
+                .focused($focused, equals: .code)
                 .padding(.horizontal, 60)
             if let errorLine {
                 Text(errorLine)
@@ -219,7 +222,7 @@ struct JoinFlow: View {
                 QuietControl(title: "Start a room instead", action: onStartInstead)
             }
         }
-        .onAppear { focused = true }
+        .onAppear { focused = .code }
     }
 
     // MARK: Movement
