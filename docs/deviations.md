@@ -199,6 +199,16 @@ written, this ledger records the difference.
   and rests at catching after ~120 h; burning rests at ~96 h. A restart
   after ~96 h of quiet lands at catching, and any further feeding ≥15 min
   later lifts it. All in `FireTuning`, none of it ever surfaced in copy.
+- **A chooser fire is drawn at its book's scale; a rooms-sheet fire is
+  not.** S13 says the drawn fire is the only length indicator, so
+  `CampfireGlyph` sizes its drawing by the book — Law 4's 120 : 180 : 240,
+  the same ratio the room screen uses — inside a box that never changes.
+  The box is what a *large* book fills, so Philemon draws at half of
+  Psalms and no row or card changes height. In S14 the same glyph carries
+  a room's *state*, and rooms are being compared with each other, so it
+  takes no scale and fills its box: a fire that shrank because the room
+  happens to be in Philemon would read as a smaller room, not a shorter
+  book.
 - **Search field** in the chooser also searches Scripture text of every
   bundled book (S23's scripture search); note search on the shelf is
   phase-aligned with cards and not yet built.

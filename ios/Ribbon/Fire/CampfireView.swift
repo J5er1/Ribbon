@@ -46,7 +46,7 @@ struct CampfireView: View {
                 Canvas { context, size in
                     FirePainter.draw(
                         in: &context, size: size, time: seed,
-                        state: state, scale: scale, coalDepth: coalDepth)
+                        state: state, coalDepth: coalDepth)
                 }
             } else {
                 TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
@@ -54,7 +54,7 @@ struct CampfireView: View {
                         FirePainter.draw(
                             in: &context, size: size,
                             time: timeline.date.timeIntervalSinceReferenceDate + seed,
-                            state: state, scale: scale, coalDepth: coalDepth)
+                            state: state, coalDepth: coalDepth)
                     }
                 }
             }
@@ -69,18 +69,40 @@ struct CampfireView: View {
 
 /// A tiny static fire — the chooser's length indicator (S13) and the rooms
 /// sheet's state glyph (S14).
+///
+/// `height` is the box the glyph occupies *and* the height a large book's
+/// fire draws at inside it. Given a `scale`, the drawing takes the book's
+/// own share of the room-screen ratio (Law 4's 120 : 180 : 240), so
+/// Philemon's fire is half of Psalms' wherever they stand next to each
+/// other — in S13 the drawn fire is the only length indicator there is, so
+/// a glyph that ignored its scale would be saying nothing. The box never
+/// changes, so a row or a card keeps one baseline whatever book it carries.
+///
+/// Pass no scale where the glyph reports a *state* rather than a length
+/// (S14's rooms sheet): it then fills its box, and its size says nothing.
 struct CampfireGlyph: View {
     var state: FireState
-    var scale: FireScale
+    var scale: FireScale? = nil
     var height: CGFloat = 22
+
+    /// The painter takes its whole geometry from the frame it is handed, so
+    /// the scale is applied by shrinking the frame — one place, and the
+    /// fire stays proportioned exactly as it is on the room screen.
+    private var drawnHeight: CGFloat {
+        guard let scale else { return height }
+        return height * CGFloat(scale.frameHeight / FireScale.large.frameHeight)
+    }
 
     var body: some View {
         Canvas { context, size in
             FirePainter.draw(
                 in: &context, size: size, time: 402.7,
-                state: state, scale: scale, coalDepth: 0.3)
+                state: state, coalDepth: 0.3)
         }
-        .frame(width: height * 1.4, height: height)
+        .frame(width: drawnHeight * 1.4, height: drawnHeight)
+        // The fires of a list sit on one base, small ones simply reaching
+        // less far up the same box.
+        .frame(width: height * 1.4, height: height, alignment: .bottom)
         .accessibilityHidden(true)
     }
 }
@@ -98,7 +120,7 @@ enum FirePainter {
 
     /// A deterministic hash → 0..<1. Everything "random" about the fire —
     /// lump shapes, spark clocks, shed gates — comes through here, never
-    /// through a RNG, so the same (time, state, scale, coalDepth) always
+    /// through a RNG, so the same (time, state, size, coalDepth) always
     /// draws the same frame. Reduce-motion holds one arbitrary instant
     /// (§11), and that instant must be a fire, not a roll of the dice.
     static func hash(_ n: Double) -> Double {
@@ -206,16 +228,20 @@ enum FirePainter {
         return path
     }
 
+    /// Everything drawn is a fraction of the frame handed in — the caller
+    /// sizes that frame from the book's scale (Law 4), so the painter never
+    /// needs to know which scale it is drawing.
     static func draw(
         in context: inout GraphicsContext, size: CGSize, time: Double,
-        state: FireState, scale: FireScale, coalDepth: Double
+        state: FireState, coalDepth: Double
     ) {
         let w = size.width
         let h = size.height
         let baseY = h * 0.88
         let cx = w / 2
 
-        // The fire's footprint grows with the book's scale.
+        // The fire's footprint — and with it every flame, coal and spark —
+        // comes from the frame, which the caller fixed from the book's scale.
         let footprint = min(w * 0.6, h * 1.05)
 
         // Below this the fire is a glyph (S13/S14): skip blur passes,
@@ -590,6 +616,21 @@ enum FirePainter {
 
         context.blendMode = .normal
     }
+}
+
+#Preview("Glyph scales") {
+    // S13's ladder, on one baseline: the box is the same for every book,
+    // the fire in it is not.
+    VStack(alignment: .leading, spacing: 14) {
+        ForEach(FireScale.allCases, id: \.self) { scale in
+            HStack(spacing: 12) {
+                CampfireGlyph(state: .burning, scale: scale, height: 20)
+                SmallCaps(scale.rawValue)
+            }
+        }
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .room()
 }
 
 #Preview("States") {

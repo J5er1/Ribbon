@@ -75,6 +75,8 @@ struct BookChooserSheet: View {
             onChoose(book.id)
         } label: {
             VStack(spacing: 8) {
+                // 30 is what a large book draws at; a shorter one draws
+                // shorter inside the same box, so the names stay in line.
                 CampfireGlyph(state: .burning, scale: book.scale, height: 30)
                 Text(book.name)
                     .font(RibbonType.ui(15))
@@ -118,6 +120,8 @@ struct BookChooserSheet: View {
                         .scaleEffect(0.5)
                         .frame(width: 26, height: 20)
                 }
+                // The fire is the whole of what this row says about
+                // length, so it has to be drawn at the book's scale.
                 CampfireGlyph(state: .burning, scale: book.scale, height: 20)
             }
             .padding(.vertical, 7)
