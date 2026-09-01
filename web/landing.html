@@ -682,6 +682,11 @@ html.js .settle-words.arrived .w { opacity: 1; transform: none; }
 /* --------------------------------------------------------- the fire (§4.1) */
 
 .fire-canvas { display: block; width: 100%; height: 100%; }
+.fire-canvas,
+canvas[data-ember] {
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 16%, #000 84%, transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, #000 16%, #000 84%, transparent 100%);
+}
 .fire-frame { position: relative; width: 100%; }
 html:not(.js) .fire-frame,
 html:not(.js) .ember canvas {
@@ -809,8 +814,7 @@ canvas[data-ember="large"]  { width: 122.4px; height: 97.2px; }
   justify-content: space-between;
   gap: 1rem;
   padding: .72rem var(--gutter);
-  background: #0B0B0A;
-  background: color-mix(in srgb, var(--ground) 94%, transparent);
+  background: var(--ground);
   border-bottom: 1px solid var(--rule);
 }
 /* With a script it arrives once you have left the reading surface; without
@@ -846,11 +850,16 @@ html.js .masthead.shown { transform: none; opacity: 1; }
 .hero {
   min-height: 100vh;
   min-height: 100svh;
+  /* The same measure every band uses, so the wordmark and the running heads
+     share one left edge at every width. */
+  width: min(72rem, calc(100% - var(--gutter) * 2));
+  margin: 0 auto;
   display: grid;
-  grid-template-columns: minmax(20rem, 27rem) minmax(0, 1fr);
+  grid-template-columns: minmax(20rem, 27rem) minmax(0, 40rem);
+  justify-content: start;
   align-items: center;
   gap: clamp(2rem, 5vw, 5rem);
-  padding: clamp(3rem, 8vh, 5.5rem) 0 clamp(3rem, 8vh, 5rem) var(--gutter);
+  padding: clamp(3rem, 8vh, 5.5rem) 0 clamp(3rem, 8vh, 5rem);
 }
 
 .hero-brand { display: flex; flex-direction: column; gap: 1.5rem; max-width: 27rem; }
@@ -911,7 +920,7 @@ html.js .masthead.shown { transform: none; opacity: 1; }
 @media (max-width: 60rem) {
   .hero {
     grid-template-columns: minmax(0, 1fr);
-    padding: clamp(3.5rem, 9vh, 5rem) var(--gutter) 0;
+    padding: clamp(3.5rem, 9vh, 5rem) 0 0;
     gap: 2.8rem;
     min-height: 0;
   }
@@ -923,6 +932,10 @@ html.js .masthead.shown { transform: none; opacity: 1; }
   }
   .hero-surface .surface { padding-right: 3.4rem; padding-left: 3.1rem; }
   .hero-surface::before { display: none; }
+}
+
+@media (max-width: 26rem) {
+  .hero-surface .surface { padding-right: 1.2rem; }
 }
 
 /* ============================================================== mechanics
@@ -1199,7 +1212,26 @@ html.js .masthead.shown { transform: none; opacity: 1; }
           <div class="surface" style="padding:1.9rem 2rem 2rem 3.1rem;background:var(--surface);font-size:1.06rem">
             <p class="running-head">Philippians 4</p>
             <p class="m verse" data-verse="6"><sup class="v">6</sup>Be anxious for nothing, but in everything, by prayer and petition, with thanksgiving, present your requests to God.</p>
-            <p class="m verse" id="notes-verse" data-verse="7" style="margin-top:.75em"><span class="gutter-mark written" id="notes-mark" style="--mark-ink: var(--moss)" aria-hidden="true"></span><sup class="v">7</sup><span class="wash" id="notes-wash" style="--wash-ink: var(--moss)">And the peace of God, which surpasses all understanding, will guard your hearts and your minds in Christ Jesus.</span></p>
+            <div class="held">
+              <p class="m verse" id="notes-verse" data-verse="7" style="margin-top:.75em"><span class="gutter-mark written" id="notes-mark" style="--mark-ink: var(--moss)" aria-hidden="true"></span><sup class="v">7</sup><span class="wash" id="notes-wash" style="--wash-ink: var(--moss)">And the peace of God, which surpasses all understanding, will guard your hearts and your minds in Christ Jesus.</span></p>
+
+              <!-- The toolbar that rises when you're holding a verse. -->
+              <div class="leave-toolbar" id="notes-toolbar" aria-hidden="true">
+                <div class="swatches">
+                  <span class="swatch" style="background:var(--crimson)"></span>
+                  <span class="swatch" style="background:var(--clay)"></span>
+                  <span class="swatch" style="background:var(--ochre)"></span>
+                  <span class="swatch on" style="background:var(--moss)"></span>
+                  <span class="swatch" style="background:var(--teal)"></span>
+                  <span class="swatch" style="background:var(--indigo)"></span>
+                  <span class="swatch" style="background:var(--plum)"></span>
+                  <span class="swatch" style="background:var(--rose)"></span>
+                </div>
+                <span class="toolbar-rule" aria-hidden="true"></span>
+                <span class="sc sc-ink">write</span>
+                <span class="sc sc-ink">speak</span>
+              </div>
+            </div>
 
             <div class="note" id="notes-note">
               <div class="note-inner">
@@ -1215,23 +1247,6 @@ html.js .masthead.shown { transform: none; opacity: 1; }
 
             <p class="m" style="margin-top:.75em"><sup class="v">8</sup>Finally, brothers, whatever is true, whatever is honorable, whatever is right, whatever is pure, whatever is lovely, whatever is admirable—if anything is excellent or praiseworthy—think on these things.</p>
 
-
-            <!-- The toolbar that rises when you’re holding a verse. -->
-            <div class="leave-toolbar" id="notes-toolbar" aria-hidden="true">
-              <div class="swatches">
-                <span class="swatch" style="background:var(--crimson)"></span>
-                <span class="swatch" style="background:var(--clay)"></span>
-                <span class="swatch" style="background:var(--ochre)"></span>
-                <span class="swatch on" style="background:var(--moss)"></span>
-                <span class="swatch" style="background:var(--teal)"></span>
-                <span class="swatch" style="background:var(--indigo)"></span>
-                <span class="swatch" style="background:var(--plum)"></span>
-                <span class="swatch" style="background:var(--rose)"></span>
-              </div>
-              <span class="toolbar-rule" aria-hidden="true"></span>
-              <span class="sc sc-ink">write</span>
-              <span class="sc sc-ink">speak</span>
-            </div>
           </div>
 
           <div class="panel-pad" style="border-top:1px solid var(--rule);display:flex;align-items:center;justify-content:space-between;gap:1rem">
@@ -1636,11 +1651,13 @@ html.js .masthead.shown { transform: none; opacity: 1; }
 
 /* The toolbar that rises when you're holding a verse: highlight, write,
    speak. It is not there until you ask for it. */
+.held { position: relative; }
 .leave-toolbar {
   position: absolute;
+  z-index: 3;   /* .surface p is positioned, so later verses would paint over it */
   left: 50%;
-  bottom: 1rem;
-  transform: translate(-50%, calc(100% + 1rem));
+  top: calc(100% + .55rem);
+  transform: translate(-50%, 14px);
   display: flex;
   align-items: center;
   gap: 1rem;
@@ -1699,18 +1716,24 @@ html.js .fire-lines p {
   position: absolute;
   inset: 0;
   opacity: 0;
-  transition: opacity var(--settle) var(--ease);
+  transition: opacity 160ms var(--ease);
 }
-html.js .fire-lines p.on { opacity: 1; }
+html.js .fire-lines p.on { opacity: 1; transition: opacity 240ms var(--ease) 160ms; }
 #fire-scroll-hint { transition: opacity var(--settle) var(--ease); }
 
 @media (max-width: 62rem) {
-  .fire-pin-grid { grid-template-columns: minmax(0, 1fr); gap: 2rem; }
+  .fire-pin { padding: 4rem var(--gutter) 1.5rem; }
+  .fire-pin-grid { grid-template-columns: minmax(0, 1fr); gap: 1.1rem; }
   .fire-track { height: 300vh; }
-  .fire-show .fire-frame { height: 190px; max-width: 26rem; }
+  .fire-show .fire-frame { height: 140px; max-width: 24rem; }
+  .fire-show .room-book { font-size: 1.2rem; }
+  #fire-quiet { margin-top: .6rem !important; }
+  #fire-scroll-hint { display: none; }
+  .fire-pin .head-rule { margin-bottom: 1.4rem; }
+  .fire-pin h2.display { font-size: clamp(1.5rem, 6vw, 2rem); }
 }
 @media (max-width: 46rem) {
-  .fire-lines { min-height: 7rem; }
+  html.js .fire-lines { min-height: 7rem; }
 }
 
 /* Three fires, at the three scales, on one baseline. */
@@ -1752,13 +1775,22 @@ html.js .fire-lines p.on { opacity: 1; }
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
   gap: clamp(1.6rem, 3vw, 2.6rem);
-  justify-items: center;
+  justify-items: stretch;
   margin-top: 3rem;
 }
-.phone-fig { margin: 0; display: grid; justify-items: center; }
+.phone-fig { margin: 0; width: 100%; display: grid; justify-items: center; }
+.phone { margin-inline: auto; }
 .phone .way-in { cursor: default; }
 
-.chooser { padding: 1.1rem 1.35rem 0; display: flex; flex-direction: column; gap: .55rem; overflow: hidden; }
+.chooser {
+  padding: 1.1rem 1.35rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: .55rem;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(#000 86%, transparent 100%);
+  mask-image: linear-gradient(#000 86%, transparent 100%);
+}
 .book-list {
   list-style: none;
   margin: 0;
@@ -1936,16 +1968,22 @@ html.js .fire-lines p.on { opacity: 1; }
 
   /* An ember — a warm heart in a dark husk, with the bloom beneath that
      implies the shelf without drawing one. */
+  /* A constant standing line, so a large ember and a small one rest on the
+     same surface however tall their frames are. */
+  const EMBER_FOOT = 14;
+
   function drawEmber(ctx, w, h, t) {
-    const cx = w / 2, cy = h * 0.52;
+    const cx = w / 2;
     const r = Math.min(w, h) * 0.32;
+    const baseline = h - EMBER_FOOT;
+    const cy = baseline - r * 0.82;
     const pulse = 0.85 + 0.1 * breath(t, 0.37);
 
-    let g = ctx.createRadialGradient(cx, h * 0.8, 0, cx, h * 0.8, Math.max(r * 2.4, 0.01));
+    let g = ctx.createRadialGradient(cx, baseline, 0, cx, baseline, Math.max(r * 2.4, 0.01));
     g.addColorStop(0, rgba(C.flameDeep, 0.2 * pulse));
     g.addColorStop(1, rgba(C.flameDeep, 0));
     ctx.fillStyle = g;
-    ellipse(ctx, cx, h * 0.66 + r * 0.75, r * 2.4, r * 0.75);
+    ellipse(ctx, cx, baseline + r * 0.3, r * 2.4, r * 0.75);
 
     const hx = cx - r * 0.2, hy = cy - r * 0.15;
     g = ctx.createRadialGradient(hx, hy, Math.max(r * 0.05, 0.01), hx, hy, Math.max(r * 1.1, 0.02));
