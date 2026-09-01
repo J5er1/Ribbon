@@ -99,7 +99,12 @@ reasoning.
     the next piece of work), and live presence (deviation 9). On first
     sign-in the local person adopts the account's id everywhere
     (`adoptRemoteIdentity`); fuel-window person ids age out on their own
-    rather than being rewritten.
+    rather than being rewritten. Two honest edges: a portrait travels to
+    a device once (a *changed* face doesn't refresh a device that has
+    one — no version rides the profile row yet), and deleting an account
+    deletes the profile row and everything it cascades, while the bare
+    auth user (an email, nothing else) waits for a service-role function
+    with the full engine.
 
 11. **Phase-two surfaces are absent, per §15**: cards (S08/S09 — model and
     schema exist, no UI), notifications delivery (S19 stores per-room

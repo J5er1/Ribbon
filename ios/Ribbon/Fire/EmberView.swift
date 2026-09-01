@@ -8,12 +8,18 @@ import RibbonCore
 
 struct EmberView: View {
     var scale: FireScale
-    /// Diameter relative to the fire the ember was. The whole point of the
-    /// shelf is that Isaiah looks like Isaiah.
-    var size: CGFloat { scale.frameHeight * 0.30 }
 
     @State private var seed = Double.random(in: 0..<1000)
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    /// Diameter relative to the fire the ember was. The whole point of the
+    /// shelf is that Isaiah looks like Isaiah — and on iPad the ember
+    /// carries the fire's same 1.45× (CampfireView), so the finishing
+    /// settle doesn't shrink mid-become.
+    var size: CGFloat {
+        scale.frameHeight * 0.30 * (sizeClass == .regular ? 1.45 : 1)
+    }
 
     var body: some View {
         Group {

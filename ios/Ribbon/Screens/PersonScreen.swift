@@ -143,7 +143,8 @@ struct InkPickerSheet: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(isTaken)
-                    .accessibilityLabel("\(ink.displayName)\(isTaken ? ", taken" : "")")
+                    .accessibilityLabel(
+                        "\(ink.displayName)\(ink == mine ? ", yours" : "")\(isTaken ? ", taken" : "")")
                 }
             }
             .padding(.bottom, 34)

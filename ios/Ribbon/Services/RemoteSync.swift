@@ -185,6 +185,22 @@ final class RemoteSync {
         }
     }
 
+    /// Account deletion (§6.8): the profile row goes, and the cascade
+    /// takes everything authored by the person that the backend holds.
+    /// Best-effort on the portrait object first (its policy is the
+    /// person's own).
+    func deleteAccountData() async {
+        guard let userID else { return }
+        try? await withAuthRetry {
+            try await self.client.deletePortrait(personID: userID)
+        }
+        try? await withAuthRetry {
+            try await self.client.delete(from: "profiles", query: [
+                URLQueryItem(name: "id", value: "eq.\(userID.uuidString.lowercased())")
+            ])
+        }
+    }
+
     /// A marked quiet day banks the fire for the room — on every device.
     func push(quietDay: QuietDay) async throws {
         try await withAuthRetry {

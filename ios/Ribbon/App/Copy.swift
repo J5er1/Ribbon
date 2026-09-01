@@ -83,6 +83,9 @@ enum Copy {
     static let roomName = "Room name"
     static let nameThisRoom = "Name this room"
     static let roomHoldsSix = "A room holds six. Start another for the rest."
+    /// The same fact, said to the person arriving — "the rest" are the
+    /// inviter's people, not theirs.
+    static let roomFullForJoiner = "This room is full. Ask them to start another."
     static let inviteExpired = "This invite has expired. Ask for a new one."
     static func wantsToReadWithYou(_ name: String) -> String { "\(name) wants to read with you." }
     static let join = "Join"

@@ -236,7 +236,22 @@ struct OnboardingFlow: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 44)
 
-            if let invite {
+            if model.remote != nil, !model.isSignedIn {
+                // A link handed out signed-out is a dead link — the
+                // account happens here, where it's honestly needed. The
+                // quiet ways past (pick a book, invite later) stand.
+                Text(Copy.inviteNeedsSignIn)
+                    .font(RibbonType.ui(15))
+                    .foregroundStyle(Palette.muted)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 48)
+                SignInInline(onSignedIn: {
+                    if let room = model.currentRoom {
+                        invite = model.createInvite(for: room)
+                    }
+                })
+                .padding(.horizontal, 40)
+            } else if let invite {
                 ShareLink(item: invite.url()) {
                     Text("Send the invite")
                         .font(RibbonType.uiMedium(17))
@@ -245,13 +260,6 @@ struct OnboardingFlow: View {
                         .padding(.vertical, 13)
                         .background(Palette.chartreuse, in: Capsule())
                 }
-            }
-            if model.remote != nil, !model.isSignedIn {
-                Text(Copy.inviteNeedsSignIn)
-                    .font(RibbonType.ui(14))
-                    .foregroundStyle(Palette.muted)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 48)
             }
 
             // You can read alone immediately while the invite is out — the

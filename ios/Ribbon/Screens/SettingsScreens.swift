@@ -31,6 +31,7 @@ struct YouSheet: View {
                                 image: model.me.flatMap { model.portrait($0.id) })
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel(Copy.addAPortrait)
                         .onChange(of: portraitItem) { _, item in
                             Task {
                                 if let data = try? await item?.loadTransferable(type: Data.self),
@@ -175,12 +176,7 @@ private struct RoomSection: View {
 private struct AccountSection: View {
     @Environment(AppModel.self) private var model
 
-    enum Phase: Equatable { case idle, email, code }
-    @State private var phase: Phase = .idle
-    @State private var email = ""
-    @State private var code = ""
-    @State private var errorLine: String?
-    @FocusState private var focused: Bool
+    @State private var signingIn = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -189,94 +185,26 @@ private struct AccountSection: View {
                     SmallCaps(address, size: 12)
                 }
                 QuietControl(title: Copy.signOut) {
+                    signingIn = false
                     Task { await model.signOutRemote() }
                 }
             } else if model.remote == nil {
                 // Remote is not configured in this build; no dead control.
                 EmptyView()
+            } else if signingIn {
+                SignInInline(
+                    onSignedIn: { signingIn = false },
+                    onCancel: { signingIn = false })
             } else {
-                switch phase {
-                case .idle:
-                    VStack(alignment: .leading, spacing: 8) {
-                        QuietControl(title: Copy.signIn) {
-                            phase = .email
-                        }
-                        Text(Copy.accountReason)
-                            .font(RibbonType.ui(13))
-                            .foregroundStyle(Palette.muted)
-                    }
-                case .email:
-                    field(prompt: Copy.yourEmail, text: $email, submit: Copy.sendTheCode) {
-                        sendCode()
-                    }
-                    .keyboardType(.emailAddress)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    QuietControl(title: "Never mind") { phase = .idle; errorLine = nil }
-                case .code:
-                    Text(Copy.codeOnItsWay)
-                        .font(RibbonType.ui(14))
-                        .foregroundStyle(Palette.muted)
-                    field(prompt: Copy.theCode, text: $code, submit: Copy.signIn) {
-                        verify()
-                    }
-                    .keyboardType(.numberPad)
-                    .textContentType(.oneTimeCode)
-                    QuietControl(title: "Send a new code") { sendCode() }
-                    QuietControl(title: "Never mind") { phase = .idle; errorLine = nil }
-                }
-                if let errorLine {
-                    Text(errorLine)
+                VStack(alignment: .leading, spacing: 8) {
+                    QuietControl(title: Copy.signIn) { signingIn = true }
+                    Text(Copy.accountReason)
                         .font(RibbonType.ui(13))
                         .foregroundStyle(Palette.muted)
                 }
             }
         }
         .padding(.top, 8)
-    }
-
-    private func field(
-        prompt: String, text: Binding<String>, submit: String, action: @escaping () -> Void
-    ) -> some View {
-        HStack(spacing: 12) {
-            TextField("", text: text, prompt: Text(prompt).foregroundStyle(Palette.muted))
-                .font(RibbonType.ui(16))
-                .foregroundStyle(Palette.text)
-                .focused($focused)
-                .onSubmit(action)
-            QuietControl(title: submit, action: action)
-        }
-        .onAppear { focused = true }
-    }
-
-    private func sendCode() {
-        let address = email.trimmingCharacters(in: .whitespaces)
-        guard address.contains("@") else { return }
-        errorLine = nil
-        Task {
-            do {
-                try await model.sendSignInCode(to: address)
-                code = ""
-                phase = .code
-            } catch {
-                errorLine = Copy.serverUnreachable
-            }
-        }
-    }
-
-    private func verify() {
-        let entered = code.trimmingCharacters(in: .whitespaces)
-        guard !entered.isEmpty else { return }
-        errorLine = nil
-        Task {
-            do {
-                try await model.verifySignInCode(
-                    email: email.trimmingCharacters(in: .whitespaces), code: entered)
-                phase = .idle
-            } catch {
-                errorLine = Copy.signInCodeWrong
-            }
-        }
     }
 }
 

@@ -20,6 +20,22 @@ struct InviteSheet: View {
                     .font(RibbonType.ui(16))
                     .foregroundStyle(Palette.text)
                     .multilineTextAlignment(.center)
+            } else if model.remote != nil, !model.isSignedIn {
+                // The link resolves through the backend, and the backend
+                // needs your account — so the account happens here, at the
+                // moment it's genuinely needed, never as a wall at launch
+                // (§6.1, §6.10).
+                Text(Copy.inviteNeedsSignIn)
+                    .font(RibbonType.ui(16))
+                    .foregroundStyle(Palette.text)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 40)
+                SignInInline(onSignedIn: {
+                    // Re-minting reuses the live invite and registers it
+                    // now that the backend knows who's asking.
+                    invite = model.createInvite(for: room)
+                })
+                .padding(.horizontal, 24)
             } else {
                 Text(Copy.inviteSend)
                     .font(RibbonType.ui(17))
@@ -36,15 +52,6 @@ struct InviteSheet: View {
                             .padding(.vertical, 13)
                             .background(Palette.chartreuse, in: Capsule())
                     }
-                }
-                // The true small thing: the link resolves through the
-                // backend, and the backend needs your account.
-                if model.remote != nil, !model.isSignedIn {
-                    Text(Copy.inviteNeedsSignIn)
-                        .font(RibbonType.ui(14))
-                        .foregroundStyle(Palette.muted)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 44)
                 }
             }
             Spacer()

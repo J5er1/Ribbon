@@ -186,6 +186,14 @@ actor SupabaseClient {
         return try await run(request)
     }
 
+    func deletePortrait(personID: UUID) async throws {
+        let path = "storage/v1/object/portraits/\(personID.uuidString.lowercased()).jpg"
+        var request = URLRequest(url: base.appending(path: path))
+        request.httpMethod = "DELETE"
+        try apply(headers: &request)
+        _ = try await run(request)
+    }
+
     // MARK: Plumbing
 
     @discardableResult

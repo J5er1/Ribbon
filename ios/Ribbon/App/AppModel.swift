@@ -564,12 +564,20 @@ final class AppModel {
     /// deletion, and the answer travels with the remote delete when sync
     /// exists; locally both paths clear this device.
     func deleteAccount(keepNotesBehind: Bool) {
-        // TODO(sync): pass keepNotesBehind to the backend's delete so notes
-        // either stay for the room (default) or leave with the person —
-        // deleting the auth user needs a service-role edge function, which
-        // ships with the full sync engine.
+        // The backend forgets the person: deleting the profile cascades
+        // memberships, invites, fuel, quiet days and positions; shared
+        // rooms and their content stay for the people still in them.
+        // (Notes aren't remote yet, so the keep/take answer is local-only
+        // until the full sync engine; the bare auth user — an email and
+        // nothing else — needs a service-role function and rides along
+        // then too.)
         _ = keepNotesBehind
-        Task { await remote?.signOut() }
+        if let remote, remote.isSignedIn {
+            Task {
+                await remote.deleteAccountData()
+                await remote.signOut()
+            }
+        }
         state = AppState()
         portraits = [:]
         persist()
@@ -593,8 +601,10 @@ final class AppModel {
         let uid = try await remote.verify(email: email, code: code)
         adoptRemoteIdentity(uid)
         await reconcileOwnProfile()
-        await pushLocalGraph()
+        // Pull before push: a room this account left on another device is
+        // removed by the merge, so the push can't quietly re-join it.
         await refreshFromRemote()
+        await pushLocalGraph()
     }
 
     /// The account is the elder truth: signing in on a fresh device must
@@ -756,8 +766,9 @@ final class AppModel {
             }
         }
         // Departures propagate: a membership the backend no longer has is
-        // gone here too. Mine stays — leaving already removed it locally,
-        // and a pull racing my own join must not undo the join.
+        // gone here too. Mine stays within a pulled room — leaving already
+        // removed it locally, and a pull racing my own join must not undo
+        // the join.
         let pulledRooms = Set(graph.rooms.map(\.id))
         state.memberships.removeAll { membership in
             membership.personID != me.id
@@ -765,6 +776,22 @@ final class AppModel {
                 && !graph.memberships.contains {
                     $0.roomId == membership.roomID && $0.personId == membership.personID
                 }
+        }
+        // My own departures, made on another device: a room the backend
+        // shared with other people that no longer lists me doesn't come
+        // back in the pull at all. A room of one stays — it may simply
+        // never have been pushed.
+        let departedRooms = state.rooms.filter { room in
+            !pulledRooms.contains(room.id)
+                && members(of: room).contains { $0.personID != me.id }
+        }.map(\.id)
+        if !departedRooms.isEmpty {
+            let departed = Set(departedRooms)
+            state.rooms.removeAll { departed.contains($0.id) }
+            state.memberships.removeAll { departed.contains($0.roomID) }
+            if let current = state.currentRoomID, departed.contains(current) {
+                state.currentRoomID = state.rooms.first?.id
+            }
         }
 
         for row in graph.profiles where row.id != me.id {

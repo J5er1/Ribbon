@@ -229,7 +229,7 @@ struct JoinFlow: View {
             if found.expired {
                 phase = .dead(Copy.inviteExpired)
             } else if found.full {
-                phase = .dead(Copy.roomHoldsSix)
+                phase = .dead(Copy.roomFullForJoiner)
             } else {
                 withAnimation(RibbonMotion.arrive) { phase = .preview }
             }
@@ -312,7 +312,7 @@ struct JoinFlow: View {
     /// The database names what happened; the screen says it plainly.
     private func deadLine(for error: Error) -> String {
         if case SupabaseError.http(_, let body) = error {
-            if body.contains("room_full") { return Copy.roomHoldsSix }
+            if body.contains("room_full") { return Copy.roomFullForJoiner }
             if body.contains("invite_expired") { return Copy.inviteExpired }
         }
         return Copy.serverUnreachable

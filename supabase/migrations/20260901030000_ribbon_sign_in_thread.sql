@@ -87,9 +87,11 @@ create policy invites_update on public.invites for update
 create policy quiet_days_update on public.quiet_days for update
   using (person_id = auth.uid());
 
--- 4. accept_invite takes the room's lock before counting, so two
---    simultaneous joins can't both read five and seat a seventh. Same
---    body as the original otherwise; create-or-replace keeps the
+-- 4. accept_invite: a member re-opening a live invite goes straight in,
+--    even to a full room (joining a room you're in is arrival, not a
+--    seventh seat) — and the room's lock is taken before counting, so
+--    two simultaneous joins can't both read five and seat a seventh.
+--    Same body as the original otherwise; create-or-replace keeps the
 --    hardening migration's grants.
 create or replace function public.accept_invite(invite_token uuid)
 returns uuid
@@ -107,6 +109,12 @@ begin
   if inv.id is null or inv.expires_at < now() then
     raise exception 'invite_expired';
   end if;
+  if exists (
+    select 1 from memberships
+    where room_id = inv.room_id and person_id = auth.uid()
+  ) then
+    return inv.room_id;
+  end if;
   perform 1 from rooms where id = inv.room_id for update;
   select count(*) into member_count from memberships where room_id = inv.room_id;
   if member_count >= 6 then
@@ -118,3 +126,18 @@ begin
   return inv.room_id;
 end;
 $$;
+
+-- 5. Account deletion (§6.8): a person may delete their own profile —
+--    the cascade takes their memberships, invites, fuel, quiet days and
+--    positions; shared rooms and what was left in them stay. The
+--    portrait object goes by its own policy. (The bare auth user — an
+--    email and nothing else — needs a service-role function; it rides
+--    the full sync engine.)
+create policy profiles_delete on public.profiles for delete
+  using (id = auth.uid());
+
+create policy portraits_delete on storage.objects for delete
+  using (
+    bucket_id = 'portraits'
+    and split_part(name, '.', 1) = auth.uid()::text
+  );
