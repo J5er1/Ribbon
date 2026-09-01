@@ -37,6 +37,15 @@ struct InviteSheet: View {
                             .background(Palette.chartreuse, in: Capsule())
                     }
                 }
+                // The true small thing: the link resolves through the
+                // backend, and the backend needs your account.
+                if model.remote != nil, !model.isSignedIn {
+                    Text(Copy.inviteNeedsSignIn)
+                        .font(RibbonType.ui(14))
+                        .foregroundStyle(Palette.muted)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 44)
+                }
             }
             Spacer()
         }

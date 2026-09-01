@@ -241,6 +241,13 @@ struct OnboardingFlow: View {
                         .background(Palette.chartreuse, in: Capsule())
                 }
             }
+            if model.remote != nil, !model.isSignedIn {
+                Text(Copy.inviteNeedsSignIn)
+                    .font(RibbonType.ui(14))
+                    .foregroundStyle(Palette.muted)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 48)
+            }
 
             // You can read alone immediately while the invite is out — the
             // room's first-run state is the book chooser, so picking a book

@@ -87,6 +87,7 @@ enum Copy {
     static func wantsToReadWithYou(_ name: String) -> String { "\(name) wants to read with you." }
     static let join = "Join"
     static let someoneWantsToReadWithYou = "Someone wants to read with you."
+    static let inviteNeedsSignIn = "Sign in first, so the link can bring them to your room."
     static let pasteInvitePrompt = "Paste the link they sent you"
     static let thatLinkIsntAnInvite = "That doesn't look like an invite link."
 
