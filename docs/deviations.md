@@ -99,6 +99,15 @@ reasoning.
     StoreKit (S22 shows the model's promise only), and the web
     invite/accept + web reading (S16/S26).
 
+12. **The app installs on iPad, with the phone's layout.** The book designs
+    phone screens; the project originally targeted iPhone only. TestFlight
+    offers builds only to devices a build targets, and the first real
+    tester's only device is an iPad — so the target now includes iPad
+    (all orientations there; the phone stays portrait-only). The layouts
+    are fluid and read fine wide, but a considered iPad reading surface
+    (margins, columns, the note card at size) is its own design pass,
+    not this.
+
 ## Licensed translations (decided: API.Bible)
 
 Open question §16.8 is now part-decided: **NKJV plus two undecided
