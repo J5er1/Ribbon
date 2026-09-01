@@ -284,7 +284,7 @@ section[id] { scroll-margin-top: 5rem; }
   font-family: var(--caps);
   font-size: .62em;
   font-weight: 400;
-  opacity: .45;
+  opacity: .55;
   margin-right: .18em;
   vertical-align: baseline;
   position: relative;
@@ -348,15 +348,22 @@ html.js .wash.inked { background-size: 100% 100%; }
   background: none;
   cursor: pointer;
   position: absolute;
-  left: -1.75rem;
-  top: .62em;
+  left: -2.31rem;
+  top: calc(.62em - 9px);
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  opacity: .65;
+}
+.gutter-mark::before {
+  content: "";
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  opacity: .65;
 }
-.gutter-mark.voice   { background: var(--mark-ink, var(--teal)); }
-.gutter-mark.written { border: 1.4px solid var(--mark-ink, var(--teal)); }
+.gutter-mark.voice::before   { background: var(--mark-ink, var(--teal)); }
+.gutter-mark.written::before { border: 1.4px solid var(--mark-ink, var(--teal)); }
 html.js .gutter-mark {
   opacity: 0;
   transform: translateY(-2px);
@@ -380,9 +387,18 @@ html.js .gutter-mark.shown.found { opacity: .55; }
 html.js .note {
   grid-template-rows: 0fr;
   opacity: 0;
-  transition: grid-template-rows var(--open) var(--ease), opacity var(--open) var(--ease);
+  visibility: hidden;
+  transition:
+    grid-template-rows var(--open) var(--ease),
+    opacity var(--open) var(--ease),
+    visibility 0s linear var(--open);
 }
-html.js .note.open { grid-template-rows: 1fr; opacity: 1; }
+html.js .note.open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
+}
 .note-inner { overflow: hidden; }
 .note-body {
   display: flex;
@@ -573,10 +589,22 @@ html.js .draw-rule.arrived { transform: scaleX(1); }
   html { scroll-behavior: auto; }
   html.js .rise,
   html.js .settle-words .w,
-  html.js .draw-rule { opacity: 1; transform: none; transition: none; }
+  html.js .draw-rule { opacity: 1; transform: none; }
   .gutter-mark.shown.unfound { animation: none; opacity: 1; }
-  .waveform.drawing i { animation: none; }
-  .way-in, .quiet-control, .quiet-control .arrow { transition: none; }
+
+  /* Nothing moves. §11: the fire holds a state, and morphs become
+     cross-fades — so opacity is given back where a cross-fade is the point. */
+  *, *::before, *::after {
+    transition-duration: 1ms !important;
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+  html.js .note,
+  html.js .fire-lines p,
+  html.js .presence-form {
+    transition: opacity var(--settle) var(--ease) !important;
+  }
 }
 
 /* ================================================================= a phone
@@ -665,6 +693,10 @@ html.js .draw-rule.arrived { transform: scaleX(1); }
 
 .fire-canvas { display: block; width: 100%; height: 100%; }
 .fire-frame { position: relative; width: 100%; }
+html:not(.js) .fire-frame,
+html:not(.js) .ember canvas {
+  background: radial-gradient(ellipse 60% 52% at 50% 88%, rgba(233, 166, 63, .22), rgba(200, 122, 70, .07) 55%, transparent 78%);
+}
 /* The frame is fixed by the book's scale and never changes during a
    reading — Philemon is small, Isaiah is large. */
 .fire-frame.small  { height: 120px; }
@@ -1026,7 +1058,7 @@ html.js .masthead.shown { transform: none; opacity: 1; }
     <p class="sc" style="margin-top:.6rem">Free through your first book, all the way to the end</p>
   </div>
 
-  <div class="hero-surface" aria-label="The reading surface, live">
+  <div class="hero-surface">
     <div class="surface" id="hero-read">
       <p class="running-head">Ruth 1</p>
 
@@ -1074,7 +1106,7 @@ html.js .masthead.shown { transform: none; opacity: 1; }
 
       <!-- Right edge belongs to people. Nothing crosses. -->
       <aside class="presence-form" id="hero-presence">
-        <div class="lozenge" style="--ring-ink: var(--teal)">
+        <div class="lozenge" role="img" aria-label="Jacob is reading.">
           <span class="portrait" style="--portrait-ink: var(--teal)" aria-hidden="true">J</span>
         </div>
       </aside>
@@ -1135,7 +1167,7 @@ html.js .masthead.shown { transform: none; opacity: 1; }
             <p class="m" style="margin-top:.75em"><sup class="v">39</sup>Then Jesus got up and rebuked the wind and the sea. “Silence!” He commanded. “Be still!” And the wind died down, and it was perfectly calm.</p>
 
             <aside class="presence-form here" id="demo-form" style="top:3.2rem">
-              <div class="lozenge" id="demo-lozenge" style="--ring-ink: var(--indigo)">
+              <div class="lozenge" id="demo-lozenge" role="img" aria-label="Ruth is reading." style="--ring-ink: var(--indigo)">
                 <span class="portrait" id="demo-portrait" style="--portrait-ink: var(--indigo)" aria-hidden="true">R</span>
               </div>
             </aside>
@@ -1149,7 +1181,7 @@ html.js .masthead.shown { transform: none; opacity: 1; }
             <button class="chip" type="button" data-state="quiet" aria-pressed="false">Reading quietly</button>
           </div>
         </div>
-        <p class="phone-caption" id="demo-note">Ruth is in Mark 4, and so are you.</p>
+        <p class="phone-caption" id="demo-note" role="status">Ruth is in Mark 4, and so are you.</p>
       </div>
     </div>
 
@@ -1262,8 +1294,8 @@ html.js .masthead.shown { transform: none; opacity: 1; }
                     role="img" aria-label="The fire is steady."></canvas>
           </div>
           <p class="room-book" style="text-align:center;margin-top:.4rem">Mark</p>
-          <p class="state-line lit" id="fire-state" style="text-align:center">catching</p>
-          <button class="quiet-control" type="button" id="fire-quiet" aria-pressed="false"
+          <p class="state-line lit" id="fire-state" role="status" style="text-align:center">catching</p>
+          <button class="quiet-control" type="button" id="fire-quiet"
                   style="margin-top:1.2rem">Mark a quiet day</button>
           <p class="sc" style="margin-top:.2rem;font-size:.72rem;text-align:center;max-width:24ch">Banking is an act. It is never on the way to anywhere.</p>
         </div>
@@ -1395,11 +1427,12 @@ html.js .masthead.shown { transform: none; opacity: 1; }
 
       <!-- S01 · the room -->
       <figure class="phone-fig">
-        <div class="phone">
-          <div class="phone-screen">
+        <div class="phone" role="img"
+             aria-label="The room. Ruth and Jacob, Jacob reading, the fire steady on Mark, one way in — Continue in Mark — two notes waiting, and Mark a quiet day at the foot.">
+          <div class="phone-screen" aria-hidden="true">
             <div class="room-chrome"><p class="sc">Ruth &amp; Jacob</p></div>
             <div class="room-presence">
-              <span class="portrait sm" style="--portrait-ink: var(--teal)" aria-label="Jacob">J</span>
+              <span class="portrait sm" role="img" style="--portrait-ink: var(--teal)" aria-label="Jacob is reading">J</span>
             </div>
             <div class="room-fire">
               <div class="fire-frame medium" style="width:100%">
@@ -1423,8 +1456,9 @@ html.js .masthead.shown { transform: none; opacity: 1; }
 
       <!-- S13 · the book chooser -->
       <figure class="phone-fig">
-        <div class="phone">
-          <div class="phone-screen">
+        <div class="phone" role="img"
+             aria-label="The book chooser. Good places to start together — Mark, Ruth, Philippians, John, Psalms — then Letters and Revelation, each book beside its own fire.">
+          <div class="phone-screen" aria-hidden="true">
             <div class="room-chrome"><p class="sc">Pick something to read together</p></div>
             <div class="chooser">
               <p class="sc sc-accent">Good places to start together</p>
@@ -1454,8 +1488,9 @@ html.js .masthead.shown { transform: none; opacity: 1; }
 
       <!-- S09 · finishing a book -->
       <figure class="phone-fig">
-        <div class="phone">
-          <div class="phone-screen" style="justify-content:center;align-items:center;text-align:center;padding:0 1.6rem">
+        <div class="phone" role="img"
+             aria-label="Finishing a book. Mark, March to June, an ember where the fire was: you finished Mark together. Put it on the shelf.">
+          <div class="phone-screen" aria-hidden="true" style="justify-content:center;align-items:center;text-align:center;padding:0 1.6rem">
             <canvas data-ember="medium" role="img" aria-label="The fire settles into an ember." style="width:91.8px;height:72.9px"></canvas>
             <p class="room-book" style="margin-top:1.5rem">Mark</p>
             <p class="sc" style="margin-top:.5rem">March – June</p>
@@ -1636,6 +1671,14 @@ html.js .masthead.shown { transform: none; opacity: 1; }
 /* ------------------------------------------------------ the fire, pinned */
 
 .fire-track { height: 320vh; }
+html:not(.js) .fire-track { height: auto; }
+/* Without a script the fire cannot answer to a scroll and the quiet day
+   cannot be marked, so neither is promised. */
+html:not(.js) #fire-scroll-hint,
+html:not(.js) #fire-quiet,
+html:not(.js) #fire-quiet + .sc,
+html:not(.js) #notes-replay { display: none; }
+html:not(.js) .fire-pin { position: static; min-height: 0; padding-block: 3rem; }
 .fire-pin {
   position: sticky;
   top: 0;
@@ -1736,7 +1779,9 @@ html.js .fire-lines p.on { opacity: 1; }
   padding: .3rem 0;
 }
 .glyph { flex: none; display: flex; align-items: flex-end; justify-content: flex-end; }
-.glyph canvas { display: block; }
+.glyph canvas { display: block; width: 42px; height: 30px; }
+.glyph canvas[data-glyph="small"] { width: 28px; height: 20px; }
+.glyph canvas[data-glyph="large"] { width: 56px; height: 40px; }
 
 /* ------------------------------------------------------------- notices */
 
@@ -1932,9 +1977,6 @@ html.js .fire-lines p.on { opacity: 1; }
      state — the way the app holds it. */
 
   const EMBER_SIZE = { small: 36, medium: 54, large: 72 };
-  /* The chooser's glyphs keep the fire's 120:180:240 ratio — the drawn fire
-     is the only thing allowed to say how long a book is. */
-  const GLYPH_H = { small: 20, medium: 30, large: 40 };
   const live = new Set();
   const items = [];
 
@@ -2031,9 +2073,6 @@ html.js .fire-lines p.on { opacity: 1; }
       if (item) { el._ribbon = item; canvasSeen.observe(el); }
     });
     document.querySelectorAll("canvas[data-glyph]").forEach((el) => {
-      const h = GLYPH_H[el.dataset.glyph] || GLYPH_H.medium;
-      el.style.height = h + "px";
-      el.style.width = Math.round(h * 1.4) + "px";
       const item = register(el, "glyph", { state: "burning" });
       if (item) { el._ribbon = item; canvasSeen.observe(el); }
     });
@@ -2088,8 +2127,13 @@ html.js .fire-lines p.on { opacity: 1; }
   const hero = document.querySelector(".hero");
   if (masthead && hero) {
     const past = new IntersectionObserver((entries) => {
-      masthead.classList.toggle("shown", !entries[0].isIntersecting);
+      const shown = !entries[0].isIntersecting;
+      masthead.classList.toggle("shown", shown);
+      /* Off screen it is out of the tab order too: six focus stops with the
+         ring drawn above the window is worse than no masthead at all. */
+      masthead.inert = !shown;
     }, { rootMargin: "-70% 0px 0px 0px" });
+    masthead.inert = true;
     past.observe(hero);
   }
 
@@ -2156,11 +2200,11 @@ html.js .fire-lines p.on { opacity: 1; }
   };
 
   const PRESENCE = {
-    absent:    { note: "Nobody is reading. The form is not there at all — not greyed, not a placeholder." },
-    one:       { note: "Ruth is in Mark 4, and so are you." },
-    several:   { note: "Ruth and Jacob. A short stack you flick through, never a row of shrinking avatars." },
-    following: { note: "You’re following Ruth. A hairline runs down the edge, and your scroll is hers." },
-    quiet:     { note: "You’re reading quietly. You see everyone; nobody sees you." },
+    absent:    { note: "Nobody is reading. The form is not there at all — not greyed, not a placeholder.", label: "" },
+    one:       { note: "Ruth is in Mark 4, and so are you.", label: "Ruth is reading." },
+    several:   { note: "Ruth and Jacob. A short stack you flick through, never a row of shrinking avatars.", label: "Ruth and Jacob are reading." },
+    following: { note: "You’re following Ruth. A hairline runs down the edge, and your scroll is hers.", label: "You are following Ruth." },
+    quiet:     { note: "You’re reading quietly. You see everyone; nobody sees you.", label: "Ruth is reading." },
   };
 
   let closedShape = null;
@@ -2171,6 +2215,7 @@ html.js .fire-lines p.on { opacity: 1; }
     demo.lozenge.classList.toggle("stacked", state === "several");
     demo.lozenge.classList.toggle("followed", state === "following");
     demo.lozenge.hidden = state === "absent";
+    if (spec.label) demo.lozenge.setAttribute("aria-label", spec.label);
     if (state === "quiet") {
       if (!closedShape) {
         closedShape = document.createElement("div");
@@ -2199,11 +2244,15 @@ html.js .fire-lines p.on { opacity: 1; }
     if (presenceTimer) { clearInterval(presenceTimer); presenceTimer = null; }
   }
   let tookOver = false;
-  demo.chips.forEach((chip) => chip.addEventListener("click", () => {
-    tookOver = true;
-    stopCycling();
-    showPresence(chip.dataset.state);
-  }));
+  const takeOver = () => { tookOver = true; stopCycling(); };
+  demo.chips.forEach((chip) => {
+    chip.addEventListener("click", () => {
+      takeOver();
+      showPresence(chip.dataset.state);
+    });
+    chip.addEventListener("focus", takeOver);
+    chip.addEventListener("pointerenter", takeOver);
+  });
 
   if (demo.form && !reduce.matches) {
     const watch = new IntersectionObserver((entries) => {
@@ -2340,7 +2389,6 @@ html.js .fire-lines p.on { opacity: 1; }
       quietBtn.addEventListener("click", () => {
         quietHold = !quietHold;
         quietBtn.textContent = quietHold ? "Read again" : "Mark a quiet day";
-        quietBtn.setAttribute("aria-pressed", String(quietHold));
         readFire();
       });
     }
