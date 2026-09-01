@@ -155,6 +155,7 @@ struct JoinFlow: View {
                 .onSubmit(advanceFromName)
             WayInButton(title: "That's me") { advanceFromName() }
                 .padding(.horizontal, 80)
+                .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
                 .opacity(name.trimmingCharacters(in: .whitespaces).isEmpty ? 0.3 : 1)
         }
         .onAppear { focused = .name }
@@ -185,6 +186,7 @@ struct JoinFlow: View {
             }
             WayInButton(title: Copy.sendTheCode) { sendCode() }
                 .padding(.horizontal, 80)
+                .disabled(!email.contains("@"))
                 .opacity(email.contains("@") ? 1 : 0.3)
             if let onStartInstead {
                 // Never a step without a way out.
@@ -216,6 +218,7 @@ struct JoinFlow: View {
             }
             WayInButton(title: Copy.join) { verifyAndJoin() }
                 .padding(.horizontal, 80)
+                .disabled(code.trimmingCharacters(in: .whitespaces).isEmpty)
                 .opacity(code.trimmingCharacters(in: .whitespaces).isEmpty ? 0.3 : 1)
             QuietControl(title: "Send a new code") { sendCode() }
             if let onStartInstead {

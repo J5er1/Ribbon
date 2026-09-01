@@ -36,6 +36,7 @@ struct SignInInline: View {
                     .onSubmit(sendCode)
                 WayInButton(title: Copy.sendTheCode) { sendCode() }
                     .padding(.horizontal, 40)
+                    .disabled(!email.contains("@"))
                     .opacity(email.contains("@") ? 1 : 0.3)
             case .code:
                 Text(Copy.codeOnItsWay)
@@ -53,6 +54,7 @@ struct SignInInline: View {
                     .onSubmit(verify)
                 WayInButton(title: Copy.signIn) { verify() }
                     .padding(.horizontal, 40)
+                    .disabled(code.trimmingCharacters(in: .whitespaces).isEmpty)
                     .opacity(code.trimmingCharacters(in: .whitespaces).isEmpty ? 0.3 : 1)
                 QuietControl(title: "Send a new code") { sendCode() }
             }

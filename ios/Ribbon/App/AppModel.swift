@@ -197,6 +197,12 @@ final class AppModel {
         members(of: room).count >= Room.capacity
     }
 
+    /// Rooms whose rename hasn't landed remotely — merge() must not let a
+    /// stale pull revert an edit that was never pushed. In-memory only: a
+    /// relaunch before the push lands re-exposes the edge, accepted for a
+    /// rename.
+    private var pendingRenamePushes: Set<UUID> = []
+
     /// Naming a room after the fact (S15's naming half, reachable later).
     func renameRoom(_ room: Room, to name: String?) {
         guard let i = state.rooms.firstIndex(where: { $0.id == room.id }) else { return }
@@ -205,7 +211,12 @@ final class AppModel {
         persist()
         if let remote, remote.isSignedIn {
             let updated = state.rooms[i]
-            Task { try? await remote.push(room: updated) }
+            pendingRenamePushes.insert(updated.id)
+            Task {
+                if (try? await remote.push(room: updated)) != nil {
+                    pendingRenamePushes.remove(updated.id)
+                }
+            }
         }
     }
 
@@ -694,6 +705,13 @@ final class AppModel {
     /// launch, on foreground, and after joining.
     func refreshFromRemote() async {
         guard let remote, remote.isSignedIn else { return }
+        // An unpushed rename goes first, so the pull can't revert it.
+        for roomID in Array(pendingRenamePushes) {
+            if let room = state.rooms.first(where: { $0.id == roomID }),
+               (try? await remote.push(room: room)) != nil {
+                pendingRenamePushes.remove(roomID)
+            }
+        }
         guard let graph = try? await remote.pullRooms() else { return }
         merge(graph)
     }
@@ -742,7 +760,11 @@ final class AppModel {
 
         for row in graph.rooms {
             if let i = state.rooms.firstIndex(where: { $0.id == row.id }) {
-                state.rooms[i].name = row.name
+                // Remote wins on the multi-author name — except over a
+                // local rename that hasn't landed there yet.
+                if !pendingRenamePushes.contains(row.id) {
+                    state.rooms[i].name = row.name
+                }
                 state.rooms[i].isPaused = row.isPaused
             } else {
                 state.rooms.append(
