@@ -313,8 +313,7 @@ section[id] { scroll-margin-top: 5rem; }
 .wash {
   --wash-ink: var(--ochre);
   /* 24% wash, mixed into the ink rather than applied as opacity: the wash
-     sits behind the glyphs and the text stays ivory. Two overlapping
-     highlights deepen the way two passes of real ink would. */
+     sits behind the glyphs and the text stays ivory. */
   --wash-at: color-mix(in srgb, var(--wash-ink) 24%, transparent);
   --wash-edge: color-mix(in srgb, var(--wash-ink) 13%, transparent);
   background-image: linear-gradient(
@@ -332,8 +331,6 @@ section[id] { scroll-margin-top: 5rem; }
 }
 html.js .wash { background-size: 0% 100%; }
 html.js .wash.inked { background-size: 100% 100%; }
-/* Two inks on the same verse deepen to 38%, the way the app blends them. */
-.wash.doubled { --wash-at: color-mix(in srgb, var(--wash-ink) 38%, transparent); }
 
 /* ------------------------------------------------------------ the gutter */
 
@@ -366,10 +363,11 @@ html.js .gutter-mark {
   transition: opacity var(--settle) var(--ease), transform var(--settle) var(--ease);
 }
 html.js .gutter-mark.shown { opacity: .65; transform: none; }
+html.js .gutter-mark.shown.found { opacity: .55; }
 
 /* Unfound marks breathe — 0.65 to 1.0 over 4s, eased both ways, slow enough
    that it never reads as an alert. Your own marks never breathe. */
-.gutter-mark.shown.unfound { animation: breathe 4s var(--ease) infinite alternate; }
+.gutter-mark.shown.unfound { animation: breathe 4s ease-in-out infinite alternate; }
 .gutter-mark.found { opacity: .55; animation: none; }
 @keyframes breathe { from { opacity: .65; } to { opacity: 1; } }
 
@@ -388,12 +386,37 @@ html.js .note.open { grid-template-rows: 1fr; opacity: 1; }
 .note-inner { overflow: hidden; }
 .note-body {
   display: flex;
-  gap: .85rem;
+  flex-direction: column;
+  gap: .5rem;
   margin: 1.1rem 0 .3rem;
-  padding: .1rem 0 0;
   font-family: var(--sans);
   font-size: .96rem;
   line-height: 1.5;
+}
+.note-head { display: flex; align-items: center; gap: .5rem; }
+
+/* The transcript sits behind the word, the way the app keeps it: present for
+   anyone who needs it, not read aloud at you. */
+.transcript-toggle {
+  align-self: flex-start;
+  font-family: var(--caps);
+  font-size: .76rem;
+  letter-spacing: .09em;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.transcript-toggle:hover { color: var(--ink); }
+.transcript-toggle .tt-text {
+  display: block;
+  text-align: left;
+  font-family: var(--sans);
+  font-size: .92rem;
+  letter-spacing: 0;
+  line-height: 1.5;
+  color: var(--muted);
 }
 
 .portrait {
@@ -418,16 +441,16 @@ html.js .note.open { grid-template-rows: 1fr; opacity: 1; }
 .waveform {
   display: flex;
   align-items: center;
-  gap: 2px;
-  height: 26px;
+  gap: 1.5px;
+  height: 34px;
 }
 .waveform i {
   display: block;
   width: 2px;
   border-radius: 1px;
   background: var(--wave-ink, var(--teal));
-  opacity: .85;
-  height: calc(var(--h) * 1%);
+  opacity: .35;
+  height: max(3px, calc(var(--h) * 0.3px));
   transform-origin: center;
   transition: transform var(--settle) var(--ease);
 }
@@ -473,7 +496,7 @@ html.js .presence-form.here { transform: translateX(0); opacity: 1; }
 }
 /* Several here: a short vertical stack with a hairline of the next one
    behind. Never a row of shrinking avatars. */
-.lozenge .portrait { margin-right: 14px; }
+.lozenge .portrait { width: 38px; height: 38px; font-size: .92rem; margin-right: 10px; }
 .lozenge.stacked::before {
   content: "";
   position: absolute;
@@ -483,8 +506,8 @@ html.js .presence-form.here { transform: translateX(0); opacity: 1; }
   opacity: .6;
   z-index: -1;
 }
-/* Following: a thin ring in their ink. */
-.lozenge.followed { box-shadow: 0 0 0 1.5px var(--ring-ink, var(--indigo)); }
+/* Following: a thin ring in their ink, around their face. */
+.lozenge.followed .portrait { box-shadow: 0 0 0 1.6px var(--ring-ink, var(--indigo)); }
 
 /* Idle: dimmed by about 40%, the edge softened — here, but still. */
 .lozenge.idle { opacity: .6; }
@@ -509,7 +532,7 @@ html.js .presence-form.here { transform: translateX(0); opacity: 1; }
   width: 1px;
   background: var(--accent);
   height: 0;
-  opacity: .55;
+  opacity: .7;
   transition: height var(--open) var(--ease);
 }
 .follow-thread.drawn { height: 100%; }
@@ -611,6 +634,15 @@ html.js .draw-rule.arrived { transform: scaleX(1); }
 }
 .room-presence { padding: .55rem 1.35rem 0; display: flex; gap: .45rem; align-items: center; }
 .room-fire { display: grid; place-items: center; gap: .5rem; padding: 1.1rem 0 0; }
+/* A grid item's automatic minimum size would otherwise let the transferred
+   aspect-ratio width win over `width: 100%` and push the fire past the
+   phone's edge, so the minimum is released explicitly. */
+.phone .room-fire .fire-frame {
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  aspect-ratio: 393 / 180;
+}
 .room-book {
   font-family: var(--serif);
   font-size: 1.5rem;
@@ -651,9 +683,10 @@ html.js .draw-rule.arrived { transform: scaleX(1); }
 /* The four states, as a row you can read at a glance. */
 .states {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
   gap: 1.8rem 1.2rem;
 }
+.state .fire-frame { width: 100%; }
 .state {
   display: grid;
   align-content: start;
@@ -1014,13 +1047,18 @@ html.js .masthead.shown { transform: none; opacity: 1; }
       <div class="note" id="hero-note">
         <div class="note-inner">
           <div class="note-body">
-            <span class="portrait" style="--portrait-ink: var(--teal)" aria-hidden="true">J</span>
+            <div class="note-head">
+              <span class="portrait sm" style="--portrait-ink: var(--teal);width:22px;height:22px" aria-label="Jacob">J</span>
+              <span class="sc" style="font-size:.74rem">this morning</span>
+            </div>
             <div class="stack gap-sm" style="min-width:0">
-              <div class="waveform" style="--wave-ink: var(--teal)" aria-hidden="true">
+              <div class="waveform" style="--wave-ink: var(--teal)" role="img" aria-label="A voice note from Jacob">
                 <i style="--h:22"></i><i style="--h:46"></i><i style="--h:70"></i><i style="--h:52"></i><i style="--h:88"></i><i style="--h:64"></i><i style="--h:38"></i><i style="--h:76"></i><i style="--h:96"></i><i style="--h:58"></i><i style="--h:34"></i><i style="--h:66"></i><i style="--h:82"></i><i style="--h:44"></i><i style="--h:28"></i><i style="--h:60"></i><i style="--h:72"></i><i style="--h:40"></i><i style="--h:24"></i><i style="--h:50"></i>
               </div>
-              <p class="transcript">“I read this at my grandmother’s funeral. I didn’t know then that it was about staying.”</p>
-              <p class="sc" style="font-size:.72rem">Jacob · Ruth 1:16</p>
+              <button class="transcript-toggle" type="button" id="hero-transcript" aria-expanded="false">
+                <span class="tt-word">transcript</span>
+                <span class="tt-text" hidden>“I read this at my grandmother’s funeral. I didn’t know then that it was about staying.”</span>
+              </button>
             </div>
           </div>
         </div>
@@ -1140,11 +1178,11 @@ html.js .masthead.shown { transform: none; opacity: 1; }
             <div class="note" id="notes-note">
               <div class="note-inner">
                 <div class="note-body">
-                  <span class="portrait" style="--portrait-ink: var(--moss)" aria-hidden="true">R</span>
-                  <div class="stack gap-sm" style="min-width:0">
-                    <p style="color:var(--ink)">Read this one on the bad Tuesday. It held.</p>
-                    <p class="sc" style="font-size:.72rem">Ruth · Philippians 4:7</p>
+                  <div class="note-head">
+                    <span class="portrait sm" style="--portrait-ink: var(--moss);width:22px;height:22px" aria-label="Ruth">R</span>
+                    <span class="sc" style="font-size:.74rem">yesterday</span>
                   </div>
+                  <p style="color:var(--ink)">Read this one on the bad Tuesday. It held.</p>
                 </div>
               </div>
             </div>
@@ -1164,6 +1202,7 @@ html.js .masthead.shown { transform: none; opacity: 1; }
                 <span class="swatch" style="background:var(--plum)"></span>
                 <span class="swatch" style="background:var(--rose)"></span>
               </div>
+              <span class="toolbar-rule" aria-hidden="true"></span>
               <span class="sc sc-ink">write</span>
               <span class="sc sc-ink">speak</span>
             </div>
@@ -1218,8 +1257,8 @@ html.js .masthead.shown { transform: none; opacity: 1; }
         </div>
 
         <div class="fire-show">
-          <div class="fire-frame large">
-            <canvas class="fire-canvas" id="fire-hero" data-fire="steady" data-scale="large"
+          <div class="fire-frame">
+            <canvas class="fire-canvas" id="fire-hero" data-fire="steady"
                     role="img" aria-label="The fire is steady."></canvas>
           </div>
           <p class="room-book" style="text-align:center;margin-top:.4rem">Mark</p>
@@ -1275,22 +1314,22 @@ html.js .masthead.shown { transform: none; opacity: 1; }
 
       <div class="states rise" style="margin-top:4rem">
         <div class="state">
-          <div class="fire-frame" style="height:112px;width:152px"><canvas class="fire-canvas" data-fire="catching" data-scale="small" data-coal="0.15" role="img" aria-label="The fire is catching."></canvas></div>
+          <div class="fire-frame" style="height:100px;max-width:210px"><canvas class="fire-canvas" data-fire="catching" data-scale="small" data-coal="0.15" role="img" aria-label="The fire is catching."></canvas></div>
           <p class="state-line">catching</p>
           <p>Just started, or just restarted after a long quiet.</p>
         </div>
         <div class="state">
-          <div class="fire-frame" style="height:112px;width:152px"><canvas class="fire-canvas" data-fire="burning" data-scale="small" data-coal="0.4" role="img" aria-label="The fire is burning."></canvas></div>
+          <div class="fire-frame" style="height:100px;max-width:210px"><canvas class="fire-canvas" data-fire="burning" data-scale="small" data-coal="0.4" role="img" aria-label="The fire is burning."></canvas></div>
           <p class="state-line">burning</p>
           <p>Someone has been reading.</p>
         </div>
         <div class="state">
-          <div class="fire-frame" style="height:112px;width:152px"><canvas class="fire-canvas" data-fire="steady" data-scale="small" data-coal="0.7" role="img" aria-label="The fire is steady."></canvas></div>
+          <div class="fire-frame" style="height:100px;max-width:210px"><canvas class="fire-canvas" data-fire="steady" data-scale="small" data-coal="0.7" role="img" aria-label="The fire is steady."></canvas></div>
           <p class="state-line">steady</p>
           <p>You have both been reading. The only thing overlap changes is the mood of the fire.</p>
         </div>
         <div class="state">
-          <div class="fire-frame" style="height:112px;width:152px"><canvas class="fire-canvas" data-fire="banked" data-scale="small" data-coal="0.55" role="img" aria-label="The fire is banked."></canvas></div>
+          <div class="fire-frame" style="height:100px;max-width:210px"><canvas class="fire-canvas" data-fire="banked" data-scale="small" data-coal="0.55" role="img" aria-label="The fire is banked."></canvas></div>
           <p class="state-line">banked</p>
           <p>A quiet day, marked on purpose. Covered and kept low, still alive.</p>
         </div>
@@ -1372,7 +1411,7 @@ html.js .masthead.shown { transform: none; opacity: 1; }
             <div class="room-in"><span class="way-in">Continue in Mark</span></div>
             <div class="room-waiting">
               <p class="waiting-row"><span class="ink-dot" style="--dot-ink: var(--teal)"></span> Jacob left you a note at Mark 4:39</p>
-              <p class="waiting-row"><span class="ink-dot" style="--dot-ink: var(--indigo)"></span> The cards are open</p>
+              <p class="waiting-row"><span class="ink-dot" style="--dot-ink: var(--teal)"></span> Jacob left you a note at Mark 6:31</p>
             </div>
             <div class="room-foot">
               <p class="quiet-control" style="cursor:default">Mark a quiet day</p>
@@ -1410,14 +1449,14 @@ html.js .masthead.shown { transform: none; opacity: 1; }
             </div>
           </div>
         </div>
-        <figcaption class="phone-caption">The chooser · the fire is the length</figcaption>
+        <figcaption class="phone-caption">The chooser · pick something together</figcaption>
       </figure>
 
       <!-- S09 · finishing a book -->
       <figure class="phone-fig">
         <div class="phone">
           <div class="phone-screen" style="justify-content:center;align-items:center;text-align:center;padding:0 1.6rem">
-            <canvas data-ember="medium" data-big="1" role="img" aria-label="The fire settles into an ember." style="width:146.9px;height:116.6px"></canvas>
+            <canvas data-ember="medium" role="img" aria-label="The fire settles into an ember." style="width:91.8px;height:72.9px"></canvas>
             <p class="room-book" style="margin-top:1.5rem">Mark</p>
             <p class="sc" style="margin-top:.5rem">March – June</p>
             <p class="lede" style="margin-top:1.6rem;font-size:1.06rem">You finished Mark together</p>
@@ -1425,7 +1464,8 @@ html.js .masthead.shown { transform: none; opacity: 1; }
               <span class="portrait" style="--portrait-ink: var(--moss)" aria-hidden="true">R</span>
               <span class="portrait" style="--portrait-ink: var(--teal);margin-left:-6px" aria-hidden="true">J</span>
             </div>
-            <p class="quiet-control" style="margin-top:2rem;cursor:default">Put it on the shelf</p>
+            <p class="way-in" style="margin-top:2rem;cursor:default;font-size:.98rem;padding:.72rem 1.6rem">Put it on the shelf</p>
+            <p class="quiet-control" style="margin-top:1rem;cursor:default">Start another</p>
           </div>
         </div>
         <figcaption class="phone-caption">Finishing · the fire becomes an ember</figcaption>
@@ -1590,7 +1630,8 @@ html.js .masthead.shown { transform: none; opacity: 1; }
   width: 12px; height: 12px; border-radius: 50%;
   transition: box-shadow var(--arrive) var(--ease);
 }
-.swatch.on { box-shadow: 0 0 0 1.5px var(--ground), 0 0 0 3px currentColor; color: var(--muted); }
+.swatch.on { outline: 1.4px solid rgba(243, 240, 230, .7); outline-offset: 2px; }
+.toolbar-rule { width: 1px; height: 20px; background: var(--rule); }
 
 /* ------------------------------------------------------ the fire, pinned */
 
@@ -1610,7 +1651,7 @@ html.js .masthead.shown { transform: none; opacity: 1; }
   align-items: center;
 }
 .fire-show { display: grid; justify-items: center; }
-.fire-show .fire-frame { height: 300px; max-width: 40rem; }
+.fire-show .fire-frame { height: 240px; max-width: 40rem; }
 
 /* One line per state. With a script driving the fire they share one place and
    cross-fade; without one they are simply a list of the four states. */
@@ -1628,7 +1669,7 @@ html.js .fire-lines p.on { opacity: 1; }
 @media (max-width: 62rem) {
   .fire-pin-grid { grid-template-columns: minmax(0, 1fr); gap: 2rem; }
   .fire-track { height: 300vh; }
-  .fire-show .fire-frame { height: 210px; max-width: 26rem; }
+  .fire-show .fire-frame { height: 190px; max-width: 26rem; }
 }
 @media (max-width: 46rem) {
   .fire-lines { min-height: 7rem; }
@@ -1648,23 +1689,23 @@ html.js .fire-lines p.on { opacity: 1; }
 .scales::-webkit-scrollbar { display: none; }
 .scale-item { min-width: 0; display: grid; justify-items: center; gap: .5rem; }
 .scale-item .fire-frame { aspect-ratio: 2.3; width: auto; }
-.scales .fire-frame.small  { height: 104px; margin-bottom: 33px; }
-.scales .fire-frame.medium { height: 156px; margin-bottom: 16px; }
+.scales .fire-frame.small  { height: 104px; margin-bottom: 13px; }
+.scales .fire-frame.medium { height: 156px; margin-bottom: 6px; }
 .scales .fire-frame.large  { height: 208px; }
 @media (max-width: 62rem) {
-  .scales .fire-frame.small  { height: 70px; margin-bottom: 22px; }
-  .scales .fire-frame.medium { height: 105px; margin-bottom: 11px; }
+  .scales .fire-frame.small  { height: 70px; margin-bottom: 8px; }
+  .scales .fire-frame.medium { height: 105px; margin-bottom: 4px; }
   .scales .fire-frame.large  { height: 140px; }
 }
 /* On a phone the three stack instead of shrinking to nothing: the growth
    still reads, left-aligned, one under the next. */
 @media (max-width: 40rem) {
   .scales { flex-direction: column; align-items: flex-start; gap: .4rem; overflow-x: visible; }
-  .scale-item { grid-template-columns: auto auto; align-items: end; gap: .8rem; justify-items: start; }
+  .scale-item { grid-template-columns: minmax(0, 1fr); justify-items: start; gap: .1rem; }
   .scales .fire-frame.small  { height: 58px;  margin-bottom: 0; }
   .scales .fire-frame.medium { height: 87px;  margin-bottom: 0; }
   .scales .fire-frame.large  { height: 116px; margin-bottom: 0; }
-  .scale-item .sc { padding-bottom: .35rem; }
+  .scale-item .sc { padding-bottom: .9rem; }
 }
 
 /* -------------------------------------------------------------- phones */
@@ -1684,7 +1725,7 @@ html.js .fire-lines p.on { opacity: 1; }
   list-style: none;
   margin: 0;
   padding: 0;
-  font-family: var(--serif);
+  font-family: var(--sans);
   font-size: 1rem;
 }
 .book-list li {
@@ -1910,12 +1951,6 @@ html.js .fire-lines p.on { opacity: 1; }
     return true;
   }
 
-  /* The fire is painted into a box inset from the canvas — 19% either side,
-     22% below — so the wide warm throw of a steady fire reaches nothing and
-     fades, instead of being cut off square by the element's edge. The
-     drawing itself is untouched; it is only given room. */
-  const PAD_X = 0.19, PAD_BOTTOM = 0.22;
-
   function paint(item, now) {
     const ctx = item.ctx;
     ctx.clearRect(0, 0, item.w, item.h);
@@ -1924,10 +1959,7 @@ html.js .fire-lines p.on { opacity: 1; }
     } else if (item.kind === "glyph") {
       drawFire(ctx, item.w, item.h, 402.7, item.state, 0.3);
     } else {
-      ctx.save();
-      ctx.translate(item.w * PAD_X, 0);
-      drawFire(ctx, item.w * (1 - PAD_X * 2), item.h * (1 - PAD_BOTTOM), now + item.seed, item.state, item.coal);
-      ctx.restore();
+      drawFire(ctx, item.w, item.h, now + item.seed, item.state, item.coal);
     }
     item.dirty = false;
   }
@@ -2075,6 +2107,21 @@ html.js .fire-lines p.on { opacity: 1; }
     waves: document.querySelectorAll("#hero-note .waveform"),
   };
 
+  /* The transcript sits behind the word until it is asked for — and the
+     control is the transcript once it is open, the way the card's is. */
+  const transcript = document.getElementById("hero-transcript");
+  function showTranscript(open) {
+    if (!transcript) return;
+    transcript.querySelector(".tt-word").hidden = open;
+    transcript.querySelector(".tt-text").hidden = !open;
+    transcript.setAttribute("aria-expanded", String(open));
+  }
+  if (transcript) {
+    transcript.addEventListener("click", () => {
+      showTranscript(transcript.getAttribute("aria-expanded") !== "true");
+    });
+  }
+
   function heroOpenNote() {
     if (!heroBits.note || heroBits.note.classList.contains("open")) return;
     heroBits.note.classList.add("open");
@@ -2091,6 +2138,9 @@ html.js .fire-lines p.on { opacity: 1; }
   setTimeout(() => heroBits.presence && heroBits.presence.classList.add("here"), 420 * beat);
   setTimeout(() => heroBits.mark && heroBits.mark.classList.add("shown", "unfound"), 1300 * beat);
   setTimeout(heroOpenNote, 3000 * beat);
+  /* And then, unasked once, the transcript — because it is the half of a
+     voice note that anyone can read. */
+  setTimeout(() => showTranscript(true), 4600 * beat);
   if (heroBits.mark) heroBits.mark.addEventListener("click", heroOpenNote);
 
   /* ==================================================== presence, the five
