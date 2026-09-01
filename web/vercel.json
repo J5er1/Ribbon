@@ -1,0 +1,8 @@
+{
+  "buildCommand": "node build.mjs",
+  "outputDirectory": "dist",
+  "cleanUrls": true,
+  "rewrites": [
+    { "source": "/i/:token", "destination": "/invite.html" }
+  ]
+}

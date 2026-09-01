@@ -90,7 +90,8 @@ struct ChapterLayout: Equatable {
 
 struct ChapterTextView: UIViewRepresentable {
     let chapter: ScriptureChapter
-    let bookName: String
+    /// The running head, fully formed: "Mark 4", "Psalm 23".
+    let runningHead: String
     let theme: ReadingTheme
     /// Inks covering each verse. One ink washes at 24%; overlapping inks
     /// multiply into a third color — the correct emotional result (§4.5).
@@ -153,14 +154,14 @@ struct ChapterTextView: UIViewRepresentable {
         // body re-evaluates on every scroll tick, and NSShadow has no
         // value equality, so an isEqual comparison can't be the gate.
         let buildKey = [
-            bookName, String(chapter.n), String(describing: theme),
+            runningHead, String(chapter.n), String(describing: theme),
             liftedVerses.map(String.init(describing:)) ?? "-",
             String(isFirstChapter), String(showMarginHint),
         ].joined(separator: "|")
         if context.coordinator.builtKey != buildKey {
             context.coordinator.builtKey = buildKey
             view.attributedText = Self.attributedText(
-                chapter: chapter, bookName: bookName, theme: theme,
+                chapter: chapter, runningHead: runningHead, theme: theme,
                 liftedVerses: liftedVerses, isFirstChapter: isFirstChapter,
                 showMarginHint: showMarginHint)
         }
@@ -353,7 +354,7 @@ struct ChapterTextView: UIViewRepresentable {
     }
 
     static func attributedText(
-        chapter: ScriptureChapter, bookName: String, theme: ReadingTheme,
+        chapter: ScriptureChapter, runningHead: String, theme: ReadingTheme,
         liftedVerses: ClosedRange<Int>?, isFirstChapter: Bool, showMarginHint: Bool
     ) -> NSAttributedString {
         let result = NSMutableAttributedString()
@@ -402,9 +403,8 @@ struct ChapterTextView: UIViewRepresentable {
         // opacity, set into the text block. Not a bar.
         let headStyle = NSMutableParagraphStyle()
         headStyle.paragraphSpacing = em * 1.6
-        let head = "\(bookName) \(chapter.n)"
         result.append(NSAttributedString(
-            string: head + "\n",
+            string: runningHead + "\n",
             attributes: [
                 .font: RibbonType.uiSmallCaps(14),
                 .foregroundColor: ivory.withAlphaComponent(0.4),

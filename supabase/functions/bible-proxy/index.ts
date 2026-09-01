@@ -15,6 +15,28 @@ Deno.serve(async (req: Request) => {
     return json({ error: "method_not_allowed" }, 405);
   }
   const url = new URL(req.url);
+
+  // Catalog mode: the available editions, trimmed to what choosing a
+  // translation needs. Used to find an edition's bibleID (NKJV first,
+  // two more undecided).
+  if (url.searchParams.get("catalog") === "1") {
+    const key = Deno.env.get("API_BIBLE_KEY");
+    if (!key) return json({ error: "not_configured" }, 503);
+    const response = await fetch(
+      "https://api.scripture.api.bible/v1/bibles?language=eng&include-full-details=false",
+      { headers: { "api-key": key } },
+    );
+    if (!response.ok) return json({ error: "upstream" }, response.status);
+    const payload = await response.json();
+    const editions = (payload.data ?? []).map((b: Record<string, unknown>) => ({
+      id: b.id,
+      abbreviation: b.abbreviation,
+      name: b.name,
+      description: b.description,
+    }));
+    return json({ editions }, 200);
+  }
+
   const bible = url.searchParams.get("bible") ?? "";
   const chapter = url.searchParams.get("chapter") ?? "";
 

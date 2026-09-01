@@ -74,7 +74,7 @@ struct ReadingScreen: View {
                             .id(n)
                         if n < (book?.chapterCount ?? 1) {
                             PassageEndView(
-                                nextChapterTitle: "\(book?.name ?? "") \(n + 1)",
+                                nextChapterTitle: book?.chapterHeading(n + 1) ?? "\(n + 1)",
                                 onContinue: { withAnimation(RibbonMotion.settle) { proxy.scrollTo(n + 1, anchor: .top) } },
                                 onClose: close)
                         }
@@ -138,7 +138,7 @@ struct ReadingScreen: View {
             ZStack(alignment: .topLeading) {
                 ChapterTextView(
                     chapter: chapter,
-                    bookName: book?.name ?? reading.bookID,
+                    runningHead: book?.chapterHeading(n) ?? "\(reading.bookID) \(n)",
                     theme: ReadingTheme(
                         fontSize: model.settings.scriptureSize,
                         lineHeightMultiple: model.settings.lineHeightMultiple,
@@ -172,7 +172,7 @@ struct ReadingScreen: View {
             // skeleton lines, which read as fake text.
             VStack(alignment: .leading) {
                 SmallCaps(
-                    "\(book?.name ?? reading.bookID) \(n)", size: 14,
+                    book?.chapterHeading(n) ?? "\(reading.bookID) \(n)", size: 14,
                     color: Palette.text.opacity(0.4))
                 Spacer().frame(height: 320)
             }

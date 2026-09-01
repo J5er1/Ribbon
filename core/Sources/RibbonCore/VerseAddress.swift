@@ -14,15 +14,15 @@ public struct VerseAddress: Codable, Hashable, Comparable, Sendable, CustomStrin
         self.verse = verse
     }
 
-    /// "Mark 4:9"
+    /// "Mark 4:9" — "Psalm 23:1" for the Psalter.
     public var formatted: String {
-        let name = Bible.book(id: bookID)?.name ?? bookID
+        let name = Bible.book(id: bookID)?.referenceName ?? bookID
         return "\(name) \(chapter):\(verse)"
     }
 
-    /// "Mark 4"
+    /// "Mark 4" — "Psalm 23" for the Psalter.
     public var chapterFormatted: String {
-        let name = Bible.book(id: bookID)?.name ?? bookID
+        let name = Bible.book(id: bookID)?.referenceName ?? bookID
         return "\(name) \(chapter)"
     }
 
@@ -73,7 +73,7 @@ public struct VerseRange: Codable, Hashable, Sendable {
 
     /// "Mark 4:9" for one verse, "Mark 4:9–11" for a run.
     public var formatted: String {
-        let name = Bible.book(id: bookID)?.name ?? bookID
+        let name = Bible.book(id: bookID)?.referenceName ?? bookID
         if startVerse == endVerse { return "\(name) \(chapter):\(startVerse)" }
         return "\(name) \(chapter):\(startVerse)–\(endVerse)"
     }

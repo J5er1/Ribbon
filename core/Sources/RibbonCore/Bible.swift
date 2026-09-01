@@ -62,6 +62,17 @@ public struct BibleBook: Codable, Hashable, Identifiable, Sendable {
     public let wordCount: Int
 
     public var scale: FireScale { FireScale(wordCount: wordCount) }
+
+    /// The name a reference uses: the book is "Psalms," but a page heads a
+    /// single psalm "Psalm 23" and a citation reads "Psalm 23:1."
+    public var referenceName: String {
+        id == "PSA" ? "Psalm" : name
+    }
+
+    /// "Mark 4" — or "Psalm 23," the way a printed page heads it.
+    public func chapterHeading(_ chapter: Int) -> String {
+        "\(referenceName) \(chapter)"
+    }
 }
 
 public enum Bible {
