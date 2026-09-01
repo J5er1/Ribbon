@@ -110,6 +110,18 @@ a { color: inherit; text-decoration: none; }
 img { max-width: 100%; height: auto; display: block; }
 [hidden] { display: none !important; }
 
+/* Read aloud, never seen. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /* The way past the reading surface, for anyone arriving by keyboard. */
 .skip {
   position: absolute;
@@ -147,7 +159,6 @@ img { max-width: 100%; height: auto; display: block; }
   margin: 0;
 }
 
-h1.display { font-size: clamp(2.3rem, 6.4vw, 3.5rem); }
 h2.display { font-size: clamp(1.85rem, 4.4vw, 2.7rem); }
 h3.display { font-size: clamp(1.3rem, 2.6vw, 1.6rem); }
 
@@ -197,8 +208,6 @@ section[id] { scroll-margin-top: 5rem; }
 .stack   { display: flex; flex-direction: column; }
 .gap-sm  { gap: .7rem; }
 .gap-md  { gap: 1.3rem; }
-.gap-lg  { gap: 2.2rem; }
-.gap-xl  { gap: 3.4rem; }
 
 /* -------------------------------------------------------------- controls */
 
@@ -269,13 +278,9 @@ section[id] { scroll-margin-top: 5rem; }
 }
 
 .surface p { margin: 0; }
-.surface p.p  { text-indent: 1.1em; }
-.surface p.p:first-of-type { text-indent: 0; }
 .surface p.m  { margin-top: .75em; }
 .surface p.q1 { padding-left: 1.6em; text-indent: -1em; }
 .surface p.q2 { padding-left: 2.6em; text-indent: -1em; }
-.surface p.d  { color: var(--muted); font-size: .95em; font-style: italic; margin: .6em 0; }
-.surface .stanza { height: .8em; }
 
 /* Verse numbers: small caps superscript at ~45%. Addresses are not scores —
    a verse number is an address, and it is set so it can exist without
@@ -290,9 +295,6 @@ section[id] { scroll-margin-top: 5rem; }
   position: relative;
   top: -.42em;
 }
-
-/* Words of Jesus, when a reader has asked for them. */
-.surface .wj { color: var(--crimson); }
 
 /* A verse the surface is holding — long-pressed, lifted about 2px with a
    soft shadow. The verse becomes a physical thing you're holding. */
@@ -314,6 +316,8 @@ section[id] { scroll-margin-top: 5rem; }
   --wash-ink: var(--ochre);
   /* 24% wash, mixed into the ink rather than applied as opacity: the wash
      sits behind the glyphs and the text stays ivory. */
+  --wash-at: rgba(160, 150, 120, .24);
+  --wash-edge: rgba(160, 150, 120, .13);
   --wash-at: color-mix(in srgb, var(--wash-ink) 24%, transparent);
   --wash-edge: color-mix(in srgb, var(--wash-ink) 13%, transparent);
   background-image: linear-gradient(
@@ -449,7 +453,6 @@ html.js .note.open {
   font-weight: 500;
   letter-spacing: .01em;
 }
-.portrait.lg { width: 34px; height: 34px; font-size: .86rem; }
 .portrait.sm { width: 20px; height: 20px; font-size: .58rem; }
 
 /* A voice note draws a thin waveform in the author's ink and plays in
@@ -472,13 +475,6 @@ html.js .note.open {
 }
 .waveform.drawing i { animation: draw-bar var(--settle) var(--ease) backwards; }
 @keyframes draw-bar { from { transform: scaleY(.08); } to { transform: scaleY(1); } }
-
-.transcript {
-  font-family: var(--sans);
-  font-size: .92rem;
-  color: var(--muted);
-  line-height: 1.5;
-}
 
 /* ------------------------------------------------- the presence form (§4.2) */
 
@@ -524,9 +520,6 @@ html.js .presence-form.here { transform: translateX(0); opacity: 1; }
 }
 /* Following: a thin ring in their ink, around their face. */
 .lozenge.followed .portrait { box-shadow: 0 0 0 1.6px var(--ring-ink, var(--indigo)); }
-
-/* Idle: dimmed by about 40%, the edge softened — here, but still. */
-.lozenge.idle { opacity: .6; }
 
 /* Reading quietly: a small closed shape at the edge, so you never forget
    you're invisible. */
@@ -582,14 +575,11 @@ html.js .settle-words .w {
 html.js .settle-words.arrived .w { opacity: 1; transform: none; }
 
 /* A hairline that draws itself as the section arrives. */
-html.js .draw-rule { transform: scaleX(0); transform-origin: left; transition: transform var(--open) var(--ease); }
-html.js .draw-rule.arrived { transform: scaleX(1); }
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   html.js .rise,
-  html.js .settle-words .w,
-  html.js .draw-rule { opacity: 1; transform: none; }
+  html.js .settle-words .w { opacity: 1; transform: none; }
   .gutter-mark.shown.unfound { animation: none; opacity: 1; }
 
   /* Nothing moves. §11: the fire holds a state, and morphs become
@@ -729,7 +719,6 @@ html:not(.js) .ember canvas {
   border-radius: 14px;
   transition: border-color var(--settle) var(--ease), background var(--settle) var(--ease);
 }
-.state.current { border-color: var(--rule); background: rgba(29, 26, 19, .5); }
 .state p { font-family: var(--sans); font-size: .9rem; color: var(--muted); text-align: center; line-height: 1.45; }
 
 /* ------------------------------------------------------- the shelf (§4.8) */
@@ -820,6 +809,7 @@ canvas[data-ember="large"]  { width: 122.4px; height: 97.2px; }
   justify-content: space-between;
   gap: 1rem;
   padding: .72rem var(--gutter);
+  background: #0B0B0A;
   background: color-mix(in srgb, var(--ground) 94%, transparent);
   border-bottom: 1px solid var(--rule);
 }
@@ -854,6 +844,7 @@ html.js .masthead.shown { transform: none; opacity: 1; }
    form belongs. */
 
 .hero {
+  min-height: 100vh;
   min-height: 100svh;
   display: grid;
   grid-template-columns: minmax(20rem, 27rem) minmax(0, 1fr);
@@ -916,9 +907,6 @@ html.js .masthead.shown { transform: none; opacity: 1; }
 }
 .hero-surface::before { top: 0; background: linear-gradient(var(--ground), transparent); }
 .hero-surface::after { bottom: 0; background: linear-gradient(transparent, var(--ground)); }
-
-@media (max-width: 46rem) {
-  }
 
 @media (max-width: 60rem) {
   .hero {
@@ -1048,7 +1036,8 @@ html.js .masthead.shown { transform: none; opacity: 1; }
 <section class="hero" aria-labelledby="hero-title">
   <div class="hero-brand">
     <h1 id="hero-title" style="margin:0">
-      <span class="hero-wordmark"><img src="/wordmark.png" alt="Ribbon." width="4096" height="1024" decoding="async"></span>
+      <span class="visually-hidden">Ribbon.</span>
+      <span class="hero-wordmark"><img src="/wordmark.png" alt="" width="4096" height="1024" decoding="async"></span>
     </h1>
     <p class="hero-tagline">Read it together.</p>
     <p class="hero-say">
@@ -1173,7 +1162,7 @@ html.js .masthead.shown { transform: none; opacity: 1; }
 
             <aside class="presence-form here" id="demo-form" style="top:3.2rem">
               <div class="lozenge" id="demo-lozenge" role="img" aria-label="Ruth is reading." style="--ring-ink: var(--indigo)">
-                <span class="portrait" id="demo-portrait" style="--portrait-ink: var(--indigo)" aria-hidden="true">R</span>
+                <span class="portrait" style="--portrait-ink: var(--indigo)" aria-hidden="true">R</span>
               </div>
             </aside>
             <div class="follow-thread" id="demo-thread"></div>
@@ -1207,7 +1196,7 @@ html.js .masthead.shown { transform: none; opacity: 1; }
     <div class="mechanic">
       <div class="mechanic-show rise">
         <div class="panel" id="notes-demo">
-          <div class="surface" id="notes-surface" style="padding:1.9rem 2rem 2rem 3.1rem;background:var(--surface);font-size:1.06rem">
+          <div class="surface" style="padding:1.9rem 2rem 2rem 3.1rem;background:var(--surface);font-size:1.06rem">
             <p class="running-head">Philippians 4</p>
             <p class="m verse" data-verse="6"><sup class="v">6</sup>Be anxious for nothing, but in everything, by prayer and petition, with thanksgiving, present your requests to God.</p>
             <p class="m verse" id="notes-verse" data-verse="7" style="margin-top:.75em"><span class="gutter-mark written" id="notes-mark" style="--mark-ink: var(--moss)" aria-hidden="true"></span><sup class="v">7</sup><span class="wash" id="notes-wash" style="--wash-ink: var(--moss)">And the peace of God, which surpasses all understanding, will guard your hearts and your minds in Christ Jesus.</span></p>
@@ -1351,22 +1340,22 @@ html.js .masthead.shown { transform: none; opacity: 1; }
 
       <div class="states rise" style="margin-top:4rem">
         <div class="state">
-          <div class="fire-frame" style="height:100px;max-width:210px"><canvas class="fire-canvas" data-fire="catching" data-scale="small" data-coal="0.15" role="img" aria-label="The fire is catching."></canvas></div>
+          <div class="fire-frame" style="height:100px;max-width:210px"><canvas class="fire-canvas" data-fire="catching" data-coal="0.15" role="img" aria-label="The fire is catching."></canvas></div>
           <p class="state-line">catching</p>
           <p>Just started, or just restarted after a long quiet.</p>
         </div>
         <div class="state">
-          <div class="fire-frame" style="height:100px;max-width:210px"><canvas class="fire-canvas" data-fire="burning" data-scale="small" data-coal="0.4" role="img" aria-label="The fire is burning."></canvas></div>
+          <div class="fire-frame" style="height:100px;max-width:210px"><canvas class="fire-canvas" data-fire="burning" data-coal="0.4" role="img" aria-label="The fire is burning."></canvas></div>
           <p class="state-line">burning</p>
           <p>Someone has been reading.</p>
         </div>
         <div class="state">
-          <div class="fire-frame" style="height:100px;max-width:210px"><canvas class="fire-canvas" data-fire="steady" data-scale="small" data-coal="0.7" role="img" aria-label="The fire is steady."></canvas></div>
+          <div class="fire-frame" style="height:100px;max-width:210px"><canvas class="fire-canvas" data-fire="steady" data-coal="0.7" role="img" aria-label="The fire is steady."></canvas></div>
           <p class="state-line">steady</p>
           <p>You have both been reading. The only thing overlap changes is the mood of the fire.</p>
         </div>
         <div class="state">
-          <div class="fire-frame" style="height:100px;max-width:210px"><canvas class="fire-canvas" data-fire="banked" data-scale="small" data-coal="0.55" role="img" aria-label="The fire is banked."></canvas></div>
+          <div class="fire-frame" style="height:100px;max-width:210px"><canvas class="fire-canvas" data-fire="banked" data-coal="0.55" role="img" aria-label="The fire is banked."></canvas></div>
           <p class="state-line">banked</p>
           <p>A quiet day, marked on purpose. Covered and kept low, still alive.</p>
         </div>
@@ -1406,7 +1395,7 @@ html.js .masthead.shown { transform: none; opacity: 1; }
       </div>
     </div>
 
-    <div class="shelf rise" id="shelf-row" role="group" aria-label="A shelf of embers, one for each book finished">
+    <div class="shelf rise" role="group" aria-label="A shelf of embers, one for each book finished">
       <div class="ember"><canvas data-ember="small"  role="img" aria-label="An ember: Philemon."></canvas><p class="sc">Philemon</p></div>
       <div class="ember"><canvas data-ember="medium" role="img" aria-label="An ember: Ruth."></canvas><p class="sc">Ruth</p></div>
       <div class="ember"><canvas data-ember="large"  role="img" aria-label="An ember: Psalms."></canvas><p class="sc">Psalms</p></div>
@@ -1441,7 +1430,7 @@ html.js .masthead.shown { transform: none; opacity: 1; }
             </div>
             <div class="room-fire">
               <div class="fire-frame medium" style="width:100%">
-                <canvas class="fire-canvas" data-fire="steady" data-scale="medium" data-coal="0.62" role="img" aria-label="The fire is steady."></canvas>
+                <canvas class="fire-canvas" data-fire="steady" data-coal="0.62" role="img" aria-label="The fire is steady."></canvas>
               </div>
               <p class="room-book">Mark</p>
               <p class="state-line">steady</p>
@@ -1687,6 +1676,7 @@ html:not(.js) .fire-pin { position: static; min-height: 0; padding-block: 3rem; 
 .fire-pin {
   position: sticky;
   top: 0;
+  min-height: 100vh;
   min-height: 100svh;
   display: grid;
   align-items: center;
@@ -2038,7 +2028,9 @@ html.js .fire-lines p.on { opacity: 1; }
     const now = ms / 1000;
     let want = false;
     for (const item of live) {
-      if (reduce.matches) {
+      /* A glyph is drawn at a fixed instant and a reduced-motion fire holds
+         its state: both are painted when they change size and never again. */
+      if (item.kind === "glyph" || reduce.matches) {
         if (item.dirty) { measure(item); paint(item, item.seed); }
         continue;
       }
@@ -2120,7 +2112,7 @@ html.js .fire-lines p.on { opacity: 1; }
     }
   }, { rootMargin: "0px 0px -12% 0px", threshold: 0.08 });
 
-  document.querySelectorAll(".rise, .settle-words, .draw-rule").forEach((el) => arrive.observe(el));
+  document.querySelectorAll(".rise, .settle-words").forEach((el) => arrive.observe(el));
 
   /* =============================================================== chrome */
 
@@ -2161,8 +2153,10 @@ html.js .fire-lines p.on { opacity: 1; }
     transcript.querySelector(".tt-text").hidden = !open;
     transcript.setAttribute("aria-expanded", String(open));
   }
+  let transcriptTouched = false;
   if (transcript) {
     transcript.addEventListener("click", () => {
+      transcriptTouched = true;
       showTranscript(transcript.getAttribute("aria-expanded") !== "true");
     });
   }
@@ -2179,13 +2173,12 @@ html.js .fire-lines p.on { opacity: 1; }
     }
   }
 
-  const beat = reduce.matches ? 0 : 1;
-  setTimeout(() => heroBits.presence && heroBits.presence.classList.add("here"), 420 * beat);
-  setTimeout(() => heroBits.mark && heroBits.mark.classList.add("shown", "unfound"), 1300 * beat);
-  setTimeout(heroOpenNote, 3000 * beat);
+  setTimeout(() => heroBits.presence && heroBits.presence.classList.add("here"), 420);
+  setTimeout(() => heroBits.mark && heroBits.mark.classList.add("shown", "unfound"), 1300);
+  setTimeout(heroOpenNote, 3000);
   /* And then, unasked once, the transcript — because it is the half of a
      voice note that anyone can read. */
-  setTimeout(() => showTranscript(true), 4600 * beat);
+  setTimeout(() => { if (!transcriptTouched) showTranscript(true); }, 4600);
   if (heroBits.mark) heroBits.mark.addEventListener("click", heroOpenNote);
 
   /* ==================================================== presence, the five
@@ -2194,7 +2187,6 @@ html.js .fire-lines p.on { opacity: 1; }
   const demo = {
     form: document.getElementById("demo-form"),
     lozenge: document.getElementById("demo-lozenge"),
-    portrait: document.getElementById("demo-portrait"),
     thread: document.getElementById("demo-thread"),
     note: document.getElementById("demo-note"),
     chips: Array.from(document.querySelectorAll("#presence-demo .chip")),
@@ -2235,6 +2227,7 @@ html.js .fire-lines p.on { opacity: 1; }
   }
 
   let presenceTimer = null;
+  let inView = false;
   const PRESENCE_ORDER = ["one", "several", "following", "quiet", "absent"];
   let presenceAt = 0;
   function cyclePresence() {
@@ -2246,6 +2239,7 @@ html.js .fire-lines p.on { opacity: 1; }
   }
   let tookOver = false;
   const takeOver = () => { tookOver = true; stopCycling(); };
+  reduce.addEventListener("change", () => syncCycling());
   demo.chips.forEach((chip) => {
     chip.addEventListener("click", () => {
       takeOver();
@@ -2255,12 +2249,17 @@ html.js .fire-lines p.on { opacity: 1; }
     chip.addEventListener("pointerenter", takeOver);
   });
 
-  if (demo.form && !reduce.matches) {
+  /* It cycles only while it is on screen, nobody has taken it over, and the
+     reader has not asked for less motion — any of those changing stops it. */
+  function syncCycling() {
+    if (inView && !tookOver && !reduce.matches) {
+      if (!presenceTimer) presenceTimer = setInterval(cyclePresence, 3400);
+    } else stopCycling();
+  }
+  if (demo.form) {
     const watch = new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting) {
-        /* Once someone has driven it themselves, it stays theirs. */
-        if (!presenceTimer && !tookOver) presenceTimer = setInterval(cyclePresence, 3400);
-      } else stopCycling();
+      inView = entries[0].isIntersecting;
+      syncCycling();
     }, { threshold: 0.4 });
     watch.observe(document.getElementById("presence-demo"));
   }
@@ -2291,7 +2290,7 @@ html.js .fire-lines p.on { opacity: 1; }
     notes.toolbar.classList.remove("risen");
     notes.step.textContent = "Hold a verse.";
 
-    const at = (ms, fn) => noteTimers.push(setTimeout(fn, reduce.matches ? 0 : ms));
+    const at = (ms, fn) => noteTimers.push(setTimeout(fn, ms));
     at(500, () => {
       notes.verse.classList.add("lifted");
       notes.step.textContent = "The verse lifts. You’re holding it.";
@@ -2367,7 +2366,6 @@ html.js .fire-lines p.on { opacity: 1; }
       /* The coal bed deepens as the room keeps reading — the one thing that
          may grow. It never resets, and it never becomes a number. */
       item.coal = 0.12 + 0.72 * p;
-      item.dirty = true;
 
       let state = "steady";
       for (const [edge, name] of STOPS) { if (p < edge) { state = name; break; } }
