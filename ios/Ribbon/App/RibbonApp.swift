@@ -202,10 +202,12 @@ struct RootView: View {
             }
             .sheet(item: pendingInviteBinding) { pending in
                 // A tapped invite while already onboarded: the join flow
-                // rides over the room (S16).
+                // rides over the room (S16). id keeps a second link from
+                // inheriting the first one's half-finished state.
                 JoinFlow(token: pending.token, onDone: {
                     pendingInviteBinding.wrappedValue = nil
                 })
+                .id(pending.token)
                 .presentationBackground(Palette.ground)
             }
         } else {

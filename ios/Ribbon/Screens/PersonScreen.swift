@@ -127,15 +127,17 @@ struct InkPickerSheet: View {
                         model.pickInk(ink, in: room)
                         dismiss()
                     } label: {
+                        // 30 pt drawn, ~44 pt tappable — widening the
+                        // frames instead would overflow a 375 pt phone
+                        // (8 × 44 + gaps).
                         Circle()
                             .fill(ink.color.opacity(isTaken ? 0.2 : 1))
                             .frame(width: 30, height: 30)
-                            .frame(width: 44, height: 44)
-                            .contentShape(Rectangle())
+                            .contentShape(Rectangle().inset(by: -7))
                             .overlay {
                                 if ink == mine {
                                     Circle().strokeBorder(Palette.text.opacity(0.8), lineWidth: 1.6)
-                                        .padding(3)
+                                        .padding(-4)
                                 }
                             }
                     }

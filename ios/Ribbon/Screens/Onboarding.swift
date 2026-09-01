@@ -50,8 +50,13 @@ struct OnboardingFlow: View {
                     token: token,
                     onDone: onDone,
                     onStartInstead: {
+                        // Declining the join forgets it — otherwise the
+                        // pending token re-presents the join over the
+                        // room they start instead.
+                        model.pendingInvite = nil
                         withAnimation(RibbonMotion.settle) { step = .name }
                     })
+                .id(token)
                 .transition(.opacity)
             }
         }

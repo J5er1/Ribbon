@@ -135,16 +135,19 @@ final class AppModel {
         }
         let person = Person(id: personID, name: name, portraitPath: portraitPath, translation: .bsb)
         state.me = person
-        if startRoom {
+        persist()
+        if isSignedIn {
+            // Reinstall: the account's rooms and profile come back —
+            // before any fresh room is minted, so an account that already
+            // has rooms doesn't gain an empty stray one.
+            await reconcileOwnProfile()
+            await refreshFromRemote()
+            await pushLocalGraph()
+        }
+        if startRoom, currentRoom == nil {
             createRoom(named: nil)
         }
         persist()
-        if isSignedIn {
-            // Reinstall: the account's rooms and profile come back.
-            await reconcileOwnProfile()
-            await pushLocalGraph()
-            await refreshFromRemote()
-        }
     }
 
     @discardableResult
@@ -850,7 +853,11 @@ final class AppModel {
         Task {
             guard let data = await remote.fetchPortrait(personID: personID) else { return }
             if let path = try? await store.writePortrait(data, personID: personID) {
-                state.people[personID]?.portraitPath = path
+                if state.me?.id == personID {
+                    state.me?.portraitPath = path
+                } else {
+                    state.people[personID]?.portraitPath = path
+                }
                 if let image = UIImage(data: data) { portraits[personID] = image }
                 persist()
             }

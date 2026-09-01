@@ -34,6 +34,7 @@ struct JoinFlow: View {
     @State private var email = ""
     @State private var code = ""
     @State private var errorLine: String?
+    @State private var sendingCode = false
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -173,6 +174,10 @@ struct JoinFlow: View {
             WayInButton(title: Copy.sendTheCode) { sendCode() }
                 .padding(.horizontal, 80)
                 .opacity(email.contains("@") ? 1 : 0.3)
+            if let onStartInstead {
+                // Never a step without a way out.
+                QuietControl(title: "Start a room instead", action: onStartInstead)
+            }
         }
         .onAppear { focused = true }
     }
@@ -201,6 +206,9 @@ struct JoinFlow: View {
                 .padding(.horizontal, 80)
                 .opacity(code.trimmingCharacters(in: .whitespaces).isEmpty ? 0.3 : 1)
             QuietControl(title: "Send a new code") { sendCode() }
+            if let onStartInstead {
+                QuietControl(title: "Start a room instead", action: onStartInstead)
+            }
         }
         .onAppear { focused = true }
     }
@@ -257,9 +265,11 @@ struct JoinFlow: View {
 
     private func sendCode() {
         let address = email.trimmingCharacters(in: .whitespaces)
-        guard address.contains("@") else { return }
+        guard address.contains("@"), !sendingCode else { return }
+        sendingCode = true
         errorLine = nil
         Task {
+            defer { sendingCode = false }
             do {
                 try await model.sendSignInCode(to: address)
                 code = ""

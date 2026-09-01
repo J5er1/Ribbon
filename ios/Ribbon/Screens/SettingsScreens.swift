@@ -212,6 +212,7 @@ private struct AccountSection: View {
                     .keyboardType(.emailAddress)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
+                    QuietControl(title: "Never mind") { phase = .idle; errorLine = nil }
                 case .code:
                     Text(Copy.codeOnItsWay)
                         .font(RibbonType.ui(14))
@@ -221,6 +222,8 @@ private struct AccountSection: View {
                     }
                     .keyboardType(.numberPad)
                     .textContentType(.oneTimeCode)
+                    QuietControl(title: "Send a new code") { sendCode() }
+                    QuietControl(title: "Never mind") { phase = .idle; errorLine = nil }
                 }
                 if let errorLine {
                     Text(errorLine)
