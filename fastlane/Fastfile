@@ -1,5 +1,10 @@
 default_platform(:ios)
 
+# Paths are relative to the repo root: fastlane is invoked from there
+# (`bundle exec fastlane beta`), not from inside fastlane/.
+XCODEPROJ = "ios/Ribbon.xcodeproj"
+SCHEME = "Ribbon"
+
 platform :ios do
   desc "Build the app and upload a new build to TestFlight"
   lane :beta do
@@ -18,16 +23,27 @@ platform :ios do
     )
 
     latest_build = latest_testflight_build_number(api_key: api_key)
-    increment_build_number(build_number: latest_build + 1)
+    increment_build_number(
+      xcodeproj: XCODEPROJ,
+      build_number: latest_build + 1
+    )
+
+    profile_specifier = "match AppStore #{ENV['APP_IDENTIFIER'] || 'bible.ribbon.app'}"
 
     build_app(
-      scheme: "Ribbon",
+      project: XCODEPROJ,
+      scheme: SCHEME,
       export_method: "app-store",
       export_options: {
         provisioningProfiles: {
-          (ENV["APP_IDENTIFIER"] || "bible.ribbon.app") => "match AppStore #{ENV['APP_IDENTIFIER'] || 'bible.ribbon.app'}"
+          (ENV["APP_IDENTIFIER"] || "bible.ribbon.app") => profile_specifier
         }
-      }
+      },
+      xcargs: [
+        "CODE_SIGN_STYLE=Manual",
+        "DEVELOPMENT_TEAM=#{ENV['TEAM_ID']}",
+        "PROVISIONING_PROFILE_SPECIFIER='#{profile_specifier}'"
+      ].join(" ")
     )
 
     upload_to_testflight(
