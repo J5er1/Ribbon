@@ -1,0 +1,217 @@
+/* The room, on the web (§12.3). Dark is the hero condition: true black
+   with a breath of warmth, ivory text, chartreuse only as chrome. The
+   reading page goes furthest toward the printed book — a single column,
+   ~68 characters, real margins, the running head as a book sets one. */
+
+:root {
+  --ground: #0B0B0A;
+  --surface: #14120D;
+  --text: #F3F0E6;
+  --muted: #8E8271;
+  --rule: #292118;
+  --chartreuse: #D6E45C;
+  --crimson: #C9584E;
+}
+
+* { box-sizing: border-box; }
+
+html { background: var(--ground); }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--text);
+  background: var(--ground) url("/grain.png") repeat;
+  background-blend-mode: overlay;
+  font-family: "Alegreya Sans", system-ui, sans-serif;
+  font-size: 17px;
+  line-height: 1.5;
+}
+
+a { color: inherit; text-decoration: none; }
+a:focus-visible {
+  outline: 1px solid var(--chartreuse);
+  outline-offset: 3px;
+}
+
+/* True small caps, the way a book sets a running head. */
+.sc {
+  font-family: "Alegreya Sans SC", "Alegreya Sans", sans-serif;
+  font-size: 0.8rem;
+  letter-spacing: 0.09em;
+  color: var(--muted);
+}
+
+.display {
+  font-family: Literata, Georgia, serif;
+  font-weight: 400;
+  font-size: 2rem;
+  margin: 0.4em 0 0.8em;
+}
+
+/* ------------------------------------------------------------- home */
+
+.home-main {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.4rem;
+  padding: 2rem;
+  text-align: center;
+}
+
+.wordmark { width: min(320px, 70vw); height: auto; }
+
+.tagline {
+  font-family: Literata, Georgia, serif;
+  font-size: 1.25rem;
+  margin: 0;
+}
+
+.way-in {
+  display: inline-block;
+  margin-top: 1.4rem;
+  padding: 0.75rem 1.8rem;
+  border-radius: 999px;
+  background: var(--chartreuse);
+  color: var(--ground);
+  font-weight: 500;
+}
+
+/* ---------------------------------------------------------- chooser */
+
+.chooser-main {
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: 3rem 1.5rem 5rem;
+}
+
+.crumb { display: block; margin-bottom: 2.4rem; }
+
+.chooser-main h2 { margin: 2.2rem 0 0.7rem; font-weight: 400; }
+
+.books {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-family: Literata, Georgia, serif;
+  font-size: 1.1rem;
+}
+.books li { padding: 0.32rem 0; }
+.books.starters { display: flex; flex-wrap: wrap; gap: 0.4rem 1.6rem; }
+
+.chapters {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.chapters a {
+  display: inline-block;
+  min-width: 2.4rem;
+  padding: 0.45rem 0.5rem;
+  text-align: center;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  font-family: "Alegreya Sans SC", sans-serif;
+}
+
+/* ---------------------------------------------------------- reading */
+
+.running-head {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 0.85rem 1.5rem;
+  text-align: center;
+  opacity: 0.75;
+  background: linear-gradient(var(--ground) 60%, transparent);
+  pointer-events: none;
+}
+
+.measure {
+  max-width: 68ch;
+  margin: 0 auto;
+  padding: 5.5rem 1.5rem 3rem;
+  font-family: Literata, Georgia, serif;
+  font-size: 1.14rem;
+  line-height: 1.72;
+}
+
+.measure p { margin: 0; }
+.measure p.p { text-indent: 1.1em; }
+.measure p.p:first-of-type { text-indent: 0; }
+.measure p.m { margin-top: 0.75em; }
+.measure p.q1 { padding-left: 1.6em; text-indent: -1em; }
+.measure p.q2 { padding-left: 2.6em; text-indent: -1em; }
+.measure p.d {
+  color: var(--muted);
+  font-size: 0.95em;
+  font-style: italic;
+  margin: 0.6em 0;
+}
+.measure .stanza { height: 0.8em; }
+
+sup.v {
+  font-family: "Alegreya Sans SC", sans-serif;
+  font-size: 0.62em;
+  opacity: 0.45;
+  margin-right: 0.18em;
+  scroll-margin-top: 4.5rem;
+}
+
+.reading-red .wj { color: var(--crimson); }
+
+.passage-end {
+  margin-top: 3.2rem;
+  padding-top: 2.2rem;
+  border-top: 1px solid var(--rule);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.3rem;
+  font-family: "Alegreya Sans", sans-serif;
+}
+.continue { font-size: 1.05rem; font-weight: 500; }
+.quiet { opacity: 0.8; }
+
+.page-foot {
+  display: flex;
+  justify-content: center;
+  gap: 2.2rem;
+  padding: 1.4rem 1rem 2.4rem;
+}
+
+/* ----------------------------------------------------------- invite */
+
+.invite-main {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.1rem;
+  padding: 2rem;
+  text-align: center;
+}
+
+.invite-line {
+  font-family: Literata, Georgia, serif;
+  font-size: 1.6rem;
+  margin: 0;
+  max-width: 22ch;
+}
+
+.invite-sub { margin: 0; }
+
+.quiet-line {
+  color: var(--muted);
+  font-size: 0.95rem;
+  max-width: 34ch;
+  margin-top: 2rem;
+}
