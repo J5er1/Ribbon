@@ -1,0 +1,17 @@
+# Xcode
+ios/Ribbon.xcodeproj/xcuserdata/
+ios/Ribbon.xcodeproj/project.xcworkspace/xcuserdata/
+ios/Ribbon.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
+DerivedData/
+*.xcuserstate
+
+# Swift Package Manager
+core/.build/
+core/.swiftpm/
+
+# Python
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store
