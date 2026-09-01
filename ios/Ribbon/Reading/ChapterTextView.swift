@@ -118,7 +118,7 @@ struct ChapterTextView: UIViewRepresentable {
         let storage = NSTextStorage()
         let layoutManager = InkLayoutManager()
         storage.addLayoutManager(layoutManager)
-        let container = NSTextContainer(size: CGSize(width: 0, height: .greatestFiniteMagnitude))
+        let container = NSTextContainer(size: CGSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
         container.lineFragmentPadding = 0
         // The container must follow the view's width or nothing wraps —
         // TextKit 1 treats a fixed 0 as unbounded.
