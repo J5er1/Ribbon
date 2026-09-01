@@ -58,10 +58,10 @@ final class ScriptureModelTests: XCTestCase {
         guard FileManager.default.fileExists(atPath: root.path) else {
             throw XCTSkip("converted Scripture not present")
         }
-        for translation in TranslationID.allCases {
+        for translation in TranslationRegistry.bundled {
             for book in Bible.books {
                 let url = root
-                    .appendingPathComponent(translation.rawValue)
+                    .appendingPathComponent(translation.id.rawValue)
                     .appendingPathComponent("\(book.id).json")
                 let data = try Data(contentsOf: url)
                 let text = try JSONDecoder().decode(ScriptureBookText.self, from: data)

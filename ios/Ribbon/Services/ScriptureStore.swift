@@ -65,10 +65,14 @@ final class ScriptureStore: @unchecked Sendable {
             hits.append(.book(book.id))
         }
 
-        // Text, across downloaded books (all of them, at launch).
+        // Text, across the books on this phone. Licensed translations keep
+        // only the open book locally, so their text search runs over the
+        // bundled Berean text instead — the hits are addresses, and an
+        // address opens in the reader's own translation.
         let needle = trimmed.lowercased()
+        let textTranslation = TranslationRegistry.isBundled(translation) ? translation : .bsb
         outer: for book in Bible.books {
-            guard let text = self.book(book.id, translation: translation) else { continue }
+            guard let text = self.book(book.id, translation: textTranslation) else { continue }
             for chapter in text.chapters {
                 var verse = 0
                 for block in chapter.blocks {

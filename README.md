@@ -65,6 +65,17 @@ comments in the migration. The app is local-first and fully usable with no
 account; remote sync turns on in `SupabaseConfig` once the sign-in thread
 ships.
 
+## Licensed translations
+
+NKJV and two undecided versions will arrive via API.Bible. The plumbing is
+in place — translation registry in core, a tested converter for API.Bible
+chapter JSON, the `bible-proxy` edge function holding the key server-side,
+and a stream-and-cache-the-open-book policy on device (their license, not
+our design; the bundled public-domain translations stay whole and
+offline). It lights up when the API.Bible account + NKJV license exist:
+set `API_BIBLE_KEY` as a function secret and fill in the edition's
+bibleID in `TranslationRegistry`. Details in docs/deviations.md.
+
 ## What's built, what's next
 
 Phase one (§15) is in place end to end for a room of one on-device: the

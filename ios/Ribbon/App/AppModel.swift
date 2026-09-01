@@ -438,6 +438,14 @@ final class AppModel {
         persist()
     }
 
+    /// What the translation picker offers: the bundled two always, and
+    /// each licensed translation once its edition is configured on the
+    /// proxy (§16.8 — NKJV first, two more undecided).
+    var availableTranslations: [Translation] {
+        TranslationRegistry.bundled
+            + TranslationRegistry.licensed.filter { $0.isConfigured && SupabaseConfig.remoteEnabled }
+    }
+
     func setTranslation(_ translation: TranslationID) {
         state.me?.translation = translation
         persist()

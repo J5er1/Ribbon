@@ -99,6 +99,39 @@ reasoning.
     StoreKit (S22 shows the model's promise only), and the web
     invite/accept + web reading (S16/S26).
 
+## Licensed translations (decided: API.Bible)
+
+Open question §16.8 is now part-decided: **NKJV plus two undecided
+versions will come through API.Bible.** The architecture is in place and
+gated off until the account and licenses exist:
+
+- `TranslationRegistry` (core) holds bundled and licensed translations;
+  the database stores a raw key and never enumerates, so adding a
+  translation is a registry edit, not a migration.
+- `APIBibleContent` (core, tested) converts API.Bible's
+  `content-type=json` chapters into the same page model the bundled
+  translations use — the reading surface never knows where text came from.
+- The `bible-proxy` Supabase Edge Function (deployed) holds the API key as
+  a server secret; the app never carries it. It answers 503 until
+  `API_BIBLE_KEY` is set, which the app reads as "not offered yet," so
+  NKJV never appears as a dead row in S20.
+- **The licensing tension, stated plainly:** "Scripture is never locked"
+  (§2.5) and first-class offline (§6.10) hold *fully* for the bundled
+  public-domain translations. Licensed text streams, and the device keeps
+  only the book being read (`RemoteScripture.swift` enforces the prune) —
+  their license, not our design. A reader who needs guaranteed-offline
+  Scripture always has BSB and WEB, whole.
+- Scripture *text* search for a licensed translation runs over the bundled
+  Berean text (hits are addresses; an address opens in the reader's own
+  translation). NKJV shares KJV versification; the handful of
+  verse-presence differences behave exactly like the BSB/WEB ones already
+  do.
+
+Still needed to light it up: an API.Bible account, the NKJV license
+approval on it (Thomas Nelson reviews these), the two remaining version
+choices, then `supabase secrets set API_BIBLE_KEY=…` and the editions'
+bibleIDs in `TranslationRegistry`.
+
 ## Small product calls made here
 
 - **"Begin Mark" vs "Continue in Mark"**: the way-in reads Begin until you

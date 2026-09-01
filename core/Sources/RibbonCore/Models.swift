@@ -6,27 +6,7 @@ import Foundation
 //   2. Position is per-person, per-reading — there is no shared "where we are."
 //   3. Notes belong to the reading, not the person — they were left for you.
 
-/// The translations available at launch. Translation is a personal setting,
-/// not a room setting (§2.6). Both launch translations share versification.
-public enum TranslationID: String, Codable, CaseIterable, Hashable, Sendable {
-    case bsb
-    case web
-
-    /// Names as they appear in S20: "Berean Standard", "World English".
-    public var displayName: String {
-        switch self {
-        case .bsb: return "Berean Standard"
-        case .web: return "World English"
-        }
-    }
-
-    public var fullName: String {
-        switch self {
-        case .bsb: return "Berean Standard Bible"
-        case .web: return "World English Bible"
-        }
-    }
-}
+// TranslationID and the translation registry live in Translations.swift.
 
 /// An account. Portrait is close to required — presence is faces. Skipping
 /// gives a monogram in their ink.

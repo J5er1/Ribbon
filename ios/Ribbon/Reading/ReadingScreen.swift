@@ -58,6 +58,12 @@ struct ReadingScreen: View {
     private var bookText: ScriptureBookText? {
         model.scripture.book(reading.bookID, translation: translation)
     }
+    /// Chapters of a licensed translation, as they stream in (§16.8).
+    @State private var remoteChapters: [Int: ScriptureChapter] = [:]
+
+    private func chapterContent(_ n: Int) -> ScriptureChapter? {
+        bookText?.chapter(n) ?? remoteChapters[n]
+    }
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -128,7 +134,7 @@ struct ReadingScreen: View {
 
     @ViewBuilder
     private func chapterSection(_ n: Int) -> some View {
-        if let chapter = bookText?.chapter(n) {
+        if let chapter = chapterContent(n) {
             ZStack(alignment: .topLeading) {
                 ChapterTextView(
                     chapter: chapter,
@@ -160,6 +166,25 @@ struct ReadingScreen: View {
                 trackReading(chapter: n, frame: frame)
             }
             .padding(.bottom, 8)
+        } else if let licensed = TranslationRegistry.translation(for: translation), !licensed.isBundled {
+            // A licensed translation's chapter, genuinely fetching (S02):
+            // the running head appears and the body fades in — no
+            // skeleton lines, which read as fake text.
+            VStack(alignment: .leading) {
+                SmallCaps(
+                    "\(book?.name ?? reading.bookID) \(n)", size: 14,
+                    color: Palette.text.opacity(0.4))
+                Spacer().frame(height: 320)
+            }
+            .padding(.leading, 36)
+            .task {
+                let address = VerseAddress(bookID: reading.bookID, chapter: n, verse: 1)
+                if let chapter = await model.scripture.ensureRemoteChapter(address, translation: licensed) {
+                    withAnimation(RibbonMotion.arrive) {
+                        remoteChapters[n] = chapter
+                    }
+                }
+            }
         } else {
             // Text is local or it isn't shown (S02): with bundled
             // translations this is unreachable, but the state exists.

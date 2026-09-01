@@ -99,16 +99,19 @@ struct TextSettingsScreen: View {
             VStack(alignment: .leading, spacing: 28) {
                 VStack(alignment: .leading, spacing: 12) {
                     SmallCaps(Copy.translation, size: 12)
-                    ForEach(TranslationID.allCases, id: \.self) { translation in
+                    // Bundled translations always; licensed ones (NKJV
+                    // first) appear the day their edition is configured on
+                    // the proxy — never as a dead row.
+                    ForEach(model.availableTranslations) { translation in
                         Button {
-                            model.setTranslation(translation)
+                            model.setTranslation(translation.id)
                         } label: {
                             HStack {
                                 Text(translation.displayName)
                                     .font(RibbonType.ui(16))
                                     .foregroundStyle(Palette.text)
                                 Spacer()
-                                if model.me?.translation == translation {
+                                if model.me?.translation == translation.id {
                                     Circle().fill(Palette.chartreuse).frame(width: 6, height: 6)
                                 }
                             }
@@ -284,13 +287,20 @@ struct DownloadsScreen: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 SmallCaps(Copy.onThisPhone, size: 12)
-                ForEach(TranslationID.allCases, id: \.self) { translation in
+                ForEach(model.availableTranslations) { translation in
                     HStack {
                         Text(translation.fullName)
                             .font(RibbonType.ui(16))
                             .foregroundStyle(Palette.text)
                         Spacer()
-                        SmallCaps("\(bundledMegabytes(translation)) MB", size: 12)
+                        if translation.isBundled {
+                            SmallCaps("\(bundledMegabytes(translation.id)) MB", size: 12)
+                        } else {
+                            // Licensed text streams; the book being read
+                            // stays on the phone, the rest doesn't — its
+                            // license, not our design.
+                            SmallCaps("streams", size: 12)
+                        }
                     }
                 }
                 Text(Copy.voiceNotesPolicy)
