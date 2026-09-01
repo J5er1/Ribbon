@@ -265,14 +265,37 @@ final class RemoteSync {
         }
     }
 
+    /// The account's own profile row, if the account has one — the seam
+    /// where a fresh device learns it belongs to an older person.
+    func fetchOwnProfile() async throws -> ProfileRow? {
+        guard let userID else { return nil }
+        let rows: [ProfileRow] = try await withAuthRetry {
+            try await self.client.select(
+                [ProfileRow].self, from: "profiles",
+                query: [URLQueryItem(name: "id", value: "eq.\(userID.uuidString.lowercased())")])
+        }
+        return rows.first
+    }
+
     // MARK: - Plumbing
 
     /// Access tokens are short-lived; a 401 means refresh and retry once.
+    /// A refresh the server itself refuses (revoked or rotated-away
+    /// token) means this session is dead — clear it, so signed-out is a
+    /// state the interface can see and offer sign-in for, never a
+    /// permanent silent failure. A network failure clears nothing.
     private func withAuthRetry<T>(_ work: () async throws -> T) async throws -> T {
         do {
             return try await work()
         } catch SupabaseError.http(401, _) {
-            try await client.refresh()
+            do {
+                try await client.refresh()
+            } catch let error as SupabaseError {
+                if case .http(let code, _) = error, (400..<500).contains(code) {
+                    await signOut()
+                }
+                throw error
+            }
             if let refreshed = await client.currentSession {
                 SessionKeychain.save(refreshed)
                 userID = refreshed.user.id

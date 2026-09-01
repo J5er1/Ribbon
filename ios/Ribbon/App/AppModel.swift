@@ -123,7 +123,11 @@ final class AppModel {
             }
             return
         }
-        let personID = UUID()
+        // The Keychain outlives the app: after a reinstall the session is
+        // already signed in while local state is empty. The person must
+        // then be the account — a random id here would fail every RLS
+        // check and orphan the account's rooms.
+        let personID = remote?.userID ?? UUID()
         var portraitPath: String?
         if let portraitData {
             portraitPath = try? await store.writePortrait(portraitData, personID: personID)
@@ -135,6 +139,12 @@ final class AppModel {
             createRoom(named: nil)
         }
         persist()
+        if isSignedIn {
+            // Reinstall: the account's rooms and profile come back.
+            await reconcileOwnProfile()
+            await pushLocalGraph()
+            await refreshFromRemote()
+        }
     }
 
     @discardableResult
@@ -289,8 +299,10 @@ final class AppModel {
             lastPushedFuelAt = event.at
             let updated = state.readings[index]
             Task {
-                try? await remote.push(fuel: event, readingID: updated.id)
+                // The reading row first: a fuel event landing before its
+                // reading exists fails the foreign key and is lost.
                 try? await remote.push(reading: updated)
+                try? await remote.push(fuel: event, readingID: updated.id)
             }
         }
     }
@@ -577,8 +589,27 @@ final class AppModel {
         guard let remote else { throw SupabaseError.notSignedIn }
         let uid = try await remote.verify(email: email, code: code)
         adoptRemoteIdentity(uid)
+        await reconcileOwnProfile()
         await pushLocalGraph()
         await refreshFromRemote()
+    }
+
+    /// The account is the elder truth: signing in on a fresh device must
+    /// not upsert its just-typed defaults over the profile the room
+    /// already knows. When the account has a profile, its name,
+    /// translation and portrait win here; the push that follows then
+    /// carries the reconciled values.
+    private func reconcileOwnProfile() async {
+        guard let remote, let existing = try? await remote.fetchOwnProfile(),
+              let row = existing, var me = state.me
+        else { return }
+        me.name = row.name
+        me.translation = TranslationID(rawValue: row.translation)
+        state.me = me
+        if me.portraitPath == nil, row.portraitPath != nil {
+            fetchRemotePortrait(me.id)
+        }
+        persist()
     }
 
     func signOutRemote() async {
@@ -718,6 +749,17 @@ final class AppModel {
                     id: row.id, roomID: row.roomId, personID: row.personId,
                     ink: ink, joinedAt: row.joinedAt))
             }
+        }
+        // Departures propagate: a membership the backend no longer has is
+        // gone here too. Mine stays — leaving already removed it locally,
+        // and a pull racing my own join must not undo the join.
+        let pulledRooms = Set(graph.rooms.map(\.id))
+        state.memberships.removeAll { membership in
+            membership.personID != me.id
+                && pulledRooms.contains(membership.roomID)
+                && !graph.memberships.contains {
+                    $0.roomId == membership.roomID && $0.personId == membership.personID
+                }
         }
 
         for row in graph.profiles where row.id != me.id {

@@ -9,6 +9,9 @@ import RibbonCore
 @main
 struct RibbonApp: App {
     @State private var model: AppModel?
+    /// A URL that arrived before the model finished loading — the normal
+    /// case when tapping an invite link cold-starts the app (S16).
+    @State private var bufferedURL: URL?
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
@@ -26,17 +29,26 @@ struct RibbonApp: App {
             .preferredColorScheme(.dark)
             .task {
                 if model == nil {
-                    model = await AppModel.load()
+                    let loaded = await AppModel.load()
+                    if let bufferedURL {
+                        loaded.handleInviteURL(bufferedURL)
+                        self.bufferedURL = nil
+                    }
+                    model = loaded
                     // The room renders from local state instantly; the
                     // backend catches up behind it.
-                    await model?.refreshFromRemote()
+                    await loaded.refreshFromRemote()
                 }
             }
             // An invite link, tapped: readribbon.app/i/<token> via the
             // associated domain, ribbon://i/<token> as the plain-scheme
             // fallback (S16).
             .onOpenURL { url in
-                model?.handleInviteURL(url)
+                if let model {
+                    model.handleInviteURL(url)
+                } else {
+                    bufferedURL = url
+                }
             }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active, let model {
