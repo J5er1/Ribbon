@@ -496,14 +496,6 @@ html.js .presence-form.here { transform: translateX(0); opacity: 1; }
   border: 1px solid var(--rule);
 }
 
-.presence-form .with-you {
-  font-family: var(--caps);
-  font-size: .72rem;
-  letter-spacing: .07em;
-  color: var(--muted);
-  margin-right: 2.4rem;
-  white-space: nowrap;
-}
 
 /* A hairline chartreuse thread runs down the screen's right edge while you
    follow someone. Your scroll is theirs. */
@@ -781,23 +773,6 @@ html.js .masthead.shown { transform: none; opacity: 1; }
   .masthead nav .sc { display: none; }
 }
 
-/* The thread down the right edge — the app's own idiom for "your scroll is
-   being followed", borrowed here as the page's only progress indicator. A
-   hairline, chartreuse, chrome and nothing more. */
-.page-thread {
-  position: fixed;
-  top: 0;
-  right: 0;
-  width: 1px;
-  height: 100svh;
-  background: var(--accent);
-  opacity: .5;
-  transform: scaleY(0);
-  transform-origin: top;
-  z-index: 85;
-  pointer-events: none;
-}
-
 /* =================================================================== hero
 
    The hero is the reading surface itself, live, with a note unfurling —
@@ -870,8 +845,7 @@ html.js .masthead.shown { transform: none; opacity: 1; }
 .hero-surface::after { bottom: 0; background: linear-gradient(transparent, var(--ground)); }
 
 @media (max-width: 46rem) {
-  .presence-form .with-you { display: none; }
-}
+  }
 
 @media (max-width: 60rem) {
   .hero {
@@ -965,8 +939,6 @@ html.js .masthead.shown { transform: none; opacity: 1; }
 
 <a class="skip sc" href="#thesis">Skip to what Ribbon is</a>
 
-<div class="page-thread" id="page-thread" aria-hidden="true"></div>
-
 <header class="masthead" id="masthead">
   <a class="masthead-brand" href="#top">
     <svg class="wave" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
@@ -1024,7 +996,9 @@ html.js .masthead.shown { transform: none; opacity: 1; }
 
       <p class="m verse" data-verse="14"><sup class="v">14</sup>Again they wept aloud, and Orpah kissed her mother-in-law goodbye, but Ruth clung to her.</p>
       <p class="m verse" data-verse="15"><sup class="v">15</sup>“Look,” said Naomi, “your sister-in-law has gone back to her people and her gods; follow her back home.”</p>
-      <p class="m verse" data-verse="16"><sup class="v">16</sup>But Ruth replied:</p>
+      <p class="m verse" data-verse="16"><button class="gutter-mark voice" id="hero-mark" type="button"
+            style="--mark-ink: var(--teal)"
+            aria-label="Note from Jacob, Ruth 1:16, not yet found"></button><sup class="v">16</sup>But Ruth replied:</p>
       <p class="q1">“Do not urge me to leave you</p>
       <p class="q2">or to turn from following you.</p>
       <p class="q1">For wherever you go, I will go,</p>
@@ -1042,7 +1016,7 @@ html.js .masthead.shown { transform: none; opacity: 1; }
               <div class="waveform" style="--wave-ink: var(--teal)" aria-hidden="true">
                 <i style="--h:22"></i><i style="--h:46"></i><i style="--h:70"></i><i style="--h:52"></i><i style="--h:88"></i><i style="--h:64"></i><i style="--h:38"></i><i style="--h:76"></i><i style="--h:96"></i><i style="--h:58"></i><i style="--h:34"></i><i style="--h:66"></i><i style="--h:82"></i><i style="--h:44"></i><i style="--h:28"></i><i style="--h:60"></i><i style="--h:72"></i><i style="--h:40"></i><i style="--h:24"></i><i style="--h:50"></i>
               </div>
-              <p class="transcript">“I read this at my grandmother's funeral. I didn't know then that it was about staying.”</p>
+              <p class="transcript">“I read this at my grandmother’s funeral. I didn’t know then that it was about staying.”</p>
               <p class="sc" style="font-size:.72rem">Jacob · Ruth 1:16</p>
             </div>
           </div>
@@ -1057,17 +1031,11 @@ html.js .masthead.shown { transform: none; opacity: 1; }
       <p class="q2">separates you and me.”</p>
       <p class="m verse" data-verse="18" style="margin-top:.9em"><sup class="v">18</sup>When Naomi saw that Ruth was determined to go with her, she stopped trying to persuade her.</p>
 
-      <!-- Left edge is the gutter and belongs to notes. -->
-      <button class="gutter-mark voice" id="hero-mark" type="button"
-              style="--mark-ink: var(--teal); top: 0"
-              aria-label="Note from Jacob, Ruth 1:16, not yet found"></button>
-
       <!-- Right edge belongs to people. Nothing crosses. -->
       <aside class="presence-form" id="hero-presence">
         <div class="lozenge" style="--ring-ink: var(--teal)">
           <span class="portrait" style="--portrait-ink: var(--teal)" aria-hidden="true">J</span>
         </div>
-        <p class="with-you" id="hero-with-you">Jacob is with you</p>
       </aside>
     </div>
   </div>
@@ -1082,7 +1050,7 @@ html.js .masthead.shown { transform: none; opacity: 1; }
     </h2>
     <div class="stack gap-md rise" style="--delay:180ms;margin-top:2rem;max-width:36rem">
       <p class="lede quiet">
-        The competition is not other Bible apps. It's that reading Scripture with
+        The competition is not other Bible apps. It’s that reading Scripture with
         someone you love currently happens badly — over text message, out of sync,
         and with a low hum of guilt about the days you missed.
       </p>
@@ -1122,14 +1090,13 @@ html.js .masthead.shown { transform: none; opacity: 1; }
         <div class="panel" id="presence-demo">
           <div class="surface" style="padding:1.6rem 4.4rem 1.9rem 2.6rem;background:var(--surface);font-size:1.02rem">
             <p class="running-head">Mark 4</p>
-            <p class="m"><sup class="v">38</sup>But Jesus was in the stern, sleeping on the cushion. So they woke Him and said, “Teacher, don't You care that we are perishing?”</p>
+            <p class="m"><sup class="v">38</sup>But Jesus was in the stern, sleeping on the cushion. So they woke Him and said, “Teacher, don’t You care that we are perishing?”</p>
             <p class="m" style="margin-top:.75em"><sup class="v">39</sup>Then Jesus got up and rebuked the wind and the sea. “Silence!” He commanded. “Be still!” And the wind died down, and it was perfectly calm.</p>
 
             <aside class="presence-form here" id="demo-form" style="top:3.2rem">
               <div class="lozenge" id="demo-lozenge" style="--ring-ink: var(--indigo)">
                 <span class="portrait" id="demo-portrait" style="--portrait-ink: var(--indigo)" aria-hidden="true">R</span>
               </div>
-              <p class="with-you" id="demo-caption" hidden>Ruth is with you</p>
             </aside>
             <div class="follow-thread" id="demo-thread"></div>
           </div>
@@ -1148,7 +1115,8 @@ html.js .masthead.shown { transform: none; opacity: 1; }
     <dl class="terms rise" style="margin-top:3.6rem;max-width:52rem">
       <div><dt>Nobody here</dt><dd>The form is absent. Not greyed, not a placeholder, not “no one is reading.” Absence is the honest rendering of absence.</dd></div>
       <div><dt>Following</dt><dd>Tap a portrait and you go where they are. A hairline runs down the right edge while your scroll is theirs. Any scroll of your own gives it back — no dialog, no asking.</dd></div>
-      <div><dt>Reading quietly</dt><dd>You see everyone. Nobody sees you. Your own form stays on screen as a small closed shape so you never forget you're invisible.</dd></div>
+      <div><dt>Being followed</dt><dd>Visible, but small. Their portrait tucks against yours and one line reads <em>Ruth is with you</em>. There is no count of followers, in either direction.</dd></div>
+      <div><dt>Reading quietly</dt><dd>You see everyone. Nobody sees you. Your own form stays on screen as a small closed shape so you never forget you’re invisible.</dd></div>
       <div><dt>Thinking of you</dt><dd>Press and hold their portrait. It fills with your ink. They get one soft tap on the shoulder, carrying nothing but your name — no message, no emoji, no count of how many.</dd></div>
     </dl>
   </div>
@@ -1164,7 +1132,7 @@ html.js .masthead.shown { transform: none; opacity: 1; }
           <div class="surface" id="notes-surface" style="padding:1.9rem 2rem 2rem 3.1rem;background:var(--surface);font-size:1.06rem">
             <p class="running-head">Philippians 4</p>
             <p class="m verse" data-verse="6"><sup class="v">6</sup>Be anxious for nothing, but in everything, by prayer and petition, with thanksgiving, present your requests to God.</p>
-            <p class="m verse" id="notes-verse" data-verse="7" style="margin-top:.75em"><sup class="v">7</sup><span class="wash" id="notes-wash" style="--wash-ink: var(--moss)">And the peace of God, which surpasses all understanding, will guard your hearts and your minds in Christ Jesus.</span></p>
+            <p class="m verse" id="notes-verse" data-verse="7" style="margin-top:.75em"><span class="gutter-mark written" id="notes-mark" style="--mark-ink: var(--moss)" aria-hidden="true"></span><sup class="v">7</sup><span class="wash" id="notes-wash" style="--wash-ink: var(--moss)">And the peace of God, which surpasses all understanding, will guard your hearts and your minds in Christ Jesus.</span></p>
 
             <div class="note" id="notes-note">
               <div class="note-inner">
@@ -1180,9 +1148,8 @@ html.js .masthead.shown { transform: none; opacity: 1; }
 
             <p class="m" style="margin-top:.75em"><sup class="v">8</sup>Finally, brothers, whatever is true, whatever is honorable, whatever is right, whatever is pure, whatever is lovely, whatever is admirable—if anything is excellent or praiseworthy—think on these things.</p>
 
-            <span class="gutter-mark written" id="notes-mark" style="--mark-ink: var(--moss); top: 0" aria-hidden="true"></span>
 
-            <!-- The toolbar that rises when you're holding a verse. -->
+            <!-- The toolbar that rises when you’re holding a verse. -->
             <div class="leave-toolbar" id="notes-toolbar" aria-hidden="true">
               <div class="swatches">
                 <span class="swatch" style="background:var(--crimson)"></span>
@@ -1215,10 +1182,10 @@ html.js .masthead.shown { transform: none; opacity: 1; }
           whole point.
         </p>
         <dl class="terms rise" style="--delay:140ms">
-          <div><dt>Voice</dt><dd>A solid dot, six pixels, in the author's ink.</dd></div>
+          <div><dt>Voice</dt><dd>A solid dot, six pixels, in the author’s ink.</dd></div>
           <div><dt>Written</dt><dd>An open ring, the same size, the same ink.</dd></div>
           <div><dt>Unfound</dt><dd>The mark breathes, over four seconds, slowly enough that it never reads as an alert.</dd></div>
-          <div><dt>Found</dt><dd>It steadies, and it stays. The record doesn't disappear because you read it.</dd></div>
+          <div><dt>Found</dt><dd>It steadies, and it stays. The record doesn’t disappear because you read it.</dd></div>
         </dl>
         <p class="quiet rise" style="--delay:180ms">
           Notes open in place. The line height opens and the note unfurls beneath the
@@ -1239,9 +1206,9 @@ html.js .masthead.shown { transform: none; opacity: 1; }
           <div class="head-rule"><p class="sc sc-accent">Three · The fire</p></div>
           <h2 class="display" id="fire-title">One book, one fire, kept by the room.</h2>
           <div class="fire-lines" id="fire-lines">
-            <p class="lede quiet" data-state="catching">Someone opened the book. It's small and low, a few licks, working at it.</p>
+            <p class="lede quiet" data-state="catching">Someone opened the book. It’s small and low, a few licks, working at it.</p>
             <p class="lede quiet" data-state="burning">Someone has been reading. Full, active, irregular.</p>
-            <p class="lede quiet" data-state="steady">You've both been reading. Broad, even, a wide warm throw — almost calm.</p>
+            <p class="lede quiet" data-state="steady">You’ve both been reading. Broad, even, a wide warm throw — almost calm.</p>
             <p class="lede quiet" data-state="banked">Someone marked a quiet day. Coals under ash, a dim glow, still warm.</p>
           </div>
           <p class="sc" id="fire-scroll-hint">Keep scrolling · the fire answers to the room</p>
@@ -1253,7 +1220,10 @@ html.js .masthead.shown { transform: none; opacity: 1; }
                     role="img" aria-label="The fire is steady."></canvas>
           </div>
           <p class="room-book" style="text-align:center;margin-top:.4rem">Mark</p>
-          <p class="state-line lit" id="fire-state" style="text-align:center">steady</p>
+          <p class="state-line lit" id="fire-state" style="text-align:center">catching</p>
+          <button class="quiet-control" type="button" id="fire-quiet" aria-pressed="false"
+                  style="margin-top:1.2rem">Mark a quiet day</button>
+          <p class="sc" style="margin-top:.2rem;font-size:.72rem;text-align:center;max-width:24ch">Banking is an act. It is never on the way to anywhere.</p>
         </div>
       </div>
     </div>
@@ -1273,29 +1243,29 @@ html.js .masthead.shown { transform: none; opacity: 1; }
           <p class="quiet rise" style="--delay:140ms">
             Its size is set by the book and never changes while you read it. What
             grows underneath is the bed of coals — because nobody can look at a bed
-            of coals and work out how much is left. Where you've got to is shown by
+            of coals and work out how much is left. Where you’ve got to is shown by
             the text, and nowhere else.
           </p>
         </div>
         <p class="quiet rise" style="--delay:100ms;align-self:end">
           Philemon is a single sitting. Isaiah is a winter. The fire is that size
-          from the first verse — so the length of what you've taken on is
-          something you feel rather than something you're told. Below, the three
+          from the first verse — so the length of what you’ve taken on is
+          something you feel rather than something you’re told. Below, the three
           scales at the ratio the app uses.
         </p>
       </div>
 
-      <div class="scales rise" role="group" aria-label="The three fire scales, at the app's own ratio">
+      <div class="scales rise" role="group" aria-label="The three fire scales, at the app’s own ratio">
         <div class="scale-item">
-          <div class="fire-frame small"><canvas class="fire-canvas" data-fire="burning" data-coal="0.3" role="img" aria-label="A small fire, burning — Philemon."></canvas></div>
+          <div class="fire-frame small"><canvas class="fire-canvas" data-fire="burning" data-coal="0.4" role="img" aria-label="A small fire, burning — Philemon."></canvas></div>
           <p class="sc">Philemon</p>
         </div>
         <div class="scale-item">
-          <div class="fire-frame medium"><canvas class="fire-canvas" data-fire="burning" data-coal="0.45" role="img" aria-label="A medium fire, burning — Philippians."></canvas></div>
+          <div class="fire-frame medium"><canvas class="fire-canvas" data-fire="burning" data-coal="0.4" role="img" aria-label="A medium fire, burning — Philippians."></canvas></div>
           <p class="sc">Philippians</p>
         </div>
         <div class="scale-item">
-          <div class="fire-frame large"><canvas class="fire-canvas" data-fire="burning" data-coal="0.6" role="img" aria-label="A large fire, burning — Isaiah."></canvas></div>
+          <div class="fire-frame large"><canvas class="fire-canvas" data-fire="burning" data-coal="0.4" role="img" aria-label="A large fire, burning — Isaiah."></canvas></div>
           <p class="sc">Isaiah</p>
         </div>
       </div>
@@ -1314,7 +1284,7 @@ html.js .masthead.shown { transform: none; opacity: 1; }
         <div class="state">
           <div class="fire-frame" style="height:112px;width:152px"><canvas class="fire-canvas" data-fire="steady" data-scale="small" data-coal="0.7" role="img" aria-label="The fire is steady."></canvas></div>
           <p class="state-line">steady</p>
-          <p>The room has been reading together. The only thing the product rewards, and the reward is a mood.</p>
+          <p>You have both been reading. The only thing overlap changes is the mood of the fire.</p>
         </div>
         <div class="state">
           <div class="fire-frame" style="height:112px;width:152px"><canvas class="fire-canvas" data-fire="banked" data-scale="small" data-coal="0.55" role="img" aria-label="The fire is banked."></canvas></div>
@@ -1325,8 +1295,9 @@ html.js .masthead.shown { transform: none; opacity: 1; }
 
       <p class="lede rise" style="margin-top:3rem;max-width:40rem">
         Banking a fire is something a careful person does. You mark the quiet day
-        yourself — the app never works it out, never notices, and never mentions it
-        afterwards.
+        yourself — the app never works it out, and never keeps a tally. The room
+        simply sees that you did it, which is the point: an act of care performed
+        in public, not an excuse filed in private.
       </p>
     </div>
   </div>
@@ -1341,8 +1312,8 @@ html.js .masthead.shown { transform: none; opacity: 1; }
         <h2 class="display rise" id="shelf-title">The flame goes down. The light stays.</h2>
         <p class="lede quiet rise" style="--delay:80ms">
           Finish a book and its fire settles into an ember. The shelf is every book
-          you've read together, each one the size its fire was, sitting on a
-          baseline that isn't drawn — the light on the surface is what implies the
+          you’ve read together, each one the size its fire was, sitting on a
+          baseline that isn’t drawn — the light on the surface is what implies the
           surface.
         </p>
       </div>
@@ -1371,10 +1342,11 @@ html.js .masthead.shown { transform: none; opacity: 1; }
 <section class="band" id="room" aria-labelledby="room-title">
   <div class="hold">
     <div class="head-rule rise"><p class="sc sc-accent">The app</p></div>
-    <h2 class="display rise" id="room-title" style="max-width:26ch">Three surfaces, and no tab bar anywhere in the product.</h2>
+    <h2 class="display rise" id="room-title" style="max-width:26ch">Six destinations, one root, and no tab bar anywhere.</h2>
     <p class="lede quiet rise" style="--delay:80ms;margin-top:1.3rem;max-width:38rem">
-      The app opens in the room and stays there. The fire, who's here, and one way
-      in. Everything else is somewhere you go and come back from.
+      The app opens in the room and stays there: the fire, who’s here, and one
+      way in. Everything else is a push off the room or a sheet over it — six
+      places in the whole product, not fifteen. Three of them are below.
     </p>
 
     <div class="phones rise" style="--delay:120ms">
@@ -1385,8 +1357,7 @@ html.js .masthead.shown { transform: none; opacity: 1; }
           <div class="phone-screen">
             <div class="room-chrome"><p class="sc">Ruth &amp; Jacob</p></div>
             <div class="room-presence">
-              <span class="portrait sm" style="--portrait-ink: var(--teal)" aria-hidden="true">J</span>
-              <span class="sc" style="font-size:.7rem">Jacob is reading</span>
+              <span class="portrait sm" style="--portrait-ink: var(--teal)" aria-label="Jacob">J</span>
             </div>
             <div class="room-fire">
               <div class="fire-frame medium" style="width:100%">
@@ -1401,7 +1372,6 @@ html.js .masthead.shown { transform: none; opacity: 1; }
               <p class="waiting-row"><span class="ink-dot" style="--dot-ink: var(--indigo)"></span> The cards are open</p>
             </div>
             <div class="room-foot">
-              <p class="sc" style="font-size:.7rem">Jacob banked the fire</p>
               <p class="quiet-control" style="cursor:default">Mark a quiet day</p>
             </div>
           </div>
@@ -1426,13 +1396,18 @@ html.js .masthead.shown { transform: none; opacity: 1; }
               <p class="sc sc-accent" style="margin-top:1.4rem">Letters &amp; Revelation</p>
               <ul class="book-list">
                 <li><span>Romans</span><span class="glyph"><canvas class="fire-canvas" data-glyph="medium"></canvas></span></li>
+                <li><span>1 Corinthians</span><span class="glyph"><canvas class="fire-canvas" data-glyph="medium"></canvas></span></li>
+                <li><span>Galatians</span><span class="glyph"><canvas class="fire-canvas" data-glyph="medium"></canvas></span></li>
                 <li><span>Philemon</span><span class="glyph"><canvas class="fire-canvas" data-glyph="small"></canvas></span></li>
+                <li><span>Hebrews</span><span class="glyph"><canvas class="fire-canvas" data-glyph="medium"></canvas></span></li>
                 <li><span>James</span><span class="glyph"><canvas class="fire-canvas" data-glyph="medium"></canvas></span></li>
+                <li><span>Jude</span><span class="glyph"><canvas class="fire-canvas" data-glyph="small"></canvas></span></li>
+                <li><span>Revelation</span><span class="glyph"><canvas class="fire-canvas" data-glyph="medium"></canvas></span></li>
               </ul>
             </div>
           </div>
         </div>
-        <figcaption class="phone-caption">The chooser · a fire for every book</figcaption>
+        <figcaption class="phone-caption">The chooser · the fire is the length</figcaption>
       </figure>
 
       <!-- S09 · finishing a book -->
@@ -1470,15 +1445,15 @@ html.js .masthead.shown { transform: none; opacity: 1; }
       <div class="mechanic-say">
         <h2 class="display rise" id="groups-title">A leader gets the same room as everyone else.</h2>
         <p class="lede quiet rise" style="--delay:80ms">
-          You make rooms and invite people into them. That's the whole of the
-          leader's tooling. A room holds six; start another for the rest.
+          You make rooms and invite people into them. That’s the whole of the
+          leader’s tooling. A room holds six; start another for the rest.
         </p>
       </div>
       <dl class="terms rise" style="--delay:120ms">
         <div><dt>No roster</dt><dd>There is no dashboard and no attendance view. That would be a count of the most sensitive kind there is.</dd></div>
-        <div><dt>Same view</dt><dd>A leader sees their own rooms exactly as any member does — the fire, who's here, the way in.</dd></div>
-        <div><dt>Quiet billing</dt><dd>Billing is per leader, for as many rooms as you run, and members never see it.</dd></div>
-        <div><dt>Under 13</dt><dd>A room with a minor in it needs an adult member, and voice notes stay on the phone.</dd></div>
+        <div><dt>Same view</dt><dd>A leader sees their own rooms exactly as any member does — the fire, who’s here, the way in.</dd></div>
+        <div><dt>Quiet billing</dt><dd>Billing is per leader, and members never see it.</dd></div>
+        <div><dt>Under 13</dt><dd>A room with anyone under 13 needs an adult member, and voice notes aren’t transcribed.</dd></div>
       </dl>
     </div>
   </div>
@@ -1490,7 +1465,7 @@ html.js .masthead.shown { transform: none; opacity: 1; }
     <div class="head-rule rise"><p class="sc sc-accent">Pricing</p></div>
     <h2 class="display rise" id="pricing-title" style="max-width:22ch">The first book is free, all the way through.</h2>
     <p class="lede quiet rise" style="--delay:80ms;margin-top:1.2rem;max-width:36rem">
-      Not seven days. A trial makes the clock the thing you're aware of, and a clock
+      Not seven days. A trial makes the clock the thing you’re aware of, and a clock
       is a count. You read a whole book together, you keep the ember, and only then
       is there anything to decide.
     </p>
@@ -1512,7 +1487,7 @@ html.js .masthead.shown { transform: none; opacity: 1; }
         </tr>
         <tr>
           <th scope="row">Youth ministry</th>
-          <td><span class="price">Per leader</span>, for as many rooms as you run. Invoiced.</td>
+          <td><span class="price">Per leader</span>, invoiced.</td>
         </tr>
       </tbody>
     </table>
@@ -1544,7 +1519,7 @@ html.js .masthead.shown { transform: none; opacity: 1; }
     <h2 class="display" style="font-size:clamp(2rem,5vw,3rem)">Read it together.</h2>
     <p class="lede quiet">
       Two ribbons in one book: two people, one text, different places, still bound
-      together. That's the whole idea, and it's where the name came from.
+      together. That’s the whole idea, and it’s where the name came from.
     </p>
     <div style="display:flex;flex-wrap:wrap;gap:1.4rem;align-items:center;justify-content:center;margin-top:.4rem">
       <a class="way-in" href="/read/">Open the book</a>
@@ -1711,13 +1686,13 @@ html.js .fire-lines p.on { opacity: 1; }
 }
 .book-list li {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 1rem;
   padding: .3rem 0;
 }
-.glyph { flex: none; width: 44px; height: 32px; }
-.glyph canvas { display: block; width: 100%; height: 100%; }
+.glyph { flex: none; display: flex; align-items: flex-end; justify-content: flex-end; }
+.glyph canvas { display: block; }
 
 /* ------------------------------------------------------------- notices */
 
@@ -1913,6 +1888,9 @@ html.js .fire-lines p.on { opacity: 1; }
      state — the way the app holds it. */
 
   const EMBER_SIZE = { small: 36, medium: 54, large: 72 };
+  /* The chooser's glyphs keep the fire's 120:180:240 ratio — the drawn fire
+     is the only thing allowed to say how long a book is. */
+  const GLYPH_H = { small: 20, medium: 30, large: 40 };
   const live = new Set();
   const items = [];
 
@@ -1940,12 +1918,12 @@ html.js .fire-lines p.on { opacity: 1; }
     ctx.clearRect(0, 0, item.w, item.h);
     if (item.kind === "ember") {
       drawEmber(ctx, item.w, item.h, now * 0.25 + item.seed);
+    } else if (item.kind === "glyph") {
+      drawFire(ctx, item.w, item.h, 402.7, item.state, 0.3);
     } else {
-      const t = item.kind === "glyph" ? 402.7 : now + item.seed;
-      const coal = item.kind === "glyph" ? 0.3 : item.coal;
       ctx.save();
       ctx.translate(item.w * PAD_X, 0);
-      drawFire(ctx, item.w * (1 - PAD_X * 2), item.h * (1 - PAD_BOTTOM), t, item.state, coal);
+      drawFire(ctx, item.w * (1 - PAD_X * 2), item.h * (1 - PAD_BOTTOM), now + item.seed, item.state, item.coal);
       ctx.restore();
     }
     item.dirty = false;
@@ -2018,6 +1996,9 @@ html.js .fire-lines p.on { opacity: 1; }
       if (item) { el._ribbon = item; canvasSeen.observe(el); }
     });
     document.querySelectorAll("canvas[data-glyph]").forEach((el) => {
+      const h = GLYPH_H[el.dataset.glyph] || GLYPH_H.medium;
+      el.style.height = h + "px";
+      el.style.width = Math.round(h * 1.4) + "px";
       const item = register(el, "glyph", { state: "burning" });
       if (item) { el._ribbon = item; canvasSeen.observe(el); }
     });
@@ -2077,29 +2058,6 @@ html.js .fire-lines p.on { opacity: 1; }
     past.observe(hero);
   }
 
-  /* ============================================ a mark, sitting in the line
-
-     The gutter mark belongs beside the first line of its verse, so it is
-     placed against the real text rather than guessed at. */
-
-  function anchorMark(mark, target) {
-    if (!mark || !target) return;
-    const surface = mark.closest(".surface");
-    if (!surface) return;
-    const line = parseFloat(getComputedStyle(target).lineHeight) || 24;
-    const top = target.getBoundingClientRect().top - surface.getBoundingClientRect().top;
-    mark.style.top = (top + line / 2 - 3) + "px";
-  }
-
-  const marks = [
-    [document.getElementById("hero-mark"), document.querySelector('#hero-read [data-verse="16"]')],
-    [document.getElementById("notes-mark"), document.getElementById("notes-verse")],
-  ];
-  const placeMarks = () => marks.forEach(([m, t]) => anchorMark(m, t));
-  placeMarks();
-  window.addEventListener("resize", placeMarks, { passive: true });
-  if (document.fonts && document.fonts.ready) document.fonts.ready.then(placeMarks);
-
   /* ================================================== the hero, unfurling
 
      Presence arrives, the mark appears and breathes, and the note opens —
@@ -2139,7 +2097,6 @@ html.js .fire-lines p.on { opacity: 1; }
     form: document.getElementById("demo-form"),
     lozenge: document.getElementById("demo-lozenge"),
     portrait: document.getElementById("demo-portrait"),
-    caption: document.getElementById("demo-caption"),
     thread: document.getElementById("demo-thread"),
     note: document.getElementById("demo-note"),
     chips: Array.from(document.querySelectorAll("#presence-demo .chip")),
@@ -2149,8 +2106,8 @@ html.js .fire-lines p.on { opacity: 1; }
     absent:    { note: "Nobody is reading. The form is not there at all — not greyed, not a placeholder." },
     one:       { note: "Ruth is in Mark 4, and so are you." },
     several:   { note: "Ruth and Jacob. A short stack you flick through, never a row of shrinking avatars." },
-    following: { note: "You're following Ruth. A hairline runs down the edge, and your scroll is hers." },
-    quiet:     { note: "You're reading quietly. You see everyone; nobody sees you." },
+    following: { note: "You’re following Ruth. A hairline runs down the edge, and your scroll is hers." },
+    quiet:     { note: "You’re reading quietly. You see everyone; nobody sees you." },
   };
 
   let closedShape = null;
@@ -2160,19 +2117,19 @@ html.js .fire-lines p.on { opacity: 1; }
     demo.form.classList.toggle("here", state !== "absent");
     demo.lozenge.classList.toggle("stacked", state === "several");
     demo.lozenge.classList.toggle("followed", state === "following");
-    demo.lozenge.hidden = state === "quiet";
+    demo.lozenge.hidden = state === "absent";
     if (state === "quiet") {
       if (!closedShape) {
         closedShape = document.createElement("div");
         closedShape.className = "closed-shape";
-        closedShape.setAttribute("aria-label", "Reading quietly. Only you can see you.");
+        closedShape.setAttribute("role", "img");
+        closedShape.setAttribute("aria-label", "You are reading quietly. Only you can see you.");
         demo.lozenge.after(closedShape);
       }
       closedShape.hidden = false;
     } else if (closedShape) {
       closedShape.hidden = true;
     }
-    demo.caption.hidden = state !== "following";
     demo.thread.classList.toggle("drawn", state === "following");
     demo.note.textContent = spec.note;
     demo.chips.forEach((chip) => chip.setAttribute("aria-pressed", String(chip.dataset.state === state)));
@@ -2231,7 +2188,7 @@ html.js .fire-lines p.on { opacity: 1; }
     const at = (ms, fn) => noteTimers.push(setTimeout(fn, reduce.matches ? 0 : ms));
     at(500, () => {
       notes.verse.classList.add("lifted");
-      notes.step.textContent = "The verse lifts. You're holding it.";
+      notes.step.textContent = "The verse lifts. You’re holding it.";
     });
     at(1500, () => {
       notes.toolbar.classList.add("risen");
@@ -2242,7 +2199,6 @@ html.js .fire-lines p.on { opacity: 1; }
       notes.verse.classList.remove("lifted");
       notes.wash.classList.add("inked");
       notes.mark.classList.add("shown", "unfound");
-      placeMarks();
       notes.step.textContent = "The mark waits in the margin, breathing.";
     });
     at(4600, () => {
@@ -2270,21 +2226,6 @@ html.js .fire-lines p.on { opacity: 1; }
      read inside a frame, never during the scroll event, and nothing is
      written unless the state has actually changed. */
 
-  const pageThread = document.getElementById("page-thread");
-  let threadQueued = false;
-  function readThread() {
-    threadQueued = false;
-    if (!pageThread) return;
-    const doc = document.documentElement;
-    const total = doc.scrollHeight - window.innerHeight;
-    const p = total > 0 ? Math.min(1, Math.max(0, window.scrollY / total)) : 0;
-    pageThread.style.transform = "scaleY(" + p.toFixed(4) + ")";
-  }
-  const onThread = () => { if (!threadQueued) { threadQueued = true; requestAnimationFrame(readThread); } };
-  window.addEventListener("scroll", onThread, { passive: true });
-  window.addEventListener("resize", onThread, { passive: true });
-  readThread();
-
   const fireTrack = document.getElementById("fire-track");
   const fireHero = document.getElementById("fire-hero");
   const fireStateLine = document.getElementById("fire-state");
@@ -2293,12 +2234,17 @@ html.js .fire-lines p.on { opacity: 1; }
 
   if (fireTrack && fireHero && fireHero._ribbon) {
     const item = fireHero._ribbon;
+    /* Reading takes the fire up through the three states it can reach on
+       its own. Banked is not on this ladder: it is only ever entered by
+       someone marking a quiet day, and drawing it as the far end of a scroll
+       would turn an act of care into the look of neglect. */
     const STOPS = [
-      [0.20, "catching"],
-      [0.48, "burning"],
-      [0.80, "steady"],
-      [1.01, "banked"],
+      [0.30, "catching"],
+      [0.66, "burning"],
+      [1.01, "steady"],
     ];
+    const quietBtn = document.getElementById("fire-quiet");
+    let quietHold = false;
     let shown = null;
     let queued = false;
 
@@ -2314,11 +2260,12 @@ html.js .fire-lines p.on { opacity: 1; }
 
       /* The coal bed deepens as the room keeps reading — the one thing that
          may grow. It never resets, and it never becomes a number. */
-      item.coal = 0.12 + 0.72 * Math.min(p / 0.8, 1);
+      item.coal = 0.12 + 0.72 * p;
       item.dirty = true;
 
-      let state = "banked";
+      let state = "steady";
       for (const [edge, name] of STOPS) { if (p < edge) { state = name; break; } }
+      if (quietHold) state = "banked";
 
       if (state !== shown) {
         shown = state;
@@ -2331,6 +2278,15 @@ html.js .fire-lines p.on { opacity: 1; }
       if (fireHint) fireHint.style.opacity = p > 0.04 ? "0" : "1";
       if (reduce.matches) { measure(item); paint(item, item.seed); }
       else schedule();
+    }
+
+    if (quietBtn) {
+      quietBtn.addEventListener("click", () => {
+        quietHold = !quietHold;
+        quietBtn.textContent = quietHold ? "Read again" : "Mark a quiet day";
+        quietBtn.setAttribute("aria-pressed", String(quietHold));
+        readFire();
+      });
     }
 
     const onScroll = () => { if (!queued) { queued = true; requestAnimationFrame(readFire); } };
