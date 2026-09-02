@@ -66,12 +66,27 @@ supabase secrets set --env-file supabase/functions/.env
 
 ```ini
 SEND_EMAIL_HOOK_SECRET="v1,whsec_<base64>"   # required — dashboard → Authentication → Hooks
-RESEND_API_KEY=...                           # required
+SMTP_HOST=...                                # required — the mail host
+SMTP_PORT=587                                # 587 (STARTTLS) or 465 (implicit TLS)
+SMTP_USER=...                                # required
+SMTP_PASS=...                                # required
 SEND_EMAIL_FROM="Ribbon <hello@example.com>" # required
 EMAIL_THROTTLE_PEPPER=<random>               # recommended, see index.ts
 EMAIL_MAX_PER_HOUR=6                         # optional
 EMAIL_MIN_INTERVAL_SECONDS=60                # optional
 ```
+
+Mail goes out over **plain SMTP**, spoken from the function itself, so
+Ribbon needs no account with an email API — the mail host it already has is
+the whole dependency. `[auth.email.smtp]` in `config.toml` takes the same
+credentials, as the fallback GoTrue would use if the hook were switched off.
+
+The cost of that choice is latency: a TCP connect, a TLS upgrade and an AUTH
+round trip all have to fit in the hook's ~5s budget, where an HTTP API would
+be one request. `SMTP_TIMEOUT_MS` (default 3500) gives up before the budget
+does and lets GoTrue retry. A timeout cannot double-send: the slot is already
+taken, so the retry lands inside the minute and is refused. If a host ever
+makes that budget untenable, `sendMail()` is the only function that changes.
 
 `SEND_EMAIL_HOOK_SECRET` is the whole of the caller's authentication —
 `verify_jwt` is off because the hook runs before a JWT exists, so the

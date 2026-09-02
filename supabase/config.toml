@@ -56,9 +56,11 @@ max_frequency = "1m"
 #      hammered would otherwise burn the allowance for every other person
 #      signing in.
 #
-# The SMTP block stays configured anyway, as the fallback that carries mail
-# if the hook is ever disabled. Credentials come from the environment; no
-# secret is ever written into this file.
+# The hook speaks SMTP itself, to this same host — so there is no email API
+# account anywhere in the picture, and the block below is not a second
+# vendor but the same credentials in GoTrue's hands, as the fallback that
+# carries mail if the hook is ever disabled. Credentials come from the
+# environment; no secret is ever written into this file.
 [auth.email.smtp]
 enabled = true
 host = "env(SMTP_HOST)"

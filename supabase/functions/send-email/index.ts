@@ -13,6 +13,14 @@
 // authentication. That is why a missing secret is a hard stop rather than a
 // warning: unverified, this endpoint is a mail cannon.
 //
+// Delivery is plain SMTP, spoken from here rather than through a provider's
+// HTTP API, so Ribbon's mail needs no account anywhere but the mail host it
+// already has. The trade is latency: a TCP connect, a TLS upgrade and an
+// AUTH round trip all have to fit inside the hook's budget, where an HTTP
+// API would be one request. Hence the timeout below — and if a host ever
+// makes that budget untenable, sendMail() is the only function that has to
+// change.
+//
 // Deploy:
 //   supabase functions deploy send-email --no-verify-jwt
 //   supabase secrets set --env-file supabase/functions/.env
@@ -21,20 +29,30 @@
 //   SEND_EMAIL_HOOK_SECRET   required — "v1,whsec_<base64>" from the
 //                            dashboard's Authentication → Hooks, or
 //                            config.toml's [auth.hook.send_email].secrets
-//   RESEND_API_KEY           required — the mail provider's key
+//   SMTP_HOST/USER/PASS      required — the mail host
+//   SMTP_PORT                optional, default 587 (or 465 for implicit TLS)
 //   SEND_EMAIL_FROM          required — e.g. "Ribbon <hello@ribbon.app>"
 //   EMAIL_THROTTLE_PEPPER    recommended — see hashRecipient below
 //   EMAIL_MAX_PER_HOUR       optional, default 6
 
 import { Webhook } from "https://esm.sh/standardwebhooks@1.0.0";
+import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { codeEmail } from "./_templates/code-email.ts";
 
 const HOOK_SECRET = Deno.env.get("SEND_EMAIL_HOOK_SECRET") ?? "";
-const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const SEND_FROM = Deno.env.get("SEND_EMAIL_FROM") ?? "";
+const SMTP_HOST = Deno.env.get("SMTP_HOST") ?? "";
+const SMTP_USER = Deno.env.get("SMTP_USER") ?? "";
+const SMTP_PASS = Deno.env.get("SMTP_PASS") ?? "";
+const SMTP_PORT = clampInt(Deno.env.get("SMTP_PORT"), 587, 1, 65535);
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const THROTTLE_PEPPER = Deno.env.get("EMAIL_THROTTLE_PEPPER") ?? "";
+
+// The hook's whole invocation has about five seconds, and the throttle call
+// wants some of it, so a mail host that has stopped answering must be given
+// up on rather than waited out. Failing here returns a retry-able 503.
+const SMTP_TIMEOUT_MS = clampInt(Deno.env.get("SMTP_TIMEOUT_MS"), 3500, 500, 10000);
 
 const MAX_PER_HOUR = clampInt(Deno.env.get("EMAIL_MAX_PER_HOUR"), 6, 1, 60);
 const WINDOW_SECONDS = 3600;
@@ -68,7 +86,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
   // Fail closed on configuration. Each of these, absent, turns the function
   // into something worse than broken.
   if (!HOOK_SECRET) return hookError(500, "hook secret not configured");
-  if (!RESEND_API_KEY || !SEND_FROM) return hookError(500, "mail provider not configured");
+  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS || !SEND_FROM) {
+    return hookError(500, "mail host not configured");
+  }
+  // Port 25 is plaintext by convention and blocked by most hosts anyway.
+  // Refusing it here means a misconfiguration surfaces as a clear error
+  // rather than as credentials offered to a connection that never upgrades.
+  if (SMTP_PORT === 25) return hookError(500, "refusing SMTP on port 25; use 587 or 465");
   if (!SUPABASE_URL || !SERVICE_ROLE_KEY) return hookError(500, "throttle backend not configured");
 
   const raw = await req.text();
@@ -156,9 +180,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
   });
 
   try {
-    await sendViaResend({ to: recipient, ...mail });
+    await sendMail({ to: recipient, ...mail });
   } catch (error) {
-    console.error(`send-email: provider rejected send: ${errorMessage(error)}`);
+    // Note what this does NOT do: give the slot back. If the send half
+    // succeeded — delivered, then timed out on the way home — GoTrue's retry
+    // arrives inside the minute and the throttle refuses it, so a timeout
+    // cannot turn into two codes in one inbox.
+    console.error(`send-email: mail host rejected send: ${errorMessage(error)}`);
     return hookError(503, "could not send the code", { retryable: true });
   }
 
@@ -265,29 +293,56 @@ function toHex(buffer: ArrayBuffer): string {
 
 // ------------------------------------------------------------------ mail
 
-async function sendViaResend(
+/**
+ * Hands one message to the mail host over SMTP.
+ *
+ * A connection per invocation, opened and closed here: edge invocations are
+ * frozen between calls, so a pooled socket would be resumed dead. (denomailer
+ * pools only when asked; it is not asked.)
+ *
+ * On TLS — port 465 is implicit TLS, and 587 connects in the clear and
+ * upgrades with STARTTLS, which the client does on its own. What is never
+ * set is `debug.allowUnsecure`: without it the client refuses to authenticate
+ * over a connection that never became TLS, so the password cannot be handed
+ * to a server that declined to upgrade.
+ */
+async function sendMail(
   message: { to: string; subject: string; html: string; text: string },
 ): Promise<void> {
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${RESEND_API_KEY}`,
-      "Content-Type": "application/json",
+  const client = new SMTPClient({
+    connection: {
+      hostname: SMTP_HOST,
+      port: SMTP_PORT,
+      tls: SMTP_PORT === 465,
+      auth: { username: SMTP_USER, password: SMTP_PASS },
     },
-    body: JSON.stringify({
-      from: SEND_FROM,
-      to: [message.to],
-      subject: message.subject,
-      html: message.html,
-      text: message.text,
-    }),
   });
 
-  if (!response.ok) {
-    // The provider's body can quote the recipient back at us; keep it to the
-    // status so an address cannot arrive in the logs this way either.
-    throw new Error(`resend responded ${response.status}`);
+  try {
+    await withTimeout(
+      client.send({
+        from: SEND_FROM,
+        to: message.to,
+        subject: message.subject,
+        content: message.text,
+        html: message.html,
+      }),
+      SMTP_TIMEOUT_MS,
+    );
+  } finally {
+    // Always, including on the timeout path — an abandoned socket would be
+    // held open across the freeze.
+    await client.close().catch(() => {});
   }
+}
+
+/** Rejects if the work outlasts the budget. The work itself cannot be
+ *  cancelled; closing the client is what actually lets go of the socket. */
+function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms);
+    work.then(resolve, reject).finally(() => clearTimeout(timer));
+  });
 }
 
 // --------------------------------------------------------------- plumbing
