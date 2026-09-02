@@ -145,6 +145,155 @@ reasoning.
     change your ink, leave — because a fresh room of one had no route to
     them at all (the second half of deviation 9a, now closed).
 
+14. **The thread ends in the book, and the account is asked where the
+    link is made.** (September 2026 pass.) §6.1 orders the thread mark →
+    start or accept → name and portrait → invite → book → read; the
+    previous build ended at the invite and dropped the person on an empty
+    room that asked "Pick something to read together" twice. Now the
+    chooser is the thread's last step and choosing opens the book itself,
+    so the room is met for the first time on closing it, with a fire in it.
+    The account moment lives inside the invite step (the backend needs an
+    authenticated creator before a link can work), phrased as its reason —
+    "Your email first, so the link works on their phone and the room stays
+    yours" — with "Read on your own for now" always beside it; the word
+    "sign in" is never said to a person who has no account. The invite is
+    registered with the backend *before* the share sheet opens; if it
+    can't be, the line says so and the link still goes out (it registers on
+    the next foreground). A reinstall with a live session restores the
+    person from the account underneath the mark's 900 ms hold and lands in
+    their room without a second name question (§6.10). Signed in as someone
+    else on the join screen shows "joining as Ruth · Not you?" and never
+    silently joins (S16).
+
+15. **One open reading, and a book set aside.** §03 says a room has one
+    open reading at a time; the book never says what happens when a room
+    picks another book while one is still going. Starting another used to
+    orphan the new reading. Now picking another book *sets the first
+    aside*: it keeps its notes, highlights and positions, is not an ember,
+    appears under "still going" at the top of the chooser, and resumes the
+    moment it is picked again. The chooser says so in one line, and nothing
+    ever counts or reproaches it. The moment rides the reading row
+    (`set_aside_at`, migration 20260902012000).
+
+16. **Leaving keeps the shelf.** "You'll keep the books on your shelf"
+    (§6.8) was not true — leaving deleted the room locally. A left room is
+    now kept as a departed room (`Room.leftAt`, `Membership.leftAt`): it sits
+    under "rooms you've left" in S14 with only its shelf, is never pulled
+    back in by a sync (the membership delete is replayed before every pull
+    when it was made offline), and a departed member stays in an ember's
+    "who read it" with their ink (S11). A room of one *closes* rather than
+    leaves itself, with the shelf's export offered first; multi-member
+    closing (everyone agrees, or 30 days plus one request) waits for the
+    agreement flow. Export (§13) exists: a Markdown file of the room's whole
+    shelf, from the shelf and from You.
+
+17. **Cards are built, local-first, on the five starter books.** Phase two
+    per §15, built now because the model and the passage end were ready:
+    one Ribbon-authored question per chapter of Mark, Ruth, Philippians and
+    John, a specific set for nineteen psalms and a six-question rotation for
+    the rest (`CardQuestions`, core, voice pinned by tests) — open question
+    §16.4 resolved as its first option. Sealed, answered, opening (480 ms
+    turn, a fade under Reduce Motion), set down, the ember record, and the
+    S01 row all follow S08/S09. Not yet synced: like notes, cards travel
+    with the full sync engine (deviation 10), so a card in a room of two
+    opens on this phone when both answers exist *here*; until then a
+    partner's answer arrives with sync. The schema's `cards_insert` policy,
+    a unique (reading, chapter) constraint and a server-side opener ride
+    that same pass.
+
+18. **Ink identity is remembered, and the newcomer picks.** §4.5's
+    transition is built: the room records when it first became three
+    (`Room.inkIdentitySince`); the two originals see "An ink to pick" on
+    S01 until they choose; the newcomer picks from what's left as the last
+    step of joining; highlights from before carry "These keep their colors"
+    in the toolbar and the ember record; identity stays when the room drops
+    back to two until someone asks for the whole palette in You. Where a
+    person has no ink at all (every room of two) their marks and monogram
+    take a stable ink derived from their id — the same on every phone,
+    never a choice, never written to the membership — so a partner's mark
+    is never drawn in the viewer's own last-used ink.
+
+19. **Read quietly is reachable when alone.** S07 says the panel can't be
+    opened while alone unless you are already reading quietly — which left
+    no way to *start* reading quietly before anyone arrives, the one moment
+    Law 3 needs it. A hold on the Wave (and a VoiceOver action on it) opens
+    the panel with only the toggle; the closed shape sits fully on screen
+    with a 44 pt target. The lozenge and the panel are one piece of glass
+    morphing (`GlassEffectContainer`), and the measure insets while the
+    panel is open so glass never lies over a verse (§12.1).
+
+20. **A finish needs a reader.** The finishing sequence used to fire the
+    moment its section entered the viewport, so a short book finished
+    itself on open on an iPad and any book on one flick. It now counts once
+    the reader has scrolled to it — or, for a book that fits its screen,
+    once it has been looked at for a few seconds — and the become plays only
+    on screen. A finished book reopened from its ember shows the ember, no
+    ceremony twice, and takes no marks.
+
+21. **Speak is press-and-hold on the toolbar itself.** S05's speak used to
+    start recording on a tap, so a hesitation kept a note of silence. The
+    recording now begins under the finger, the live waveform rises above
+    the toolbar, release keeps it, drag away discards it, and a recording
+    cut by a call is kept and offered. VoiceOver gets a start/stop action
+    instead of the hold (§11 motor).
+
+22. **Persistence decodes every field with decodeIfPresent.** Swift's
+    synthesized Decodable throws on a missing key even for a property with
+    a default, so any field added to `AppState` after a release would have
+    turned every existing state file into an empty one — and silently wiped
+    a person's notes, highlights and rooms on the next save. Every stored
+    struct now decodes field by field, an unreadable file is kept beside
+    the live one rather than overwritten, and the rule is written at the top
+    of `LocalStore.swift`.
+
+23. **The membership insert policy counted through RLS.** The "first
+    member only" guard on `memberships_insert` counted the room's members
+    with a subquery that row-level security filters — a non-member sees no
+    rows, so the count was always zero for exactly the person it exists to
+    stop: any signed-in user who learned a room's id could seat themselves.
+    Migration 20260902010000 moves the count into a security-definer
+    function. Apply it with the set-aside column migration.
+
+24. **Notifications settings say they are kept for later.** S19's switches
+    change nothing until push infrastructure exists (deviation 11). Rather
+    than a settings screen that silently does nothing, one line says the
+    choices are kept for when Ribbon can send them. Likewise Plan (S22)
+    carries no inert "Start the room again" control; it says plans arrive
+    with the store.
+
+24a. **Mark a quiet day appears only while a fire is going.** S01 has it
+    "always present, never emphasised"; with no open reading there is
+    nothing to bank, and a banked day marked on a fire-less room would make
+    the next book open on a fire that reads banked instead of catching. It
+    is absent on first run and between books, and in a paused or departed
+    room.
+
+25. **"In the night" is gone.** §4.9 forbids a wall-clock disclosure; the
+    phrase for a read before dawn revealed a 3 a.m. It is "this morning"
+    now, and the presence line reads from one last-read stamp per person
+    per room (§13) instead of the 36-hour fuel window, so "Ruth read
+    Tuesday" can actually appear.
+
+26. **A departed room can be forgotten.** §6.8 keeps the shelf of a room
+    you've left, and it stays kept. On that room alone — never in the rooms
+    sheet, never on a live room — a quiet "Forget this room" sits under
+    "You left this room. The shelf stays.", behind the same one
+    confirmation as closing a room of one, because the shelf goes with it.
+    Nothing counts down to it and nothing suggests it.
+
+27. **"Not you?" resumes the join at the name.** S16 has the flow continue
+    as a new person (name → email → code → join). Signing the last person
+    out empties the local person, which takes their room — and the join
+    sheet over it — down with them; the thread then re-presents the same
+    invite and, since it was accepted once already, opens at the name
+    rather than at a second preview.
+
+28. **"Send it again" follows the tap, not the send.** The system share
+    sheet says nothing back about whether anything went out. The tap on
+    "Send the invite" is the one signal there is, so the control reads
+    "Send it again" after it — which is also what it does — and the quiet
+    way past ("Invite later") stays visible either way.
+
 ## Licensed translations (decided: API.Bible)
 
 Open question §16.8 is now part-decided: **NKJV plus two undecided

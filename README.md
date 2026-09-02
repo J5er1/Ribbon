@@ -71,6 +71,15 @@ piece of work (`docs/deviations.md` §10). Universal links need
 `RIBBON_APPLE_TEAM_ID` set in the Vercel project so the web build emits
 a real `apple-app-site-association`.
 
+The app asks for a **code**, never a link: it posts to `auth/v1/otp` and
+verifies with `type: "email"`. Supabase decides what the email contains
+from its templates, and the defaults carry a magic link. In the
+dashboard, Authentication → Emails → Templates, both **Magic Link** (an
+address that has signed in before) and **Confirm signup** (a first-time
+address) must show `{{ .Token }}` — the six-digit code — in place of
+`{{ .ConfirmationURL }}`. A template that links instead of showing the
+code leaves the app waiting for a code the person never receives.
+
 ## Licensed translations
 
 NKJV and two undecided versions will arrive via API.Bible. The plumbing is
@@ -82,6 +91,15 @@ offline). It lights up when the API.Bible account + NKJV license exist:
 set `API_BIBLE_KEY` as a function secret and fill in the edition's
 bibleID in `TranslationRegistry`. Details in docs/deviations.md.
 
+## Applying the backend migrations
+
+Two migrations in `supabase/migrations` from the September 2026 UX pass
+are not yet applied to the live project and must be, in order:
+`20260902010000_ribbon_membership_insert_guard.sql` (closes an RLS hole in
+the membership insert check) and `20260902012000_ribbon_readings_set_aside.sql`
+(adds `readings.set_aside_at`, which the app now pushes — reading rows fail
+to upsert until the column exists).
+
 ## What's built, what's next
 
 Phase one (§15) is in place end to end: the room and its fire, reading,
@@ -89,6 +107,11 @@ notes (voice with on-device transcripts + written), ink and highlights
 with real blending, quiet days, finishing a book, the shelf and ember
 records, the chooser, onboarding, and settings — and a room of two is now
 reachable for real: accounts (emailed code), invites that open the app,
-the S16 join flow, and two-way sync of the room surface. The presence
-socket and the content half of sync (notes, highlights, positions) are
-the next piece of work. `docs/deviations.md` is the honest ledger.
+the S16 join flow, and two-way sync of the room surface. The September
+2026 UX pass added the cards (S08/S09, local-first, on the five starter
+books), the ink transition at three (§6.7), books set aside, departed
+rooms that keep their shelves, the shelf export (§13), read-quietly when
+alone, a press-and-hold speak, and the seamless thread (the chooser is
+the last step; the book opens itself). The presence socket and the
+content half of sync (notes, highlights, cards, positions) are the next
+piece of work. `docs/deviations.md` is the honest ledger.

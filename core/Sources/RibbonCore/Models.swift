@@ -44,13 +44,34 @@ public struct Room: Codable, Hashable, Identifiable, Sendable {
     /// Subscription lapsed → the room is paused: presence off, new notes
     /// off. Reading and everything already left stays, forever (§2.5).
     public var isPaused: Bool
+    /// Set when this person left the room (§6.8). The room stays on this
+    /// device as a read-only record — "You'll keep the books on your
+    /// shelf" has to be true — and is never pulled back in by a sync.
+    public var leftAt: Date?
+    /// The moment the room first became three (§4.5): ink turned into
+    /// identity here. Highlights from before it keep their colors, with
+    /// the one-line explanation. Nil while the room has only ever been two.
+    public var inkIdentitySince: Date?
+    /// Set when a room that dropped back to two asked for the free palette
+    /// again in settings (§4.5 — "the free palette returns only if someone
+    /// asks for it").
+    public var freePaletteRestoredAt: Date?
 
-    public init(id: UUID = UUID(), name: String? = nil, createdAt: Date, isPaused: Bool = false) {
+    public init(
+        id: UUID = UUID(), name: String? = nil, createdAt: Date, isPaused: Bool = false,
+        leftAt: Date? = nil, inkIdentitySince: Date? = nil, freePaletteRestoredAt: Date? = nil
+    ) {
         self.id = id
         self.name = name
         self.createdAt = createdAt
         self.isPaused = isPaused
+        self.leftAt = leftAt
+        self.inkIdentitySince = inkIdentitySince
+        self.freePaletteRestoredAt = freePaletteRestoredAt
     }
+
+    /// A room this person has left: kept for its shelf, written to no more.
+    public var isDeparted: Bool { leftAt != nil }
 }
 
 /// Person × Room. Ink lives here, not on Person — you're teal in one room
@@ -63,14 +84,21 @@ public struct Membership: Codable, Hashable, Identifiable, Sendable {
     /// freely, per highlight) or while an ink pick is still waiting (§4.5).
     public var ink: Ink?
     public var joinedAt: Date
+    /// Set when the person left the room. The membership is kept so an
+    /// ember record can still show who read the book, with their portrait
+    /// and their ink (S11 — "a departed member's notes render normally").
+    public var leftAt: Date?
 
-    public init(id: UUID = UUID(), roomID: UUID, personID: UUID, ink: Ink? = nil, joinedAt: Date) {
+    public init(id: UUID = UUID(), roomID: UUID, personID: UUID, ink: Ink? = nil, joinedAt: Date, leftAt: Date? = nil) {
         self.id = id
         self.roomID = roomID
         self.personID = personID
         self.ink = ink
         self.joinedAt = joinedAt
+        self.leftAt = leftAt
     }
+
+    public var isActive: Bool { leftAt == nil }
 }
 
 /// A book, in a room. The active unit. A room has one open reading at a time.
@@ -81,20 +109,30 @@ public struct Reading: Codable, Hashable, Identifiable, Sendable {
     public var startedAt: Date
     /// Set when the book is finished; a finished reading is an ember.
     public var finishedAt: Date?
+    /// Set when the room picked another book while this one was still
+    /// going (§6.6). A room has one open reading at a time (§03); a book
+    /// set aside keeps its notes, highlights and positions, is not an ember,
+    /// and comes back the moment someone picks it in the chooser again.
+    /// Never surfaced as a count, a lapse, or a reproach.
+    public var setAsideAt: Date?
     /// The campfire. `handiwork` is the general mechanic (§2.8) — the code
     /// says handiwork everywhere and fire only in the campfire's own module.
     public var handiwork: Handiwork
 
-    public init(id: UUID = UUID(), roomID: UUID, bookID: String, startedAt: Date, finishedAt: Date? = nil, handiwork: Handiwork) {
+    public init(id: UUID = UUID(), roomID: UUID, bookID: String, startedAt: Date, finishedAt: Date? = nil, setAsideAt: Date? = nil, handiwork: Handiwork) {
         self.id = id
         self.roomID = roomID
         self.bookID = bookID
         self.startedAt = startedAt
         self.finishedAt = finishedAt
+        self.setAsideAt = setAsideAt
         self.handiwork = handiwork
     }
 
     public var isFinished: Bool { finishedAt != nil }
+    public var isSetAside: Bool { setAsideAt != nil && finishedAt == nil }
+    /// The room's live book: neither finished nor set aside.
+    public var isOpen: Bool { finishedAt == nil && setAsideAt == nil }
 }
 
 /// What kind a note is: a voice memo or a written thought.

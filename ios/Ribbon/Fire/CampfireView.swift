@@ -26,6 +26,10 @@ struct CampfireView: View {
     var coalDepth: Double
     /// Dim by ~8% when rendering a last-known state offline (S01).
     var dimmed: Bool = false
+    /// Hold the breath while the book is open over the room — the fire
+    /// underneath a full-screen reading would otherwise draw at 30 fps
+    /// for nobody.
+    var paused: Bool = false
 
     @State private var seed = Double.random(in: 0..<1000)
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -49,7 +53,7 @@ struct CampfireView: View {
                         state: state, scale: scale, coalDepth: coalDepth)
                 }
             } else {
-                TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
+                TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: paused)) { timeline in
                     Canvas { context, size in
                         FirePainter.draw(
                             in: &context, size: size,
@@ -63,16 +67,24 @@ struct CampfireView: View {
         .frame(height: frameHeight)
         .opacity(dimmed ? 0.92 : 1)
         .accessibilityElement()
-        .accessibilityLabel("The fire is \(state.displayName).")
+        .accessibilityLabel(Copy.fireIs(state.displayName))
     }
 }
 
 /// A tiny static fire — the chooser's length indicator (S13) and the rooms
-/// sheet's state glyph (S14).
+/// sheet's state glyph (S14). Drawn at the book's scale: the chooser's
+/// fires are the only length indicator, so Philemon's must be small and
+/// Isaiah's large (§4.1) — three sizes, read as a fact about the book.
 struct CampfireGlyph: View {
     var state: FireState
     var scale: FireScale
+    /// The height of a medium fire; small and large derive from it by the
+    /// book's own frame ratios (120 : 180 : 240).
     var height: CGFloat = 22
+
+    private var drawnHeight: CGFloat {
+        height * CGFloat(scale.frameHeight / FireScale.medium.frameHeight)
+    }
 
     var body: some View {
         Canvas { context, size in
@@ -80,7 +92,10 @@ struct CampfireGlyph: View {
                 in: &context, size: size, time: 402.7,
                 state: state, scale: scale, coalDepth: 0.3)
         }
-        .frame(width: height * 1.4, height: height)
+        .frame(width: drawnHeight * 1.4, height: drawnHeight)
+        .frame(width: height * 1.4 * (FireScale.large.frameHeight / FireScale.medium.frameHeight),
+               height: height * (FireScale.large.frameHeight / FireScale.medium.frameHeight),
+               alignment: .bottom)
         .accessibilityHidden(true)
     }
 }

@@ -112,10 +112,17 @@ final class RemoteSync {
         }
     }
 
-    func push(room: Room) async throws {
+    /// The room row. The name rides only when this device authored it
+    /// (`includeName`): a nil name is omitted from the upsert, so a
+    /// partner's rename is never clobbered by a stale row (§13). A room
+    /// deliberately un-named therefore can't clear its name remotely —
+    /// accepted; renaming to nothing is rare and local.
+    func push(room: Room, includeName: Bool = false) async throws {
         try await withAuthRetry {
             try await self.client.upsert(into: "rooms", rows: [
-                RoomRow(id: room.id, name: room.name, isPaused: room.isPaused, createdAt: room.createdAt)
+                RoomRow(
+                    id: room.id, name: includeName ? room.name : nil,
+                    isPaused: room.isPaused, createdAt: room.createdAt)
             ])
         }
     }
@@ -148,7 +155,8 @@ final class RemoteSync {
                 ReadingRow(
                     id: reading.id, roomId: reading.roomID, bookId: reading.bookID,
                     scale: reading.handiwork.scale.rawValue,
-                    startedAt: reading.startedAt, finishedAt: reading.finishedAt)
+                    startedAt: reading.startedAt, finishedAt: reading.finishedAt,
+                    setAsideAt: reading.setAsideAt)
             ])
         }
         try await withAuthRetry {
@@ -189,15 +197,18 @@ final class RemoteSync {
     /// takes everything authored by the person that the backend holds.
     /// Best-effort on the portrait object first (its policy is the
     /// person's own).
-    func deleteAccountData() async {
+    func deleteAccountData() async throws {
         guard let userID else { return }
-        try? await withAuthRetry {
-            try await self.client.deletePortrait(personID: userID)
-        }
-        try? await withAuthRetry {
+        // The profile row is the deletion; if this can't land, nothing
+        // has been deleted and the caller says so (S25). The portrait
+        // object goes after — storage isn't covered by the cascade.
+        try await withAuthRetry {
             try await self.client.delete(from: "profiles", query: [
                 URLQueryItem(name: "id", value: "eq.\(userID.uuidString.lowercased())")
             ])
+        }
+        try? await withAuthRetry {
+            try await self.client.deletePortrait(personID: userID)
         }
     }
 
@@ -359,6 +370,28 @@ final class RemoteSync {
         var scale: String
         var startedAt: Date
         var finishedAt: Date?
+        /// A book set aside for another (§6.6) — a room has one open
+        /// reading at a time on every phone.
+        var setAsideAt: Date?
+
+        enum CodingKeys: String, CodingKey {
+            case id, roomId, bookId, scale, startedAt, finishedAt, setAsideAt
+        }
+
+        /// Synthesized encoding omits a nil optional, and a column left out
+        /// of the upsert is left untouched on conflict — so a resume
+        /// (set_aside_at back to null) would never reach the other phone.
+        /// The moment goes as an explicit null instead.
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encode(id, forKey: .id)
+            try c.encode(roomId, forKey: .roomId)
+            try c.encode(bookId, forKey: .bookId)
+            try c.encode(scale, forKey: .scale)
+            try c.encode(startedAt, forKey: .startedAt)
+            try c.encodeIfPresent(finishedAt, forKey: .finishedAt)
+            try c.encode(setAsideAt, forKey: .setAsideAt)
+        }
     }
 
     struct FireRow: Codable {

@@ -43,8 +43,27 @@ final class ScriptureStore: @unchecked Sendable {
         book(address.bookID, translation: translation)?.chapter(address.chapter)
     }
 
+    /// The words of one verse, in a translation. A licensed translation
+    /// answers from its cache of the open book; failing that, the bundled
+    /// Berean text stands in — Scripture is never locked (§2.5), and a
+    /// quote, a preview or an ember's highlight must never simply vanish.
     func verseText(_ address: VerseAddress, translation: TranslationID) -> String? {
-        chapter(address, translation: translation)?.text(forVerse: address.verse)
+        if let text = chapter(address, translation: translation)?.text(forVerse: address.verse) {
+            return text
+        }
+        if let licensed = TranslationRegistry.translation(for: translation), !licensed.isBundled,
+           let text = cachedRemoteChapter(address, translation: licensed)?.text(forVerse: address.verse) {
+            return text
+        }
+        return chapter(address, translation: .bsb)?.text(forVerse: address.verse)
+    }
+
+    /// The words of a run of verses, joined.
+    func rangeText(_ range: VerseRange, translation: TranslationID) -> String? {
+        let parts = range.verses.compactMap { verse in
+            verseText(VerseAddress(bookID: range.bookID, chapter: range.chapter, verse: verse), translation: translation)
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " ")
     }
 
     /// Scripture search (S23): matches book names, references, and text.

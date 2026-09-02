@@ -9,21 +9,30 @@ import RibbonCore
 // someone here, several here (a short vertical stack, never a row of
 // shrinking avatars), following (a ring in their ink and a chartreuse
 // thread down the edge), and reading quietly (you see a small closed
-// shape; others see nothing at all).
+// shape; others see nothing at all). The lozenge and the panel are one
+// piece of glass morphing between two shapes (§12.1).
 
 struct PresenceForm: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let room: Room
+    /// Owned by the reading surface: the measure insets while the panel is
+    /// open, so glass never lies over a verse (§12.1). The Wave's hold
+    /// opens it too, which is how read quietly is reachable when alone.
+    @Binding var expanded: Bool
     var onFollow: (PresentPerson) -> Void
 
-    @State private var expanded = false
     @State private var holdTarget: UUID?
     @State private var holdProgress: CGFloat = 0
+    @State private var holdBegan: Date?
     /// "Ruth is with you" appears once per follower, then rests.
     @State private var announcedFollowers: Set<UUID> = []
+    @State private var frontIndex = 0
+    @Namespace private var glass
 
     private var people: [PresentPerson] { model.presentPeople }
+    private var largeType: Bool { dynamicTypeSize.isAccessibilitySize }
 
     /// Someone whose scroll is yours: their portrait tucks against the form.
     private var follower: PresentPerson? {
@@ -32,20 +41,20 @@ struct PresenceForm: View {
     }
 
     var body: some View {
-        Group {
-            if people.isEmpty && !model.readingQuietly {
-                // Absence is the honest rendering of absence.
-                EmptyView()
-            } else if expanded {
-                expandedPanel
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
-            } else {
-                collapsedForm
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
+        GlassEffectContainer(spacing: 12) {
+            Group {
+                if people.isEmpty && !model.readingQuietly && !expanded {
+                    // Absence is the honest rendering of absence.
+                    EmptyView()
+                } else if expanded {
+                    expandedPanel
+                } else {
+                    collapsedForm
+                }
             }
         }
-        .animation(RibbonMotion.open, value: expanded)
-        .animation(RibbonMotion.arrive, value: people)
+        .animation(reduceMotion ? nil : RibbonMotion.open, value: expanded)
+        .animation(reduceMotion ? nil : RibbonMotion.arrive, value: people)
     }
 
     // MARK: Collapsed — the lozenge
@@ -53,19 +62,26 @@ struct PresenceForm: View {
     @ViewBuilder
     private var collapsedForm: some View {
         VStack(spacing: 3) {
-            if model.readingQuietly {
-                // A small closed shape at the edge, so you never forget
-                // you're invisible. Stays tappable even when you're alone.
-                Capsule()
-                    .fill(Palette.raised)
-                    .overlay(Capsule().strokeBorder(Palette.rule, lineWidth: 1))
-                    .frame(width: 20, height: 34)
-                    .accessibilityLabel("Reading quietly. Only you can see you.")
-            } else if let front = people.first {
-                lozenge(front, stacked: people.count > 1)
+            if people.isEmpty {
+                // Reading quietly, alone: a small closed shape at the edge,
+                // fully on screen, so you never forget you're invisible —
+                // and never stranded without the toggle.
+                // The same piece of glass as the panel (§12.1): the id
+                // rides on the glass itself, so the two morph.
+                Color.clear
+                    .frame(width: 22, height: 36)
+                    .ribbonGlass(in: Capsule())
+                    .glassEffectID("form", in: glass)
+                    .frame(width: 44, height: 56)
+                    .contentShape(Rectangle())
+                    .padding(.trailing, 4)
+                    .accessibilityLabel(Copy.readingQuietly)
+                    .accessibilityHint(Copy.onlyYouCanSeeYou)
+            } else {
+                lozenge(people[min(frontIndex, people.count - 1)], stacked: people.count > 1)
+                    .padding(.trailing, -22)  // about half off-screen
             }
         }
-        .padding(.trailing, -14)  // half off-screen
         .contentShape(Rectangle())
         .onTapGesture {
             if model.readingQuietly || people.count > 1 {
@@ -79,9 +95,20 @@ struct PresenceForm: View {
                 .onEnded { value in
                     if value.translation.width < -20 {
                         withAnimation(RibbonMotion.open) { expanded = true }
+                    } else if people.count > 1, abs(value.translation.height) > 20 {
+                        // Several here: flick through, one at a time.
+                        let step = value.translation.height < 0 ? 1 : -1
+                        frontIndex = (frontIndex + step + people.count) % people.count
                     }
                 })
         .onLongPressGesture(minimumDuration: 0.35) {
+            withAnimation(RibbonMotion.open) { expanded = true }
+        }
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction(named: Copy.tapToFollow) {
+            if let person = people.first { onFollow(person) }
+        }
+        .accessibilityAction(named: Copy.readQuietly) {
             withAnimation(RibbonMotion.open) { expanded = true }
         }
     }
@@ -100,22 +127,24 @@ struct PresenceForm: View {
                 portrait(person)
                     .frame(width: 44, height: 64)
                     .ribbonGlass(in: RoundedRectangle(cornerRadius: 20))
+                    .glassEffectID("form", in: glass)
                 // Being followed is visible but small: their portrait tucks
                 // against yours (§4.2).
                 if let follower {
                     PortraitView(
                         person: model.person(follower.id),
-                        ink: model.membership(of: follower.id, in: room.id)?.ink,
+                        ink: model.inkForDisplay(follower.id, in: room.id),
                         size: 20,
                         image: model.portrait(follower.id))
                     .offset(x: -30, y: 24)
                 }
             }
+            .opacity(person.isIdle ? 0.8 : 1)
             if let follower, !announcedFollowers.contains(follower.id) {
                 SmallCaps(
                     Copy.isWithYou(firstName(model.person(follower.id)?.name ?? follower.name)),
                     size: 11)
-                    .padding(.trailing, 18)
+                    .padding(.trailing, 26)
                     .task {
                         try? await Task.sleep(for: .seconds(4))
                         withAnimation(RibbonMotion.arrive) {
@@ -124,20 +153,21 @@ struct PresenceForm: View {
                     }
             }
         }
-        .accessibilityLabel(presenceLabel(person, othersCount: people.count - 1))
+        .accessibilityLabel(presenceLabel(person, others: people.filter { $0.id != person.id }))
     }
 
     private func portrait(_ person: PresentPerson) -> some View {
         PortraitView(
             person: model.person(person.id),
-            ink: model.membership(of: person.id, in: room.id)?.ink,
+            ink: model.inkForDisplay(person.id, in: room.id),
             size: 38,
             image: model.portrait(person.id))
         .opacity(person.isIdle ? 0.6 : 1)
         .overlay {
-            if model.followingPersonID == person.id,
-               let ink = model.membership(of: person.id, in: room.id)?.ink {
-                Circle().strokeBorder(ink.color, lineWidth: 1.6)
+            // A ring in their ink while following — their display ink, so
+            // a room of two draws it too.
+            if model.followingPersonID == person.id {
+                Circle().strokeBorder(model.inkForDisplay(person.id, in: room.id).color, lineWidth: 1.6)
                     .frame(width: 40, height: 40)
             }
         }
@@ -158,19 +188,27 @@ struct PresenceForm: View {
                     SmallCaps(Copy.onlyYouCanSeeYou, size: 11)
                 }
             }
-            Divider().overlay(Palette.rule)
+            if !people.isEmpty || model.readingQuietly {
+                Divider().overlay(Palette.rule)
+            }
+            // The toggle says what it does, both ways (§10.1).
             Button {
                 model.readingQuietly.toggle()
                 withAnimation(RibbonMotion.open) { expanded = false }
             } label: {
-                SmallCaps(Copy.readQuietly, size: 12,
-                          color: model.readingQuietly ? Palette.chartreuse : Palette.muted)
+                SmallCaps(model.readingQuietly ? Copy.beSeenAgain : Copy.readQuietly, size: 12,
+                          color: model.readingQuietly ? Palette.chartreuse : Palette.text)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityValue(model.readingQuietly ? Copy.readingQuietly : "")
         }
         .padding(16)
-        .frame(width: 200, alignment: .leading)
+        .frame(width: largeType ? 240 : 200, alignment: .leading)
         .ribbonGlass(in: RoundedRectangle(cornerRadius: 22), interactive: true)
+        .glassEffectID("form", in: glass)
+        .padding(.trailing, 8)
         .gesture(
             DragGesture(minimumDistance: 12)
                 .onEnded { value in
@@ -178,7 +216,7 @@ struct PresenceForm: View {
                         withAnimation(RibbonMotion.open) { expanded = false }
                     }
                 })
-        .onTapGesture {
+        .accessibilityAction(named: Copy.close) {
             withAnimation(RibbonMotion.open) { expanded = false }
         }
     }
@@ -192,64 +230,91 @@ struct PresenceForm: View {
                         // Thinking of you (§4.3): the portrait fills with
                         // your ink over ~700 ms; release completes it.
                         Circle()
-                            .trim(from: 0, to: holdProgress)
-                            .stroke(myInk.color, lineWidth: 2.5)
-                            .rotationEffect(.degrees(-90))
-                            .frame(width: 38, height: 38)
+                            .fill(myInk.color.opacity(0.85))
+                            .scaleEffect(holdProgress)
+                            .frame(width: 34, height: 34)
                     }
                 }
             VStack(alignment: .leading, spacing: 2) {
                 Text(model.person(person.id)?.name ?? person.name)
                     .font(RibbonType.ui(15))
                     .foregroundStyle(Palette.text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                 SmallCaps(
                     person.isIdle ? Copy.hereButStill : (person.position?.chapterFormatted ?? ""),
                     size: 11)
             }
             Spacer(minLength: 0)
         }
+        .frame(minHeight: 44)
         .contentShape(Rectangle())
-        .onTapGesture { onFollow(person) }
-        .onLongPressGesture(minimumDuration: 0.7) {
-            holdProgress = 1
+        // One gesture for both: a tap follows; a hold of ~700 ms sends
+        // thinking-of-you on release — never on a timer, never by mistake.
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in
+                    guard holdTarget != person.id else { return }
+                    holdTarget = person.id
+                    holdBegan = Date()
+                    Haptics.shared.beginThinkingOfYouHold()
+                    if reduceMotion {
+                        // An instant state change with the haptic intact (§11).
+                        holdProgress = 1
+                    } else {
+                        holdProgress = 0
+                        withAnimation(RibbonMotion.inkFill) { holdProgress = 1 }
+                    }
+                }
+                .onEnded { value in
+                    let held = holdBegan.map { Date().timeIntervalSince($0) } ?? 0
+                    let moved = abs(value.translation.width) > 12 || abs(value.translation.height) > 12
+                    if value.translation.width > 20 {
+                        // A drag to the right collapses the panel from a
+                        // row too (S07), not only from its toggle.
+                        Haptics.shared.cancelThinkingOfYouHold()
+                        withAnimation(RibbonMotion.open) { expanded = false }
+                    } else if held >= 0.7, !moved {
+                        Haptics.shared.completeThinkingOfYouHold()
+                        Task { await model.presence.sendThinkingOfYou(to: person.id) }
+                    } else {
+                        Haptics.shared.cancelThinkingOfYouHold()
+                        if held < 0.35, !moved {
+                            onFollow(person)
+                            withAnimation(RibbonMotion.open) { expanded = false }
+                        }
+                    }
+                    holdTarget = nil
+                    holdBegan = nil
+                    withAnimation(.easeOut(duration: 0.15)) { holdProgress = 0 }
+                })
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(presenceLabel(person, others: []))
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction(named: Copy.tapToFollow) {
+            onFollow(person)
+            withAnimation(RibbonMotion.open) { expanded = false }
+        }
+        .accessibilityAction(named: Copy.thinkingOfThem) {
             Haptics.shared.completeThinkingOfYouHold()
             Task { await model.presence.sendThinkingOfYou(to: person.id) }
-            holdTarget = nil
-            holdProgress = 0
-        } onPressingChanged: { pressing in
-            if pressing {
-                holdTarget = person.id
-                Haptics.shared.beginThinkingOfYouHold()
-                if reduceMotion {
-                    // An instant state change with the haptic intact (§11).
-                    holdProgress = 1
-                } else {
-                    withAnimation(RibbonMotion.inkFill) { holdProgress = 1 }
-                }
-            } else if holdTarget == person.id {
-                Haptics.shared.cancelThinkingOfYouHold()
-                holdTarget = nil
-                withAnimation(.easeOut(duration: 0.15)) { holdProgress = 0 }
-            }
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(presenceLabel(person, othersCount: 0))
-        .accessibilityHint("Tap to follow. Hold to let them know you're thinking of them.")
     }
 
     private var myInk: Ink {
-        model.currentRoom.flatMap { model.myMembership(in: $0)?.ink } ?? model.lastUsedInk
+        model.me.map { model.inkForDisplay($0.id, in: room.id) } ?? model.lastUsedInk
     }
 
-    private func presenceLabel(_ person: PresentPerson, othersCount: Int) -> String {
+    private func presenceLabel(_ person: PresentPerson, others: [PresentPerson]) -> String {
         let name = model.person(person.id)?.name ?? person.name
-        let base = person.isIdle ? "\(name) is here, but still" : "\(name) is reading"
+        let where_ = person.isIdle ? Copy.hereButStill : (person.position?.chapterFormatted ?? "")
+        var parts = [where_.isEmpty ? Copy.isReading(name) : Copy.presenceRow(name, where_)]
+        if model.followingPersonID == person.id { parts.append(Copy.following) }
         // Never a count of people — name who else is here instead.
-        if othersCount > 0 {
-            let others = people.dropFirst().compactMap { model.person($0.id)?.name ?? $0.name }
-            return base + ", with " + others.joined(separator: " and ")
+        if !others.isEmpty {
+            parts.append(Copy.withOthers(others.map { model.person($0.id)?.name ?? $0.name }))
         }
-        return base
+        return parts.joined(separator: ", ")
     }
 }
 

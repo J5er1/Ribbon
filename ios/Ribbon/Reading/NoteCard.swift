@@ -5,19 +5,22 @@ import RibbonCore
 // important emotional moment in the app: reading what someone left.
 
 struct NoteCard: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
     let note: Note
     /// The reader's view of the author.
     let author: Person?
     let authorInk: Ink
-    var onTakeBack: () -> Void
-    var onEdit: () -> Void
+    /// Nil where the note can't be acted on — someone else's, or an
+    /// ember's record: then there is no menu at all.
+    var onTakeBack: (() -> Void)?
+    var onEdit: (() -> Void)?
 
     @State private var player = VoicePlayer()
     @State private var transcriptShown = false
     @State private var audioURL: URL?
 
     private var isMine: Bool { note.authorID == model.me?.id }
+    private var canAct: Bool { isMine && (onTakeBack != nil || onEdit != nil) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -51,9 +54,15 @@ struct NoteCard: View {
         }
         .padding(.vertical, 8)
         .contextMenu {
-            if isMine {
-                Button(Copy.edit, action: onEdit)
-                Button(Copy.takeBack, role: .destructive, action: onTakeBack)
+            if canAct {
+                // Edit only makes sense for words; a voice note is taken
+                // back or left as it is.
+                if note.kind == .written, let onEdit {
+                    Button(Copy.edit, action: onEdit)
+                }
+                if let onTakeBack {
+                    Button(Copy.takeBack, role: .destructive, action: onTakeBack)
+                }
             }
         }
         .task {
@@ -62,7 +71,7 @@ struct NoteCard: View {
             }
         }
         .onDisappear { player.stop() }
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
         .accessibilityLabel(accessibilityText)
     }
 
@@ -73,6 +82,7 @@ struct NoteCard: View {
                 peaks: note.waveform ?? [],
                 ink: authorInk,
                 progress: player.progress,
+                isPlaying: player.isPlaying,
                 onScrub: { player.scrub(to: $0) },
                 onTap: togglePlayback)
 
@@ -84,27 +94,52 @@ struct NoteCard: View {
                     Text(Copy.noTranscript)
                         .font(RibbonType.ui(14))
                         .foregroundStyle(Palette.muted)
-                    Button(Copy.tryAgain) { model.retryTranscript(note) }
-                        .font(RibbonType.ui(14))
-                        .foregroundStyle(Palette.text)
+                    if model.speechRecognitionRefused {
+                        // Refused once: a route to Settings, not a retry
+                        // that can never succeed (S25).
+                        Button {
+                            if let url = URL(string: UIApplication.openSettingsURLString) {
+                                UIApplication.shared.open(url)
+                            }
+                        } label: {
+                            SmallCaps(Copy.openSettings, size: 12, color: Palette.text)
+                                .frame(minHeight: 44)
+                        }
                         .buttonStyle(.plain)
+                    } else {
+                        Button {
+                            model.retryTranscript(note)
+                        } label: {
+                            Text(Copy.tryAgain)
+                                .font(RibbonType.ui(14))
+                                .foregroundStyle(Palette.text)
+                                .frame(minHeight: 44)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
             case .ready, nil:
                 if let transcript = note.transcript {
                     Button {
                         withAnimation(RibbonMotion.settle) { transcriptShown.toggle() }
                     } label: {
-                        if transcriptShown {
-                            Text(transcript)
-                                .font(RibbonType.ui(14))
-                                .foregroundStyle(Palette.muted)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .multilineTextAlignment(.leading)
-                        } else {
-                            SmallCaps("transcript", size: 12)
+                        VStack(alignment: .leading, spacing: 4) {
+                            if transcriptShown {
+                                Text(transcript)
+                                    .font(RibbonType.ui(14))
+                                    .foregroundStyle(Palette.muted)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .multilineTextAlignment(.leading)
+                            }
+                            SmallCaps(Copy.transcript, size: 12)
+                                .frame(minHeight: 32)
                         }
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(Copy.transcript)
+                    .accessibilityValue(transcript)
+                    .accessibilityAddTraits(transcriptShown ? [.isSelected] : [])
                 }
             }
         }
@@ -131,33 +166,37 @@ struct NoteCard: View {
         let name = author?.name ?? ""
         switch note.kind {
         case .written:
-            return "Note from \(name). \(note.body ?? "")"
+            return Copy.noteFromAuthor(Copy.writtenNoteKind, name, note.body)
         case .voice:
-            return "Voice note from \(name). \(note.transcript ?? "")"
+            return Copy.noteFromAuthor(Copy.voiceNoteKind, name, nil)
         }
     }
 }
 
 /// The waveform, drawn in the author's ink, filling left-to-right as it
 /// plays. No timer, no duration readout — a duration is a count and it
-/// makes people self-conscious about how long they talked.
+/// makes people self-conscious about how long they talked. The bars fit
+/// the measure whatever the peak count; scrubbing maps to the same width.
 struct WaveformView: View {
     var peaks: [Float]
     var ink: Ink
     var progress: Double
+    var isPlaying: Bool
     var onScrub: (Double) -> Void
     var onTap: () -> Void
 
     var body: some View {
         GeometryReader { geo in
-            let width = geo.size.width
-            HStack(alignment: .center, spacing: 1.5) {
-                let bars = displayPeaks
+            let width = max(1, geo.size.width)
+            let bars = displayPeaks
+            let barWidth = max(1.2, min(3, width / CGFloat(bars.count) * 0.62))
+            let gap = (width - barWidth * CGFloat(bars.count)) / CGFloat(max(1, bars.count - 1))
+            HStack(alignment: .center, spacing: max(0.5, gap)) {
                 ForEach(bars.indices, id: \.self) { index in
                     let played = Double(index) / Double(max(1, bars.count)) <= progress
                     Capsule()
                         .fill(ink.color.opacity(played ? 1 : 0.35))
-                        .frame(width: 2, height: max(3, CGFloat(bars[index]) * 30))
+                        .frame(width: barWidth, height: max(3, CGFloat(bars[index]) * 30))
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
@@ -166,12 +205,23 @@ struct WaveformView: View {
             .gesture(
                 DragGesture(minimumDistance: 8)
                     .onChanged { value in
-                        onScrub(max(0, min(1, value.location.x / max(1, width))))
+                        onScrub(max(0, min(1, value.location.x / width)))
                     })
         }
         .frame(height: 34)
-        .accessibilityLabel("Play the voice note")
+        .accessibilityElement()
+        .accessibilityLabel(isPlaying ? Copy.pauseTheVoiceNote : Copy.playTheVoiceNote)
+        .accessibilityValue(isPlaying ? Copy.audioPlaying : Copy.audioPaused)
         .accessibilityAddTraits(.isButton)
+        .accessibilityAction { onTap() }
+        // Scrubbing, for VoiceOver: a step back or forward (§11).
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment: onScrub(min(1, progress + 0.1))
+            case .decrement: onScrub(max(0, progress - 0.1))
+            @unknown default: break
+            }
+        }
     }
 
     private var displayPeaks: [Float] {
