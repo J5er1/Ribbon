@@ -10,7 +10,7 @@ import RibbonCore
 // offers to switch; it never silently joins.
 
 struct JoinFlow: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
     @Environment(\.dismiss) private var dismiss
     let token: UUID
     /// Joined; the room is current. The caller decides what "arriving"
@@ -115,6 +115,11 @@ struct JoinFlow: View {
                     QuietControl(title: Copy.notYou) {
                         Task {
                             await model.signOutAndForgetThisPerson()
+                            // The thread continues as a new person (S16).
+                            // Over the room, the room went with the
+                            // person and the thread re-presents this join
+                            // — at the name, not at a second preview.
+                            model.pendingInvite = PendingInvite(token: token, resumesAtName: true)
                             withAnimation(RibbonMotion.settle) { phase = .name }
                         }
                     }
@@ -135,14 +140,11 @@ struct JoinFlow: View {
 
     private var nameStep: some View {
         VStack(spacing: 24) {
-            PortraitPicker(item: $portraitItem, data: $portraitData, person: nil)
-            VStack(spacing: 4) {
-                Text(Copy.portraitReason)
-                    .font(RibbonType.ui(15))
-                    .foregroundStyle(Palette.muted)
-                SmallCaps(Copy.portraitOptional, size: 11, color: Palette.muted.opacity(0.7))
-            }
-            .multilineTextAlignment(.center)
+            PortraitPicker(item: $portraitItem, data: $portraitData)
+            Text(Copy.portraitReason)
+                .font(RibbonType.ui(15))
+                .foregroundStyle(Palette.muted)
+                .multilineTextAlignment(.center)
             RibbonTextField(prompt: Copy.yourName, text: $name, centered: true, size: 20)
                 .textContentType(.givenName)
                 .focused($nameFocused)
@@ -162,7 +164,6 @@ struct JoinFlow: View {
     private var accountStep: some View {
         AccountStep(
             reason: Copy.emailReasonJoiner,
-            primaryTitle: Copy.join,
             onSignedIn: { join() },
             skipTitle: onStartInstead == nil ? nil : Copy.startARoomInstead,
             onSkip: onStartInstead)
@@ -236,6 +237,10 @@ struct JoinFlow: View {
                 phase = .dead(Copy.inviteExpired)
             } else if found.full {
                 phase = .dead(Copy.roomFullForJoiner)
+            } else if model.me == nil, model.pendingInvite?.token == token,
+                      model.pendingInvite?.resumesAtName == true {
+                // "Not you?" already accepted this invite once.
+                phase = .name
             } else {
                 phase = .preview
             }
@@ -276,7 +281,6 @@ struct JoinFlow: View {
             defer { joining = false }
             do {
                 let roomID = try await model.joinRoom(inviteToken: token)
-                model.pendingInvite = nil
                 guard !wasSetDown else { return }
                 if let room = model.state.rooms.first(where: { $0.id == roomID }), model.needsInkPick(in: room) {
                     phase = .ink(roomID)
@@ -290,6 +294,10 @@ struct JoinFlow: View {
     }
 
     private func arrive(in roomID: UUID) {
+        // The pending token is forgotten here, not the moment the join
+        // lands: over the room it is the sheet's item, and clearing it
+        // early would dismiss the sheet under the ink step.
+        model.pendingInvite = nil
         // A room of one minted moments ago by "Start a room" and never
         // read in has no reason to linger in the rooms sheet.
         model.discardEmptyRoomOfOne(except: roomID)

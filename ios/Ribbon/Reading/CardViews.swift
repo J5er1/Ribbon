@@ -11,7 +11,7 @@ import RibbonCore
 /// The card slot at a passage end (S03): sealed, open, or nothing. When
 /// the last answer lands while the reader is looking, it turns live.
 struct PassageCardSlot: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
     let reading: Reading
     let chapter: Int
 
@@ -45,7 +45,7 @@ struct PassageCardSlot: View {
 
 /// S08 — a card, sealed.
 struct SealedCardView: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
     let card: ReflectionCard
 
     @State private var draft = ""
@@ -120,7 +120,7 @@ struct SealedCardView: View {
 /// S09 — a card, open: every answer, each with its author's portrait and
 /// ink. The turn is a visual moment; no haptic (§9.3).
 struct OpenCardView: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let card: ReflectionCard
     let roomID: UUID

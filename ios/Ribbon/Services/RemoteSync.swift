@@ -199,15 +199,16 @@ final class RemoteSync {
     /// person's own).
     func deleteAccountData() async throws {
         guard let userID else { return }
-        try? await withAuthRetry {
-            try await self.client.deletePortrait(personID: userID)
-        }
         // The profile row is the deletion; if this can't land, nothing
-        // has been deleted and the caller says so (S25).
+        // has been deleted and the caller says so (S25). The portrait
+        // object goes after — storage isn't covered by the cascade.
         try await withAuthRetry {
             try await self.client.delete(from: "profiles", query: [
                 URLQueryItem(name: "id", value: "eq.\(userID.uuidString.lowercased())")
             ])
+        }
+        try? await withAuthRetry {
+            try await self.client.deletePortrait(personID: userID)
         }
     }
 
@@ -372,6 +373,25 @@ final class RemoteSync {
         /// A book set aside for another (§6.6) — a room has one open
         /// reading at a time on every phone.
         var setAsideAt: Date?
+
+        enum CodingKeys: String, CodingKey {
+            case id, roomId, bookId, scale, startedAt, finishedAt, setAsideAt
+        }
+
+        /// Synthesized encoding omits a nil optional, and a column left out
+        /// of the upsert is left untouched on conflict — so a resume
+        /// (set_aside_at back to null) would never reach the other phone.
+        /// The moment goes as an explicit null instead.
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encode(id, forKey: .id)
+            try c.encode(roomId, forKey: .roomId)
+            try c.encode(bookId, forKey: .bookId)
+            try c.encode(scale, forKey: .scale)
+            try c.encode(startedAt, forKey: .startedAt)
+            try c.encodeIfPresent(finishedAt, forKey: .finishedAt)
+            try c.encode(setAsideAt, forKey: .setAsideAt)
+        }
     }
 
     struct FireRow: Codable {

@@ -9,7 +9,7 @@ import RibbonCore
 // discards it.
 
 struct LeaveToolbar: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let room: Room
     let range: VerseRange
@@ -26,11 +26,14 @@ struct LeaveToolbar: View {
     var onPickInk: () -> Void
 
     @State private var recording = false
+    /// The finger is still down: set on press, cleared on release, and
+    /// checked once the microphone is ready — a quick tap, or the
+    /// permission alert lifting the finger, must not start a recording
+    /// with nobody holding (deviation 21).
+    @State private var wantsRecording = false
     @State private var draggedAway = false
     @State private var deniedRoute = false
     @State private var storageShort: Int?
-
-    private var showsSwatches: Bool { existingHighlight == nil || existingHighlight?.authorID != model.me?.id }
 
     var body: some View {
         VStack(spacing: 8) {
@@ -218,6 +221,7 @@ struct LeaveToolbar: View {
             storageShort = 20
             return
         }
+        wantsRecording = true
         Task {
             if recorder.microphoneUndecided {
                 let granted = await recorder.requestAccess()
@@ -227,12 +231,14 @@ struct LeaveToolbar: View {
                 return
             }
             let url = await model.store.audioFileURL("\(UUID().uuidString).m4a")
+            guard wantsRecording else { return }
             recorder.begin(to: url)
             withAnimation(RibbonMotion.arrive) { recording = recorder.isRecording }
         }
     }
 
     private func endRecording(discarding: Bool) {
+        wantsRecording = false
         guard recording else { return }
         withAnimation(RibbonMotion.arrive) { recording = false }
         draggedAway = false

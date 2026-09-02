@@ -10,7 +10,7 @@ import RibbonCore
 // every pushed screen carries its own small-caps title and way back.
 
 struct YouSheet: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
     @Environment(\.dismiss) private var dismiss
 
     @State private var editingName = false
@@ -154,7 +154,7 @@ struct YouSheet: View {
 /// fresh room of one couldn't reach (deviations 9a) — now they're one tap
 /// away with the rest of You.
 private struct RoomSection: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
     let room: Room
     var onLeft: () -> Void
 
@@ -188,7 +188,7 @@ private struct RoomSection: View {
                 }
             }
             // Any member can invite (§6.7), until the room holds six.
-            if !room.isPaused {
+            if !room.isPaused, !model.isFull(room) {
                 QuietControl(title: alone ? Copy.inviteSomeone : Copy.inviteSomeoneElse) { showInvite = true }
             }
             if model.inkIsIdentity(in: room) {
@@ -237,7 +237,7 @@ private struct RoomSection: View {
 /// The account (§6.10): an emailed code, no passwords. Signed out is a
 /// state, not a nag — one quiet line, and the reason stated plainly.
 private struct AccountSection: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
 
     @State private var signingIn = false
 
@@ -314,7 +314,7 @@ private struct SettingsPage<Content: View>: View {
 // reading, which is a small thing and the kind of small thing this product
 // is made of.
 struct TextSettingsScreen: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
 
     var body: some View {
         SettingsPage(title: Copy.textAndTranslation) {
@@ -436,7 +436,7 @@ struct TextSettingsScreen: View {
 // don't exist. The switches are kept for the day Ribbon can send them,
 // and the screen says so once.
 struct NotificationSettingsScreen: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
 
     var body: some View {
         SettingsPage(title: Copy.notifications) {
@@ -523,7 +523,7 @@ struct NotificationSettingsScreen: View {
 // S21 — downloads. Megabytes are a fine number: they measure a device, not
 // a person. Both launch translations ship in the app, whole.
 struct DownloadsScreen: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
 
     var body: some View {
         SettingsPage(title: Copy.downloads) {
@@ -590,7 +590,7 @@ struct DownloadsScreen: View {
 // never sees a price and never learns who pays. Until the store exists,
 // this screen says only what is true.
 struct PlanScreen: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
 
     var body: some View {
         SettingsPage(title: Copy.plan) {

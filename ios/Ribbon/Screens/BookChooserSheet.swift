@@ -10,7 +10,7 @@ import RibbonCore
 /// The chooser's content — the sheet over the room, and the last step of
 /// the thread (S17), are the same screen.
 struct BookChooserContent: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
     let room: Room
     /// The heading, when the chooser is a step rather than a sheet.
     var heading: String?
@@ -205,7 +205,7 @@ struct BookChooserContent: View {
     /// The label says what the drawn fire says — the book, and whether it
     /// is on the shelf. Never a size word that reads as a measure.
     private func bookLabel(_ book: BibleBook) -> String {
-        book.name + (onShelf.contains(book.id) ? ", on your shelf" : "")
+        book.name + (onShelf.contains(book.id) ? ", \(Copy.onTheShelf)" : "")
     }
 
     @ViewBuilder

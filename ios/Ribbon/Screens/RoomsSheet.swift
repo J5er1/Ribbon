@@ -7,7 +7,7 @@ import RibbonCore
 // you've left stay beneath, for their shelves (§6.8).
 
 struct RoomsSheet: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
     @Environment(\.dismiss) private var dismiss
     var onSwitch: (UUID) -> Void
     var onStartRoom: () -> Void

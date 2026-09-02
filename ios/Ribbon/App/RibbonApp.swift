@@ -19,7 +19,7 @@ struct RibbonApp: App {
             Group {
                 if let model {
                     RootView()
-                        .environment(model)
+                        .environment(\.appModel, model)
                 } else {
                     // One frame of the unlit ground while state loads from
                     // disk — indistinguishable from the launch screen.
@@ -68,7 +68,7 @@ struct PersonRoute: Hashable {
 }
 
 struct RootView: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var onboarding = false
@@ -237,12 +237,12 @@ struct RootView: View {
             }
         } else {
             // A person with no rooms (left their last one): a fresh room of
-            // one, quietly — reading continues (§6.8).
+            // one, quietly — reading continues (§6.8). Not while a restore
+            // is still bringing their rooms back (§6.10).
             GrainBackground()
-                .onAppear {
-                    if model.me != nil {
-                        model.createRoom(named: nil)
-                    }
+                .task(id: model.restoringRooms) {
+                    guard model.me != nil, !model.restoringRooms, model.liveRooms.isEmpty else { return }
+                    model.createRoom(named: nil)
                 }
         }
     }

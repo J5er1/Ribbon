@@ -17,7 +17,10 @@ struct EmberView: View {
 
     private var breathSeed: Double {
         guard let seed else { return randomSeed }
-        return Double(seed.hashValue & 0xFFFF) / 65.535
+        // From the id's own bytes: the same breath on every launch and
+        // every device, never from a per-process hasher.
+        let bytes = seed.uuid
+        return Double((Int(bytes.0) << 8 | Int(bytes.1)) & 0xFFFF) / 65.535
     }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -150,6 +153,6 @@ struct FireBecomesEmber: View {
             settling = 2
         }
         .accessibilityElement()
-        .accessibilityLabel(Copy.fireSettlesFor(""))
+        .accessibilityLabel(Copy.fireSettles)
     }
 }

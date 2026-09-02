@@ -6,7 +6,7 @@ import RibbonCore
 // anything they've done.
 
 struct PersonScreen: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
     @Environment(\.dismiss) private var dismiss
     let personID: UUID
     let room: Room
@@ -15,6 +15,7 @@ struct PersonScreen: View {
     var onOpenVerse: (VerseAddress, UUID) -> Void
 
     @State private var confirmLeave = false
+    @State private var confirmClose = false
     @State private var showInkPicker = false
 
     private var person: Person? { model.person(personID) }
@@ -88,7 +89,13 @@ struct PersonScreen: View {
                         if model.inkIsIdentity(in: room) {
                             QuietControl(title: Copy.changeYourInk) { showInkPicker = true }
                         }
-                        QuietControl(title: Copy.leaveThisRoom) { confirmLeave = true }
+                        // A room of one closes rather than leaves itself
+                        // (§6.8, deviation 16); the export lives in You.
+                        if model.members(of: room).count <= 1 {
+                            QuietControl(title: Copy.closeThisRoom) { confirmClose = true }
+                        } else {
+                            QuietControl(title: Copy.leaveThisRoom) { confirmLeave = true }
+                        }
                     }
                     .padding(.top, 36)
                 }
@@ -99,6 +106,12 @@ struct PersonScreen: View {
         .scrollIndicators(.hidden)
         .room()
         .leaveRoomDialog(room: room, isPresented: $confirmLeave) { dismiss() }
+        .confirmationDialog(Copy.closeRoomConfirm, isPresented: $confirmClose, titleVisibility: .visible) {
+            Button(Copy.closeIt, role: .destructive) {
+                model.closeRoomOfOne(room)
+                dismiss()
+            }
+        }
         .sheet(isPresented: $showInkPicker) {
             InkPickerSheet(room: room)
         }
@@ -110,7 +123,7 @@ struct PersonScreen: View {
 /// two chained ones (a second dialog set from inside the first's action
 /// doesn't reliably present). Shared by S12 and You.
 private struct LeaveRoomDialog: ViewModifier {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
     let room: Room
     @Binding var isPresented: Bool
     var onLeft: () -> Void
@@ -147,7 +160,7 @@ extension View {
 /// Picking an ink when color is identity (§4.5, §6.7) — an invitation, not
 /// an interruption. The row of eight, with the taken ones dimmed.
 struct InkPickerRow: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
     let room: Room
     var onPicked: () -> Void = {}
 
@@ -179,7 +192,8 @@ struct InkPickerRow: View {
                 .buttonStyle(.plain)
                 .disabled(isTaken)
                 .accessibilityLabel(
-                    "\(ink.displayName)\(ink == mine ? ", yours" : "")\(isTaken ? ", taken" : "")")
+                    ([ink.displayName] + (ink == mine ? [Copy.inkYours] : []) + (isTaken ? [Copy.inkTaken] : []))
+                        .joined(separator: ", "))
                 .accessibilityAddTraits(ink == mine ? [.isSelected] : [])
             }
         }

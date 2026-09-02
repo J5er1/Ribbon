@@ -261,11 +261,38 @@ reasoning.
     carries no inert "Start the room again" control; it says plans arrive
     with the store.
 
+24a. **Mark a quiet day appears only while a fire is going.** S01 has it
+    "always present, never emphasised"; with no open reading there is
+    nothing to bank, and a banked day marked on a fire-less room would make
+    the next book open on a fire that reads banked instead of catching. It
+    is absent on first run and between books, and in a paused or departed
+    room.
+
 25. **"In the night" is gone.** §4.9 forbids a wall-clock disclosure; the
     phrase for a read before dawn revealed a 3 a.m. It is "this morning"
     now, and the presence line reads from one last-read stamp per person
     per room (§13) instead of the 36-hour fuel window, so "Ruth read
     Tuesday" can actually appear.
+
+26. **A departed room can be forgotten.** §6.8 keeps the shelf of a room
+    you've left, and it stays kept. On that room alone — never in the rooms
+    sheet, never on a live room — a quiet "Forget this room" sits under
+    "You left this room. The shelf stays.", behind the same one
+    confirmation as closing a room of one, because the shelf goes with it.
+    Nothing counts down to it and nothing suggests it.
+
+27. **"Not you?" resumes the join at the name.** S16 has the flow continue
+    as a new person (name → email → code → join). Signing the last person
+    out empties the local person, which takes their room — and the join
+    sheet over it — down with them; the thread then re-presents the same
+    invite and, since it was accepted once already, opens at the name
+    rather than at a second preview.
+
+28. **"Send it again" follows the tap, not the send.** The system share
+    sheet says nothing back about whether anything went out. The tap on
+    "Send the invite" is the one signal there is, so the control reads
+    "Send it again" after it — which is also what it does — and the quiet
+    way past ("Invite later") stays visible either way.
 
 ## Licensed translations (decided: API.Bible)
 

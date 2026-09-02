@@ -8,7 +8,7 @@ import RibbonCore
 // has one. Errors say what happened and what didn't (S25).
 
 struct AccountStep: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
     /// The one reason an account is being asked for here.
     var reason: String
     /// What the code's primary control says — "Continue" in a thread,

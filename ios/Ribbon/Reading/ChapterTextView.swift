@@ -108,6 +108,8 @@ struct ChapterTextView: UIViewRepresentable {
     /// The reading is a record (a finished book): verses carry no actions.
     var readOnly: Bool = false
     var onLongPressVerse: (Int) -> Void
+    /// VoiceOver's "Highlight": the verse takes an ink directly.
+    var onHighlightVerse: (Int) -> Void
     var onDragToVerse: (Int) -> Void
     var onDragEnded: () -> Void
     var onTapVerse: (Int) -> Void
@@ -295,7 +297,7 @@ struct ChapterTextView: UIViewRepresentable {
                 guard let rect = verseRect[verse], let body = verseText[verse] else { continue }
                 let element = UIAccessibilityElement(accessibilityContainer: view)
                 element.accessibilityFrameInContainerSpace = rect
-                element.accessibilityLabel = "Verse \(verse). \(body.trimmingCharacters(in: .whitespacesAndNewlines))"
+                element.accessibilityLabel = Copy.verseLabel(verse, body.trimmingCharacters(in: .whitespacesAndNewlines))
                 if !parent.readOnly {
                     // The long-press, as actions (§11 motor): a VoiceOver
                     // reader can leave a note or a highlight too.
@@ -304,7 +306,7 @@ struct ChapterTextView: UIViewRepresentable {
                         return true
                     }
                     let highlight = UIAccessibilityCustomAction(name: Copy.highlight) { [weak self] _ in
-                        self?.parent.onLongPressVerse(verse)
+                        self?.parent.onHighlightVerse(verse)
                         return true
                     }
                     element.accessibilityCustomActions = [leave, highlight]

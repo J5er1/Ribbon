@@ -9,7 +9,7 @@ import RibbonCore
 // with a fire in it, catching — the loop (§6.2) shown rather than told.
 
 struct OnboardingFlow: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Done — with the reading to open straight away, when the thread
     /// ended on a book.
@@ -92,9 +92,16 @@ struct OnboardingFlow: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Copy.tagline)
         .task {
-            async let restored = model.restoreFromAccountIfPossible()
+            // The mark waits for whichever is longer — its own breath, or
+            // the restore — and the restore is capped (§6.10). A tapped
+            // link can replace the mark mid-hold; then this task is
+            // cancelled and must not set a step underneath the join.
+            let restore = Task { await model.restoreFromAccountIfPossible(within: .milliseconds(2400)) }
             try? await Task.sleep(for: .milliseconds(900))
-            if await restored {
+            guard !Task.isCancelled else { return }
+            let restored = await restore.value
+            guard !Task.isCancelled else { return }
+            if restored {
                 onDone(nil)
                 return
             }
@@ -152,11 +159,12 @@ struct OnboardingFlow: View {
                 .foregroundStyle(Palette.text)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
+                .accessibilityAddTraits(.isHeader)
             PasteButton(payloadType: String.self) { strings in
-                if let text = strings.first {
-                    pastedInvite = text
-                    acceptPasted()
-                }
+                // Parsed directly, not through the field: writing it there
+                // would fire the field's onChange, which clears the miss
+                // line the moment it was set.
+                if let text = strings.first { accept(text) }
             }
             .labelStyle(.titleOnly)
             .buttonBorderShape(.capsule)
@@ -167,12 +175,12 @@ struct OnboardingFlow: View {
                 .autocorrectionDisabled()
                 .padding(.horizontal, 40)
                 .submitLabel(.go)
-                .onSubmit(acceptPasted)
+                .onSubmit { accept(pastedInvite) }
                 .onChange(of: pastedInvite) { _, text in
                     // A pasted link is complete the moment it lands —
                     // don't make them find a go button.
                     pasteMissed = false
-                    if AppModel.inviteToken(fromPasted: text) != nil { acceptPasted() }
+                    if AppModel.inviteToken(fromPasted: text) != nil { accept(text) }
                 }
             if pasteMissed {
                 Text(Copy.thatLinkIsntAnInvite)
@@ -188,9 +196,9 @@ struct OnboardingFlow: View {
         .threadColumn()
     }
 
-    private func acceptPasted() {
-        guard let token = AppModel.inviteToken(fromPasted: pastedInvite) else {
-            if !pastedInvite.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+    private func accept(_ text: String) {
+        guard let token = AppModel.inviteToken(fromPasted: text) else {
+            if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 pasteMissed = true
             }
             return
@@ -204,16 +212,13 @@ struct OnboardingFlow: View {
         VStack(spacing: 24) {
             threadBack { step = .who }
             Spacer()
-            PortraitPicker(item: $portraitItem, data: $portraitData, person: nil)
-            // The portrait is asked for with the one reason that is true —
-            // and it is optional, which is said once, quietly.
-            VStack(spacing: 4) {
-                Text(Copy.portraitReason)
-                    .font(RibbonType.ui(15))
-                    .foregroundStyle(Palette.muted)
-                SmallCaps(Copy.portraitOptional, size: 11, color: Palette.muted.opacity(0.7))
-            }
-            .multilineTextAlignment(.center)
+            PortraitPicker(item: $portraitItem, data: $portraitData)
+            // The portrait is asked for with the one reason that is true.
+            // Skipping it is silent: no control, nothing said (S17).
+            Text(Copy.portraitReason)
+                .font(RibbonType.ui(15))
+                .foregroundStyle(Palette.muted)
+                .multilineTextAlignment(.center)
 
             RibbonTextField(prompt: Copy.yourName, text: $name, centered: true, size: 20)
                 .textContentType(.givenName)
@@ -257,7 +262,8 @@ struct OnboardingFlow: View {
                 InviteStep(
                     room: room,
                     after: (Copy.pickABook, { withAnimation(RibbonMotion.settle) { step = .book } }),
-                    later: (Copy.readOnYourOwnForNow, { withAnimation(RibbonMotion.settle) { step = .book } }))
+                    later: (Copy.inviteLater, { withAnimation(RibbonMotion.settle) { step = .book } }),
+                    skip: (Copy.readOnYourOwnForNow, { withAnimation(RibbonMotion.settle) { step = .book } }))
                 .padding(.horizontal, 32)
                 Spacer()
                 Spacer()
@@ -302,7 +308,6 @@ struct OnboardingFlow: View {
 struct PortraitPicker: View {
     @Binding var item: PhotosPickerItem?
     @Binding var data: Data?
-    var person: Person?
     var size: CGFloat = 96
 
     var body: some View {
@@ -336,17 +341,21 @@ struct PortraitPicker: View {
 }
 
 private extension View {
-    /// The thread's column: one readable width, centered, scrolling only
-    /// when it must (largest type, a short phone with the keyboard up).
+    /// The thread's column: one readable width, centered, filling the
+    /// screen so the step sits where its spacers put it, and scrolling
+    /// only when it must (largest type, a short phone with the keyboard
+    /// up).
     func threadColumn() -> some View {
-        ScrollView {
-            self
-                .frame(maxWidth: 420)
-                .frame(maxWidth: .infinity)
-                .frame(minHeight: 560)
+        GeometryReader { proxy in
+            ScrollView {
+                self
+                    .frame(maxWidth: 420)
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: max(proxy.size.height, 560))
+            }
+            .scrollIndicators(.hidden)
+            .scrollDismissesKeyboard(.interactively)
         }
-        .scrollIndicators(.hidden)
-        .scrollDismissesKeyboard(.interactively)
     }
 }
 

@@ -10,6 +10,9 @@ import RibbonCore
 /// The join a tapped invite link is waiting to run (S16).
 struct PendingInvite: Identifiable, Equatable {
     let token: UUID
+    /// "Not you?" signed the last person out: the join re-presents at the
+    /// name, not at a second preview (S16).
+    var resumesAtName = false
     var id: UUID { token }
 }
 
@@ -27,6 +30,9 @@ final class AppModel {
     private(set) var remote: RemoteSync?
     /// Set by an opened invite link; RootView and onboarding watch it.
     var pendingInvite: PendingInvite?
+    /// A reinstall's restore has the person back and is still bringing
+    /// their rooms (§6.10): the room waits rather than minting a stray one.
+    private(set) var restoringRooms = false
 
     /// Who is in the book right now (empty means the form is absent).
     private(set) var presentPeople: [PresentPerson] = []
@@ -47,6 +53,11 @@ final class AppModel {
     /// Portraits cache (person id → image).
     private var portraits: [UUID: UIImage] = [:]
 
+    /// The one loaded model, for the environment's fallback (see
+    /// `EnvironmentValues.appModel`). Written once, on the main actor, in
+    /// `load()` — before any view exists to read it.
+    nonisolated(unsafe) private(set) static var current: AppModel?
+
     init(state: AppState, store: LocalStore, presence: PresenceService) {
         self.state = state
         self.store = store
@@ -62,6 +73,7 @@ final class AppModel {
             model.remote = await RemoteSync.restore()
         }
         model.retryPendingTranscripts()
+        AppModel.current = model
         return model
     }
 
@@ -75,15 +87,17 @@ final class AppModel {
     // MARK: - Me, rooms, membership
 
     var me: Person? { state.me }
-    var isOnboarded: Bool { state.me != nil && currentRoom != nil }
 
     /// The rooms this person is in now, in the order they joined.
     var liveRooms: [Room] { state.rooms.filter { !$0.isDeparted } }
     /// Rooms this person left, kept for their shelves (§6.8).
     var departedRooms: [Room] { state.rooms.filter(\.isDeparted) }
 
+    /// The room on screen: the chosen one, else the first live room. Never
+    /// a departed room by default — after leaving the last room, the
+    /// fresh-room-of-one branch takes over (§6.8 "reading continues").
     var currentRoom: Room? {
-        state.rooms.first { $0.id == state.currentRoomID } ?? liveRooms.first ?? state.rooms.first
+        state.rooms.first { $0.id == state.currentRoomID } ?? liveRooms.first
     }
 
     func person(_ id: UUID) -> Person? {
@@ -163,7 +177,10 @@ final class AppModel {
     /// reads as a mirror.
     func displayName(of room: Room) -> String {
         if let name = room.name, !name.isEmpty { return name }
-        let names = members(of: room).compactMap { person($0.personID)?.name.split(separator: " ").first }
+        // A room you left keeps the names it had — "Your room" would be
+        // a mirror on a shelf that was two people's.
+        let roster = room.isDeparted ? everyone(in: room.id) : members(of: room)
+        let names = roster.compactMap { person($0.personID)?.name.split(separator: " ").first }
         if names.count <= 1 { return Copy.yourRoom }
         return names.joined(separator: " & ")
     }
@@ -225,10 +242,24 @@ final class AppModel {
     /// their rooms pulled — no name question, no "welcome back". Returns
     /// false when there is nothing to restore, and the thread continues
     /// as a first run.
-    func restoreFromAccountIfPossible() async -> Bool {
-        guard state.me == nil, let remote, remote.isSignedIn, let uid = remote.userID,
-              let row = try? await remote.fetchOwnProfile()
-        else { return false }
+    /// Bounded: the thread's mark holds for the profile, never past the
+    /// cap (§6.10, ≤ 3 s). A fetch that loses the race is cancelled with
+    /// nothing written, so a late answer can never land over a name being
+    /// typed. Once the person is back, their rooms follow behind — the
+    /// room renders when they arrive (`restoringRooms`).
+    func restoreFromAccountIfPossible(within cap: Duration) async -> Bool {
+        guard state.me == nil, let remote, remote.isSignedIn, let uid = remote.userID else { return false }
+        let row: RemoteSync.ProfileRow? = await withTaskGroup(of: RemoteSync.ProfileRow?.self) { group in
+            group.addTask { try? await remote.fetchOwnProfile() }
+            group.addTask {
+                try? await Task.sleep(for: cap)
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
+        }
+        guard let row, state.me == nil else { return false }
         let person = Person(
             id: uid, name: row.name, portraitPath: nil,
             translation: TranslationID(rawValue: row.translation))
@@ -236,9 +267,13 @@ final class AppModel {
         state.boundAccountID = uid
         persist()
         if row.portraitPath != nil { fetchRemotePortrait(uid) }
-        await refreshFromRemote()
-        if state.currentRoomID == nil { state.currentRoomID = liveRooms.first?.id }
-        persist()
+        restoringRooms = true
+        Task {
+            await refreshFromRemote()
+            if state.currentRoomID == nil { state.currentRoomID = liveRooms.first?.id }
+            persist()
+            restoringRooms = false
+        }
         return true
     }
 
@@ -445,6 +480,7 @@ final class AppModel {
         state.readings.removeAll { $0.roomID == room.id }
         state.rooms.removeAll { $0.id == room.id }
         state.memberships.removeAll { $0.roomID == room.id }
+        if state.currentRoomID == room.id { state.currentRoomID = liveRooms.first?.id }
         persist()
     }
 
@@ -1184,6 +1220,9 @@ final class AppModel {
     func joinRoom(inviteToken: UUID) async throws -> UUID {
         guard let remote, remote.isSignedIn, let me = state.me else { throw SupabaseError.notSignedIn }
         let roomID = try await remote.acceptInvite(token: inviteToken)
+        // A departure from this same room still waiting to replay would
+        // delete the seat accept_invite just gave back.
+        state.pendingDepartures.removeAll { $0.roomID == roomID }
         await refreshFromRemote()
         if !state.rooms.contains(where: { $0.id == roomID }) {
             state.rooms.append(Room(id: roomID, createdAt: Date()))
@@ -1331,8 +1370,12 @@ final class AppModel {
                 if state.readings[i].finishedAt == nil {
                     state.readings[i].finishedAt = row.finishedAt
                 }
-                if let aside = row.setAsideAt, state.readings[i].setAsideAt == nil, row.finishedAt == nil {
-                    state.readings[i].setAsideAt = aside
+                // The set-aside moment rides the reading row (§03, §6.6):
+                // the backend's word wins, so a resume on one phone clears
+                // it on the other. The local graph is pushed before every
+                // pull, so this device's own change is already there.
+                if state.readings[i].finishedAt == nil {
+                    state.readings[i].setAsideAt = row.setAsideAt
                 }
                 state.readings[i].handiwork = Self.mergedHandiwork(
                     local: state.readings[i].handiwork, remote: fires[row.id], events: events)
@@ -1565,4 +1608,29 @@ final class AppModel {
 
 func firstName(_ name: String) -> String {
     name.split(separator: " ").first.map(String.init) ?? name
+}
+
+// MARK: - The model, from any view
+
+/// The model reaches views through the environment, set once at the root.
+/// A view SwiftUI hosts outside that subtree (a system-presented dialog,
+/// an accessibility element, a transition snapshot — the Mac's
+/// Designed-for-iPad host does this where iOS doesn't) would otherwise
+/// find nothing and stop the app; the fallback is the loaded model, which
+/// exists before any view does.
+private struct AppModelKey: EnvironmentKey {
+    static let defaultValue: AppModel? = nil
+}
+
+extension EnvironmentValues {
+    var appModel: AppModel {
+        get {
+            if let model = self[AppModelKey.self] { return model }
+            guard let model = AppModel.current else {
+                fatalError("Ribbon: a view asked for the model before it was loaded.")
+            }
+            return model
+        }
+        set { self[AppModelKey.self] = newValue }
+    }
 }

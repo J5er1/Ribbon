@@ -7,7 +7,7 @@ import RibbonCore
 // like a book closing.
 
 struct ReadingScreen: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
@@ -52,9 +52,13 @@ struct ReadingScreen: View {
     @State private var lastPositionSave = Date.distantPast
     @State private var lastScrollAt = Date()
     @State private var hasScrolled = false
+    /// The one-time hint was scrolled past (S02) — not merely seen.
+    @State private var hintPassed = false
     @State private var didReachEnd = false
     @State private var finishingVisible = false
-    @State private var finishingVisibleSince: Date?
+    /// The whole book fits its screen (2 John on an iPad): nothing can be
+    /// scrolled, so looking at it for a while is reaching the end.
+    @State private var contentFits = false
     /// After a follow ends, the form quietly offers "back to where you
     /// were" for about two minutes, then forgets (§4.2).
     @State private var followBackOffer: (address: VerseAddress, until: Date)?
@@ -148,11 +152,21 @@ struct ReadingScreen: View {
                     pulledPastTop = true
                 }
                 if fingerDown { hasScrolled = true; lastScrollAt = Date() }
+                // The hint is dismissed by scrolling past it (S02): the
+                // opened chapter's top has gone well above the viewport.
+                if fingerDown, let frame = chapterFrames[firstOpenedChapter], frame.minY < -48 {
+                    hintPassed = true
+                }
             }
             .onScrollGeometryChange(for: CGFloat.self) { geometry in
                 geometry.containerSize.height
             } action: { _, height in
                 if height > 0 { viewportHeight = height }
+            }
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                geometry.contentSize.height <= geometry.containerSize.height
+            } action: { _, fits in
+                contentFits = fits
             }
             .onScrollPhaseChange { old, newPhase in
                 fingerDown = newPhase == .interacting || newPhase == .tracking
@@ -198,8 +212,9 @@ struct ReadingScreen: View {
         .room()
         .preferredColorScheme(.dark)
         .onDisappear {
-            // Scrolled past, or closed: the hint has been seen (§6.1).
-            if hasScrolled || closing { model.markMarginHintSeen() }
+            // Scrolled past: the hint has been seen (§6.1, S02). Merely
+            // opening and closing the book leaves it for next time.
+            if hintPassed { model.markMarginHintSeen() }
             Task { await model.stopPresence() }
         }
         .onChange(of: chapterLayouts) { _, _ in settlePendingVerse() }
@@ -303,10 +318,11 @@ struct ReadingScreen: View {
                     liftedVerses: liftedChapter == n ? lifted.map { $0.verses } : nil,
                     openNote: openNote(in: n),
                     isFirstChapter: n == firstOpenedChapter,
-                    showMarginHint: !model.state.hasSeenMarginHint && n == firstOpenedChapter && !isRecord,
+                    showMarginHint: !model.state.hasSeenMarginHint && n == firstOpenedChapter && !isRecord && !room.isDeparted,
                     onLayout: { chapterLayouts[n] = $0 },
                     readOnly: isRecord || room.isDeparted,
                     onLongPressVerse: { verse in beginLift(chapter: n, verse: verse) },
+                    onHighlightVerse: { verse in highlightVerse(chapter: n, verse: verse) },
                     onDragToVerse: { verse in extendLift(chapter: n, verse: verse) },
                     onDragEnded: {},
                     onTapVerse: { verse in tapVerse(chapter: n, verse: verse) },
@@ -323,6 +339,14 @@ struct ReadingScreen: View {
             trackReading(chapter: n, frame: frame)
         }
         .padding(.bottom, 8)
+    }
+
+    /// VoiceOver's "Highlight" action: the verse takes the ink a hold would
+    /// offer first, with no toolbar in between (§11 motor).
+    private func highlightVerse(chapter: Int, verse: Int) {
+        guard !isRecord, !room.isDeparted, !room.isPaused else { return }
+        let range = VerseRange(bookID: reading.bookID, chapter: chapter, startVerse: verse, endVerse: verse)
+        model.addHighlight(range, ink: model.inkForNewHighlight(in: room) ?? model.lastUsedInk, in: reading)
     }
 
     private func verseInks(chapter: Int) -> [Int: [Ink]] {
@@ -372,7 +396,7 @@ struct ReadingScreen: View {
     }
 
     private struct GutterStack: View {
-        @Environment(AppModel.self) private var model
+        @Environment(\.appModel) private var model
         let notes: [Note]
         let roomID: UUID
         var onTap: () -> Void
@@ -411,7 +435,7 @@ struct ReadingScreen: View {
             // said, since the shape can't be seen.
             let names = notes.compactMap { model.person($0.authorID)?.name }
             let unfound = notes.contains { !$0.foundBy.contains(model.me?.id ?? UUID()) && $0.authorID != model.me?.id }
-            let who = names.isEmpty ? "you" : Set(names).sorted().joined(separator: " and ")
+            let who = names.isEmpty ? Copy.youLower : Copy.names(Set(names).sorted())
             let allVoice = notes.allSatisfy { $0.kind == .voice }
             let kind: String
             if notes.count == 1 {
@@ -536,29 +560,34 @@ struct ReadingScreen: View {
                 // finger must be able to close the book (44 pt minimum).
                 // A hold on it opens the presence panel, which is how
                 // read quietly is reachable when you are alone (S07).
-                Button(action: close) {
-                    WaveMark(color: Palette.text.opacity(0.55))
-                        .frame(width: 20, height: 20)
-                        .padding(.horizontal, 26)
-                        .padding(.vertical, 9)
-                        .ribbonGlass(in: Capsule())
-                        .frame(minWidth: 88, minHeight: 52)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .hoverEffect(.lift)
-                .simultaneousGesture(
-                    LongPressGesture(minimumDuration: 0.5).onEnded { _ in
-                        guard !isRecord, !room.isPaused else { return }
+                // Not a Button: a hold that ended would fire a Button's
+                // action on release and close the book it just opened.
+                WaveMark(color: Palette.text.opacity(0.55))
+                    .frame(width: 20, height: 20)
+                    .padding(.horizontal, 26)
+                    .padding(.vertical, 9)
+                    .ribbonGlass(in: Capsule())
+                    .frame(minWidth: 88, minHeight: 52)
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: close)
+                    .onLongPressGesture(minimumDuration: 0.5) {
+                        guard !isRecord, !room.isPaused, !room.isDeparted else { return }
                         withAnimation(RibbonMotion.open) { presenceExpanded = true }
-                    })
+                    }
+                    .hoverEffect(.lift)
+                    .accessibilityElement()
+                    .accessibilityLabel(Copy.closeTheBook)
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityAction { close() }
+                    .accessibilityAction(named: Copy.readQuietly) {
+                        guard !isRecord, !room.isPaused, !room.isDeparted else { return }
+                        withAnimation(RibbonMotion.open) { presenceExpanded = true }
+                    }
                 // Esc closes the book on a hardware keyboard.
-                .keyboardShortcut(.cancelAction)
-                .accessibilityLabel(Copy.closeTheBook)
-                .accessibilityAction(named: Copy.readQuietly) {
-                    guard !isRecord else { return }
-                    withAnimation(RibbonMotion.open) { presenceExpanded = true }
-                }
+                Button(action: close) { EmptyView() }
+                    .keyboardShortcut(.cancelAction)
+                    .hidden()
+                    .accessibilityHidden(true)
             }
             .padding(.bottom, 6)
         }
@@ -625,7 +654,6 @@ struct ReadingScreen: View {
         } action: { visible in
             finishingVisible = visible
             guard visible, !isRecord, !didReachEnd else { return }
-            if finishingVisibleSince == nil { finishingVisibleSince = Date() }
             considerFinishing()
         }
         .task(id: finishingVisible) {
@@ -640,7 +668,10 @@ struct ReadingScreen: View {
 
     private func considerFinishing(force: Bool = false) {
         guard finishingVisible, !isRecord, !didReachEnd else { return }
-        guard hasScrolled || force else { return }
+        // Reached by scrolling — or, for a book that fits its screen,
+        // looked at for a while (deviation 20). A short last chapter
+        // reopened at a saved position still has to be scrolled to.
+        guard hasScrolled || (force && contentFits) else { return }
         finishNow()
     }
 

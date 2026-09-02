@@ -6,7 +6,7 @@ import RibbonCore
 // one tap. The only chrome is the room's name, top-left, in small caps.
 
 struct RoomScreen: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let room: Room
     /// Set from outside when "Start another" at a finishing should land
@@ -23,6 +23,7 @@ struct RoomScreen: View {
     @State private var showChooser = false
     @State private var showInviteShare = false
     @State private var showInkPicker = false
+    @State private var confirmForget = false
 
     private var reading: Reading? { model.openReading(in: room) }
     private var shelf: [Reading] { model.shelf(of: room) }
@@ -40,6 +41,23 @@ struct RoomScreen: View {
                 fireSection
                     .frame(maxWidth: .infinity)
                     .padding(.top, 18)
+
+                if room.isDeparted {
+                    // A room you left: its fire or ember stays for looking
+                    // at, and one line says where you stand (§6.8). The
+                    // quiet way to let it go, for when the shelf has been
+                    // exported or isn't wanted (deviation 26).
+                    VStack(spacing: 14) {
+                        Text(Copy.youLeftThisRoom)
+                            .font(RibbonType.ui(15))
+                            .foregroundStyle(Palette.muted)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 40)
+                        QuietControl(title: Copy.forgetThisRoom) { confirmForget = true }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 18)
+                }
 
                 wayIn
                     .padding(.top, 26)
@@ -78,6 +96,11 @@ struct RoomScreen: View {
         }
         .sheet(isPresented: $showInkPicker) {
             InkPickerSheet(room: room)
+        }
+        .confirmationDialog(Copy.forgetRoomConfirm, isPresented: $confirmForget, titleVisibility: .visible) {
+            Button(Copy.forgetIt, role: .destructive) {
+                withAnimation(RibbonMotion.arrive) { model.forgetDepartedRoom(room) }
+            }
         }
     }
 
@@ -204,12 +227,7 @@ struct RoomScreen: View {
             .accessibilityElement(children: .combine)
             .accessibilityLabel("\(book.name). \(Copy.finishedTogether(book.name))")
         } else if room.isDeparted {
-            Text(Copy.youLeftThisRoom)
-                .font(RibbonType.ui(16))
-                .foregroundStyle(Palette.muted)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
-                .padding(.top, 40)
+            EmptyView()
         } else {
             // First run: the fire's place holds nothing; in its place, the
             // way to the chooser. The shelf is absent, not empty-stated.
@@ -285,8 +303,11 @@ struct RoomScreen: View {
         let quiet = room.isPaused || room.isDeparted
         let waiting = quiet ? [] : model.waitingNotes(in: room)
         let openCards = quiet ? [] : model.waitingOpenCards(in: room)
+        // Zero to four rows in all (S01): the cards and the ink take theirs
+        // from the notes' share.
+        let noteBudget = max(0, 4 - (openCards.isEmpty ? 0 : 1) - (!quiet && model.needsInkPick(in: room) ? 1 : 0))
         VStack(alignment: .leading, spacing: 14) {
-            ForEach(waiting.prefix(4)) { note in
+            ForEach(waiting.prefix(noteBudget)) { note in
                 if let author = model.person(note.authorID) {
                     Button {
                         // Jumps to that note (§6.3): the reading opens at
@@ -371,9 +392,15 @@ struct RoomScreen: View {
     @ViewBuilder
     private var quietDaySection: some View {
         if reading != nil, !room.isPaused, !room.isDeparted {
+            let quiet = model.activeQuietDay(in: room)
+            // Whether *you* banked it today — not merely whoever banked it
+            // first — so the control rests once you have, even after
+            // someone else got there before you.
+            let bankedByMe = model.quietDays(for: room).contains {
+                $0.personID == model.me?.id && $0.bankedInterval?.contains(Date()) == true
+            }
             VStack(spacing: 12) {
-                if let quiet = model.activeQuietDay(in: room),
-                   let name = model.person(quiet.personID)?.name {
+                if let quiet, let name = model.person(quiet.personID)?.name {
                     let phrase = RibbonClock.phrase(for: quiet.markedAt)
                     SmallCaps(
                         quiet.personID == model.me?.id
@@ -381,7 +408,7 @@ struct RoomScreen: View {
                             : Copy.bankedTheFire(firstName(name), phrase),
                         size: 12)
                 }
-                if model.activeQuietDay(in: room)?.personID == model.me?.id, model.activeQuietDay(in: room) != nil {
+                if bankedByMe {
                     SmallCaps(Copy.quietDayMarked, size: 12, color: Palette.muted.opacity(0.6))
                 } else {
                     QuietControl(title: Copy.markAQuietDay) {

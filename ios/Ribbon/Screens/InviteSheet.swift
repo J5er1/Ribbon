@@ -12,14 +12,16 @@ import RibbonCore
 /// the share control once the link is real, and whatever the host offers
 /// after — "Pick a book" in the thread, nothing in a sheet.
 struct InviteStep: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
     let room: Room
     /// The host's primary control after the invite (the thread's "Pick a
     /// book"), if any.
     var after: (title: String, action: () -> Void)?
-    /// The host's quiet way past ("Invite later", "Read on your own for
-    /// now").
+    /// The host's quiet way past once the link is real ("Invite later").
     var later: (title: String, action: () -> Void)?
+    /// The quiet way past the account moment ("Read on your own for
+    /// now"); `later` stands in where the host has only one.
+    var skip: (title: String, action: () -> Void)?
 
     @State private var invite: Invite?
     @State private var registering = false
@@ -47,8 +49,8 @@ struct InviteStep: View {
                     AccountStep(
                         reason: Copy.emailReasonStarter,
                         onSignedIn: { Task { await register() } },
-                        skipTitle: later?.title,
-                        onSkip: later?.action)
+                        skipTitle: (skip ?? later)?.title,
+                        onSkip: (skip ?? later)?.action)
                     .padding(.horizontal, 8)
                 } else {
                     shareControl
@@ -63,12 +65,15 @@ struct InviteStep: View {
                         WayInButton(title: after.title, action: after.action)
                             .padding(.top, 6)
                     }
-                    if let later, !shared {
+                    if let later {
                         QuietControl(title: later.title, action: later.action)
                     }
                 }
             }
         }
+        // The code lands and the step settles into the signed-in layout
+        // in place — nothing navigates.
+        .animation(RibbonMotion.settle, value: needsAccount)
         .task { await register() }
     }
 
@@ -78,6 +83,9 @@ struct InviteStep: View {
             // The link is real (or honestly said not to be yet): into the
             // system share sheet it goes. The label is the app's own
             // capsule, so it reads as the one primary control it is.
+            // ShareLink says nothing about whether the share went out; the
+            // tap is the one signal there is, so after it the control reads
+            // "Send it again" — which is also what it does.
             ShareLink(item: invite.url()) {
                 PrimaryCapsuleLabel(title: shared ? Copy.sendItAgain : Copy.sendTheInvite)
             }
@@ -93,6 +101,13 @@ struct InviteStep: View {
 
     private func register() async {
         guard !model.isFull(room), !needsAccount, !registering else { return }
+        if !model.reachability.isOnline {
+            // Known now, not after a timeout: the link still goes out and
+            // registers on the next foreground (S25).
+            invite = model.invite(for: room)
+            line = Copy.inviteNotRegisteredYet
+            return
+        }
         registering = true
         defer { registering = false }
         do {
@@ -134,7 +149,7 @@ struct InviteSheet: View {
 // S15's two steps that should feel like one — an optional name, then the
 // invite — in one sheet, when starting an additional room from S14.
 struct NewRoomSheet: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
     @Environment(\.dismiss) private var dismiss
     var onCreated: (Room) -> Void
 

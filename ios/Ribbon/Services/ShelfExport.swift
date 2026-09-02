@@ -26,7 +26,7 @@ struct ShelfExport {
         var lines: [String] = []
         lines.append("# \(roomName)")
         lines.append("")
-        lines.append("The shelf, as of \(RibbonClock.emberRange(start: now, end: now)).")
+        lines.append(Copy.exportAsOf(RibbonClock.emberRange(start: now, end: now)))
         lines.append("")
 
         let ordered = readings.sorted {
@@ -38,18 +38,18 @@ struct ShelfExport {
             lines.append("## \(name)")
             let range = RibbonClock.emberRange(
                 start: reading.startedAt, end: reading.finishedAt ?? now)
-            lines.append(reading.isFinished ? range : "\(range) — still going")
+            lines.append(reading.isFinished ? range : "\(range) — \(Copy.exportStillGoing)")
             lines.append("")
 
             let bookNotes = notes.filter { $0.readingID == reading.id }.sorted { $0.verse < $1.verse }
             if !bookNotes.isEmpty {
-                lines.append("### Notes left")
+                lines.append("### \(Copy.exportNotesLeft)")
                 for note in bookNotes {
-                    let who = people[note.authorID]?.name ?? "Someone"
+                    let who = people[note.authorID]?.name ?? Copy.someone
                     let body: String
                     switch note.kind {
                     case .written: body = note.body ?? ""
-                    case .voice: body = note.transcript.map { "(voice) \($0)" } ?? "(voice note)"
+                    case .voice: body = note.transcript.map { "\(Copy.exportVoice) \($0)" } ?? Copy.exportVoiceNote
                     }
                     lines.append("- **\(note.verse.formatted)** — \(who): \(body)")
                 }
@@ -59,7 +59,7 @@ struct ShelfExport {
             let bookHighlights = highlights.filter { $0.readingID == reading.id }
                 .sorted { $0.range.start < $1.range.start }
             if !bookHighlights.isEmpty {
-                lines.append("### Highlights")
+                lines.append("### \(Copy.exportHighlights)")
                 for highlight in bookHighlights {
                     let who = people[highlight.authorID]
                     let translation = who?.translation ?? .bsb
@@ -67,7 +67,7 @@ struct ShelfExport {
                         verseText(VerseAddress(bookID: highlight.range.bookID,
                                                chapter: highlight.range.chapter, verse: verse), translation)
                     }.joined(separator: " ")
-                    lines.append("- **\(highlight.range.formatted)** (\(who?.name ?? "someone"), \(highlight.ink.displayName)): \(text)")
+                    lines.append("- **\(highlight.range.formatted)** (\(who?.name ?? Copy.someone), \(highlight.ink.displayName)): \(text)")
                 }
                 lines.append("")
             }
@@ -75,11 +75,11 @@ struct ShelfExport {
             let openCards = cards.filter { $0.readingID == reading.id && $0.state == .open }
                 .sorted { $0.chapter < $1.chapter }
             if !openCards.isEmpty {
-                lines.append("### Cards")
+                lines.append("### \(Copy.exportCards)")
                 for card in openCards {
                     lines.append("**\(book?.chapterHeading(card.chapter) ?? "\(card.chapter)")** — \(card.question)")
                     for (personID, answer) in card.answers.sorted(by: { ($0.value, $0.key.uuidString) < ($1.value, $1.key.uuidString) }) {
-                        lines.append("- \(people[personID]?.name ?? "Someone"): \(answer)")
+                        lines.append("- \(people[personID]?.name ?? Copy.someone): \(answer)")
                     }
                     lines.append("")
                 }
@@ -91,7 +91,7 @@ struct ShelfExport {
     /// Writes the export beside the state, for the share sheet.
     func writeFile(to directory: URL) throws -> URL {
         let safeName = roomName.replacingOccurrences(of: "/", with: "-")
-        let url = directory.appendingPathComponent("\(safeName) — shelf.md")
+        let url = directory.appendingPathComponent("\(Copy.exportFileName(safeName)).md")
         try markdown().data(using: .utf8)?.write(to: url, options: .atomic)
         return url
     }

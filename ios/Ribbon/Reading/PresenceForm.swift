@@ -13,7 +13,7 @@ import RibbonCore
 // piece of glass morphing between two shapes (§12.1).
 
 struct PresenceForm: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let room: Room
@@ -66,10 +66,12 @@ struct PresenceForm: View {
                 // Reading quietly, alone: a small closed shape at the edge,
                 // fully on screen, so you never forget you're invisible —
                 // and never stranded without the toggle.
-                Capsule()
-                    .fill(Palette.raised)
-                    .overlay(Capsule().strokeBorder(Palette.rule, lineWidth: 1))
+                // The same piece of glass as the panel (§12.1): the id
+                // rides on the glass itself, so the two morph.
+                Color.clear
                     .frame(width: 22, height: 36)
+                    .ribbonGlass(in: Capsule())
+                    .glassEffectID("form", in: glass)
                     .frame(width: 44, height: 56)
                     .contentShape(Rectangle())
                     .padding(.trailing, 4)
@@ -80,7 +82,6 @@ struct PresenceForm: View {
                     .padding(.trailing, -22)  // about half off-screen
             }
         }
-        .glassEffectID("form", in: glass)
         .contentShape(Rectangle())
         .onTapGesture {
             if model.readingQuietly || people.count > 1 {
@@ -126,6 +127,7 @@ struct PresenceForm: View {
                 portrait(person)
                     .frame(width: 44, height: 64)
                     .ribbonGlass(in: RoundedRectangle(cornerRadius: 20))
+                    .glassEffectID("form", in: glass)
                 // Being followed is visible but small: their portrait tucks
                 // against yours (§4.2).
                 if let follower {
@@ -267,7 +269,12 @@ struct PresenceForm: View {
                 .onEnded { value in
                     let held = holdBegan.map { Date().timeIntervalSince($0) } ?? 0
                     let moved = abs(value.translation.width) > 12 || abs(value.translation.height) > 12
-                    if held >= 0.7, !moved {
+                    if value.translation.width > 20 {
+                        // A drag to the right collapses the panel from a
+                        // row too (S07), not only from its toggle.
+                        Haptics.shared.cancelThinkingOfYouHold()
+                        withAnimation(RibbonMotion.open) { expanded = false }
+                    } else if held >= 0.7, !moved {
                         Haptics.shared.completeThinkingOfYouHold()
                         Task { await model.presence.sendThinkingOfYou(to: person.id) }
                     } else {
@@ -301,13 +308,13 @@ struct PresenceForm: View {
     private func presenceLabel(_ person: PresentPerson, others: [PresentPerson]) -> String {
         let name = model.person(person.id)?.name ?? person.name
         let where_ = person.isIdle ? Copy.hereButStill : (person.position?.chapterFormatted ?? "")
-        var label = where_.isEmpty ? "\(name) is reading" : Copy.presenceRow(name, where_)
-        if model.followingPersonID == person.id { label += ", following" }
+        var parts = [where_.isEmpty ? Copy.isReading(name) : Copy.presenceRow(name, where_)]
+        if model.followingPersonID == person.id { parts.append(Copy.following) }
         // Never a count of people — name who else is here instead.
         if !others.isEmpty {
-            label += ", with " + others.map { model.person($0.id)?.name ?? $0.name }.joined(separator: " and ")
+            parts.append(Copy.withOthers(others.map { model.person($0.id)?.name ?? $0.name }))
         }
-        return label
+        return parts.joined(separator: ", ")
     }
 }
 

@@ -164,7 +164,7 @@ struct BackControl: View {
         }
         .buttonStyle(.plain)
         .hoverEffect(.highlight)
-        .accessibilityLabel(title == Copy.back ? "Back" : title)
+        .accessibilityLabel(title == Copy.back ? Copy.backLabel : title)
     }
 }
 
@@ -253,7 +253,9 @@ struct RibbonToggleStyle: ToggleStyle {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityAddTraits(configuration.isOn ? [.isSelected] : [])
+        // A switch, to VoiceOver: on or off, not "selected" (§11).
+        .accessibilityAddTraits(.isToggle)
+        .accessibilityValue(configuration.isOn ? Copy.toggleOn : Copy.toggleOff)
     }
 }
 

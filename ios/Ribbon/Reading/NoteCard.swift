@@ -5,7 +5,7 @@ import RibbonCore
 // important emotional moment in the app: reading what someone left.
 
 struct NoteCard: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
     let note: Note
     /// The reader's view of the author.
     let author: Person?
@@ -166,9 +166,9 @@ struct NoteCard: View {
         let name = author?.name ?? ""
         switch note.kind {
         case .written:
-            return "\(Copy.writtenNoteKind) from \(name). \(note.body ?? "")"
+            return Copy.noteFromAuthor(Copy.writtenNoteKind, name, note.body)
         case .voice:
-            return "\(Copy.voiceNoteKind) from \(name)."
+            return Copy.noteFromAuthor(Copy.voiceNoteKind, name, nil)
         }
     }
 }
@@ -211,7 +211,7 @@ struct WaveformView: View {
         .frame(height: 34)
         .accessibilityElement()
         .accessibilityLabel(isPlaying ? Copy.pauseTheVoiceNote : Copy.playTheVoiceNote)
-        .accessibilityValue(isPlaying ? "playing" : "paused")
+        .accessibilityValue(isPlaying ? Copy.audioPlaying : Copy.audioPaused)
         .accessibilityAddTraits(.isButton)
         .accessibilityAction { onTap() }
         // Scrubbing, for VoiceOver: a step back or forward (§11).

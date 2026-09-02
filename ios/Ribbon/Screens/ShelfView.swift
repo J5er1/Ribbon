@@ -6,7 +6,7 @@ import RibbonCore
 // filtering, no list view — a shelf you can sort is a database.
 
 struct ShelfView: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
     @Environment(\.horizontalSizeClass) private var sizeClass
     let room: Room
     let readings: [Reading]
@@ -76,7 +76,7 @@ struct ShelfView: View {
 // S11 — an ember: one finished book's complete record. Immutable, and the
 // source of the printed keepsake.
 struct EmberRecordScreen: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
     @Environment(\.dismiss) private var dismiss
     let reading: Reading
     var onOpenVerse: (VerseAddress) -> Void
@@ -190,7 +190,7 @@ struct EmberRecordScreen: View {
 }
 
 private struct EmberNoteRow: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
     let note: Note
     let roomID: UUID
     var onOpenVerse: (VerseAddress) -> Void
@@ -250,7 +250,7 @@ private struct EmberNoteRow: View {
 }
 
 private struct QuotedHighlight: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
     let highlight: Highlight
     let room: Room?
     var onOpenVerse: (VerseAddress) -> Void
