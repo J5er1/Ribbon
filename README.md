@@ -71,6 +71,15 @@ piece of work (`docs/deviations.md` §10). Universal links need
 `RIBBON_APPLE_TEAM_ID` set in the Vercel project so the web build emits
 a real `apple-app-site-association`.
 
+The app asks for a **code**, never a link: it posts to `auth/v1/otp` and
+verifies with `type: "email"`. Supabase decides what the email contains
+from its templates, and the defaults carry a magic link. In the
+dashboard, Authentication → Emails → Templates, both **Magic Link** (an
+address that has signed in before) and **Confirm signup** (a first-time
+address) must show `{{ .Token }}` — the six-digit code — in place of
+`{{ .ConfirmationURL }}`. A template that links instead of showing the
+code leaves the app waiting for a code the person never receives.
+
 ## Licensed translations
 
 NKJV and two undecided versions will arrive via API.Bible. The plumbing is
