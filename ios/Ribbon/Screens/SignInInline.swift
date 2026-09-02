@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 import RibbonCore
 
@@ -19,6 +20,19 @@ struct SignInInline: View {
     @State private var errorLine: String?
     @State private var busy = false
     @FocusState private var focused: Bool
+
+    /// What this phone knows about how often it has asked for a code. The
+    /// server is the enforcement (GoTrue's minute, the send-email hook's
+    /// six an hour); this is only so the button can tell the truth instead
+    /// of firing a request that will come back 429. It starts empty on a
+    /// fresh sheet, which is fine — a refusal from the server sets the hold
+    /// either way.
+    @State private var window = SignInSendWindow()
+    @State private var now = Date()
+    private let tick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+
+    private var waitSeconds: Int { window.secondsUntilNextSend(now: now) }
+    private var mayAskAgain: Bool { waitSeconds == 0 }
 
     var body: some View {
         VStack(spacing: 16) {
@@ -56,7 +70,14 @@ struct SignInInline: View {
                     .padding(.horizontal, 40)
                     .disabled(code.trimmingCharacters(in: .whitespaces).isEmpty)
                     .opacity(code.trimmingCharacters(in: .whitespaces).isEmpty ? 0.3 : 1)
-                QuietControl(title: "Send a new code") { sendCode() }
+                // An inert button says so rather than sitting there dead:
+                // while the minute is running the control names the wait.
+                if mayAskAgain {
+                    QuietControl(title: "Send a new code") { sendCode() }
+                } else {
+                    SmallCaps("Another code in \(waitSeconds)s", size: 13, color: Palette.muted)
+                        .frame(minHeight: 44)
+                }
             }
             if let errorLine {
                 Text(errorLine)
@@ -70,19 +91,51 @@ struct SignInInline: View {
         }
         .onAppear { focused = true }
         .onChange(of: phase) { _, _ in focused = true }
+        .onReceive(tick) { moment in
+            // Only while a countdown is actually running — otherwise this
+            // view would redraw once a second for the whole sitting. The
+            // tick that crosses zero still lands, so the button comes back.
+            guard window.secondsUntilNextSend(now: now) > 0 else { return }
+            now = moment
+        }
     }
 
     private func sendCode() {
         let address = email.trimmingCharacters(in: .whitespaces)
         guard address.contains("@"), !busy else { return }
+        now = Date()
+        guard window.maySend(now: now) else {
+            errorLine = window.isHourlyLimit(now: now)
+                ? Copy.tooManyCodes
+                : Copy.codeAlreadySent(seconds: waitSeconds)
+            return
+        }
         busy = true
         errorLine = nil
         Task {
             defer { busy = false }
             do {
                 try await model.sendSignInCode(to: address)
+                now = Date()
+                window.record(at: now)
                 code = ""
                 withAnimation(RibbonMotion.settle) { phase = .code }
+            } catch SupabaseError.rateLimited(let retryAfter) {
+                // The server refused: either GoTrue's minute or the hook's
+                // hourly ceiling. Take its word over the local model — this
+                // phone may have been asleep, or another one may have spent
+                // the window.
+                now = Date()
+                let wait = retryAfter ?? SignInSendWindow.minimumInterval
+                window.hold(until: now.addingTimeInterval(wait))
+                errorLine = wait > SignInSendWindow.minimumInterval
+                    ? Copy.tooManyCodes
+                    : Copy.codeAlreadySent(seconds: window.secondsUntilNextSend(now: now))
+                // A refused code is still a code the reader is waiting for,
+                // so the code field is where they should be either way.
+                if phase == .email {
+                    withAnimation(RibbonMotion.settle) { phase = .code }
+                }
             } catch {
                 errorLine = Copy.serverUnreachable
             }
