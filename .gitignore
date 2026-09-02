@@ -13,5 +13,16 @@ core/.swiftpm/
 __pycache__/
 *.pyc
 
+# Secrets. The send-email hook's secret, the mail provider's key and the
+# throttle pepper live in supabase/functions/.env on a developer's machine
+# and are pushed with `supabase secrets set` — they must never be committed.
+.env
+.env.*
+!.env.example
+
+# Supabase CLI scratch
+supabase/.temp/
+supabase/.branches/
+
 # OS
 .DS_Store

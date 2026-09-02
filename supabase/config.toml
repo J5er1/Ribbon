@@ -1,0 +1,108 @@
+# Ribbon — Supabase configuration.
+#
+# This file is deliberately partial: it declares the auth surface (§6.10 —
+# an emailed code, no passwords) and nothing else, so that the one part of
+# the backend with a security posture worth reviewing is reviewable in a
+# diff rather than remembered from a dashboard.
+#
+# ⚠️  `supabase config push` writes EVERY setting, not just the ones named
+# here — anything omitted is pushed as the CLI's default. Treat this file
+# as the source of truth for the [auth] blocks below and push deliberately,
+# or set them in the dashboard and keep this file as the reviewed record.
+# `supabase start` (local) reads it safely either way.
+
+project_id = "ribbon"
+
+[auth]
+enabled = true
+
+[auth.email]
+enable_signup = true
+# The code is typed into the app, never tapped as a link — there is no web
+# sign-in (docs/deviations.md #11), so nothing here confirms by URL.
+enable_confirmations = false
+otp_length = 6
+
+# Ten minutes, not the stock hour. A sign-in code that outlives the sitting
+# it was asked for is a credential lying around in an inbox. Pinning it also
+# lets email-templates/otp.html say the duration instead of "soon" — see the
+# note in that file's header.
+otp_expiry = 600
+
+# The per-address floor: GoTrue refuses a second code for the same address
+# inside this window, before the hook is ever called — so a tight loop is
+# turned away without a database round trip, let alone an email.
+#
+# It is not the only copy of this rule. The hook enforces the same minute
+# itself (EMAIL_MIN_INTERVAL_SECONDS), because this line is one dashboard
+# toggle away from being gone and an hourly ceiling on its own would still
+# permit six emails in six seconds. This one is the fast path; that one is
+# the guarantee.
+max_frequency = "1m"
+
+# --------------------------------------------------------------- sending
+#
+# Why any of this exists: Supabase's stock cap is `email_sent = 2` an hour,
+# which is a guard on THEIR shared relay — it also refuses to deliver to any
+# address outside the project's team. Both go away once we send our own
+# mail. Two ways to do that:
+#
+#   1. Custom SMTP — GoTrue keeps sending, just through our provider. The
+#      cap becomes 30/hour until raised.
+#   2. The send_email hook — the hook owns delivery entirely (with a hook
+#      enabled, SMTP is not used at all). This is what Ribbon does, because
+#      it is the only option that can throttle PER ADDRESS. Everything
+#      below in [auth.rate_limit] is project-wide: one address being
+#      hammered would otherwise burn the allowance for every other person
+#      signing in.
+#
+# The SMTP block stays configured anyway, as the fallback that carries mail
+# if the hook is ever disabled. Credentials come from the environment; no
+# secret is ever written into this file.
+[auth.email.smtp]
+enabled = true
+host = "env(SMTP_HOST)"
+port = 587
+user = "env(SMTP_USER)"
+pass = "env(SMTP_PASS)"
+admin_email = "env(SMTP_ADMIN_EMAIL)"
+sender_name = "Ribbon"
+
+[auth.hook.send_email]
+enabled = true
+# Local: the Auth container reaches the function through the host.
+# Hosted: set this to https://<project-ref>.supabase.co/functions/v1/send-email
+# — or, equivalently, create the hook in the dashboard under
+# Authentication → Hooks and let it generate the secret.
+uri = "http://host.docker.internal:54321/functions/v1/send-email"
+secrets = "env(SEND_EMAIL_HOOK_SECRET)"
+
+# --------------------------------------------------------------- limits
+#
+# Project-wide, all of these. They are the outer wall; the hook's
+# per-address window is the one that protects an individual inbox.
+[auth.rate_limit]
+# Was 2 (the shared-relay guard). 100 is room for a launch day's worth of
+# distinct people without being unbounded — a bug or a script that starts
+# looping still hits a ceiling within the hour, and the loop cannot be
+# aimed at one person regardless, because the hook stops that first.
+email_sent = 100
+
+# Hits on /auth/v1/otp, which is not the same thing as mail leaving: a
+# repeat inside max_frequency is refused here without an email being sent.
+sign_in_sign_ups = 30
+token_verifications = 30
+token_refresh = 150
+anonymous_users = 30
+
+# ------------------------------------------------------------- functions
+[functions.send-email]
+# The hook fires BEFORE any JWT exists, so JWT verification has to be off.
+# The Standard Webhooks signature is what authenticates the caller instead,
+# and the function refuses to run without a secret to check it against —
+# see supabase/functions/send-email/index.ts.
+verify_jwt = false
+
+# (bible-proxy is deliberately absent: it keeps the default verify_jwt =
+# true, because the app calls it with a bearer key and the API.Bible key it
+# guards should not be reachable without one.)

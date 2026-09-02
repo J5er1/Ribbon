@@ -136,6 +136,20 @@ enum Copy {
     // Failure surfaces (S25) — name what happened, name what didn't, offer
     // the one action that helps. No "oops," no "sorry," no error codes.
     static let signInCodeWrong = "That code didn't work. Try again, or send a new one."
+    /// The minute between codes. The one already sent is the thing that
+    /// helps, so the line points at the inbox rather than at the button.
+    /// (A count about an action, not about a person — the same boundary
+    /// noRoomOnPhone sits on.)
+    static func codeAlreadySent(seconds: Int) -> String {
+        seconds <= 1
+            ? "A code is already on its way. You can ask for another in a moment."
+            : "A code is already on its way. You can ask for another in \(seconds) seconds."
+    }
+    /// The hourly ceiling, which the send-email hook enforces per address so
+    /// that nobody can bury someone else's inbox by typing their address in.
+    /// Nothing to offer but the inbox, so it doesn't pretend otherwise.
+    static let tooManyCodes =
+        "That's every code Ribbon will send to that address this hour. Check your inbox, including spam."
     static let cardDeclined = "The card was declined. Nothing changed in your room."
     static func bookNotDownloaded(_ book: String) -> String { "\(book) isn't downloaded yet. It'll finish on Wi-Fi." }
     static let serverUnreachable = "Can't reach Ribbon right now."

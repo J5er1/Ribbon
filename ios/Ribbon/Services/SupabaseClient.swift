@@ -30,6 +30,12 @@ struct SupabaseUser: Codable {
 
 enum SupabaseError: Error {
     case http(Int, String)
+    /// Too many requests, with the server's own `Retry-After` when it sent
+    /// one. Broken out from `.http(429, _)` because the sign-in thread has
+    /// something specific and true to say about it (§6.10) — a code that
+    /// hasn't been sent yet is not the same failure as a server that can't
+    /// be reached.
+    case rateLimited(retryAfter: TimeInterval?)
     case notSignedIn
 }
 
@@ -229,6 +235,15 @@ actor SupabaseClient {
             throw SupabaseError.http(0, "")
         }
         guard (200..<300).contains(http.statusCode) else {
+            if http.statusCode == 429 {
+                // Both throttles land here: GoTrue's own minute between
+                // codes, and the send-email hook's hourly ceiling for one
+                // address. The header is advisory — Supabase sends "true"
+                // as often as a number — so a value that isn't seconds is
+                // simply absent, and the app falls back to what it knows.
+                let retryAfter = http.value(forHTTPHeaderField: "Retry-After").flatMap(TimeInterval.init)
+                throw SupabaseError.rateLimited(retryAfter: retryAfter)
+            }
             throw SupabaseError.http(http.statusCode, String(data: data, encoding: .utf8) ?? "")
         }
         return data
