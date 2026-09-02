@@ -37,7 +37,7 @@ struct RibbonApp: App {
                     model = loaded
                     // The room renders from local state instantly; the
                     // backend catches up behind it.
-                    await loaded.refreshFromRemote()
+                    await loaded.foregroundSync()
                 }
             }
             // An invite link, tapped: readribbon.app/i/<token> via the
@@ -51,8 +51,10 @@ struct RibbonApp: App {
                 }
             }
             .onChange(of: scenePhase) { _, phase in
-                if phase == .active, let model {
-                    Task { await model.refreshFromRemote() }
+                guard let model else { return }
+                model.scenePhaseChanged(to: phase)
+                if phase == .active {
+                    Task { await model.foregroundSync() }
                 }
             }
         }
@@ -67,27 +69,35 @@ struct PersonRoute: Hashable {
 
 struct RootView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var onboarding = false
     @State private var openReading: Reading?
     /// Where the reading should open, when a row or a quoted verse named a
     /// place (§6.3, S11). Nil means your own position.
     @State private var openTarget: VerseAddress?
+    /// Open at a chapter's end — the card there (S08/S09).
+    @State private var openAtPassageEnd: Int?
     @State private var showRooms = false
     @State private var showYou = false
     @State private var showNewRoom = false
-    /// A just-created room whose invite half is due (S15 — naming and
-    /// inviting are two steps that should feel like one).
-    @State private var inviteRoom: Room?
     /// The finishing sequence's "Start another" lands in the chooser (S13).
     @State private var chooserRequested = false
     @State private var navigationPath = NavigationPath()
+    /// The ember grows into its own record (§12.1 — the one place the
+    /// system's zoom is exactly the right metaphor).
+    @Namespace private var shelfNamespace
 
     var body: some View {
         Group {
             if onboarding || !model.isOnboardedPerson {
-                OnboardingFlow {
+                OnboardingFlow { reading in
                     onboarding = false
+                    if let reading {
+                        // The thread ends in the book itself (§6.1).
+                        openTarget = nil
+                        openReading = reading
+                    }
                 }
                 .onAppear { onboarding = true }
             } else {
@@ -104,12 +114,23 @@ struct RootView: View {
                 RoomScreen(
                     room: room,
                     chooserRequested: $chooserRequested,
+                    readingIsOpen: openReading != nil,
+                    shelfNamespace: shelfNamespace,
                     onOpenReading: { reading, target in
                         openTarget = target
+                        openAtPassageEnd = nil
+                        withAnimation(RibbonMotion.arrive) { openReading = reading }
+                    },
+                    onOpenPassageEnd: { reading, chapter in
+                        openTarget = nil
+                        openAtPassageEnd = chapter
                         withAnimation(RibbonMotion.arrive) { openReading = reading }
                     },
                     onOpenRooms: { showRooms = true },
                     onYou: { showYou = true })
+                // The room cross-fades when you switch rooms (S14, 320 ms).
+                .id(room.id)
+                .transition(.opacity)
                 .navigationDestination(for: UUID.self) { readingID in
                     if let reading = model.state.readings.first(where: { $0.id == readingID }) {
                         EmberRecordScreen(
@@ -119,6 +140,7 @@ struct RootView: View {
                                 // verse (S11) — the finished book's own
                                 // pages, not a copy.
                                 openTarget = verse
+                                openAtPassageEnd = nil
                                 withAnimation(RibbonMotion.arrive) { openReading = reading }
                             },
                             onReadAgain: { bookID in
@@ -127,6 +149,7 @@ struct RootView: View {
                                 openTarget = nil
                                 withAnimation(RibbonMotion.arrive) { openReading = new }
                             })
+                        .navigationTransition(.zoom(sourceID: reading.id, in: shelfNamespace))
                     }
                 }
                 .navigationDestination(for: PersonRoute.self) { route in
@@ -140,6 +163,7 @@ struct RootView: View {
                                 // open one.
                                 if let reading = model.state.readings.first(where: { $0.id == readingID }) {
                                     openTarget = verse
+                                    openAtPassageEnd = nil
                                     withAnimation(RibbonMotion.arrive) { openReading = reading }
                                 }
                             })
@@ -147,6 +171,7 @@ struct RootView: View {
                 }
                 .toolbarVisibility(.hidden, for: .navigationBar)
             }
+            .animation(RibbonMotion.arrive, value: room.id)
             .overlay {
                 // The reading is a full-screen cover in spirit, but drawn
                 // in-tree so the closing drag settles like a book (S02) —
@@ -156,22 +181,26 @@ struct RootView: View {
                         room: room,
                         reading: reading,
                         openAt: openTarget,
+                        openAtPassageEnd: openAtPassageEnd,
                         onClose: {
                             withAnimation(RibbonMotion.settle) { openReading = nil }
                             openTarget = nil
+                            openAtPassageEnd = nil
                         },
                         onFinished: {
                             withAnimation(RibbonMotion.settle) { openReading = nil }
                             openTarget = nil
+                            openAtPassageEnd = nil
                         },
                         onStartAnother: {
                             withAnimation(RibbonMotion.settle) { openReading = nil }
                             openTarget = nil
+                            openAtPassageEnd = nil
                             chooserRequested = true
                         })
                     .transition(.asymmetric(
                         insertion: .opacity,
-                        removal: .move(edge: .bottom).combined(with: .opacity)))
+                        removal: reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity)))
                 }
             }
             .sheet(isPresented: $showRooms) {
@@ -190,12 +219,8 @@ struct RootView: View {
             }
             .sheet(isPresented: $showNewRoom) {
                 // Naming and inviting are two steps that should feel like
-                // one (S15) — the invite sheet follows the naming sheet.
-                NewRoomSheet { room in inviteRoom = room }
-            }
-            .sheet(item: $inviteRoom) { newRoom in
-                InviteSheet(room: newRoom)
-                    .presentationDetents([.medium])
+                // one (S15) — one sheet, the invite following the name.
+                NewRoomSheet { _ in }
             }
             .sheet(isPresented: $showYou) {
                 YouSheet()

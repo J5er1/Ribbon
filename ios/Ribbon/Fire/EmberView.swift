@@ -8,8 +8,17 @@ import RibbonCore
 
 struct EmberView: View {
     var scale: FireScale
+    /// The ember's own breath. Seeded from the reading, so the ember on
+    /// the shelf and the one in its record are the same ember, and the
+    /// zoom between them is one object growing (§12.1).
+    var seed: UUID? = nil
 
-    @State private var seed = Double.random(in: 0..<1000)
+    @State private var randomSeed = Double.random(in: 0..<1000)
+
+    private var breathSeed: Double {
+        guard let seed else { return randomSeed }
+        return Double(seed.hashValue & 0xFFFF) / 65.535
+    }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.horizontalSizeClass) private var sizeClass
 
@@ -25,20 +34,26 @@ struct EmberView: View {
         Group {
             if reduceMotion {
                 Canvas { context, canvasSize in
-                    Self.draw(in: &context, size: canvasSize, time: seed)
+                    Self.draw(in: &context, size: canvasSize, time: breathSeed)
                 }
             } else {
                 TimelineView(.animation(minimumInterval: 1.0 / 12.0)) { timeline in
                     Canvas { context, canvasSize in
                         Self.draw(
                             in: &context, size: canvasSize,
-                            time: timeline.date.timeIntervalSinceReferenceDate * 0.25 + seed)
+                            time: timeline.date.timeIntervalSinceReferenceDate * 0.25 + breathSeed)
                     }
                 }
             }
         }
         .frame(width: size * 1.7, height: size * 1.35)
         .accessibilityHidden(true)
+    }
+
+    /// The width an ember of a scale takes on the shelf — so the grid's
+    /// cells fit the largest ember present and Isaiah never overlaps Ruth.
+    static func shelfWidth(for scale: FireScale, regular: Bool) -> CGFloat {
+        scale.frameHeight * 0.30 * (regular ? 1.45 : 1) * 1.7
     }
 
     static func draw(in context: inout GraphicsContext, size: CGSize, time: Double) {
@@ -98,6 +113,11 @@ struct EmberView: View {
 struct FireBecomesEmber: View {
     var scale: FireScale
     var coalDepth: Double
+    /// The sequence begins only once the reader is looking at it — a lazy
+    /// stack would otherwise play the one event in the product off-screen.
+    var begins: Bool = true
+    /// Already an ember (a finished book reopened): no ceremony twice.
+    var alreadyEmber: Bool = false
     /// 0 = the fire as it was, 1 = the last licks, 2 = the ember.
     @State private var settling = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -116,7 +136,9 @@ struct FireBecomesEmber: View {
                 ? .easeInOut(duration: 0.4)
                 : .easeInOut(duration: RibbonMotion.becomeDuration * 0.44),
             value: settling)
-        .task {
+        .onAppear { if alreadyEmber { settling = 2 } }
+        .task(id: begins) {
+            guard begins, !alreadyEmber, settling == 0 else { return }
             try? await Task.sleep(for: .milliseconds(600))
             if reduceMotion {
                 // One quiet cross-fade; the intermediate flare is motion.
@@ -128,6 +150,6 @@ struct FireBecomesEmber: View {
             settling = 2
         }
         .accessibilityElement()
-        .accessibilityLabel("The fire settles into an ember.")
+        .accessibilityLabel(Copy.fireSettlesFor(""))
     }
 }

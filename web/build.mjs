@@ -218,9 +218,9 @@ writeFileSync(
     body: `
 <main class="invite-main">
   <p id="invite-line" class="invite-line">&nbsp;</p>
-  <p class="sc invite-sub">Ribbon · read it together</p>
+  <p id="invite-sub" class="sc invite-sub">Ribbon · read it together</p>
   <p><a id="invite-action" class="way-in" href="/read/bsb/MRK/1.html">Open the book</a></p>
-  <p class="quiet-line">Joining the room from the browser is on its way. Reading works now.</p>
+  <p class="quiet-line"><a id="invite-app" class="sc quiet" href="#">Open in Ribbon</a></p>
 </main>
 `,
   }),
@@ -234,9 +234,15 @@ cpSync(join(here, "invite.js"), join(dist, "invite.js"));
 // Vercel project.
 const teamID = process.env.RIBBON_APPLE_TEAM_ID ?? "TEAMID";
 if (teamID === "TEAMID") {
-  console.warn(
-    "RIBBON_APPLE_TEAM_ID is not set — apple-app-site-association is built with a placeholder and universal links will not work.",
-  );
+  const message =
+    "RIBBON_APPLE_TEAM_ID is not set — apple-app-site-association would be built with a placeholder and every invite link would open Safari instead of the app.";
+  if (process.env.VERCEL_ENV === "production") {
+    // A production deploy with broken universal links is worse than no
+    // deploy: fail loudly rather than ship a silent placeholder.
+    console.error(message);
+    process.exit(1);
+  }
+  console.warn(message);
 }
 mkdirSync(join(dist, ".well-known"), { recursive: true });
 writeFileSync(

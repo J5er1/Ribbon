@@ -3,7 +3,8 @@ import RibbonCore
 
 // S14 — rooms: switching between rooms, and making a new one. One row per
 // room: its name, its members' portraits, and its fire drawn small in its
-// current state. "You" at the bottom is how settings is reached.
+// current state. "You" at the bottom is how settings is reached. Rooms
+// you've left stay beneath, for their shelves (§6.8).
 
 struct RoomsSheet: View {
     @Environment(AppModel.self) private var model
@@ -14,13 +15,26 @@ struct RoomsSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Spacer()
+                BackControl(title: Copy.close) { dismiss() }
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 8)
             ScrollView {
                 VStack(alignment: .leading, spacing: 6) {
-                    ForEach(model.state.rooms) { room in
+                    ForEach(model.liveRooms) { room in
                         roomRow(room)
                     }
+                    if !model.departedRooms.isEmpty {
+                        SectionHeader(Copy.roomsYouLeft)
+                            .padding(.top, 18)
+                        ForEach(model.departedRooms) { room in
+                            roomRow(room)
+                        }
+                    }
                 }
-                .padding(.top, 26)
+                .padding(.top, 10)
                 .padding(.horizontal, 22)
             }
             .scrollIndicators(.hidden)
@@ -30,17 +44,20 @@ struct RoomsSheet: View {
                 Button(action: onYou) {
                     HStack(spacing: 10) {
                         PortraitView(
-                            person: model.me, ink: nil, size: 26,
+                            person: model.me, ink: model.me.map { Ink.stable(for: $0.id) }, size: 26,
                             image: model.me.flatMap { model.portrait($0.id) })
                         SmallCaps(Copy.you, size: 13, color: Palette.text.opacity(0.8))
                     }
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(Copy.you)
+                .accessibilityHint(Copy.yourAccountAndSettings)
             }
             .padding(22)
         }
-        .room()
-        .presentationBackground(Palette.ground)
+        .ribbonSheet()
         .presentationDetents([.medium, .large])
     }
 
@@ -54,16 +71,16 @@ struct RoomsSheet: View {
                 // The current room marked with a chartreuse hairline.
                 Rectangle()
                     .fill(isCurrent ? Palette.chartreuse : .clear)
-                    .frame(width: 2, height: 34)
+                    .frame(width: 1, height: 34)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(model.displayName(of: room))
                         .font(RibbonType.ui(16))
-                        .foregroundStyle(Palette.text)
+                        .foregroundStyle(room.isDeparted ? Palette.muted : Palette.text)
                     HStack(spacing: -5) {
                         ForEach(model.members(of: room)) { membership in
                             PortraitView(
                                 person: model.person(membership.personID),
-                                ink: membership.ink,
+                                ink: model.inkForDisplay(membership.personID, in: room.id),
                                 size: 18,
                                 image: model.portrait(membership.personID))
                         }
@@ -73,17 +90,35 @@ struct RoomsSheet: View {
                 if room.isPaused {
                     SmallCaps(Copy.paused, size: 11)
                 }
-                if let reading = model.openReading(in: room) {
+                if !room.isDeparted, let reading = model.openReading(in: room) {
                     // A paused room's fire is drawn in whatever state it
                     // actually holds — never banked by a lapse (S14).
                     CampfireGlyph(
                         state: model.fireState(of: reading),
                         scale: reading.handiwork.scale,
-                        height: 22)
+                        height: 18)
                 }
             }
             .padding(.vertical, 8)
+            .frame(minHeight: 50)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(roomLabel(room, isCurrent: isCurrent))
+        .accessibilityAddTraits(isCurrent ? [.isSelected] : [])
+    }
+
+    /// The row's label: the room, its fire's state, and whether it is the
+    /// current one — said, not colored (§11).
+    private func roomLabel(_ room: Room, isCurrent: Bool) -> String {
+        var parts = [model.displayName(of: room)]
+        if isCurrent { parts.append(Copy.currentRoom) }
+        if room.isPaused { parts.append(Copy.paused) }
+        if room.isDeparted { parts.append(Copy.roomsYouLeft) }
+        if let reading = model.openReading(in: room), let book = Bible.book(id: reading.bookID) {
+            parts.append(book.name)
+            parts.append(Copy.fireIs(model.fireState(of: reading).displayName))
+        }
+        return parts.joined(separator: ", ")
     }
 }

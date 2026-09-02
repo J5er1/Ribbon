@@ -112,10 +112,17 @@ final class RemoteSync {
         }
     }
 
-    func push(room: Room) async throws {
+    /// The room row. The name rides only when this device authored it
+    /// (`includeName`): a nil name is omitted from the upsert, so a
+    /// partner's rename is never clobbered by a stale row (§13). A room
+    /// deliberately un-named therefore can't clear its name remotely —
+    /// accepted; renaming to nothing is rare and local.
+    func push(room: Room, includeName: Bool = false) async throws {
         try await withAuthRetry {
             try await self.client.upsert(into: "rooms", rows: [
-                RoomRow(id: room.id, name: room.name, isPaused: room.isPaused, createdAt: room.createdAt)
+                RoomRow(
+                    id: room.id, name: includeName ? room.name : nil,
+                    isPaused: room.isPaused, createdAt: room.createdAt)
             ])
         }
     }
@@ -148,7 +155,8 @@ final class RemoteSync {
                 ReadingRow(
                     id: reading.id, roomId: reading.roomID, bookId: reading.bookID,
                     scale: reading.handiwork.scale.rawValue,
-                    startedAt: reading.startedAt, finishedAt: reading.finishedAt)
+                    startedAt: reading.startedAt, finishedAt: reading.finishedAt,
+                    setAsideAt: reading.setAsideAt)
             ])
         }
         try await withAuthRetry {
@@ -189,12 +197,14 @@ final class RemoteSync {
     /// takes everything authored by the person that the backend holds.
     /// Best-effort on the portrait object first (its policy is the
     /// person's own).
-    func deleteAccountData() async {
+    func deleteAccountData() async throws {
         guard let userID else { return }
         try? await withAuthRetry {
             try await self.client.deletePortrait(personID: userID)
         }
-        try? await withAuthRetry {
+        // The profile row is the deletion; if this can't land, nothing
+        // has been deleted and the caller says so (S25).
+        try await withAuthRetry {
             try await self.client.delete(from: "profiles", query: [
                 URLQueryItem(name: "id", value: "eq.\(userID.uuidString.lowercased())")
             ])
@@ -359,6 +369,9 @@ final class RemoteSync {
         var scale: String
         var startedAt: Date
         var finishedAt: Date?
+        /// A book set aside for another (§6.6) — a room has one open
+        /// reading at a time on every phone.
+        var setAsideAt: Date?
     }
 
     struct FireRow: Codable {

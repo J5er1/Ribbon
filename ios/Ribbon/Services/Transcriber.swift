@@ -12,6 +12,16 @@ import Speech
 // docs/deviations.md.
 
 enum Transcriber {
+    /// Refused once, in Settings: no transcript can ever be written until
+    /// that changes, so the note says so instead of offering a retry that
+    /// can't succeed (S25).
+    static var isRefused: Bool {
+        switch SFSpeechRecognizer.authorizationStatus() {
+        case .denied, .restricted: return true
+        default: return false
+        }
+    }
+
     static func requestAccessIfNeeded() async -> Bool {
         switch SFSpeechRecognizer.authorizationStatus() {
         case .authorized:

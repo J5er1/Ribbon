@@ -31,6 +31,21 @@ struct SupabaseUser: Codable {
 enum SupabaseError: Error {
     case http(Int, String)
     case notSignedIn
+    /// A second account on a device that already belongs to a person
+    /// (§6.10, S16): never a silent re-attribution of what they left.
+    case differentAccount
+
+    /// The backend answered and said no (a wrong code, a malformed email, a
+    /// rate limit) — as opposed to never being reached.
+    var isRefusal: Bool {
+        if case .http(let code, _) = self, (400..<500).contains(code) { return true }
+        return false
+    }
+
+    var isRateLimited: Bool {
+        if case .http(429, _) = self { return true }
+        return false
+    }
 }
 
 actor SupabaseClient {

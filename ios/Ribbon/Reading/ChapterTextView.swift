@@ -105,6 +105,8 @@ struct ChapterTextView: UIViewRepresentable {
     let showMarginHint: Bool
 
     var onLayout: (ChapterLayout) -> Void
+    /// The reading is a record (a finished book): verses carry no actions.
+    var readOnly: Bool = false
     var onLongPressVerse: (Int) -> Void
     var onDragToVerse: (Int) -> Void
     var onDragEnded: () -> Void
@@ -279,11 +281,34 @@ struct ChapterTextView: UIViewRepresentable {
             on view: UITextView, verseText: [Int: String], verseRect: [Int: CGRect]
         ) {
             var elements: [UIAccessibilityElement] = []
+            // The running head (and the one-time hint) are heard, as the
+            // heading of the chapter, before its verses.
+            let head = UIAccessibilityElement(accessibilityContainer: view)
+            head.accessibilityFrameInContainerSpace = CGRect(
+                x: 0, y: 0, width: max(1, view.bounds.width), height: 24)
+            head.accessibilityLabel = parent.showMarginHint && parent.isFirstChapter
+                ? "\(parent.runningHead). \(Copy.firstRunHint)"
+                : parent.runningHead
+            head.accessibilityTraits = .header
+            elements.append(head)
             for verse in verseText.keys.sorted() {
                 guard let rect = verseRect[verse], let body = verseText[verse] else { continue }
                 let element = UIAccessibilityElement(accessibilityContainer: view)
                 element.accessibilityFrameInContainerSpace = rect
                 element.accessibilityLabel = "Verse \(verse). \(body.trimmingCharacters(in: .whitespacesAndNewlines))"
+                if !parent.readOnly {
+                    // The long-press, as actions (§11 motor): a VoiceOver
+                    // reader can leave a note or a highlight too.
+                    let leave = UIAccessibilityCustomAction(name: Copy.leaveANote) { [weak self] _ in
+                        self?.parent.onLongPressVerse(verse)
+                        return true
+                    }
+                    let highlight = UIAccessibilityCustomAction(name: Copy.highlight) { [weak self] _ in
+                        self?.parent.onLongPressVerse(verse)
+                        return true
+                    }
+                    element.accessibilityCustomActions = [leave, highlight]
+                }
                 elements.append(element)
             }
             view.isAccessibilityElement = false
@@ -303,7 +328,7 @@ struct ChapterTextView: UIViewRepresentable {
         }
 
         @objc func longPressed(_ gesture: UILongPressGestureRecognizer) {
-            guard let view = textView else { return }
+            guard let view = textView, !parent.readOnly else { return }
             switch gesture.state {
             case .began:
                 if let verse = verse(at: gesture.location(in: view)) {
@@ -365,13 +390,17 @@ struct ChapterTextView: UIViewRepresentable {
         func paragraphStyle(_ style: BlockStyle, isFirstBlock: Bool, afterBreak: Bool) -> NSParagraphStyle {
             let p = NSMutableParagraphStyle()
             p.lineHeightMultiple = theme.lineHeightMultiple
+            // A stanza break (the USFX "b" block) opens space before
+            // whatever follows it — poetry above all: without this the
+            // whole Psalter runs together (S02 edge cases).
+            if afterBreak { p.paragraphSpacingBefore = em * 0.75 }
             switch style {
             case .p:
                 // A printed page: first-line indent, except the paragraph
                 // that opens the chapter.
                 p.firstLineHeadIndent = isFirstBlock ? 0 : em * 0.95
             case .m:
-                p.paragraphSpacingBefore = afterBreak ? em * 0.75 : 0
+                break
             case .q1:
                 p.firstLineHeadIndent = em * 0.6
                 p.headIndent = em * 1.6

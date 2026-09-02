@@ -21,8 +21,10 @@ public enum RibbonClock {
         guard date <= now else { return "just now" }
 
         if calendar.isDate(date, inSameDayAs: now) {
+            // A read before dawn is "this morning" too: "in the night"
+            // would be a wall-clock disclosure in words (§4.9, §13 — never
+            // reveal that someone was awake at 3 a.m.).
             let hour = calendar.component(.hour, from: date)
-            if hour < 5 { return "in the night" }
             if hour < 12 { return "this morning" }
             if hour < 17 { return "this afternoon" }
             return "this evening"

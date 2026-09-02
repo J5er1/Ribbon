@@ -4,18 +4,24 @@ import RibbonCore
 
 // S17 — onboarding: a thread, not a screen. Four questions, no tour, no
 // carousel, no permission prompts at launch, no account wall. The Wave and
-// the tagline are the only branded moment in the product.
+// the tagline are the only branded moment in the product. The thread ends
+// in the book itself: the room is met for the first time on closing it,
+// with a fire in it, catching — the loop (§6.2) shown rather than told.
 
 struct OnboardingFlow: View {
     @Environment(AppModel.self) private var model
-    var onDone: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Done — with the reading to open straight away, when the thread
+    /// ended on a book.
+    var onDone: (Reading?) -> Void
 
     enum Step: Equatable {
         case mark
         case who
-        case fromInvite
+        case link
         case name
         case invite
+        case book
         case join(UUID)
     }
 
@@ -31,42 +37,38 @@ struct OnboardingFlow: View {
         ZStack {
             switch step {
             case .mark:
-                markMoment
-                    .transition(.opacity)
+                markMoment.transition(.opacity)
             case .who:
-                whoStep
-                    .transition(.opacity)
-            case .fromInvite:
-                fromInviteStep
-                    .transition(.opacity)
+                whoStep.transition(.opacity)
+            case .link:
+                linkStep.transition(.opacity)
             case .name:
-                nameStep
-                    .transition(.opacity)
+                nameStep.transition(.opacity)
             case .invite:
-                inviteStep
-                    .transition(.opacity)
+                inviteStep.transition(.opacity)
+            case .book:
+                bookStep.transition(.opacity)
             case .join(let token):
                 JoinFlow(
                     token: token,
-                    onDone: onDone,
+                    onDone: { onDone(nil) },
                     onStartInstead: {
                         // Declining the join forgets it — otherwise the
                         // pending token re-presents the join over the
                         // room they start instead.
                         model.pendingInvite = nil
-                        withAnimation(RibbonMotion.settle) { step = .name }
+                        withAnimation(RibbonMotion.settle) { step = model.me == nil ? .name : .invite }
                     })
                 .id(token)
                 .transition(.opacity)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .frame(maxWidth: 420)
-        .frame(maxWidth: .infinity)
         .room()
         .preferredColorScheme(.dark)
         // A tapped invite link is the strongest possible statement of
-        // intent — it wins over whatever step was showing (S16).
+        // intent — it wins over whatever step was showing (S16). The name
+        // and portrait already typed are kept (the person exists once).
         .onChange(of: model.pendingInvite, initial: true) { _, pending in
             if let pending {
                 withAnimation(RibbonMotion.settle) { step = .join(pending.token) }
@@ -74,7 +76,11 @@ struct OnboardingFlow: View {
         }
     }
 
+    // MARK: The mark
+
     // The mark, and one line. It holds for about 900 ms and then dissolves.
+    // A reinstall restores silently underneath the hold (§6.10): if the
+    // account already has a person, the thread ends here, in their room.
     private var markMoment: some View {
         VStack(spacing: 22) {
             WaveMark()
@@ -83,11 +89,30 @@ struct OnboardingFlow: View {
                 .font(RibbonType.display(22))
                 .foregroundStyle(Palette.text)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Copy.tagline)
         .task {
+            async let restored = model.restoreFromAccountIfPossible()
             try? await Task.sleep(for: .milliseconds(900))
-            withAnimation(.easeInOut(duration: 0.6)) { step = .who }
+            if await restored {
+                onDone(nil)
+                return
+            }
+            if model.me != nil {
+                // A person already exists (the thread was re-entered):
+                // straight to the invite, never to a second name.
+                withAnimation(dissolve) { step = .invite }
+            } else {
+                withAnimation(dissolve) { step = .who }
+            }
         }
     }
+
+    private var dissolve: Animation {
+        reduceMotion ? .easeOut(duration: 0.01) : .easeInOut(duration: 0.6)
+    }
+
+    // MARK: Who
 
     private var whoStep: some View {
         VStack(spacing: 26) {
@@ -96,95 +121,51 @@ struct OnboardingFlow: View {
                 .font(RibbonType.display(24))
                 .foregroundStyle(Palette.text)
                 .multilineTextAlignment(.center)
+                .accessibilityAddTraits(.isHeader)
             VStack(spacing: 16) {
                 WayInButton(title: Copy.startARoom) {
                     withAnimation(RibbonMotion.settle) { step = .name }
                 }
                 QuietControl(title: Copy.haveAnInvite) {
-                    withAnimation(RibbonMotion.settle) { step = .fromInvite }
+                    withAnimation(RibbonMotion.settle) { step = .link }
                 }
             }
             .padding(.horizontal, 56)
             Spacer()
             Spacer()
         }
+        .threadColumn()
     }
 
-    private var nameStep: some View {
-        VStack(spacing: 26) {
-            Spacer()
-            PhotosPicker(selection: $portraitItem, matching: .images) {
-                ZStack {
-                    if let portraitData, let image = UIImage(data: portraitData) {
-                        Image(uiImage: image)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 96, height: 96)
-                            .clipShape(Circle())
-                    } else {
-                        Circle()
-                            .fill(Palette.surface)
-                            .overlay(Circle().strokeBorder(Palette.rule, lineWidth: 1))
-                            .frame(width: 96, height: 96)
-                        SmallCaps(Copy.addAPortrait, size: 11)
-                    }
-                }
-            }
-            .onChange(of: portraitItem) { _, item in
-                Task {
-                    if let data = try? await item?.loadTransferable(type: Data.self) {
-                        portraitData = downsampledJPEG(data)
-                    }
-                }
-            }
-
-            // The portrait is asked for with the one reason that is true.
-            Text(Copy.portraitReason)
-                .font(RibbonType.ui(15))
-                .foregroundStyle(Palette.muted)
-
-            TextField("", text: $name, prompt: Text(Copy.yourName).foregroundStyle(Palette.muted))
-                .font(RibbonType.ui(20))
-                .foregroundStyle(Palette.text)
-                .multilineTextAlignment(.center)
-                .focused($nameFocused)
-                .padding(.horizontal, 40)
-                .submitLabel(.done)
-                .onSubmit(advanceFromName)
-
-            WayInButton(title: "That's me") { advanceFromName() }
-                .padding(.horizontal, 80)
-                .opacity(name.trimmingCharacters(in: .whitespaces).isEmpty ? 0.3 : 1)
-            Spacer()
-            Spacer()
-        }
-        .onAppear { nameFocused = true }
-    }
+    // MARK: The link (I have an invite)
 
     // The link is the whole mechanism (S15): opening it lands here via
     // the universal link — and pasting it works when the link was sent
-    // somewhere this device can't tap it from.
-    private var fromInviteStep: some View {
+    // somewhere this device can't tap it from. The system paste control
+    // reads the clipboard without the paste banner.
+    private var linkStep: some View {
         VStack(spacing: 22) {
+            threadBack { step = .who }
             Spacer()
-            Text("Open the link they sent you. It brings you straight into their room.")
+            Text(Copy.openTheLinkTheySent)
                 .font(RibbonType.ui(17))
                 .foregroundStyle(Palette.text)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 48)
-            TextField(
-                "", text: $pastedInvite,
-                prompt: Text(Copy.pasteInvitePrompt).foregroundStyle(Palette.muted))
-                .font(RibbonType.ui(16))
-                .foregroundStyle(Palette.text)
-                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
+            PasteButton(payloadType: String.self) { strings in
+                if let text = strings.first {
+                    pastedInvite = text
+                    acceptPasted()
+                }
+            }
+            .labelStyle(.titleOnly)
+            .buttonBorderShape(.capsule)
+            .tint(Palette.chartreuse)
+            .foregroundStyle(Palette.ground)
+            RibbonTextField(prompt: Copy.orPasteItHere, text: $pastedInvite, centered: true, size: 15)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-                .background(Palette.surface, in: RoundedRectangle(cornerRadius: 10))
-                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Palette.rule, lineWidth: 1))
-                .padding(.horizontal, 48)
+                .padding(.horizontal, 40)
                 .submitLabel(.go)
                 .onSubmit(acceptPasted)
                 .onChange(of: pastedInvite) { _, text in
@@ -198,12 +179,13 @@ struct OnboardingFlow: View {
                     .font(RibbonType.ui(14))
                     .foregroundStyle(Palette.muted)
             }
-            QuietControl(title: "Start a room instead") {
+            QuietControl(title: Copy.startARoomInstead) {
                 withAnimation(RibbonMotion.settle) { step = .name }
             }
             Spacer()
             Spacer()
         }
+        .threadColumn()
     }
 
     private func acceptPasted() {
@@ -216,66 +198,155 @@ struct OnboardingFlow: View {
         withAnimation(RibbonMotion.settle) { step = .join(token) }
     }
 
+    // MARK: Name and portrait
+
+    private var nameStep: some View {
+        VStack(spacing: 24) {
+            threadBack { step = .who }
+            Spacer()
+            PortraitPicker(item: $portraitItem, data: $portraitData, person: nil)
+            // The portrait is asked for with the one reason that is true —
+            // and it is optional, which is said once, quietly.
+            VStack(spacing: 4) {
+                Text(Copy.portraitReason)
+                    .font(RibbonType.ui(15))
+                    .foregroundStyle(Palette.muted)
+                SmallCaps(Copy.portraitOptional, size: 11, color: Palette.muted.opacity(0.7))
+            }
+            .multilineTextAlignment(.center)
+
+            RibbonTextField(prompt: Copy.yourName, text: $name, centered: true, size: 20)
+                .textContentType(.givenName)
+                .focused($nameFocused)
+                .padding(.horizontal, 40)
+                .submitLabel(.done)
+                .onSubmit(advanceFromName)
+
+            WayInButton(title: Copy.thatsMe) { advanceFromName() }
+                .padding(.horizontal, 80)
+                .disabled(nameIsEmpty)
+                .opacity(nameIsEmpty ? 0.3 : 1)
+            Spacer()
+            Spacer()
+        }
+        .threadColumn()
+        .onAppear { nameFocused = true }
+    }
+
+    private var nameIsEmpty: Bool { name.trimmingCharacters(in: .whitespaces).isEmpty }
+
     private func advanceFromName() {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
+        nameFocused = false
         Task {
             await model.completeOnboarding(name: trimmed, portraitData: portraitData)
             withAnimation(RibbonMotion.settle) { step = .invite }
         }
     }
 
-    @State private var invite: Invite?
+    // MARK: Invite
 
+    // Send the link, or read on your own for now; the account happens in
+    // here when it must, with its reason (§6.1 — inside whichever path).
+    @ViewBuilder
     private var inviteStep: some View {
-        VStack(spacing: 24) {
-            Spacer()
-            Text(Copy.inviteSend)
-                .font(RibbonType.ui(17))
-                .foregroundStyle(Palette.text)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 44)
+        if let room = model.currentRoom {
+            VStack(spacing: 24) {
+                Spacer()
+                InviteStep(
+                    room: room,
+                    after: (Copy.pickABook, { withAnimation(RibbonMotion.settle) { step = .book } }),
+                    later: (Copy.readOnYourOwnForNow, { withAnimation(RibbonMotion.settle) { step = .book } }))
+                .padding(.horizontal, 32)
+                Spacer()
+                Spacer()
+            }
+            .threadColumn()
+        } else {
+            Color.clear.onAppear { withAnimation(RibbonMotion.settle) { step = .name } }
+        }
+    }
 
-            if model.remote != nil, !model.isSignedIn {
-                // A link handed out signed-out is a dead link — the
-                // account happens here, where it's honestly needed. The
-                // quiet ways past (pick a book, invite later) stand.
-                Text(Copy.inviteNeedsSignIn)
-                    .font(RibbonType.ui(15))
-                    .foregroundStyle(Palette.muted)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 48)
-                SignInInline(onSignedIn: {
-                    if let room = model.currentRoom {
-                        invite = model.createInvite(for: room)
-                    }
-                })
-                .padding(.horizontal, 40)
-            } else if let invite {
-                ShareLink(item: invite.url()) {
-                    Text("Send the invite")
-                        .font(RibbonType.uiMedium(17))
-                        .foregroundStyle(Palette.ground)
-                        .padding(.horizontal, 28)
-                        .padding(.vertical, 13)
-                        .background(Palette.chartreuse, in: Capsule())
+    // MARK: The book
+
+    // The chooser (S13) as the last step: choosing opens the book itself.
+    @ViewBuilder
+    private var bookStep: some View {
+        if let room = model.currentRoom {
+            BookChooserContent(
+                room: room,
+                heading: Copy.pickSomethingToRead,
+                onChoose: { bookID, _ in
+                    let reading = model.startReading(bookID: bookID, in: room)
+                    onDone(reading)
+                },
+                onClose: nil)
+        }
+    }
+
+    // MARK: Pieces
+
+    private func threadBack(_ action: @escaping () -> Void) -> some View {
+        HStack {
+            BackControl { withAnimation(RibbonMotion.settle) { action() } }
+            Spacer()
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 8)
+    }
+}
+
+/// The portrait circle: a face, or the invitation to add one. Used by the
+/// thread, the join flow, and You.
+struct PortraitPicker: View {
+    @Binding var item: PhotosPickerItem?
+    @Binding var data: Data?
+    var person: Person?
+    var size: CGFloat = 96
+
+    var body: some View {
+        PhotosPicker(selection: $item, matching: .images) {
+            ZStack {
+                if let data, let image = UIImage(data: data) {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: size, height: size)
+                        .clipShape(Circle())
+                } else {
+                    Circle()
+                        .fill(Palette.surface)
+                        .overlay(Circle().strokeBorder(Palette.rule, lineWidth: 1))
+                        .frame(width: size, height: size)
+                    SmallCaps(Copy.addAPortrait, size: 11)
                 }
             }
-
-            // You can read alone immediately while the invite is out — the
-            // room's first-run state is the book chooser, so picking a book
-            // and starting is the next thing that happens (§6.1).
-            WayInButton(title: Copy.pickABook) { onDone() }
-                .padding(.horizontal, 56)
-            QuietControl(title: Copy.inviteLater) { onDone() }
-            Spacer()
-            Spacer()
         }
-        .onAppear {
-            if let room = model.currentRoom {
-                invite = model.createInvite(for: room)
+        .buttonStyle(.plain)
+        .accessibilityLabel(data == nil ? Copy.addAPortrait : Copy.changePortrait)
+        .onChange(of: item) { _, item in
+            Task {
+                if let raw = try? await item?.loadTransferable(type: Data.self) {
+                    data = downsampledJPEG(raw)
+                }
             }
         }
+    }
+}
+
+private extension View {
+    /// The thread's column: one readable width, centered, scrolling only
+    /// when it must (largest type, a short phone with the keyboard up).
+    func threadColumn() -> some View {
+        ScrollView {
+            self
+                .frame(maxWidth: 420)
+                .frame(maxWidth: .infinity)
+                .frame(minHeight: 560)
+        }
+        .scrollIndicators(.hidden)
+        .scrollDismissesKeyboard(.interactively)
     }
 }
 

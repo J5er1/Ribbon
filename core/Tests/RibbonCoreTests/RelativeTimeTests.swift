@@ -17,7 +17,7 @@ final class RelativeTimeTests: XCTestCase {
         XCTAssertEqual(RibbonClock.phrase(for: date(2026, 8, 31, 6, 40), now: now, calendar: calendar), "this morning")
         XCTAssertEqual(RibbonClock.phrase(for: date(2026, 8, 31, 14), now: now, calendar: calendar), "this afternoon")
         XCTAssertEqual(RibbonClock.phrase(for: date(2026, 8, 31, 20), now: now, calendar: calendar), "this evening")
-        XCTAssertEqual(RibbonClock.phrase(for: date(2026, 8, 31, 3), now: now, calendar: calendar), "in the night")
+        XCTAssertEqual(RibbonClock.phrase(for: date(2026, 8, 31, 3), now: now, calendar: calendar), "this morning")
     }
 
     func testYesterdayAndLastNight() {

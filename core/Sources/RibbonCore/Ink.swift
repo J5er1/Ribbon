@@ -55,4 +55,20 @@ public enum Ink: String, Codable, CaseIterable, Hashable, Sendable {
         let taken = Set(taken)
         return allCases.filter { !taken.contains($0) }
     }
+
+    /// A person's ink where they have none yet — a room of two draws
+    /// from the whole palette, so a membership carries no ink there (§4.5),
+    /// but their monogram and their marks in the gutter still want a
+    /// color that is theirs (§03: "a monogram in their ink"). Derived from
+    /// the id, so it is the same on every device and never changes under
+    /// them; never written to the membership.
+    public static func stable(for id: UUID) -> Ink {
+        let bytes = id.uuid
+        var hash: UInt32 = 2166136261
+        for byte in [bytes.0, bytes.1, bytes.2, bytes.3, bytes.4, bytes.5, bytes.6, bytes.7,
+                     bytes.8, bytes.9, bytes.10, bytes.11, bytes.12, bytes.13, bytes.14, bytes.15] {
+            hash = (hash ^ UInt32(byte)) &* 16777619
+        }
+        return allCases[Int(hash % UInt32(allCases.count))]
+    }
 }

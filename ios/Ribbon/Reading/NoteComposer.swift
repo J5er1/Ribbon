@@ -3,67 +3,245 @@ import RibbonCore
 
 // Leaving a note (S05): the toolbar rises from the bottom after the
 // long-press — the ink swatches, write, speak. Highlighting (S06) shares
-// the toolbar. Dismissed by tapping anywhere in the text.
-
-enum ComposerMode: Equatable {
-    case toolbar
-    case writing
-    case speaking
-}
+// the toolbar. Dismissed by tapping anywhere in the text. Speak is press
+// and hold, on the toolbar itself: the recording begins under the finger,
+// the waveform draws live in your ink, release keeps it, drag away
+// discards it.
 
 struct LeaveToolbar: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let room: Room
     let range: VerseRange
     /// Paused rooms: only highlight shows, greyed, with one line (S02).
     let roomPaused: Bool
+    let recorder: VoiceRecorder
+    /// A highlight already on the lifted verse, if any — its author is
+    /// named here, and it can be removed if it's yours (S06).
+    var existingHighlight: Highlight?
     var onHighlight: (Ink) -> Void
+    var onRemoveHighlight: (Highlight) -> Void
     var onWrite: () -> Void
-    var onSpeak: () -> Void
+    var onSpeakKept: (URL, [Float]) -> Void
+    var onPickInk: () -> Void
+
+    @State private var recording = false
+    @State private var draggedAway = false
+    @State private var deniedRoute = false
+    @State private var storageShort: Int?
+
+    private var showsSwatches: Bool { existingHighlight == nil || existingHighlight?.authorID != model.me?.id }
 
     var body: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 8) {
             if roomPaused {
                 SmallCaps(Copy.newNotesNeedTheRoom, size: 12)
             }
-            HStack(spacing: 14) {
-                // Two people: eight swatches, pick per highlight, last-used
-                // pre-selected. Three or more: one swatch — yours (§4.5).
-                // Paused: only highlight shows, greyed and inert — the room
-                // reads everything and writes nothing (S02, §08).
-                if let mine = model.inkForNewHighlight(in: room) {
+            if let existingHighlight, let author = model.person(existingHighlight.authorID) {
+                // A small label naming who made it, and remove if it's
+                // yours (S06). Here, in the chrome — never glass over the
+                // verse.
+                HStack(spacing: 10) {
+                    InkDot(ink: existingHighlight.ink)
+                    Text(author.name)
+                        .font(RibbonType.ui(14))
+                        .foregroundStyle(Palette.text)
+                    if model.isFromWhenTheRoomWasTwo(existingHighlight, in: room) {
+                        SmallCaps(Copy.inksFromWhenTheRoomWasTwo, size: 11)
+                    }
+                    if existingHighlight.authorID == model.me?.id {
+                        QuietControl(title: Copy.remove) { onRemoveHighlight(existingHighlight) }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 6)
+                .ribbonGlass(in: Capsule())
+                .accessibilityElement(children: .combine)
+            }
+            if recording || deniedRoute || storageShort != nil {
+                speakSurface
+            }
+            toolbar
+        }
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+        .onDisappear {
+            // The composer leaving the screen for any reason — a tap in
+            // the text, the book closing — ends the recording. The mic is
+            // never left hot.
+            if recorder.isRecording { recorder.discard() }
+        }
+        .onChange(of: recorder.interrupted) { _, interrupted in
+            // Interrupted by a call: what was captured is kept and
+            // offered, not thrown away (S05).
+            guard interrupted, recording else { return }
+            recording = false
+            if let kept = recorder.finish() { onSpeakKept(kept.url, kept.waveform) }
+        }
+    }
+
+    // MARK: The toolbar
+
+    private var toolbar: some View {
+        let identity = model.inkIsIdentity(in: room)
+        let mine = model.inkForNewHighlight(in: room)
+        return HStack(spacing: 14) {
+            // Two people: eight swatches, pick per highlight, last-used
+            // pre-selected. Three or more: one swatch — yours; none picked
+            // yet → the invitation to pick (§4.5, §6.7). Paused: only
+            // highlight shows, greyed and inert — the room reads
+            // everything and writes nothing (S02, §08).
+            if identity {
+                if let mine {
                     InkSwatch(ink: mine, isSelected: !roomPaused) {
                         if !roomPaused { onHighlight(mine) }
                     }
                     .opacity(roomPaused ? 0.35 : 1)
                 } else {
-                    ForEach(Ink.allCases, id: \.self) { ink in
-                        InkSwatch(ink: ink, isSelected: !roomPaused && ink == model.lastUsedInk) {
-                            if !roomPaused { onHighlight(ink) }
+                    Button(action: onPickInk) {
+                        SmallCaps(Copy.pickYourInk, size: 13, color: Palette.text)
+                            .frame(minHeight: 44)
+                    }
+                    .buttonStyle(.plain)
+                }
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: dynamicTypeSize.isAccessibilitySize ? 18 : 12) {
+                        ForEach(Ink.allCases, id: \.self) { ink in
+                            InkSwatch(ink: ink, isSelected: !roomPaused && ink == model.lastUsedInk) {
+                                if !roomPaused { onHighlight(ink) }
+                            }
+                            .opacity(roomPaused ? 0.35 : 1)
                         }
-                        .opacity(roomPaused ? 0.35 : 1)
                     }
                 }
-
-                if !roomPaused {
-                    Rectangle().fill(Palette.rule).frame(width: 1, height: 20)
-
-                    Button(action: onWrite) {
-                        SmallCaps(Copy.write, size: 13, color: Palette.text)
-                    }
-                    .buttonStyle(.plain)
-
-                    Button(action: onSpeak) {
-                        SmallCaps(Copy.speak, size: 13, color: Palette.text)
-                    }
-                    .buttonStyle(.plain)
-                }
+                .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? 180 : 232)
             }
-            .padding(.horizontal, 18)
-            .frame(height: 52)
-            .ribbonGlass(in: Capsule(), interactive: true)
+
+            if !roomPaused {
+                Rectangle().fill(Palette.rule).frame(width: 1, height: 20)
+
+                Button(action: onWrite) {
+                    SmallCaps(Copy.write, size: 13, color: Palette.text)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Copy.leaveANote)
+
+                speakHold
+            }
         }
-        .transition(.move(edge: .bottom).combined(with: .opacity))
+        .padding(.horizontal, 18)
+        .frame(minHeight: 52)
+        .ribbonGlass(in: Capsule(), interactive: true)
+    }
+
+    /// Speak: press and hold. The recording starts under the finger, not
+    /// on a tap, so a hesitation never keeps a note of silence. VoiceOver
+    /// gets a start/stop action instead of the hold (§11 motor).
+    private var speakHold: some View {
+        SmallCaps(recording ? Copy.releaseToLeaveIt : Copy.speak, size: 13,
+                  color: recording ? Palette.chartreuse : Palette.text)
+            .frame(minWidth: 44, minHeight: 44)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        if !recording { beginRecording() }
+                        draggedAway = abs(value.translation.height) > 70 || abs(value.translation.width) > 90
+                    }
+                    .onEnded { _ in endRecording(discarding: draggedAway) })
+            .accessibilityLabel(recording ? Copy.stopRecording : Copy.recordAVoiceNote)
+            .accessibilityHint(recording ? "" : Copy.holdToSpeak)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction {
+                if recording { endRecording(discarding: false) } else { beginRecording() }
+            }
+    }
+
+    // MARK: The recording surface
+
+    @ViewBuilder
+    private var speakSurface: some View {
+        VStack(spacing: 10) {
+            if let storageShort {
+                // S25: a count about a device, not about a person.
+                Text(Copy.noRoomOnPhone(storageShort))
+                    .font(RibbonType.ui(15))
+                    .foregroundStyle(Palette.text)
+                    .multilineTextAlignment(.center)
+            } else if deniedRoute {
+                // Refused once: one route to Settings, then never asked
+                // again (S25).
+                Text(Copy.micNeeded)
+                    .font(RibbonType.ui(15))
+                    .foregroundStyle(Palette.text)
+                Button {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                } label: {
+                    SmallCaps(Copy.openSettings, size: 13, color: Palette.chartreuse)
+                        .frame(minHeight: 44)
+                }
+                .buttonStyle(.plain)
+            } else {
+                let ink = model.inkForNewHighlight(in: room) ?? model.lastUsedInk
+                HStack(spacing: 2) {
+                    let peaks = recorder.livePeaks.suffix(80)
+                    ForEach(Array(peaks.enumerated()), id: \.offset) { _, peak in
+                        Capsule()
+                            .fill(ink.color.opacity(draggedAway ? 0.25 : 1))
+                            .frame(width: 2.5, height: max(3, CGFloat(peak) * 36))
+                    }
+                }
+                .frame(height: 44)
+                .frame(maxWidth: .infinity)
+                .animation(.linear(duration: 0.05), value: recorder.livePeaks.count)
+                .accessibilityHidden(true)
+
+                SmallCaps(
+                    draggedAway ? Copy.letGoToDiscard : Copy.releaseToLeaveIt,
+                    size: 12,
+                    color: draggedAway ? Palette.muted : Palette.text.opacity(0.7))
+            }
+        }
+        .padding(.horizontal, 22)
+        .padding(.vertical, 14)
+        .ribbonGlass(in: RoundedRectangle(cornerRadius: 18))
+        .transition(.opacity)
+    }
+
+    private func beginRecording() {
+        guard !roomPaused, !recording, !deniedRoute else { return }
+        if let free = LocalStore.freeMegabytes(), free < 20 {
+            storageShort = 20
+            return
+        }
+        Task {
+            if recorder.microphoneUndecided {
+                let granted = await recorder.requestAccess()
+                if !granted { deniedRoute = true; return }
+            } else if !recorder.hasMicrophoneAccess {
+                deniedRoute = true
+                return
+            }
+            let url = await model.store.audioFileURL("\(UUID().uuidString).m4a")
+            recorder.begin(to: url)
+            withAnimation(RibbonMotion.arrive) { recording = recorder.isRecording }
+        }
+    }
+
+    private func endRecording(discarding: Bool) {
+        guard recording else { return }
+        withAnimation(RibbonMotion.arrive) { recording = false }
+        draggedAway = false
+        if discarding {
+            recorder.discard()
+        } else if let kept = recorder.finish() {
+            onSpeakKept(kept.url, kept.waveform)
+        }
+        // A recording under ~1 s is discarded silently as a mis-touch.
     }
 }
 
@@ -83,9 +261,12 @@ struct InkSwatch: View {
                             .padding(-3)
                     }
                 }
+                .frame(width: 28, height: 44)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(ink.displayName) ink")
+        .accessibilityLabel(Copy.inkSwatch(ink.displayName))
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 }
 
@@ -116,18 +297,23 @@ struct WriteComposer: View {
                 .foregroundStyle(Palette.text)
                 .lineLimit(1...12)
                 .focused($focused)
+                .accessibilityLabel(Copy.leaveANote)
             HStack {
-                Button(Copy.takeBack) { onCancel() }
-                    .font(RibbonType.ui(15))
-                    .foregroundStyle(Palette.muted)
-                    .buttonStyle(.plain)
+                // Discarding a draft is not taking a note back (§10.2 —
+                // "take back" is for a note already left).
+                Button(action: onCancel) {
+                    SmallCaps(Copy.discard, size: 13, color: Palette.muted)
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle().inset(by: -8))
+                }
+                .buttonStyle(.plain)
                 Spacer()
                 Button {
                     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !trimmed.isEmpty else { return }
                     onSave(trimmed)
                 } label: {
-                    SmallCaps("leave it", size: 13, color: Palette.chartreuse)
+                    SmallCaps(Copy.leaveIt, size: 13, color: Palette.chartreuse)
                         .frame(minHeight: 44)
                         .contentShape(Rectangle().inset(by: -8))
                 }
@@ -145,108 +331,6 @@ struct WriteComposer: View {
         .onAppear {
             text = initialText
             focused = true
-        }
-    }
-}
-
-/// Speak (S05): press and hold. The waveform draws live in your ink.
-/// Release keeps it; drag away discards, with the waveform receding rather
-/// than a confirmation.
-struct SpeakControl: View {
-    let ink: Ink
-    let recorder: VoiceRecorder
-    var onKeep: (URL, [Float]) -> Void
-    var onDismiss: () -> Void
-
-    @Environment(AppModel.self) private var model
-    @State private var draggedAway = false
-    @State private var deniedRoute = false
-    @State private var storageFull = false
-
-    var body: some View {
-        VStack(spacing: 10) {
-            if storageFull {
-                // S25: a count about a device, not about a person.
-                Text(Copy.noRoomOnPhone(5))
-                    .font(RibbonType.ui(15))
-                    .foregroundStyle(Palette.text)
-                    .multilineTextAlignment(.center)
-            } else if deniedRoute {
-                // Refused once: one route to Settings, then never asked
-                // again (S25).
-                Text(Copy.micNeeded)
-                    .font(RibbonType.ui(15))
-                    .foregroundStyle(Palette.text)
-                Button {
-                    if let url = URL(string: UIApplication.openSettingsURLString) {
-                        UIApplication.shared.open(url)
-                    }
-                } label: {
-                    SmallCaps("open settings", size: 13, color: Palette.chartreuse)
-                }
-                .buttonStyle(.plain)
-            } else {
-                HStack(spacing: 2) {
-                    let peaks = recorder.livePeaks.suffix(80)
-                    ForEach(Array(peaks.enumerated()), id: \.offset) { _, peak in
-                        Capsule()
-                            .fill(ink.color.opacity(draggedAway ? 0.25 : 1))
-                            .frame(width: 2.5, height: max(3, CGFloat(peak) * 36))
-                    }
-                }
-                .frame(height: 44)
-                .frame(maxWidth: .infinity)
-                .animation(.linear(duration: 0.05), value: recorder.livePeaks.count)
-
-                SmallCaps(
-                    draggedAway ? "let go to discard" : "release to leave it",
-                    size: 12,
-                    color: draggedAway ? Palette.muted : Palette.text.opacity(0.7))
-            }
-        }
-        .padding(.horizontal, 22)
-        .padding(.vertical, 14)
-        .ribbonGlass(in: RoundedRectangle(cornerRadius: 18))
-        .gesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { value in
-                    draggedAway = abs(value.translation.height) > 70 || abs(value.translation.width) > 90
-                }
-                .onEnded { _ in
-                    if draggedAway {
-                        recorder.discard()
-                        onDismiss()
-                    } else if let kept = recorder.finish() {
-                        onKeep(kept.url, kept.waveform)
-                    } else {
-                        onDismiss()  // a mis-touch, discarded silently
-                    }
-                })
-        .onDisappear {
-            // The composer leaving the screen for any reason — a tap in
-            // the text, the book closing — ends the recording. The mic is
-            // never left hot.
-            if recorder.isRecording {
-                recorder.discard()
-            }
-        }
-        .task {
-            if let free = LocalStore.freeMegabytes(), free < 20 {
-                storageFull = true
-                return
-            }
-            if recorder.microphoneUndecided {
-                let granted = await recorder.requestAccess()
-                if !granted {
-                    deniedRoute = true
-                    return
-                }
-            } else if !recorder.hasMicrophoneAccess {
-                deniedRoute = true
-                return
-            }
-            let url = await model.store.audioFileURL("\(UUID().uuidString).m4a")
-            recorder.begin(to: url)
         }
     }
 }
