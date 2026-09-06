@@ -15,11 +15,16 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Ribbon">
 
+        <!-- No android:screenOrientation here on purpose. Portrait on a
+             phone and every orientation on a tablet (deviation 12) is a
+             decision about the device, and the manifest cannot make it —
+             so MainActivity.orientToTheDevice() makes it, in one place,
+             before the first frame. A manifest lock as well would start a
+             tablet portrait-locked and unlock it a frame later. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
-            android:screenOrientation="portrait"
             android:theme="@style/Theme.Ribbon"
             android:windowSoftInputMode="adjustResize">
 

@@ -328,6 +328,58 @@ A13. **Four substitutions in the state spine, none of them behavioural.**
     remotely. That is a real gap in the sync surface, it predates this
     port, and it is written down here because this is where it was noticed.
 
+A14. **The note's carve is an inline placeholder, and it closes iOS
+    deviation 6.** TextKit opens a hole in a page with an exclusion path,
+    which is why the iOS build's unfurl appears instantly — exclusion paths
+    do not animate, and animating them per frame during layout is jank.
+    Compose has no exclusion path at all, but it has inline placeholders:
+    the gap is a sized box inside the text itself, so the text reflows
+    around a real hole *and the hole's height can animate*. S04's 400 ms
+    open is therefore literal here and approximate on iOS.
+
+    The cost is honest and worth naming: a placeholder breaks the
+    paragraph, so the verse's last line ends at the carve rather than
+    setting beside it. TextKit would have flowed the text around three
+    sides of the hole.
+
+    Two smaller ones in the same file. Compose's ParagraphStyle has no
+    paragraph spacing, so §S02's stanza break and psalm-descriptor spacing
+    are set as short spacer paragraphs of the exact measured height — same
+    result, different mechanism. And the long-press threshold is the
+    platform's own 500 ms rather than iOS's 450 ms, because a reader's
+    muscle memory belongs to their phone, not to our number.
+
+A15. **Three things the fire says differently, none of which change the
+    picture.** `.plusLighter` becomes a per-draw `BlendMode.Plus`, because
+    a Compose DrawScope has no mutable blend mode the way a SwiftUI
+    GraphicsContext does. SwiftUI's layer blur — used on the flame sheath
+    and the hot air — becomes a Skia mask filter on each path: Gaussian
+    blur is linear and additive blending commutes, so blurring each tongue
+    and adding is the same picture as adding and blurring the group, but a
+    mask filter blurs the shape's coverage rather than its filled pixels,
+    and Skia derives its sigma from the radius, so the softness is faithful
+    in kind rather than to the pixel. The Canvas composites offscreen, which
+    reproduces the two properties of a SwiftUI Canvas the additive passes
+    actually depend on: accumulation happens in the fire's own buffer rather
+    than over the room's grain, and the warm throw is clipped at the edge.
+
+    One test differs on purpose. The fire draws larger in a "regular width"
+    room; on Android that is measured from the *window* (600 dp, the
+    Material medium breakpoint), not from the device — a tablet holding
+    Ribbon in a narrow split pane is a small room. That is the opposite of
+    A8's device noun, and deliberately so: the copy is about the hardware
+    in your hand, the drawing is about the room it is drawn in.
+
+A16. **The ember grows, but it is not the same object travelling.** S11's
+    fire → ember record is the one place a system morph is exactly the
+    right metaphor, and iOS gets it from a zoom navigation transition tied
+    to the tapped view. Here the record's ember arrives at the shelf
+    ember's drawn size and settles up to full size on the settle curve. It
+    reads as the ember growing, and under reduce motion it is simply drawn
+    at full size — but it plays on any entry to the record, not only on a
+    tap from the shelf, because a true shared-element morph would have to
+    be owned by the navigation host rather than by the screen.
+
 ## Licensed translations (decided: API.Bible)
 
 Open question §16.8 is now part-decided: **NKJV plus two undecided

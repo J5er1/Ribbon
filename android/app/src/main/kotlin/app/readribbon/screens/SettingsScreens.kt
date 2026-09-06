@@ -196,6 +196,13 @@ private object Route {
  * presentation here, and predictive back peels it away to leave the room
  * behind it.
  *
+ * Swift asks for no `presentationDetents`, which is one `.large` detent: You
+ * opens at the full height of the screen, not half of it. A Compose sheet
+ * offers a half-height stop unless it is told not to, and a settings screen
+ * that pushes four more screens behind it has no business opening folded in
+ * two — so the partial stop is skipped, as it is on every other single-detent
+ * sheet here.
+ *
  * @param model the store.
  * @param onDismiss close the sheet. Swift's `@Environment(\.dismiss)` — which
  *   leaving the room calls for itself, because the room this belongs to is
@@ -206,7 +213,7 @@ fun YouSheet(
     model: AppModel,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
-    sheetState: SheetState = rememberModalBottomSheetState(),
+    sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -216,6 +223,10 @@ fun YouSheet(
         // it, inside the content, exactly as it does in a room.
         containerColor = Palette.ground,
         contentColor = Palette.text,
+        // Swift shows no grabber: `.presentationDragIndicator` is
+        // `.automatic`, and automatic draws nothing for a sheet with a single
+        // detent. The whole sheet still drags, and predictive back closes it.
+        dragHandle = null,
         // The content carries its own clearance from the system bars, so a
         // pushed screen can scroll behind a three-button bar rather than be
         // cut short above it.
@@ -394,8 +405,12 @@ fun YouContent(
                     )
                 } else {
                     Box(
+                        // A short name draws a short word, and the word is the
+                        // whole control: the target keeps its 44 dp in both
+                        // directions so "Jo" is no harder to tap than
+                        // "Jonathan" (§11, deviation 12).
                         modifier = Modifier
-                            .sizeIn(minHeight = MinTarget)
+                            .sizeIn(minWidth = MinTarget, minHeight = MinTarget)
                             .clickable(role = Role.Button) {
                                 name = model.me?.name ?: ""
                                 editingName = true

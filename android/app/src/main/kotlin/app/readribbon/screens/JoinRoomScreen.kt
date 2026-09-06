@@ -2,7 +2,6 @@
 
 package app.readribbon.screens
 
-import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -47,6 +46,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -57,6 +57,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.contentType
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
@@ -81,8 +82,6 @@ import app.readribbon.services.SupabaseError
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.ByteArrayOutputStream
-import kotlin.math.roundToInt
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
@@ -122,17 +121,11 @@ private val CodeFieldMargin = 60.dp
 /** The portrait well: `.frame(width: 96, height: 96)`. */
 private val PortraitSize = 96.dp
 
-/** The longest side a portrait is stored at, before JPEG. */
-private const val PORTRAIT_MAX_SIDE = 512
-
-/** `jpegData(compressionQuality: 0.82)`. */
-private const val PORTRAIT_QUALITY = 82
-
 /** The visible field is small; the tappable field is never under 44 dp. */
 private val TouchTarget = 44.dp
 
 /**
- * Where the flow is. Swift nests this as `JoinFlow.JoinPhase` and makes it
+ * Where the flow is. Swift nests this as `JoinFlow.Phase` and makes it
  * `Equatable`; the data class carries the dead line and its equality.
  */
 private sealed interface JoinPhase {
@@ -159,32 +152,6 @@ private fun deadLine(error: Throwable): String {
         if (error.body.contains("invite_expired")) return Copy.INVITE_EXPIRED
     }
     return Copy.SERVER_UNREACHABLE
-}
-
-/**
- * The portrait, small enough to carry. Swift's free function of the same
- * name lives beside onboarding, which has not crossed yet; this copy is
- * file-private so the two cannot collide when it does.
- */
-private fun downsampledJPEG(data: ByteArray, maxSide: Int = PORTRAIT_MAX_SIDE): ByteArray? {
-    val image = BitmapFactory.decodeByteArray(data, 0, data.size) ?: return null
-    val scale = minOf(1f, maxSide.toFloat() / maxOf(image.width, image.height).toFloat())
-    val resized = if (scale < 1f) {
-        Bitmap.createScaledBitmap(
-            image,
-            (image.width * scale).roundToInt().coerceAtLeast(1),
-            (image.height * scale).roundToInt().coerceAtLeast(1),
-            true,
-        )
-    } else {
-        image
-    }
-    val out = ByteArrayOutputStream()
-    return if (resized.compress(Bitmap.CompressFormat.JPEG, PORTRAIT_QUALITY, out)) {
-        out.toByteArray()
-    } else {
-        null
-    }
 }
 
 private fun <T> settleSpec(reduceMotion: Boolean): FiniteAnimationSpec<T> =
@@ -250,19 +217,22 @@ fun JoinFlow(
 
     // The picked portrait is decoded and downsampled off the main thread;
     // nothing about it survives the screen, so it rides the UI's own scope.
+    // The downsampler is onboarding's — Swift's `downsampledJPEG` is one free
+    // function used by both threads, and so is this one.
     val portraitPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia(),
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         uiScope.launch {
-            val jpeg = withContext(Dispatchers.IO) {
+            val bytes = withContext(Dispatchers.IO) {
                 runCatching {
                     context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                }.getOrNull()?.let { downsampledJPEG(it) }
-            }
+                }.getOrNull()
+            } ?: return@launch
+            val jpeg = withContext(Dispatchers.Default) { downsampledJpeg(bytes) }
             if (jpeg != null) {
                 portraitData = jpeg
-                portraitImage = withContext(Dispatchers.IO) {
+                portraitImage = withContext(Dispatchers.Default) {
                     BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size)?.asImageBitmap()
                 }
             }
@@ -678,18 +648,19 @@ private fun CodeStep(
             placeholder = Copy.THE_CODE,
             size = 22f,
             focusRequester = focusRequester,
-            // Swift adds `.textContentType(.oneTimeCode)`, which fills the
-            // code in from the notification shade. Compose's equivalent
-            // autofill hint is not reachable from a BasicTextField in the
-            // version this build compiles against, so the code is typed —
-            // the same call the inline sign-in thread made.
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Number,
                 autoCorrectEnabled = false,
                 imeAction = ImeAction.Done,
             ),
             keyboardActions = KeyboardActions(),
-            modifier = Modifier.padding(horizontal = CodeFieldMargin),
+            // `.textContentType(.oneTimeCode)`: the code arrives by email but
+            // may equally arrive by message, and the platform offers to fill
+            // it in rather than making them copy it out. A number pad has no
+            // return key, so `ImeAction.Done` is what puts the keyboard away.
+            modifier = Modifier
+                .padding(horizontal = CodeFieldMargin)
+                .semantics { contentType = ContentType.SmsOtpCode },
         )
         errorLine?.let { line ->
             Text(
@@ -763,35 +734,43 @@ private fun CentredField(
     LaunchedEffect(focusRequester) {
         runCatching { focusRequester.requestFocus() }
     }
-    Box(
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = true,
+        textStyle = RibbonType.ui(size).copy(
+            color = Palette.text,
+            textAlign = TextAlign.Center,
+        ),
+        cursorBrush = SolidColor(Palette.chartreuse),
+        keyboardOptions = keyboardOptions,
+        keyboardActions = keyboardActions,
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = TouchTarget),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (value.isEmpty()) {
-            Text(
-                text = placeholder,
-                style = RibbonType.ui(size),
-                color = Palette.muted,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-        BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            singleLine = true,
-            textStyle = RibbonType.ui(size).copy(
-                color = Palette.text,
-                textAlign = TextAlign.Center,
-            ),
-            cursorBrush = SolidColor(Palette.chartreuse),
-            keyboardOptions = keyboardOptions,
-            keyboardActions = keyboardActions,
-            modifier = Modifier
-                .fillMaxWidth()
-                .focusRequester(focusRequester),
-        )
-    }
+            .focusRequester(focusRequester),
+        // The 44 dp minimum belongs to the field itself, not to a box drawn
+        // around it: a text field's tappable area is exactly its decoration,
+        // so a taller wrapper would leave the same short line to hit
+        // (deviation 12 — the defect found on iPad, and the same defect
+        // here). One line of type, centred in a target a finger can find.
+        decorationBox = { innerTextField ->
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = TouchTarget),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (value.isEmpty()) {
+                    Text(
+                        text = placeholder,
+                        style = RibbonType.ui(size),
+                        color = Palette.muted,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                innerTextField()
+            }
+        },
+    )
 }

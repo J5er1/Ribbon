@@ -52,6 +52,19 @@ object Copy {
     fun bankedTheFire(name: String) = "$name banked the fire"
 
     /**
+     * The two pieces of chrome at the top of the room, said aloud (§11).
+     *
+     * Swift writes these inline as `.accessibilityHint("Opens your rooms")`
+     * and `.accessibilityHint("Your account and settings")`. Compose has no
+     * hint field; the nearest honest thing is the click action's own label,
+     * which TalkBack reads as "double tap to open your rooms" — so the same
+     * fact is phrased as the action rather than as its consequence, and it
+     * lives here because a screen reader's sentence is copy like any other.
+     */
+    const val OPEN_YOUR_ROOMS = "open your rooms"
+    const val OPEN_YOUR_ACCOUNT = "open your account and settings"
+
+    /**
      * The fire's screen-reader label (§11). Law 2 in one line: a state, a
      * full stop, and nothing else — never a percentage, never a count,
      * never "how long since". [stateName] is [app.readribbon.core.FireState.displayName].

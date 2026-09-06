@@ -109,11 +109,20 @@ bibleID in `TranslationRegistry`. Details in docs/deviations.md.
 
 ## What's built, what's next
 
-Phase one (§15) is in place end to end: the room and its fire, reading,
-notes (voice with on-device transcripts + written), ink and highlights
-with real blending, quiet days, finishing a book, the shelf and ember
-records, the chooser, onboarding, and settings — and a room of two is now
-reachable for real: accounts (emailed code), invites that open the app,
-the S16 join flow, and two-way sync of the room surface. The presence
-socket and the content half of sync (notes, highlights, positions) are
-the next piece of work. `docs/deviations.md` is the honest ledger.
+Phase one (§15) is in place end to end on iOS: the room and its fire,
+reading, notes (voice with on-device transcripts + written), ink and
+highlights with real blending, quiet days, finishing a book, the shelf and
+ember records, the chooser, onboarding, and settings — and a room of two is
+reachable for real: accounts (emailed code), invites that open the app, the
+S16 join flow, and two-way sync of the room surface.
+
+**Phase three — Android — now stands beside it**, the same product against
+the same backend: RibbonCore in Kotlin (checked against the Swift by the
+same test suites), the design system, the campfire and the ember, the
+reading surface with real ink blending, notes, presence, and every screen
+through to the join flow and settings. It builds and its tests pass; it has
+not yet been run on a physical device.
+
+Still ahead on both platforms: the presence socket and the content half of
+sync (notes, highlights, positions), and everything §15 puts in phase two.
+`docs/deviations.md` is the honest ledger — §A is Android's.
