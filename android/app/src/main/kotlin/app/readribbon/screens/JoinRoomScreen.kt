@@ -182,8 +182,8 @@ fun JoinFlow(
     model: AppModel,
     onDone: () -> Unit,
     onDismiss: () -> Unit,
-    onStartInstead: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
+    onStartInstead: (() -> Unit)? = null,
 ) {
     var phase by remember { mutableStateOf<JoinPhase>(JoinPhase.Loading) }
     var preview by remember { mutableStateOf<InvitePreview?>(null) }

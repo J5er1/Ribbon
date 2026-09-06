@@ -64,6 +64,7 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
+import androidx.core.net.toUri
 
 // The app's one store. Local-first: every mutation lands in AppState and is
 // persisted; a remote backend (when configured and signed in) syncs the
@@ -1258,7 +1259,7 @@ class AppModel(
             val trimmed = fromPasted.trim()
             // Swift guards on `URL(string:)` returning nil; `Uri.parse` never
             // does, and a string that is no URL simply matches nothing above.
-            inviteToken(from = Uri.parse(trimmed))?.let { return it }
+            inviteToken(from = trimmed.toUri())?.let { return it }
             val match = UUID_PATTERN.find(trimmed) ?: return null
             return runCatching { Uuid.parse(match.value) }.getOrNull()
         }

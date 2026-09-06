@@ -48,6 +48,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -219,7 +220,7 @@ fun PresenceForm(
     // gesture is pulled, and the panel is only actually let go when the
     // gesture completes. A cancelled back leaves the panel exactly as it
     // was, which is the whole point of the API.
-    var backPull by remember { mutableStateOf(0f) }
+    var backPull by remember { mutableFloatStateOf(0f) }
     PredictiveBackHandler(enabled = expanded) { progress ->
         try {
             progress.collect { event -> backPull = event.progress }

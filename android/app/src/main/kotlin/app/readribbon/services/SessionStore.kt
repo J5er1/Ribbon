@@ -11,6 +11,7 @@ import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
+import androidx.core.content.edit
 
 /**
  * Where the session tokens live between launches.
@@ -59,12 +60,12 @@ class SessionStore(context: Context) {
     fun save(session: SupabaseSession) {
         runCatching {
             val sealed = encrypt(json.encodeToString(session))
-            prefs.edit().putString(SESSION_KEY, sealed).apply()
+            prefs.edit { putString(SESSION_KEY, sealed) }
         }
     }
 
     fun clear() {
-        prefs.edit().remove(SESSION_KEY).apply()
+        prefs.edit { remove(SESSION_KEY) }
     }
 
     // MARK: The key

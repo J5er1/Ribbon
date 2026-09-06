@@ -343,11 +343,11 @@ fun InkSwatch(
 @Composable
 fun WriteComposer(
     verse: VerseAddress,
-    initialText: String = "",
-    identity: String = "",
     onSave: (String) -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
+    initialText: String = "",
+    identity: String = "",
 ) {
     var text by remember(identity) {
         mutableStateOf(TextFieldValue(initialText, TextRange(initialText.length)))

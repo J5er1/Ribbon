@@ -78,6 +78,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import app.readribbon.app.AppModel
@@ -853,7 +854,11 @@ private fun ChapterSection(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .offset(y = heldSlot.value ?: 0.dp)
+                            // The lambda overload on purpose: the slot is
+                            // snapshot state, and reading it here defers the
+                            // read to layout instead of recomposing the card
+                            // every time the carve settles.
+                            .offset { IntOffset(0, (heldSlot.value ?: 0.dp).roundToPx()) }
                             .padding(start = 36.dp, end = 26.dp)
                             .onSizeChanged { size ->
                                 onNoteCardHeight(with(density) { size.height.toDp() })

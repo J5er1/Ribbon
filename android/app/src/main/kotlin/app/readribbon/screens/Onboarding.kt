@@ -85,6 +85,7 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
+import androidx.core.graphics.scale
 
 // S17 — onboarding: a thread, not a screen. Four questions, no tour, no
 // carousel, no permission prompts at launch, no account wall. The Wave and
@@ -697,11 +698,9 @@ fun downsampledJpeg(data: ByteArray, maxSide: Int = 512): ByteArray? {
 
     val scale = min(1f, maxSide.toFloat() / max(decoded.width, decoded.height).toFloat())
     val resized = if (scale < 1f) {
-        Bitmap.createScaledBitmap(
-            decoded,
+        decoded.scale(
             (decoded.width * scale).roundToInt().coerceAtLeast(1),
             (decoded.height * scale).roundToInt().coerceAtLeast(1),
-            true,
         )
     } else {
         decoded

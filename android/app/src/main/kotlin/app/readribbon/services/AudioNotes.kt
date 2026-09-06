@@ -9,6 +9,7 @@ import android.media.AudioManager
 import android.media.MediaPlayer
 import android.media.MediaRecorder
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CoroutineScope
@@ -27,6 +28,7 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
+import androidx.core.content.edit
 
 // Voice notes (§4.4, S05). Speak is press-and-hold; the waveform draws live
 // in your ink; release keeps it, drag away discards. A recording under ~1 s
@@ -131,7 +133,7 @@ class VoiceRecorder(context: Context) {
      * to decide *whether* to ask is above.
      */
     fun noteAccessAsked() {
-        permissionMemory.edit().putBoolean(ASKED_KEY, true).apply()
+        permissionMemory.edit { putBoolean(ASKED_KEY, true) }
     }
 
     /**
@@ -374,7 +376,7 @@ class VoicePlayer(context: Context) {
         private set
 
     /** 0...1 — drives the waveform fill only; never rendered as a number. */
-    var progress: Double by mutableStateOf(0.0)
+    var progress: Double by mutableDoubleStateOf(0.0)
         private set
 
     private val scope = CoroutineScope(Dispatchers.Main.immediate + SupervisorJob())

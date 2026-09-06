@@ -220,7 +220,7 @@ object WaveGeometry {{
 
 def make_android_icon():
     """The launcher icon as an adaptive icon (the only kind that matters at
-    minSdk 31). The foreground is a vector of the same three-step
+    minSdk 31, which is also why the directory needs no -v26 qualifier). The foreground is a vector of the same three-step
     composition the PNG icon uses - back ribbon, ground-coloured knockout
     stroke, front ribbon - so it stays crisp at every density and in the
     themed-icon monochrome slot.
@@ -304,7 +304,7 @@ def make_android_icon():
     <monochrome android:drawable="@drawable/ic_launcher_monochrome" />
 </adaptive-icon>
 """
-    mip = os.path.join(res, "mipmap-anydpi-v26")
+    mip = os.path.join(res, "mipmap-anydpi")
     os.makedirs(mip, exist_ok=True)
     for name in ("ic_launcher.xml", "ic_launcher_round.xml"):
         with open(os.path.join(mip, name), "w") as f:

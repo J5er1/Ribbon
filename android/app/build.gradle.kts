@@ -52,6 +52,20 @@ android {
         localeFilters += listOf("en")
     }
 
+    lint {
+        // OldTargetApi wants targetSdk raised to whatever is newest. The
+        // build book pins the target at API 36 (§12.2) and that is the
+        // number that decides runtime behaviour, so raising it is a product
+        // decision rather than housekeeping — see docs/deviations.md A1.
+        disable += "OldTargetApi"
+        // A lint error should stop CI. Warnings should not: the dependency
+        // freshness checks go off on their own as the world moves, and a
+        // build that fails because someone else published a release is a
+        // build nobody trusts.
+        abortOnError = true
+        warningsAsErrors = false
+    }
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
