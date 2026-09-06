@@ -189,9 +189,11 @@ fun InkDot(ink: Ink, modifier: Modifier = Modifier) {
 @Composable
 fun WayInButton(
     title: String,
-    onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    // Last, for the same reason QuietControl's is: so the trailing-lambda
+    // form binds the click handler rather than `enabled`.
+    onClick: () -> Unit,
 ) {
     Text(
         text = title,
@@ -219,10 +221,14 @@ fun WayInButton(
 @Composable
 fun QuietControl(
     title: String,
-    onClick: () -> Unit,
     modifier: Modifier = Modifier,
     color: Color = Palette.muted,
     size: Float = 13f,
+    // Last, so that the Compose trailing-lambda form reads naturally:
+    // `QuietControl(title = Copy.LEAVE_THIS_ROOM) { confirmLeave = true }`.
+    // With onClick earlier, that form binds the lambda to `size` instead —
+    // a type error rather than a silent bug, but a trap either way.
+    onClick: () -> Unit,
 ) {
     Box(
         modifier = modifier
