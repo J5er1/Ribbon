@@ -1,0 +1,44 @@
+name: android
+
+# The Kotlin port of RibbonCore is a plain JVM library, so its tests — the
+# fire engine, the time rules, the book table — run here exactly as the
+# Swift package's do, without a Mac and without an emulator. The app module
+# is compiled and linted; running it on a device is still a local job.
+#
+# The two cores are checked against ported-across test suites on purpose: if
+# the fire curve or the ~750-word scale boundary ever diverges between the
+# platforms, a red build here is where it should surface.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up the Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: RibbonCore (Kotlin) tests
+        working-directory: android
+        run: ./gradlew :core:test
+
+      - name: Assemble the app
+        working-directory: android
+        run: ./gradlew :app:assembleDebug
+
+      - name: Lint
+        working-directory: android
+        run: ./gradlew :app:lintDebug

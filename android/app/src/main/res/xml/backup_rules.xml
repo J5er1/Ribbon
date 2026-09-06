@@ -1,2 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<full-backup-content />
+<!-- The session blob is sealed with a keystore key that never leaves the
+     device, so a restored copy could not be decrypted on another phone. It
+     is excluded rather than shipped as undecryptable noise. -->
+<full-backup-content>
+    <exclude domain="sharedpref" path="ribbon.session.xml" />
+</full-backup-content>

@@ -12,7 +12,8 @@ plugins {
 // the Swift package keeps (Foundation only) and it is what lets both
 // implementations be checked against one shared body of tests.
 dependencies {
-    implementation(libs.kotlinx.serialization.json)
+    api(libs.kotlinx.serialization.json)
+    api(libs.kotlinx.datetime)
     implementation(libs.kotlinx.coroutines.core)
 
     testImplementation(libs.kotlin.test)

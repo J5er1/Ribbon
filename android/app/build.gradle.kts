@@ -103,7 +103,6 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.datastore.preferences)
-    implementation(libs.androidx.security.crypto)
     implementation(libs.androidx.graphics.shapes)
     implementation(libs.androidx.splashscreen)
     implementation(libs.androidx.browser)
@@ -111,6 +110,7 @@ dependencies {
 
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.kotlinx.datetime)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test)
