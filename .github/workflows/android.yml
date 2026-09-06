@@ -35,6 +35,15 @@ jobs:
         working-directory: android
         run: ./gradlew :core:test
 
+      - name: App unit tests
+        working-directory: android
+        # Includes the wire-format tests: the Android client and the iOS
+        # client write to one Supabase project, so the column names these
+        # rows serialize to are the schema, not a private choice. A renamed
+        # field compiles and round-trips against itself; it fails only in a
+        # real room, on someone else's phone.
+        run: ./gradlew :app:testDebugUnitTest
+
       - name: Assemble the app
         working-directory: android
         run: ./gradlew :app:assembleDebug
