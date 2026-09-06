@@ -145,6 +145,189 @@ reasoning.
     change your ink, leave — because a fresh room of one had no route to
     them at all (the second half of deviation 9a, now closed).
 
+## Android (phase three)
+
+The Android build is a second implementation of one product, not a second
+product. These are its knowing departures — from the build book where it
+names Android (§12.2), and from the iOS app where the two platforms could
+not honestly be made identical. Everything §12.2 asks for that is *not*
+listed here is simply built: Expressive shapes and damped spring physics,
+no FAB, no bottom navigation, no visible loading, predictive back,
+mandatory edge-to-edge, Alegreya Sans SC as a real small-caps face rather
+than a textTransform, and dynamic colour declined.
+
+A1. **minSdk is 31, not the literal 36.** §12.2 reads "Target: Android 16+
+    (API 36)". The app compiles against and targets exactly that, but taken
+    as an *install floor* it would ship to almost no phones. Everything
+    §12.2 actually asks for is present at Android 12: the Expressive shape
+    and motion systems, edge-to-edge, and `VibrationEffect.Composition` for
+    the thinking-of-you tap (API 30). Predictive back degrades to ordinary
+    back below 33, which is the one visible loss. `compileSdk` is 37 —
+    not a product call, just the floor the current AndroidX libraries
+    impose; `targetSdk` stays at the 36 the book pins, because that is the
+    number that decides runtime behaviour.
+
+A2. **RibbonCore is ported to Kotlin, not shared.** The alternative was
+    Kotlin Multiplatform with one source set for both apps, which is the
+    better long-run answer and a much larger change: it rewrites the iOS
+    app's dependency on a package that is currently working and tested.
+    The cost of a port is drift, so the port carries its own guard — all
+    five Swift test suites are ported case-for-case, 35 cases with the same
+    names, inputs and expected values, and both run in CI. If the fire
+    curve or the ~750-word scale boundary ever diverges, a red build is
+    where it surfaces rather than a couple's two phones disagreeing about
+    their fire.
+
+A3. **Scripture, the fonts and the grain are not copied into the repo a
+    second time.** They live once under `ios/Ribbon/Resources` and a Gradle
+    task syncs them into the Android assets at build time. Two copies of
+    11 MB of Scripture would be two things to keep in step, and the second
+    one would eventually be the stale one. The same reasoning extends to
+    the Wave: `tools/make_assets.py` already owned the mark's path data,
+    and now emits the Kotlin geometry and the Android adaptive icon from
+    the same two paths, so neither app hand-copies the mark.
+
+A4. **The launcher icon is a vector, and its monochrome slot is a
+    different drawing.** The iOS icon is a rendered PNG; Android's adaptive
+    icon is drawn from the mark's paths, so it stays crisp at every
+    density. The knockout is the same erase stroke the SVG mask does —
+    occlusion, not transparency — expressed as a ground-coloured stroke
+    between the two fills. The themed-icon monochrome slot cannot use that
+    trick, because the launcher tints the whole drawable: there the
+    knockout is a real hole.
+
+A5. **The ripple is replaced, not configured.** §12.2 asks for "a soft
+    state layer at low opacity" and no bounded ripple over Scripture. A
+    ripple with its radius turned down is still a ripple, and it still
+    animates outward from the touch point, so this is a custom indication
+    that draws a flat wash and never expands. Pressed 6%, focused 10%,
+    hovered 4%.
+
+A6. **Reduce motion is read from the animator duration scale.** Android
+    has no single switch equivalent to iOS's Reduce Motion; turning
+    animations off in accessibility or developer settings sets
+    `ANIMATOR_DURATION_SCALE` to zero, and that is the signal a
+    well-behaved app reads. §11 then applies exactly as on iOS: the fire
+    holds a state instead of flickering, morphs become cross-fades, and the
+    thinking-of-you fill becomes an instant state change with the haptic
+    intact.
+
+A7. **Session tokens are sealed with a hand-rolled keystore key.** iOS
+    uses the Keychain, on the grounds that tokens are credentials rather
+    than state. The Android equivalent would have been
+    `EncryptedSharedPreferences`, but `androidx.security.crypto` is
+    deprecated and on its way out, so the app does directly what that
+    library wrapped: an AES-GCM key generated in the hardware-backed
+    keystore, with only ciphertext in a preference file, excluded from
+    backup and device transfer.
+
+    **A real behavioural difference falls out of this**, and it is the good
+    direction: a keystore key does not survive a reinstall, so on Android a
+    reinstall signs you out. On iOS the Keychain outlives the app, which is
+    why `adoptRemoteIdentity` exists — a reinstalled iPhone can be signed
+    in with empty local state and must not mint a second person. Android
+    never hits that particular seam; the ordinary sign-in path still needs
+    the identity adoption, and it is ported.
+
+A8. **"This phone" follows the hardware, not the window.** The copy's
+    concrete noun is wrong on a tablet, so iOS switches it on interface
+    idiom. Android has no idiom; the closest honest test is
+    `smallestScreenWidthDp >= 600`, which is a property of the device
+    rather than of the current window — so a phone in a freeform window is
+    still a phone and a tablet in a narrow split is still a tablet, which
+    is the behaviour idiom gives on iOS.
+
+A9. **`QuietDay.bankedInterval` is stricter than Foundation's.** Given a
+    corrupt stored date like `2024-13-01`, Foundation's lenient `Calendar`
+    rolls it over to January 2025 and banks *that* day; kotlinx-datetime
+    refuses, and the Kotlin returns null. Banking nothing is the better
+    failure — a day that was never marked must not bank another day's
+    hours — so the Kotlin is left as it is and the difference is recorded
+    rather than reproduced.
+
+A10. **`Handiwork` exposes as `var` what Swift marks `private(set)`.**
+    Kotlin cannot attach a private setter to a primary-constructor
+    property, and moving the fields into the class body would break both
+    documented construction shapes and the `@Serializable` constructor. The
+    invariants the Swift type enforces are therefore convention here, not
+    compilation. Relatedly, collapsing Swift's two initialisers into one
+    constructor means the normalising (`coalDepth` clamped, `banked`
+    reduced to `catching`) also runs on the decode path, where Swift's
+    synthesized `init(from:)` skips it — strictly *more* of the invariant
+    the Swift documents, never less.
+
+A11. **`ReflectionCard.answers` will not round-trip between the two
+    apps.** Swift's `JSONEncoder` writes a dictionary with a non-String key
+    as a flat alternating array; kotlinx-serialization writes a JSON
+    object, because `Uuid`'s descriptor is a string primitive. This is
+    latent — cards are phase two (§15) and `answers` is serialized nowhere
+    yet — and it is listed so that whoever lights the cards up fixes the
+    shape on both sides at once rather than discovering it in a room.
+
+A12. **Voice notes get no transcript on Android 12 and 12L.** Deviation 4
+    holds — transcription is on-device on both platforms, and on Android
+    that is `SpeechRecognizer.createOnDeviceSpeechRecognizer`, so the audio
+    never leaves the phone. But Android's recognizer listens to a *stream*,
+    not to a file: the only way to hand it a finished recording is
+    `RecognizerIntent.EXTRA_AUDIO_SOURCE`, which arrived in API 33. On 31
+    and 32 there is no route from a recorded note to a transcript at all.
+    Those two releases therefore get exactly what a failure gets — null,
+    and the honest "No transcript for this one." with Try again — rather
+    than a worse transcript or a silent absence.
+
+    **This is unresolved, not settled.** §11 makes transcripts mandatory
+    ("a voice-only note is unreadable to a deaf member and unfindable to
+    everyone in six months"), and an OS version that structurally cannot
+    produce one is a real hole in that promise. Three ways out, none taken
+    yet because the choice is the owner's:
+
+    - Raise minSdk to 33. §12.2 asked for 36 in the first place, so 33 is
+      still far more permissive than the book, and it closes the hole
+      completely.
+    - Transcribe live, off the microphone, while the note is being
+      recorded — works on every release, but it puts two consumers on the
+      microphone at once, which is unreliable on some devices.
+    - Fall back to a server transcriber on 31/32 only. The interface was
+      built to allow exactly this (deviation 4), at the cost of the
+      privacy answer on those devices.
+
+    Everything below API 33 also needs `decodeToPcm`, which is carried
+    regardless: the note is AAC in MPEG-4 and the recognizer wants raw
+    16-bit PCM, so it is decoded into a cache scratch file that is deleted
+    the moment recognition ends.
+
+A13. **Four substitutions in the state spine, none of them behavioural.**
+    `AppModel` is a `ViewModel` and Swift's `@Observable` becomes Compose
+    snapshot state, which is the nearest equivalent and lets a composable
+    read a field directly. Four details are worth knowing before reading
+    the file:
+
+    - `state` uses `neverEqualPolicy()`. `Handiwork` is a struct in Swift
+      and a mutable class in the Kotlin core, so feeding a fire mutates an
+      object that both the old and the new `AppState` point at. Under the
+      default structural equality the two would compare equal and a
+      feeding would never reach the screen.
+    - `Reading.snapshot()` deep-copies the handiwork before a queued push,
+      so the row that lands describes the fire as it was when the push was
+      made — which is what Swift gets for free by capturing a struct.
+    - `persist()` runs on a scope that is deliberately never cancelled,
+      standing in for Swift's `Task.detached`, so a save started as the app
+      goes away is not killed by the ViewModel clearing.
+    - `RemoteSync` is main-thread-confined by convention rather than by
+      `@MainActor`, and its keystore reads and writes are moved to the IO
+      dispatcher — keystore crypto on Android's main thread is a StrictMode
+      violation waiting to happen, where the Keychain calls it replaces are
+      synchronous on the main actor.
+
+    One shared-backend note that looks like a Kotlin artifact and is not:
+    both clients omit a null optional from an upsert body rather than
+    sending JSON null (Swift's synthesized `encodeIfPresent`,
+    kotlinx-serialization's `explicitNulls = false`). So on *both*
+    platforms an upsert never clears one of those columns back to null —
+    removing a portrait locally does not blank `profiles.portrait_path`
+    remotely. That is a real gap in the sync surface, it predates this
+    port, and it is written down here because this is where it was noticed.
+
 ## Licensed translations (decided: API.Bible)
 
 Open question §16.8 is now part-decided: **NKJV plus two undecided
