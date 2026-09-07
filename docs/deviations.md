@@ -197,16 +197,16 @@ reasoning.
     tap a room to switch, no swipe on a row, no folders, no reordering,
     a paused room's fire drawn in the state it actually holds.
 
-15. **Onboarding has a third door: sign in.** — noticed by the owner
-    (September 2026). S17's thread offers two answers to "Who's reading
-    with you?" — start a room, or accept an invite — and both of them
-    mint a *new* person. The account, which §6.10 says exists for exactly
-    one reason ("An account carries your room between phones"), had no
-    door at the one moment a person needs it: a second phone, or a
-    reinstall the Keychain/keystore did not outlive. The only route back
-    to your own rooms was to finish onboarding as a stranger, land in a
-    stray room of one, and find *Sign in* at the bottom of the menu —
-    which then adopted the account's id and pushed the stray room to it.
+15. **Onboarding has a third door: sign in — S17 and §6.10 disagreed,
+    and §6.10 won.** — noticed by the owner (September 2026). S17's
+    sequence is "start or accept", and both of its answers mint a *new*
+    person. §6.10 says something the thread had no way to honour: "New
+    device: sign in, rooms restore." There was no door at the one moment
+    a person needs it — a second phone, or a reinstall the
+    Keychain/keystore did not outlive. The only route back to your own
+    rooms was to finish onboarding as a stranger, land in a stray room of
+    one, and find *Sign in* at the bottom of the menu — which then
+    adopted the account's id and pushed the stray room to it.
 
     So the who-step now offers *Sign in* as a third, quiet answer (absent
     when the build has no backend — no dead control), and
@@ -219,15 +219,28 @@ reasoning.
     rather than a fresh one.
 
     What this does **not** fix, and what is still true of the identity
-    model: a portrait travels to a device once and a changed face never
-    refreshes one that already has an old one (deviation 10's first edge —
-    nothing on the profile row says the face changed, so the fix is a
-    version column and a migration on the live project); and a person who
-    goes through onboarding on a second device *before* signing in still
-    creates a stray person and a stray room that the sign-in then merges
-    into the account. One email is still one account — `profiles.id`
-    references `auth.users(id)` — but the local-first seam lets more than
-    one local self reach it.
+    model, all of it §6.10's and none of it new here:
+
+    - **Sign-in is an emailed code only.** §6.10 asks for "a passkey where
+      available, an emailed code otherwise". The code half is built; the
+      passkey half is not.
+    - **A changed face never travels.** A portrait reaches a device once
+      and only once (deviation 10's first edge): the remote path is
+      `<person id>.jpg` and nothing on the profile row says the object
+      behind it changed, so a device that has your old face keeps it. The
+      fix is a version on the row and a migration on the live project.
+    - **Re-invited is only half re-attached.** §6.10's "lost access
+      entirely" wants your ink *and* your notes to reattach rather than
+      duplicating. Notes do: they are keyed by the author's id, which is
+      the account's. Ink does not: it lives on the membership row (by
+      design — you are teal in one room and ochre in another), and leaving
+      deletes that row, so `accept_invite` seats you again with no ink.
+    - **A second device can still make a stray self.** Onboarding *before*
+      signing in mints a local person and a room of one, and the sign-in
+      that follows adopts the account's id and pushes that room to it. One
+      email is still one account — `profiles.id` references
+      `auth.users(id)` — but the local-first seam lets more than one local
+      self reach it. The door above makes this avoidable, not impossible.
 
 ## Android (phase three)
 
