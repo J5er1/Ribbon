@@ -102,7 +102,7 @@ final class AppModel {
     func displayName(of room: Room) -> String {
         if let name = room.name, !name.isEmpty { return name }
         let names = members(of: room).compactMap { person($0.personID)?.name.split(separator: " ").first }
-        if names.isEmpty { return "Your room" }
+        if names.isEmpty { return Copy.yourRoom }
         return names.joined(separator: " & ")
     }
 

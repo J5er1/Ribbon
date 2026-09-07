@@ -56,7 +56,7 @@ struct SignInInline: View {
                     .padding(.horizontal, 40)
                     .disabled(code.trimmingCharacters(in: .whitespaces).isEmpty)
                     .opacity(code.trimmingCharacters(in: .whitespaces).isEmpty ? 0.3 : 1)
-                QuietControl(title: "Send a new code") { sendCode() }
+                QuietControl(title: Copy.sendANewCode) { sendCode() }
             }
             if let errorLine {
                 Text(errorLine)

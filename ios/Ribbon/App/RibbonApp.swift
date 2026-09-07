@@ -73,12 +73,10 @@ struct RootView: View {
     /// Where the reading should open, when a row or a quoted verse named a
     /// place (§6.3, S11). Nil means your own position.
     @State private var openTarget: VerseAddress?
-    @State private var showRooms = false
-    @State private var showYou = false
-    @State private var showNewRoom = false
-    /// A just-created room whose invite half is due (S15 — naming and
-    /// inviting are two steps that should feel like one).
-    @State private var inviteRoom: Room?
+    /// The menu, when it is open, and which of its two doors was used
+    /// (S14 + S18 in one screen — MenuScreen.swift, deviations 14). Nil is
+    /// the room, which is the only permanent destination.
+    @State private var menu: MenuEntry?
     /// The finishing sequence's "Start another" lands in the chooser (S13).
     @State private var chooserRequested = false
     @State private var navigationPath = NavigationPath()
@@ -108,8 +106,8 @@ struct RootView: View {
                         openTarget = target
                         withAnimation(RibbonMotion.arrive) { openReading = reading }
                     },
-                    onOpenRooms: { showRooms = true },
-                    onYou: { showYou = true })
+                    onOpenRooms: { menu = .rooms },
+                    onYou: { menu = .you })
                 .navigationDestination(for: UUID.self) { readingID in
                     if let reading = model.state.readings.first(where: { $0.id == readingID }) {
                         EmberRecordScreen(
@@ -174,31 +172,18 @@ struct RootView: View {
                         removal: .move(edge: .bottom).combined(with: .opacity)))
                 }
             }
-            .sheet(isPresented: $showRooms) {
-                RoomsSheet(
-                    onSwitch: { roomID in
-                        withAnimation(RibbonMotion.arrive) { model.switchRoom(to: roomID) }
-                    },
-                    onStartRoom: {
-                        showRooms = false
-                        showNewRoom = true
-                    },
-                    onYou: {
-                        showRooms = false
-                        showYou = true
-                    })
+            // The menu, full screen. It is one screen rather than the
+            // book's two sheets, and it holds the rooms, the room you are
+            // in, and you — the whole of what used to be S14 and S18, with
+            // the two doors that were missing from both (deviations 14).
+            .fullScreenCover(item: $menu) { entry in
+                MenuScreen(entry: entry)
             }
-            .sheet(isPresented: $showNewRoom) {
-                // Naming and inviting are two steps that should feel like
-                // one (S15) — the invite sheet follows the naming sheet.
-                NewRoomSheet { room in inviteRoom = room }
-            }
-            .sheet(item: $inviteRoom) { newRoom in
-                InviteSheet(room: newRoom)
-                    .presentationDetents([.medium])
-            }
-            .sheet(isPresented: $showYou) {
-                YouSheet()
+            .onChange(of: model.pendingInvite) { _, pending in
+                // A tapped invite link is the strongest possible statement
+                // of intent (S16): it closes the menu rather than arriving
+                // underneath it, the way it wins over onboarding's step.
+                if pending != nil { menu = nil }
             }
             .sheet(item: pendingInviteBinding) { pending in
                 // A tapped invite while already onboarded: the join flow

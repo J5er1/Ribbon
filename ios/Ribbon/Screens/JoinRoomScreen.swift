@@ -16,6 +16,10 @@ struct JoinFlow: View {
     var onDone: () -> Void
     /// Onboarding only: the quiet way out to starting a room of your own.
     var onStartInstead: (() -> Void)?
+    /// What the dead end's way out is called. Presented over the room it
+    /// closes; pushed inside the menu it goes back one step instead — to the
+    /// paste field, which is exactly where "ask for a new one" lands.
+    var wayOut: String = Copy.close
 
     enum Phase: Equatable {
         case loading
@@ -51,7 +55,7 @@ struct JoinFlow: View {
             case .loading:
                 // A held beat, not a spinner. The preview answers fast or
                 // the dead line takes its place.
-                SmallCaps("ribbon", size: 12, color: Palette.muted.opacity(0.6))
+                SmallCaps(Copy.wordmark, size: 12, color: Palette.muted.opacity(0.6))
             case .preview:
                 previewStep
             case .name:
@@ -61,7 +65,7 @@ struct JoinFlow: View {
             case .code:
                 codeStep
             case .joining:
-                SmallCaps("joining", size: 12, color: Palette.muted)
+                SmallCaps(Copy.joining, size: 12, color: Palette.muted)
             case .dead(let line):
                 VStack(spacing: 18) {
                     Text(line)
@@ -70,11 +74,11 @@ struct JoinFlow: View {
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 44)
                     if let onStartInstead {
-                        QuietControl(title: "Start a room instead", action: onStartInstead)
+                        QuietControl(title: Copy.startARoomInstead, action: onStartInstead)
                     } else {
                         // Presented over the room: a dead end still needs
                         // its own way out, not only the swipe.
-                        QuietControl(title: "Close") { dismiss() }
+                        QuietControl(title: wayOut) { dismiss() }
                     }
                 }
             }
@@ -104,7 +108,7 @@ struct JoinFlow: View {
                 .padding(.horizontal, 80)
                 .padding(.top, 8)
             if let onStartInstead {
-                QuietControl(title: "Start a room instead", action: onStartInstead)
+                QuietControl(title: Copy.startARoomInstead, action: onStartInstead)
             }
         }
     }
@@ -153,7 +157,7 @@ struct JoinFlow: View {
                 .padding(.horizontal, 40)
                 .submitLabel(.done)
                 .onSubmit(advanceFromName)
-            WayInButton(title: "That's me") { advanceFromName() }
+            WayInButton(title: Copy.thatsMe) { advanceFromName() }
                 .padding(.horizontal, 80)
                 .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
                 .opacity(name.trimmingCharacters(in: .whitespaces).isEmpty ? 0.3 : 1)
@@ -190,7 +194,7 @@ struct JoinFlow: View {
                 .opacity(email.contains("@") ? 1 : 0.3)
             if let onStartInstead {
                 // Never a step without a way out.
-                QuietControl(title: "Start a room instead", action: onStartInstead)
+                QuietControl(title: Copy.startARoomInstead, action: onStartInstead)
             }
         }
         .onAppear { focused = .email }
@@ -220,9 +224,9 @@ struct JoinFlow: View {
                 .padding(.horizontal, 80)
                 .disabled(code.trimmingCharacters(in: .whitespaces).isEmpty)
                 .opacity(code.trimmingCharacters(in: .whitespaces).isEmpty ? 0.3 : 1)
-            QuietControl(title: "Send a new code") { sendCode() }
+            QuietControl(title: Copy.sendANewCode) { sendCode() }
             if let onStartInstead {
-                QuietControl(title: "Start a room instead", action: onStartInstead)
+                QuietControl(title: Copy.startARoomInstead, action: onStartInstead)
             }
         }
         .onAppear { focused = .code }

@@ -152,7 +152,7 @@ struct OnboardingFlow: View {
                 .submitLabel(.done)
                 .onSubmit(advanceFromName)
 
-            WayInButton(title: "That's me") { advanceFromName() }
+            WayInButton(title: Copy.thatsMe) { advanceFromName() }
                 .padding(.horizontal, 80)
                 .opacity(name.trimmingCharacters(in: .whitespaces).isEmpty ? 0.3 : 1)
             Spacer()
@@ -167,7 +167,7 @@ struct OnboardingFlow: View {
     private var fromInviteStep: some View {
         VStack(spacing: 22) {
             Spacer()
-            Text("Open the link they sent you. It brings you straight into their room.")
+            Text(Copy.openTheLink)
                 .font(RibbonType.ui(17))
                 .foregroundStyle(Palette.text)
                 .multilineTextAlignment(.center)
@@ -198,7 +198,7 @@ struct OnboardingFlow: View {
                     .font(RibbonType.ui(14))
                     .foregroundStyle(Palette.muted)
             }
-            QuietControl(title: "Start a room instead") {
+            QuietControl(title: Copy.startARoomInstead) {
                 withAnimation(RibbonMotion.settle) { step = .name }
             }
             Spacer()
@@ -253,7 +253,7 @@ struct OnboardingFlow: View {
                 .padding(.horizontal, 40)
             } else if let invite {
                 ShareLink(item: invite.url()) {
-                    Text("Send the invite")
+                    Text(Copy.sendTheInvite)
                         .font(RibbonType.uiMedium(17))
                         .foregroundStyle(Palette.ground)
                         .padding(.horizontal, 28)

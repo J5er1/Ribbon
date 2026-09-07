@@ -294,6 +294,42 @@ object Copy {
      */
     const val START_A_ROOM_INSTEAD = "Start a room instead"
 
+    // The menu (S14 + S18, one screen — see docs/deviations.md 14). Three
+    // section heads, so the rooms, the room you are in, and you are three
+    // things rather than one pile.
+    const val ROOMS = "Rooms"
+    const val THIS_ROOM = "This room"
+    const val ACCOUNT = "Account"
+
+    /**
+     * Inviting someone to the room you are already in (S15). The room
+     * screen's own line only appears while a room of one still has its first
+     * invite out; this is the way in from two members to six.
+     */
+    const val INVITE_SOMEONE = "Invite someone"
+
+    /**
+     * Accepting an invite to another room when you already have one (S16).
+     * The tapped link does this by itself; this is the same door, for a link
+     * that landed somewhere this phone can't tap it from.
+     */
+    const val JOIN_WITH_AN_INVITE = "Join with an invite"
+
+    /**
+     * The line over the menu's paste field. [OPEN_THE_LINK] tells you to
+     * open the link, which is exactly what a person standing here could not
+     * do — the link landed on a laptop, or in a thread this phone can't
+     * open. So this one states the fact and lets the field's own prompt do
+     * the asking.
+     */
+    const val THE_LINK_BRINGS_YOU_IN = "The link they sent you brings you into their room."
+
+    /**
+     * The room with no name and no members but you (S15) — a room is named
+     * by whoever is in it, and until somebody is, this.
+     */
+    const val YOUR_ROOM = "Your room"
+
     // Sign-in (§6.10) — an emailed code, no passwords. The account exists for
     // one reason, said plainly.
     const val ACCOUNT_REASON = "An account carries your room between phones."

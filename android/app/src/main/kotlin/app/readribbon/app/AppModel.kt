@@ -213,7 +213,7 @@ class AppModel(
             if (full.all { it == ' ' }) return@mapNotNull null
             firstName(full)
         }
-        if (names.isEmpty()) return "Your room"
+        if (names.isEmpty()) return Copy.YOUR_ROOM
         return names.joinToString(" & ")
     }
 

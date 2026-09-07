@@ -15,6 +15,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
@@ -53,14 +54,12 @@ import app.readribbon.design.rememberReduceMotion
 import app.readribbon.design.room
 import app.readribbon.reading.ReadingScreen
 import app.readribbon.screens.EmberRecordScreen
-import app.readribbon.screens.InviteSheet
 import app.readribbon.screens.JoinFlow
-import app.readribbon.screens.NewRoomSheet
+import app.readribbon.screens.MenuEntry
+import app.readribbon.screens.MenuScreen
 import app.readribbon.screens.OnboardingFlow
 import app.readribbon.screens.PersonScreen
 import app.readribbon.screens.RoomScreen
-import app.readribbon.screens.RoomsSheet
-import app.readribbon.screens.YouSheet
 import kotlinx.coroutines.flow.Flow
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
@@ -73,7 +72,7 @@ import kotlin.uuid.Uuid
 // Swift's `@main struct RibbonApp: App` is a Scene; on Android the scene is
 // MainActivity, so this file is the two halves of the Swift one: the model's
 // loading, the buffered link and the lifecycle refresh (Swift's
-// `WindowGroup`), and the navigation, the sheets and the book (Swift's
+// `WindowGroup`), and the navigation, the menu and the book (Swift's
 // `RootView`).
 
 /**
@@ -298,15 +297,12 @@ private fun RoomStack(model: AppModel, room: Room) {
      * place (§6.3, S11). Null means your own position.
      */
     var openTarget by remember { mutableStateOf<VerseAddress?>(null) }
-    var showRooms by remember { mutableStateOf(false) }
-    var showYou by remember { mutableStateOf(false) }
-    var showNewRoom by remember { mutableStateOf(false) }
-
     /**
-     * A just-created room whose invite half is due (S15 — naming and
-     * inviting are two steps that should feel like one).
+     * The menu, when it is open, and which of the room header's two doors was
+     * used (S14 + S18 in one screen — MenuScreen.kt, deviations 14). Null is
+     * the room, which is the only permanent destination.
      */
-    var inviteRoom by remember { mutableStateOf<Room?>(null) }
+    var menu by remember { mutableStateOf<MenuEntry?>(null) }
 
     /** The finishing sequence's "Start another" lands in the chooser (S13). */
     var chooserRequested by remember { mutableStateOf(false) }
@@ -377,8 +373,8 @@ private fun RoomStack(model: AppModel, room: Room) {
                         chooserRequested = chooserRequested,
                         onChooserHandled = { chooserRequested = false },
                         onOpenReading = { reading, target -> openBook(reading, target) },
-                        onOpenRooms = { showRooms = true },
-                        onYou = { showYou = true },
+                        onOpenRooms = { menu = MenuEntry.ROOMS },
+                        onYou = { menu = MenuEntry.YOU },
                         onOpenPerson = { personID, roomID -> openPerson(personID, roomID) },
                         onOpenEmber = { readingID -> navController.navigate(Route.ember(readingID)) },
                     )
@@ -490,49 +486,39 @@ private fun RoomStack(model: AppModel, room: Room) {
             }
         }
 
-        // The sheets. Swift's four `.sheet` modifiers hang off the same
-        // container the book does, so they present over the book as well as
-        // over the room; these are drawn last for the same reason.
-
-        if (showRooms) {
-            RoomsSheet(
-                model = model,
-                onSwitch = { roomID -> model.switchRoom(roomID) },
-                onStartRoom = {
-                    showRooms = false
-                    showNewRoom = true
-                },
-                onYou = {
-                    showRooms = false
-                    showYou = true
-                },
-                onDismiss = { showRooms = false },
-            )
-        }
-
-        if (showNewRoom) {
-            // Naming and inviting are two steps that should feel like one
-            // (S15) — the invite sheet follows the naming sheet.
-            NewRoomSheet(
-                model = model,
-                onCreated = { newRoom -> inviteRoom = newRoom },
-                onDismiss = { showNewRoom = false },
-            )
-        }
-
-        inviteRoom?.let { newRoom ->
-            // Swift asks for `.presentationDetents([.medium])`; the sheet
-            // sizes its own content to that fraction, so there is no detent
-            // to ask for here.
-            InviteSheet(
-                room = newRoom,
-                model = model,
-                onDismiss = { inviteRoom = null },
-            )
-        }
-
-        if (showYou) {
-            YouSheet(model = model, onDismiss = { showYou = false })
+        // The menu, full screen, over the stack and over the book — Swift
+        // presents it with `.fullScreenCover`, off the same container the
+        // book hangs on. It is one screen rather than the book's two sheets,
+        // and it holds the rooms, the room you are in, and you, with the two
+        // doors that were missing from both (deviations 14).
+        //
+        // Composed after the book for the same reason the sheets were: back
+        // callbacks are taken in reverse order of registration, so the menu's
+        // own predictive back wins for as long as the menu is open.
+        AnimatedContent(
+            targetState = menu,
+            modifier = Modifier.fillMaxSize(),
+            transitionSpec = {
+                // A cover arrives from the bottom of the screen and leaves
+                // the same way. Under reduce motion both are a cut (§11).
+                val transform = if (targetState != null) {
+                    (slideInVertically(slide) { it } + fadeIn(arrive)) togetherWith
+                        ExitTransition.None
+                } else {
+                    EnterTransition.None togetherWith
+                        (slideOutVertically(slide) { it } + fadeOut(settle))
+                }
+                transform.using(SizeTransform(clip = false))
+            },
+            label = "the-menu",
+        ) { open ->
+            if (open != null) {
+                MenuScreen(
+                    model = model,
+                    entry = open,
+                    onDismiss = { menu = null },
+                )
+            }
         }
 
         model.pendingInvite?.let { pending ->
@@ -541,6 +527,10 @@ private fun RoomStack(model: AppModel, room: Room) {
             // inheriting the first one's half-finished state — Swift's
             // `.id(pending.token)`, and here it discards the sheet's own
             // state with it.
+            // A tapped invite link is the strongest possible statement of
+            // intent (S16): it closes the menu rather than arriving
+            // underneath it, the way it wins over onboarding's step.
+            LaunchedEffect(pending.token) { menu = null }
             key(pending.token) {
                 ModalBottomSheet(
                     onDismissRequest = { model.pendingInvite = null },

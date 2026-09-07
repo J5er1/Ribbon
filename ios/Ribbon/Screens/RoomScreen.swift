@@ -93,7 +93,7 @@ struct RoomScreen: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityHint("Opens your rooms")
+            .accessibilityHint(Copy.opensYourRooms)
             Spacer()
             // Your own portrait, top-right — settings one tap away, from
             // anywhere the room is. (A departure from S18's two-taps-deep;
@@ -107,7 +107,7 @@ struct RoomScreen: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Copy.you)
-            .accessibilityHint("Your account and settings")
+            .accessibilityHint(Copy.opensYourAccount)
         }
         .padding(.horizontal, 24)
         .padding(.top, 4)
