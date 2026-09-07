@@ -51,3 +51,22 @@ jobs:
       - name: Lint
         working-directory: android
         run: ./gradlew :app:lintDebug
+
+      # There is no emulator in the environments this gets built in, so the
+      # only way anyone sees the app actually run is on a real phone. This
+      # is that: download the artifact from the run's summary page, open the
+      # .apk on an Android 13+ device, and allow the install when it asks.
+      # It installs as app.readribbon.debug, so it will not collide with
+      # anything from Play later.
+      #
+      # It is a debug build signed with the runner's throwaway debug key —
+      # fine for installing by hand, useless for distribution, and a new
+      # key each run, so an update over a previous download will ask to
+      # uninstall first.
+      - name: Keep the APK, so it can be installed on a phone
+        uses: actions/upload-artifact@v4
+        with:
+          name: ribbon-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14

@@ -59,6 +59,22 @@ cd android && ./gradlew :app:assembleDebug
 
 Kotlin core tests: `cd android && ./gradlew :core:test`.
 
+### Getting it onto a phone
+
+Any Android 13 or newer device. Either:
+
+- **From CI, no tools.** Open the latest `android` workflow run on GitHub,
+  download the `ribbon-debug-apk` artifact from the run summary, unzip it,
+  open the `.apk` on the phone and allow the install. It lands as
+  `app.readribbon.debug`. Each run signs with a fresh throwaway debug key,
+  so installing a newer one over an older one asks you to uninstall first.
+- **Over USB, with the tools.** `./gradlew :app:installDebug` with the
+  phone plugged in and USB debugging on, or just Run in Android Studio.
+  Slower to set up and worth it — it is the only way to get logcat, the
+  debugger and the layout inspector, which is what you want for the things
+  a build cannot check: the fire's flicker on real hardware, the blur under
+  HWUI, the recogniser, the keystore, and every gesture.
+
 The Kotlin core is a port of the Swift one, and the guard against the two
 drifting is that all five Swift test suites are ported case-for-case — same
 names, same inputs, same expected values — and both run in CI. If the fire
