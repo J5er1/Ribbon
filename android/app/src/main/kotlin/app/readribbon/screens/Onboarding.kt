@@ -105,6 +105,7 @@ private sealed interface Step {
     data object Mark : Step
     data object Who : Step
     data object FromInvite : Step
+    data object SignIn : Step
     data object Name : Step
     data object Invite : Step
     data class Join(val token: Uuid) : Step
@@ -233,6 +234,23 @@ fun OnboardingFlow(
                     Step.Who -> WhoStep(
                         onStartARoom = { step = Step.Name },
                         onHaveAnInvite = { step = Step.FromInvite },
+                        // Absent when this build has no backend — no dead
+                        // control.
+                        onSignIn = if (model.remote == null) null else {
+                            { step = Step.SignIn }
+                        },
+                    )
+
+                    Step.SignIn -> SignInStep(
+                        model = model,
+                        onSignedIn = {
+                            // A profile came back with the account: the
+                            // person and their rooms are already here, so
+                            // onboarding is over. An account without one
+                            // still needs a name.
+                            if (model.me != null) onDone() else step = Step.Name
+                        },
+                        onCancel = { step = Step.Who },
                     )
 
                     Step.FromInvite -> FromInviteStep(
@@ -314,7 +332,11 @@ private fun MarkMoment(onElapsed: () -> Unit) {
 }
 
 @Composable
-private fun WhoStep(onStartARoom: () -> Unit, onHaveAnInvite: () -> Unit) {
+private fun WhoStep(
+    onStartARoom: () -> Unit,
+    onHaveAnInvite: () -> Unit,
+    onSignIn: (() -> Unit)?,
+) {
     StepColumn(spacing = 26.dp) {
         Text(
             text = Copy.WHO_IS_READING,
@@ -330,7 +352,45 @@ private fun WhoStep(onStartARoom: () -> Unit, onHaveAnInvite: () -> Unit) {
         ) {
             WayInButton(title = Copy.START_A_ROOM, onClick = onStartARoom)
             QuietControl(title = Copy.HAVE_AN_INVITE, onClick = onHaveAnInvite)
+            // The third answer, for the person this is not the first time
+            // for: a new phone, or a reinstall. Without it the only way back
+            // to your own rooms was to make a stranger and a stray room
+            // first, and find Sign in underneath them.
+            if (onSignIn != null) {
+                QuietControl(title = Copy.SIGN_IN, onClick = onSignIn)
+            }
         }
+    }
+}
+
+/**
+ * The way back to a room you already have.
+ *
+ * The account is the only thing that carries one between phones (§6.10), so
+ * this is where a second phone starts — and when the account already has a
+ * profile, its person and its rooms come back and there is nothing left to
+ * ask.
+ */
+@Composable
+private fun SignInStep(
+    model: AppModel,
+    onSignedIn: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    StepColumn(spacing = 24.dp) {
+        Text(
+            text = Copy.ACCOUNT_REASON,
+            style = RibbonType.ui(17f),
+            color = Palette.text,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 44.dp),
+        )
+        SignInInline(
+            model = model,
+            onSignedIn = onSignedIn,
+            onCancel = onCancel,
+            modifier = Modifier.padding(horizontal = 40.dp),
+        )
     }
 }
 

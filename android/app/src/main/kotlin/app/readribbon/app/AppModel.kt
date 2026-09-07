@@ -850,12 +850,42 @@ class AppModel(
     suspend fun verifySignInCode(email: String, code: String) {
         val remote = this.remote ?: throw SupabaseError.NotSignedIn
         val uid = remote.verify(email = email, code = code)
+        if (state.me == null) {
+            // Signing in before this device has a person: a new phone, or a
+            // reinstall the keystore didn't outlive. Carrying your room
+            // between phones is the whole reason an account exists (§6.10),
+            // and the account's own profile *is* the person — minting a
+            // second local identity here and merging it afterwards is how a
+            // person ends up with two of themselves.
+            restorePerson(uid)
+        }
         adoptRemoteIdentity(uid)
         reconcileOwnProfile()
         // Pull before push: a room this account left on another device is
         // removed by the merge, so the push can't quietly re-join it.
         refreshFromRemote()
         pushLocalGraph()
+    }
+
+    /**
+     * The account's profile, made this device's person.
+     *
+     * Null means an account with no profile yet — an email that was verified
+     * and never finished onboarding — and there is nothing to restore, so
+     * the caller asks for a name as it would have anyway.
+     */
+    private suspend fun restorePerson(uid: Uuid) {
+        val remote = this.remote ?: return
+        val row = runCatching { remote.fetchOwnProfile() }.getOrNull() ?: return
+        state = state.copy(
+            me = Person(
+                id = uid,
+                name = row.name,
+                portraitPath = null,
+                translation = TranslationID(rawValue = row.translation)))
+        persist()
+        // The face is left to `reconcileOwnProfile`, which runs next and
+        // asks the same question — fetching it here would download it twice.
     }
 
     /**

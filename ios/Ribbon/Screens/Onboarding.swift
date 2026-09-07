@@ -14,6 +14,7 @@ struct OnboardingFlow: View {
         case mark
         case who
         case fromInvite
+        case signIn
         case name
         case invite
         case join(UUID)
@@ -38,6 +39,9 @@ struct OnboardingFlow: View {
                     .transition(.opacity)
             case .fromInvite:
                 fromInviteStep
+                    .transition(.opacity)
+            case .signIn:
+                signInStep
                     .transition(.opacity)
             case .name:
                 nameStep
@@ -103,8 +107,50 @@ struct OnboardingFlow: View {
                 QuietControl(title: Copy.haveAnInvite) {
                     withAnimation(RibbonMotion.settle) { step = .fromInvite }
                 }
+                // The third answer, for the person this is not the first
+                // time for: a new phone, or a reinstall. Without it the
+                // only way back to your own rooms was to make a stranger
+                // and a stray room first and find Sign in underneath them.
+                // Absent when this build has no backend — no dead control.
+                if model.remote != nil {
+                    QuietControl(title: Copy.signIn) {
+                        withAnimation(RibbonMotion.settle) { step = .signIn }
+                    }
+                }
             }
             .padding(.horizontal, 56)
+            Spacer()
+            Spacer()
+        }
+    }
+
+    // The way back to a room you already have. The account is the only
+    // thing that carries one between phones (§6.10), so this is where a
+    // second phone starts — and when the account already has a profile,
+    // its person and its rooms come back and there is nothing left to ask.
+    private var signInStep: some View {
+        VStack(spacing: 24) {
+            Spacer()
+            Text(Copy.accountReason)
+                .font(RibbonType.ui(17))
+                .foregroundStyle(Palette.text)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 44)
+            SignInInline(
+                onSignedIn: {
+                    // A profile came back with the account: the person and
+                    // their rooms are already here, so onboarding is over.
+                    // An account without one still needs a name.
+                    if model.me != nil {
+                        onDone()
+                    } else {
+                        withAnimation(RibbonMotion.settle) { step = .name }
+                    }
+                },
+                onCancel: {
+                    withAnimation(RibbonMotion.settle) { step = .who }
+                })
+                .padding(.horizontal, 40)
             Spacer()
             Spacer()
         }

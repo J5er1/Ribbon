@@ -610,12 +610,35 @@ final class AppModel {
     func verifySignInCode(email: String, code: String) async throws {
         guard let remote else { throw SupabaseError.notSignedIn }
         let uid = try await remote.verify(email: email, code: code)
+        if state.me == nil {
+            // Signing in before this device has a person: a new phone, or a
+            // reinstall the Keychain didn't outlive. Carrying your room
+            // between phones is the whole reason an account exists (§6.10),
+            // and the account's own profile *is* the person — minting a
+            // second local identity here and merging it afterwards is how a
+            // person ends up with two of themselves.
+            await restorePerson(from: uid)
+        }
         adoptRemoteIdentity(uid)
         await reconcileOwnProfile()
         // Pull before push: a room this account left on another device is
         // removed by the merge, so the push can't quietly re-join it.
         await refreshFromRemote()
         await pushLocalGraph()
+    }
+
+    /// The account's profile, made this device's person. Nil means an
+    /// account with no profile yet — an email that was verified and never
+    /// finished onboarding — and there is nothing to restore, so the caller
+    /// asks for a name as it would have anyway.
+    private func restorePerson(from uid: UUID) async {
+        guard let remote, let row = try? await remote.fetchOwnProfile() else { return }
+        state.me = Person(
+            id: uid, name: row.name, portraitPath: nil,
+            translation: TranslationID(rawValue: row.translation))
+        persist()
+        // The face is left to `reconcileOwnProfile`, which runs next and
+        // asks the same question — fetching it here would download it twice.
     }
 
     /// The account is the elder truth: signing in on a fresh device must

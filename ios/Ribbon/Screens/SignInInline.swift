@@ -65,7 +65,7 @@ struct SignInInline: View {
                     .multilineTextAlignment(.center)
             }
             if let onCancel {
-                QuietControl(title: "Never mind", action: onCancel)
+                QuietControl(title: Copy.neverMind, action: onCancel)
             }
         }
         .onAppear { focused = true }

@@ -197,6 +197,38 @@ reasoning.
     tap a room to switch, no swipe on a row, no folders, no reordering,
     a paused room's fire drawn in the state it actually holds.
 
+15. **Onboarding has a third door: sign in.** — noticed by the owner
+    (September 2026). S17's thread offers two answers to "Who's reading
+    with you?" — start a room, or accept an invite — and both of them
+    mint a *new* person. The account, which §6.10 says exists for exactly
+    one reason ("An account carries your room between phones"), had no
+    door at the one moment a person needs it: a second phone, or a
+    reinstall the Keychain/keystore did not outlive. The only route back
+    to your own rooms was to finish onboarding as a stranger, land in a
+    stray room of one, and find *Sign in* at the bottom of the menu —
+    which then adopted the account's id and pushed the stray room to it.
+
+    So the who-step now offers *Sign in* as a third, quiet answer (absent
+    when the build has no backend — no dead control), and
+    `verifySignInCode` handles the case it could not before: with no local
+    person, the account's own profile *becomes* the person
+    (`restorePerson`), its rooms arrive with the pull, and onboarding is
+    over without a name ever being asked for. An account with no profile
+    — an email verified and abandoned — still falls through to the name
+    step, and `completeOnboarding` already gives that person the auth id
+    rather than a fresh one.
+
+    What this does **not** fix, and what is still true of the identity
+    model: a portrait travels to a device once and a changed face never
+    refreshes one that already has an old one (deviation 10's first edge —
+    nothing on the profile row says the face changed, so the fix is a
+    version column and a migration on the live project); and a person who
+    goes through onboarding on a second device *before* signing in still
+    creates a stray person and a stray room that the sign-in then merges
+    into the account. One email is still one account — `profiles.id`
+    references `auth.users(id)` — but the local-first seam lets more than
+    one local self reach it.
+
 ## Android (phase three)
 
 The Android build is a second implementation of one product, not a second

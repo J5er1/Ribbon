@@ -178,6 +178,10 @@ enum Copy {
     static let theCode = "The code"
     static let signIn = "Sign in"
 
+    /// The quiet way out of the sign-in thread, wherever it is offered —
+    /// never a wall (§6.1, §6.10).
+    static let neverMind = "Never mind"
+
     // Settings (S18–S22)
     static let textAndTranslation = "Text"
     static let notifications = "Notifications"
