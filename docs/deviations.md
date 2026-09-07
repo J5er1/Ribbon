@@ -188,12 +188,15 @@ reasoning.
     the top, your portrait opens it already scrolled to You — so
     deviation 13's promise is intact.
 
-    Two things are added to a room's row that the book does not list: the
-    name of the book that room is reading, and `selected` state for a
-    screen reader. The first is an address, not a score (Law 2), and with
-    more than one room it is the thing that tells two small fires apart;
-    the second is §11's rule that colour — here the chartreuse hairline —
-    is never the only signal. Everything else S14 asks for is unchanged:
+    Three things are added to a room's row that the book does not list:
+    the name of the book that room is reading, `selected` state for a
+    screen reader, and the fire's own state spoken beside the glyph. The
+    first is an address, not a score (Law 2), and with more than one room
+    it is the thing that tells two small fires apart. The second and
+    third are both §11's rule that colour is never the only signal — the
+    chartreuse hairline for which room you are in, and the fire itself,
+    which hides its own semantics everywhere else because it always sits
+    beside the words it illustrates, and here does not. Everything else S14 asks for is unchanged:
     tap a room to switch, no swipe on a row, no folders, no reordering,
     a paused room's fire drawn in the state it actually holds.
 
