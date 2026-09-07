@@ -179,11 +179,47 @@ actor SupabaseClient {
         _ = try await run(request)
     }
 
-    func downloadPortrait(personID: UUID) async throws -> Data {
+    /// What a conditional portrait download found.
+    enum PortraitFetch {
+        /// The server's copy is the copy this device already has.
+        case unchanged
+        /// A different face, and the tag to offer next time.
+        case changed(Data, etag: String?)
+        /// No portrait behind the row — deleted, or never uploaded.
+        case missing
+    }
+
+    /// The face, asked for conditionally.
+    ///
+    /// The object's path is `<person id>.jpg` and never changes, so nothing
+    /// in the profile row can say the bytes behind it did. The object's own
+    /// tag can: offer the one this device stored, and a 304 with no body is
+    /// the server saying the face is still the face.
+    func downloadPortrait(personID: UUID, ifNoneMatch: String?) async throws -> PortraitFetch {
         let path = "storage/v1/object/authenticated/portraits/\(personID.uuidString.lowercased()).jpg"
         var request = URLRequest(url: base.appending(path: path))
         try apply(headers: &request)
-        return try await run(request)
+        if let ifNoneMatch {
+            request.setValue(ifNoneMatch, forHTTPHeaderField: "If-None-Match")
+        }
+        // URLSession answers a conditional request out of its own cache when
+        // it can, which would hand back 200 and the old bytes and hide the
+        // 304 this whole mechanism turns on.
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw SupabaseError.http(0, "")
+        }
+        switch http.statusCode {
+        case 304:
+            return .unchanged
+        case 404:
+            return .missing
+        case 200..<300:
+            return .changed(data, etag: http.value(forHTTPHeaderField: "ETag"))
+        default:
+            throw SupabaseError.http(http.statusCode, String(data: data, encoding: .utf8) ?? "")
+        }
     }
 
     func deletePortrait(personID: UUID) async throws {

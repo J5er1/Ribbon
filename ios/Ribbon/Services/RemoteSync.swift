@@ -112,6 +112,30 @@ final class RemoteSync {
         }
     }
 
+    /// The memory of an ink you chose in a room (§6.10). Best-effort on
+    /// purpose: it is a nicety, and a build talking to a project without the
+    /// table yet must behave exactly as it did before.
+    func rememberInk(_ ink: Ink, roomID: UUID, personID: UUID) async {
+        try? await withAuthRetry {
+            try await self.client.upsert(into: "room_inks", rows: [
+                RoomInkRow(roomId: roomID, personId: personID, ink: ink.rawValue)
+            ])
+        }
+    }
+
+    /// The ink this account last chose in this room, if it ever chose one.
+    func rememberedInk(roomID: UUID, personID: UUID) async -> Ink? {
+        let rows: [RoomInkRow]? = try? await withAuthRetry {
+            try await self.client.select(
+                [RoomInkRow].self, from: "room_inks",
+                query: [
+                    URLQueryItem(name: "room_id", value: "eq.\(roomID.uuidString.lowercased())"),
+                    URLQueryItem(name: "person_id", value: "eq.\(personID.uuidString.lowercased())"),
+                ])
+        }
+        return rows?.first.flatMap { Ink(rawValue: $0.ink) }
+    }
+
     func push(room: Room) async throws {
         try await withAuthRetry {
             try await self.client.upsert(into: "rooms", rows: [
@@ -275,10 +299,16 @@ final class RemoteSync {
         return graph
     }
 
-    func fetchPortrait(personID: UUID) async -> Data? {
-        try? await withAuthRetry {
-            try await self.client.downloadPortrait(personID: personID)
+    /// The face, asked for conditionally (§2.7). A network failure reads as
+    /// `.unchanged`: the device keeps the face it has, which is what it
+    /// would have done anyway.
+    func fetchPortrait(
+        personID: UUID, ifNoneMatch: String?
+    ) async -> SupabaseClient.PortraitFetch {
+        let found = try? await withAuthRetry {
+            try await self.client.downloadPortrait(personID: personID, ifNoneMatch: ifNoneMatch)
         }
+        return found ?? .unchanged
     }
 
     /// The account's own profile row, if the account has one — the seam
@@ -327,6 +357,12 @@ final class RemoteSync {
         var name: String
         var portraitPath: String?
         var translation: String
+    }
+
+    struct RoomInkRow: Codable {
+        var roomId: UUID
+        var personId: UUID
+        var ink: String
     }
 
     struct RoomRow: Codable {

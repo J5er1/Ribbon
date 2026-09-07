@@ -191,11 +191,73 @@ class SupabaseClient(
         )
     }
 
-    suspend fun downloadPortrait(personID: Uuid): ByteArray = requestBytes(
-        method = "GET",
-        url = url("storage/v1/object/authenticated/portraits/$personID.jpg"),
-        authenticated = true,
-    )
+    /**
+     * The face, asked for conditionally.
+     *
+     * The object's path is `<person id>.jpg` and never changes, so nothing
+     * in the profile row can say the bytes behind it did. The object's own
+     * tag can: offer the one this device stored, and a 304 with no body is
+     * the server saying the face is still the face.
+     *
+     * Its own connection rather than [requestBytes], which treats every
+     * status outside 200..299 as a failure — and 304 is not one.
+     */
+    suspend fun downloadPortrait(personID: Uuid, ifNoneMatch: String?): PortraitFetch {
+        val bearer = (currentSession() ?: throw SupabaseError.NotSignedIn).accessToken
+        val target = url("storage/v1/object/authenticated/portraits/$personID.jpg")
+        return withContext(Dispatchers.IO) {
+            val connection = (URL(target).openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 20_000
+                readTimeout = 30_000
+                // HttpURLConnection would follow its own cache and hand back
+                // 200 with the old bytes, hiding the 304 this turns on.
+                useCaches = false
+                setRequestProperty("apikey", key)
+                setRequestProperty("Authorization", "Bearer $bearer")
+                ifNoneMatch?.let { setRequestProperty("If-None-Match", it) }
+            }
+            try {
+                when (val status = connection.responseCode) {
+                    HttpURLConnection.HTTP_NOT_MODIFIED -> PortraitFetch.Unchanged
+                    HttpURLConnection.HTTP_NOT_FOUND -> PortraitFetch.Missing
+                    in 200..299 -> PortraitFetch.Changed(
+                        data = connection.inputStream.use { it.readBytes() },
+                        etag = connection.getHeaderField("ETag"),
+                    )
+                    else -> {
+                        val error = runCatching {
+                            connection.errorStream?.readBytes()?.decodeToString()
+                        }.getOrNull().orEmpty()
+                        throw SupabaseError.Http(status, error)
+                    }
+                }
+            } catch (io: IOException) {
+                throw SupabaseError.Http(0, io.message.orEmpty())
+            } finally {
+                connection.disconnect()
+            }
+        }
+    }
+
+    /** What a conditional portrait download found. */
+    sealed interface PortraitFetch {
+        /** The server's copy is the copy this device already has. */
+        data object Unchanged : PortraitFetch
+
+        /** A different face, and the tag to offer next time. */
+        data class Changed(val data: ByteArray, val etag: String?) : PortraitFetch {
+            // A ByteArray in a data class compares by identity, which would
+            // make two equal faces unequal. Nothing here compares one, and
+            // the compiler is right to insist the choice be made explicit.
+            override fun equals(other: Any?): Boolean = this === other
+
+            override fun hashCode(): Int = System.identityHashCode(this)
+        }
+
+        /** No portrait behind the row — deleted, or never uploaded. */
+        data object Missing : PortraitFetch
+    }
 
     suspend fun deletePortrait(personID: Uuid) {
         request(

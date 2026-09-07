@@ -67,6 +67,18 @@ class WireFormatTest {
     }
 
     @Test
+    fun testRoomInksRowMatchesSchema() {
+        // 20260907170000_ribbon_ink_outlives_membership.sql. `chosen_at` has
+        // a default and the client never sends it — the row says which ink
+        // and for whom, and the server says when.
+        val row = RemoteSync.RoomInkRow(roomId = other, personId = id, ink = "teal")
+        assertEquals(
+            setOf("room_id", "person_id", "ink"),
+            keysOf(json.encodeToString(row)),
+        )
+    }
+
+    @Test
     fun testInvitesRowMatchesSchema() {
         val row = RemoteSync.InviteRow(
             id = id, roomId = other, createdBy = id, createdAt = at, expiresAt = at,

@@ -224,23 +224,65 @@ reasoning.
     - **Sign-in is an emailed code only.** §6.10 asks for "a passkey where
       available, an emailed code otherwise". The code half is built; the
       passkey half is not.
-    - **A changed face never travels.** A portrait reaches a device once
-      and only once (deviation 10's first edge): the remote path is
-      `<person id>.jpg` and nothing on the profile row says the object
-      behind it changed, so a device that has your old face keeps it. The
-      fix is a version on the row and a migration on the live project.
-    - **Re-invited is only half re-attached.** §6.10's "lost access
-      entirely" wants your ink *and* your notes to reattach rather than
-      duplicating. Notes do: they are keyed by the author's id, which is
-      the account's. Ink does not: it lives on the membership row (by
-      design — you are teal in one room and ochre in another), and leaving
-      deletes that row, so `accept_invite` seats you again with no ink.
+    - ~~**A changed face never travels.**~~ Fixed below (16).
+    - ~~**Re-invited is only half re-attached.**~~ Fixed below (17).
     - **A second device can still make a stray self.** Onboarding *before*
       signing in mints a local person and a room of one, and the sign-in
       that follows adopts the account's id and pushes that room to it. One
       email is still one account — `profiles.id` references
       `auth.users(id)` — but the local-first seam lets more than one local
       self reach it. The door above makes this avoidable, not impossible.
+
+16. **A changed face travels, by asking the object rather than the row.**
+    Deviation 10's first honest edge, closed. A portrait reached a device
+    once and only once — `merge` fetched it when the device had nothing,
+    and never again — so everyone who had already seen your old face kept
+    it forever, and your own second phone did too. The remote object is
+    `<person id>.jpg` and never renames, so nothing in the `profiles` row
+    can say the bytes behind it changed.
+
+    The object's own tag can. `downloadPortrait` now offers the ETag this
+    device stored (`AppState.portraitETags`, persisted, so a relaunch
+    re-downloads nothing) and reads three answers: 304 means the face is
+    still the face, 404 means there is none, and 200 carries the new bytes
+    and the new tag. Both clients switch caching off for that one request,
+    because URLSession and HttpURLConnection would each answer it out of
+    their own cache and hide the 304 the whole mechanism turns on.
+
+    Two bounds keep it quiet. A face is taken on trust for 15 minutes
+    before it is asked about again (a room holds six; this is a handful of
+    empty responses an hour), and setting your own portrait starts that
+    window on this device, so an upload still in flight is never overtaken
+    by a fetch of the face it is replacing. No schema change, no migration,
+    and a network failure reads as "unchanged" — the device keeps the face
+    it has, which is what it would have done anyway.
+
+17. **An ink outlives the membership it was chosen on.** §6.10's "lost
+    access entirely" asks that a re-invited person's ink *and* notes
+    reattach rather than duplicating. Notes always did: they are keyed by
+    the author's id, which is the account's. Ink could not — it lives on
+    the membership row on purpose (teal in one room, ochre in another,
+    §4.5) and leaving deletes that row, so `accept_invite` seated you
+    again with no colour. In a room of three or more, where ink *is*
+    identity, that is a stranger arriving rather than the same person
+    coming back.
+
+    `supabase/migrations/20260907170000_ribbon_ink_outlives_membership.sql`
+    adds `room_inks` — one row per person per room, keyed to `profiles`
+    rather than to `memberships` precisely so it is there when the
+    membership is not. Its RLS is `person_id = auth.uid()` in both
+    directions: which ink someone once chose in a room they have left is
+    not a thing the room gets to know, and the current ink of everyone
+    present is already on their membership where the room can see it.
+
+    The membership stays the truth for the *current* ink and every screen
+    still reads it; this is only the memory of what was chosen. `pickInk`
+    writes it, and `joinRoom` reads it after the pull and puts it back on —
+    never over somebody else, so a colour taken in the meantime stays taken
+    and the room asks for a new one the way it always would. Both writes
+    are best-effort: a build talking to a project without the table yet
+    behaves exactly as it did before, which is what makes it safe to ship
+    the client before the migration is applied.
 
 ## Android (phase three)
 

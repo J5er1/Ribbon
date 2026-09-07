@@ -76,6 +76,12 @@ data class AppState(
     val currentRoomID: Uuid? = null,
     val settings: AppSettings = AppSettings(),
     val hasSeenMarginHint: Boolean = false,
+    /**
+     * The tag of the portrait object each face on this device came from, so
+     * a conditional fetch can be told what it already has. Persisted: a
+     * relaunch must not re-download every face in the room.
+     */
+    val portraitETags: Map<Uuid, String> = emptyMap(),
 )
 
 /**
