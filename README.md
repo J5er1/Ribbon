@@ -65,7 +65,8 @@ names, same inputs, same expected values — and both run in CI. If the fire
 curve or the fire-scale boundary ever diverges between the platforms, a red
 build is where it should surface rather than a couple's two phones
 disagreeing about their fire. `docs/deviations.md` §A is the Android ledger;
-A1 explains why minSdk is 31 where §12.2 says API 36.
+A1 explains why minSdk is 33 where §12.2 says API 36 — the floor is set
+by §11's mandatory transcripts, not by convenience.
 
 ## Scripture data
 

@@ -220,7 +220,7 @@ object WaveGeometry {{
 
 def make_android_icon():
     """The launcher icon as an adaptive icon (the only kind that matters at
-    minSdk 31, which is also why the directory needs no -v26 qualifier). The foreground is a vector of the same three-step
+    minSdk 33, which is also why the directory needs no -v26 qualifier). The foreground is a vector of the same three-step
     composition the PNG icon uses - back ribbon, ground-coloured knockout
     stroke, front ribbon - so it stays crisp at every density and in the
     themed-icon monochrome slot.

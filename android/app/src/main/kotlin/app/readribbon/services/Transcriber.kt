@@ -8,13 +8,11 @@ import android.media.AudioFormat
 import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
-import android.os.Build
 import android.os.Bundle
 import android.os.ParcelFileDescriptor
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
-import androidx.annotation.RequiresApi
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -40,10 +38,10 @@ import kotlin.time.Duration.Companion.minutes
 // docs/deviations.md.
 //
 // SFSpeechRecognizer becomes android.speech.SpeechRecognizer, built through
-// createOnDeviceSpeechRecognizer (API 31, our minSdk) so that the decision
-// above means the same thing here: the audio never leaves the phone. Three
-// things about Android's recognizer differ from Apple's, and the length of
-// this file is those three things:
+// createOnDeviceSpeechRecognizer so that the decision above means the same
+// thing here: the audio never leaves the phone. Two things about Android's
+// recognizer differ from Apple's, and the length of this file is those two
+// things:
 //
 //   1. There is no SFSpeechURLRecognitionRequest. Android's recognizer
 //      listens to a *stream*, and the only way to hand it a finished
@@ -57,13 +55,11 @@ import kotlin.time.Duration.Companion.minutes
 //      recognizer stopped reading, and there is nothing useful to do about
 //      a half-fed recognizer. Fifteen seconds of speech is about 1.3 MB of
 //      scratch.
-//   2. EXTRA_AUDIO_SOURCE arrived in API 33, and this app runs from 31. On
-//      Android 12 and 12L there is no way to transcribe a recorded file at
-//      all — not a worse transcript, no transcript — so those two releases
-//      get the same null a failure gives, and the same honest "No
-//      transcript for this one." with Try again. Named in
-//      docs/deviations.md.
-//   3. It is callback-based and main-thread-bound where Swift's is an
+//      EXTRA_AUDIO_SOURCE arrived in API 33, and it is the reason minSdk
+//      is 33 rather than 31: below it there is no route from a recorded
+//      note to a transcript at all — not a worse transcript, no
+//      transcript — and §11 does not treat a transcript as optional.
+//   2. It is callback-based and main-thread-bound where Swift's is an
 //      async continuation, so the whole session runs on Dispatchers.Main
 //      inside one suspendCancellableCoroutine — and, because nothing in
 //      the contract promises a terminal callback for a session fed from a
@@ -113,8 +109,8 @@ object Transcriber {
         val app = context.applicationContext
         if (!hasAccess(app)) return null
         // Swift's `SFSpeechRecognizer()` + `recognizer.isAvailable`: no
-        // recognizer, no transcript, and never a half-answer.
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return null
+        // recognizer, no transcript, and never a half-answer. A device can
+        // still lack an on-device recogniser at any API level.
         if (!SpeechRecognizer.isOnDeviceRecognitionAvailable(app)) return null
 
         val scratch = withContext(Dispatchers.IO) {
@@ -145,7 +141,6 @@ object Transcriber {
      * reports an error *after* a result would otherwise resume the
      * continuation twice.
      */
-    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     private suspend fun recognize(context: Context, audio: PcmAudio): String? =
         // Every method on SpeechRecognizer must be called from the main
         // thread, and every callback arrives there.

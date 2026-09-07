@@ -16,9 +16,16 @@ android {
     defaultConfig {
         applicationId = "app.readribbon"
         // The build book §12.2 says "Android 16+ (API 36)". We compile and
-        // target 36 exactly as it asks, and run from Android 12 — see
-        // docs/deviations.md. Everything §12.2 requires is present at 31.
-        minSdk = 31
+        // target 36 exactly as it asks, and run from Android 13 — see
+        // docs/deviations.md A1.
+        //
+        // 33 rather than 31 because §11 makes transcripts mandatory and
+        // Android cannot transcribe a recorded file below it: the only
+        // route from a finished recording to a transcript is
+        // RecognizerIntent.EXTRA_AUDIO_SOURCE, which arrived in API 33.
+        // Shipping to a release that structurally cannot produce a
+        // transcript would be shipping a voice note nobody deaf can read.
+        minSdk = 33
         targetSdk = 36
         versionCode = 1
         versionName = "0.1"
