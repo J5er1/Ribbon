@@ -2,6 +2,7 @@
 
 package app.readribbon.screens
 
+import android.content.Intent
 import android.content.res.AssetManager
 import android.text.format.DateFormat
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -33,6 +34,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
@@ -74,6 +76,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
@@ -81,6 +84,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
@@ -123,8 +127,31 @@ import kotlin.uuid.ExperimentalUuidApi
 // `model.settings` or `model.state.rooms` recomposes exactly as `@Observable`
 // does.
 
+/**
+ * A group's label, announced as the heading it is drawn as. TalkBack's
+ * heading swipe is how a screen reader skims a screen; without this, reaching
+ * quiet hours past four rooms of switches means swiping through every one of
+ * them (§11).
+ */
+private val HeadingModifier: Modifier = Modifier.semantics { heading() }
+
 /** Each pushed settings screen's own `.padding(24)`. */
 private val ScreenPadding = 24.dp
+
+/**
+ * [QuietControl] pads itself by 8 dp so its 44 dp target clears the glyph;
+ * Swift grows the target outward instead and leaves the words where they
+ * were. Pulling the control back by that same 8 dp puts it on the screen's
+ * own margin — the same correction the menu makes.
+ */
+private val QuietControlInset = (-8).dp
+
+/**
+ * Where a subscription is managed on this platform. The store owns billing,
+ * and §6.11 says a member never sees it — this is the way out for whoever
+ * does.
+ */
+private const val PLAY_SUBSCRIPTIONS = "https://play.google.com/store/account/subscriptions"
 
 /**
  * The smallest a control may be tapped at (§11, deviation 12). Every gesture
@@ -179,7 +206,7 @@ fun TextSettingsScreen(
             verticalArrangement = Arrangement.spacedBy(28.dp),
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                SmallCaps(Copy.TRANSLATION, size = 12f)
+                SmallCaps(Copy.TRANSLATION, size = 12f, modifier = HeadingModifier)
                 // Bundled translations always; licensed ones (NKJV first)
                 // appear the day their edition is configured on the proxy —
                 // never as a dead row.
@@ -218,7 +245,7 @@ fun TextSettingsScreen(
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                SmallCaps(Copy.TEXT_SIZE, size = 12f)
+                SmallCaps(Copy.TEXT_SIZE, size = 12f, modifier = HeadingModifier)
                 Slider(
                     value = model.settings.scriptureSize.toFloat(),
                     onValueChange = { size ->
@@ -238,7 +265,7 @@ fun TextSettingsScreen(
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                SmallCaps(Copy.LINE_SPACING, size = 12f)
+                SmallCaps(Copy.LINE_SPACING, size = 12f, modifier = HeadingModifier)
                 val steps = listOf(
                     Copy.LINE_SPACING_CLOSE,
                     Copy.LINE_SPACING_BOOK,
@@ -356,7 +383,7 @@ private fun NotificationRoomSection(model: AppModel, room: Room) {
     fun set(next: RoomNotificationPrefs) = model.setNotificationPrefs(next, room)
 
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        SmallCaps(model.displayName(room), size = 12f)
+        SmallCaps(model.displayName(room), size = 12f, modifier = HeadingModifier)
         RibbonToggle(Copy.NOTES_LEFT_FOR_YOU, prefs.notesLeft) { on ->
             set(prefs.copy(notesLeft = on))
         }
@@ -375,7 +402,7 @@ private fun NotificationRoomSection(model: AppModel, room: Room) {
 @Composable
 private fun QuietHours(model: AppModel) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        SmallCaps(Copy.QUIET_HOURS, size = 12f)
+        SmallCaps(Copy.QUIET_HOURS, size = 12f, modifier = HeadingModifier)
         Row(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -488,7 +515,7 @@ fun DownloadsScreen(
             modifier = Modifier.padding(ScreenPadding),
             verticalArrangement = Arrangement.spacedBy(22.dp),
         ) {
-            SmallCaps(Copy.onThisPhone(context), size = 12f)
+            SmallCaps(Copy.onThisPhone(context), size = 12f, modifier = HeadingModifier)
             model.availableTranslations.forEach { translation ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -561,6 +588,7 @@ fun PlanScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
     SettingsScroll(modifier = modifier) {
         BackControl(onBack)
         Column(
@@ -574,9 +602,27 @@ fun PlanScreen(
             )
             val room = model.currentRoom
             if (room != null && room.isPaused) {
-                WayInButton(title = Copy.START_THE_ROOM_AGAIN) {
-                    // Swift: "StoreKit arrives with the backend; nothing to
-                    // restore locally." Play Billing is the same story here.
+                // S22's anatomy is "Start the room again if paused · manage
+                // in the store", and the restore half needs billing that
+                // does not exist yet on either platform (deviation 11). What
+                // stood here was a chartreuse capsule with an empty body: a
+                // control that says exactly what happens and then does not
+                // do it, which is worse than no control and reads as a
+                // failure the app never names. So the room says the true
+                // thing instead, and the store is where the other half of it
+                // lives.
+                Text(
+                    text = Copy.ROOM_PAUSED,
+                    style = RibbonType.ui(15f),
+                    color = Palette.text,
+                )
+                QuietControl(
+                    title = Copy.MANAGE_IN_STORE,
+                    modifier = Modifier.offset(x = QuietControlInset),
+                ) {
+                    context.startActivity(
+                        Intent(Intent.ACTION_VIEW, PLAY_SUBSCRIPTIONS.toUri()),
+                    )
                 }
             }
             Text(
@@ -600,14 +646,18 @@ fun PlanScreen(
  * navigation's inset is added under the last row so a screen scrolls behind
  * the bar rather than stopping above it.
  *
- * These screens live inside a bottom sheet, which already clears the status
- * bar, so only the bottom inset is theirs to carry.
+ * Both insets are theirs to carry. They used to live inside a bottom sheet,
+ * which cleared the status bar for them; the menu is a full-screen layer
+ * now (deviations 14, A17) and nothing above them clears anything, so a
+ * screen without the top inset would draw its own back chevron underneath
+ * the clock.
  */
 @Composable
 private fun SettingsScroll(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val bottomBar = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     Box(modifier = modifier.fillMaxWidth()) {
         Box(Modifier.matchParentSize().room())
@@ -621,7 +671,7 @@ private fun SettingsScroll(
             Column(
                 modifier = Modifier
                     .readableColumn()
-                    .padding(bottom = bottomBar),
+                    .padding(top = statusBar, bottom = bottomBar),
             ) {
                 content()
             }

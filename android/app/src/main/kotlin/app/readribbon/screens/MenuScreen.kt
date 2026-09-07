@@ -72,6 +72,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
@@ -564,11 +565,17 @@ private fun MenuRoot(
             question = Copy.LEAVE_NOTES_QUESTION,
             onDismiss = { confirmDelete = false },
         ) {
+            // The menu closes first, the way leaving a room does: the person
+            // it was about is gone. The way in replaces this whole branch a
+            // moment later, so this is belt to that brace rather than the
+            // only thing holding it — iOS, where the menu is a presentation
+            // of its own, genuinely needs it.
             ConfirmChoice(
                 title = Copy.DELETE_AND_LEAVE_THEM,
                 destructive = true,
                 onClick = {
                     confirmDelete = false
+                    onDismiss()
                     model.deleteAccount(keepNotesBehind = true)
                 },
             )
@@ -577,6 +584,7 @@ private fun MenuRoot(
                 destructive = true,
                 onClick = {
                     confirmDelete = false
+                    onDismiss()
                     model.deleteAccount(keepNotesBehind = false)
                 },
             )
@@ -604,7 +612,14 @@ private fun SectionHead(
         modifier = modifier.padding(bottom = 6.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            // A head is drawn as a head and has to be announced as one: the
+            // headings rotor is how a screen reader skims a menu, and
+            // without this the sections are four unlabelled piles again
+            // (§11).
+            modifier = Modifier.semantics(mergeDescendants = true) { heading() },
+        ) {
             SmallCaps(title, size = 12f, color = Palette.text.copy(alpha = 0.75f))
             if (detail != null) SmallCaps(detail, size = 12f)
         }
@@ -770,7 +785,16 @@ private fun YouIdentityRow(model: AppModel) {
                 // replaces the label rather than adding to it: the control is
                 // the way to a portrait, so the portrait's own name is
                 // cleared beneath it.
-                .semantics { contentDescription = Copy.ADD_A_PORTRAIT },
+                // What the control does depends on whether there is a
+                // face behind it, and it should not go on saying "add" to
+                // somebody who has one.
+                .semantics {
+                    contentDescription = if (model.me?.let { model.portrait(it.id) } == null) {
+                        Copy.ADD_A_PORTRAIT
+                    } else {
+                        Copy.CHANGE_YOUR_PORTRAIT
+                    }
+                },
             contentAlignment = Alignment.Center,
         ) {
             PortraitView(
@@ -813,7 +837,10 @@ private fun YouIdentityRow(model: AppModel) {
                 // "Jo" is no harder to tap than "Jonathan" (§11, deviation 12).
                 modifier = Modifier
                     .sizeIn(minWidth = MinTarget, minHeight = MinTarget)
-                    .clickable(role = Role.Button) {
+                    .clickable(
+                        role = Role.Button,
+                        onClickLabel = Copy.EDITS_YOUR_NAME,
+                    ) {
                         name = model.me?.name ?: ""
                         editingName = true
                     },

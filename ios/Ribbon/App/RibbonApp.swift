@@ -179,6 +179,13 @@ struct RootView: View {
             .fullScreenCover(item: $menu) { entry in
                 MenuScreen(entry: entry)
             }
+            .onChange(of: model.isOnboardedPerson) { _, stillHere in
+                // Belt and braces on the menu's own dismissal: whatever
+                // empties the store — deleting the account today, anything
+                // else later — must not leave a menu about a person who is
+                // no longer there standing over the room that replaces them.
+                if !stillHere { menu = nil }
+            }
             .onChange(of: model.pendingInvite) { _, pending in
                 // A tapped invite link is the strongest possible statement
                 // of intent (S16): it closes the menu rather than arriving

@@ -23,10 +23,12 @@ struct TextSettingsScreen: View {
             VStack(alignment: .leading, spacing: 28) {
                 VStack(alignment: .leading, spacing: 12) {
                     SmallCaps(Copy.translation, size: 12)
+                        .accessibilityAddTraits(.isHeader)
                     // Bundled translations always; licensed ones (NKJV
                     // first) appear the day their edition is configured on
                     // the proxy — never as a dead row.
                     ForEach(model.availableTranslations) { translation in
+                        let chosen = model.me?.translation == translation.id
                         Button {
                             model.setTranslation(translation.id)
                         } label: {
@@ -35,29 +37,42 @@ struct TextSettingsScreen: View {
                                     .font(RibbonType.ui(16))
                                     .foregroundStyle(Palette.text)
                                 Spacer()
-                                if model.me?.translation == translation.id {
+                                if chosen {
                                     Circle().fill(Palette.chartreuse).frame(width: 6, height: 6)
                                 }
                             }
+                            // A row is a target, and no target is shorter
+                            // than a finger (§11, deviation 12).
+                            .frame(minHeight: 44)
                             .padding(.vertical, 6)
+                            .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        // The chartreuse dot is the only drawn sign of which
+                        // translation is yours, and colour is never the only
+                        // signal (§11).
+                        .accessibilityAddTraits(chosen ? [.isSelected] : [])
                     }
                 }
 
                 VStack(alignment: .leading, spacing: 12) {
                     SmallCaps(Copy.textSize, size: 12)
+                        .accessibilityAddTraits(.isHeader)
                     Slider(
                         value: Binding(
                             get: { model.settings.scriptureSize },
                             set: { size in model.updateSettings { $0.scriptureSize = size } }),
                         in: 16...24, step: 0.5)
                         .tint(Palette.chartreuse)
+                        // The small caps above it are a heading, not this
+                        // control's name, so the control is given its own.
+                        .accessibilityLabel(Copy.textSize)
                 }
 
                 VStack(alignment: .leading, spacing: 12) {
                     SmallCaps(Copy.lineSpacing, size: 12)
-                    Picker("", selection: Binding(
+                        .accessibilityAddTraits(.isHeader)
+                    Picker(Copy.lineSpacing, selection: Binding(
                         get: { model.settings.lineSpacingStep },
                         set: { step in model.updateSettings { $0.lineSpacingStep = step } })
                     ) {
@@ -66,6 +81,7 @@ struct TextSettingsScreen: View {
                         Text(Copy.lineSpacingOpen).tag(2)
                     }
                     .pickerStyle(.segmented)
+                    .labelsHidden()
                 }
 
                 Toggle(isOn: Binding(
@@ -137,6 +153,7 @@ struct NotificationSettingsScreen: View {
         let prefs = model.notificationPrefs(for: room)
         return VStack(alignment: .leading, spacing: 14) {
             SmallCaps(model.displayName(of: room), size: 12)
+                .accessibilityAddTraits(.isHeader)
             toggle(Copy.notesLeftForYou, prefs.notesLeft) { on in
                 var p = prefs; p.notesLeft = on; model.setNotificationPrefs(p, for: room)
             }
@@ -164,6 +181,7 @@ struct NotificationSettingsScreen: View {
     private var quietHours: some View {
         VStack(alignment: .leading, spacing: 10) {
             SmallCaps(Copy.quietHours, size: 12)
+                .accessibilityAddTraits(.isHeader)
             HStack(spacing: 10) {
                 minutePicker(
                     minutes: Binding(
@@ -211,6 +229,7 @@ struct DownloadsScreen: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 SmallCaps(Copy.onThisPhone, size: 12)
+                    .accessibilityAddTraits(.isHeader)
                 ForEach(model.availableTranslations) { translation in
                     HStack {
                         Text(translation.fullName)
@@ -265,9 +284,22 @@ struct PlanScreen: View {
                     .font(RibbonType.ui(17))
                     .foregroundStyle(Palette.text)
                 if let room = model.currentRoom, room.isPaused {
-                    WayInButton(title: Copy.startTheRoomAgain) {
-                        // StoreKit arrives with the backend; nothing to
-                        // restore locally.
+                    // S22's anatomy is "Start the room again if paused ·
+                    // manage in the store", and the restore half needs
+                    // StoreKit, which arrives with billing (deviation 11).
+                    // What stood here was a chartreuse capsule with an empty
+                    // body: a control that says exactly what happens and then
+                    // does not do it, which is worse than no control and
+                    // reads as a failure the app never names. So the room
+                    // says the true thing instead, and the store is where the
+                    // other half of it lives.
+                    Text(Copy.roomPaused)
+                        .font(RibbonType.ui(15))
+                        .foregroundStyle(Palette.text)
+                    Link(destination: URL(string: "https://apps.apple.com/account/subscriptions")!) {
+                        SmallCaps(Copy.manageInStore, size: 13, color: Palette.muted)
+                            .frame(minHeight: 44)
+                            .contentShape(Rectangle())
                     }
                 }
                 Text(Copy.theAskComesOnce)

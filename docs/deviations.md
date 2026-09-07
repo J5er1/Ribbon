@@ -197,6 +197,51 @@ reasoning.
     tap a room to switch, no swipe on a row, no folders, no reordering,
     a paused room's fire drawn in the state it actually holds.
 
+15. **What the menu's own review turned up, and what it left alone.**
+    Five things an adversarial pass over 14 found and this build fixes,
+    recorded because two of them are older than the menu and one was a
+    regression the menu itself introduced:
+
+    - **The pushed settings screens lost their top inset** when they
+      stopped living inside a bottom sheet — the sheet had been clearing
+      the status bar for them, and `SettingsScroll`'s own comment still
+      said so. Each screen's first drawn thing is its back chevron, at
+      y = 8..52 dp, under a status bar 24–48 dp tall. Fixed, and the
+      comment corrected. (Android only; iOS's `NavigationStack` clears it.)
+    - **S22's "Start the room again" was a chartreuse capsule with an
+      empty body** on both platforms — a control that says exactly what
+      happens and then does not do it, which is worse than no control and
+      reads as a failure the app never names. The restore half needs
+      billing (deviation 11), so the paused room now says the true thing
+      it already has copy for (`roomPaused`) and offers the other half of
+      S22's own anatomy, `manageInStore` — both of which had been sitting
+      in `Copy` with zero call sites on either platform.
+    - **Nothing in either app was announced as a heading.** The menu's
+      four section heads and the six group labels on the pushed screens
+      are drawn as heads and were read as plain text, so a rotor or a
+      heading swipe had nothing to land on and reaching Account meant
+      swiping past every room. `grep isHeader|heading()` returned nothing
+      across both apps before this.
+    - **Deleting your account left the menu standing** on iOS, over the
+      fresh room the app makes next. It dismisses first now, the way
+      leaving a room does, and `RootView` also clears the menu whenever
+      the person goes — Android's menu is inside the branch that swaps
+      out, so it had this structurally.
+    - **Two controls said the wrong thing about themselves**: the
+      portrait went on offering to "add a portrait" to somebody who had
+      one, and your own name had no minimum tap width and no hint. Both
+      are now conditional and 44 pt/dp in both directions.
+
+    Deliberately left alone, all of them older than this change and none
+    of them the menu's: ink is unreachable below three members and
+    nothing assigns one when a room reaches three (so §4.5's "ink is
+    identity" arrives silently unenforced, and
+    `inksFromWhenTheRoomWasTwo` is still dead copy); presence never
+    populates, so reading quietly, following and thinking-of-you have no
+    reachable control (deviation 9); and the notification switches write
+    preferences nothing reads (deviation 11). Each is a piece of work,
+    not a menu bug.
+
 ## Android (phase three)
 
 The Android build is a second implementation of one product, not a second
