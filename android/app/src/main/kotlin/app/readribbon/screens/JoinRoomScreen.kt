@@ -255,7 +255,11 @@ fun JoinFlow(
         model.viewModelScope.launch {
             try {
                 val roomID = model.joinRoom(inviteToken = token)
-                model.pendingInvite = null
+                // Only if it is still the one this flow is about: a second
+                // link tapped while this join was in flight has already
+                // replaced it, and clearing that would throw away an invite
+                // nobody has answered yet.
+                if (model.pendingInvite?.token == token) model.pendingInvite = null
                 if (wasSetDown) return@launch
                 model.switchRoom(roomID)
                 onDone()

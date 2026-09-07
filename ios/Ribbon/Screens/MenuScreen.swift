@@ -53,14 +53,14 @@ private enum MenuAnchor: Hashable {
     case you
 }
 
-/// A room whose invite is being handed out, and whether it was just made.
+/// A room whose invite is being handed out.
+///
+/// Whether it was just made is `closeAfterInviting` on the menu rather than
+/// a field here: `.sheet(item:onDismiss:)` hands its dismissal no item, so
+/// the fact has to live where the closure can see it, and carrying it twice
+/// would be one copy nothing reads.
 private struct InviteTarget: Identifiable {
     let room: Room
-    /// A room made a moment ago: closing its invite should leave you in the
-    /// new room rather than back in the menu (S15 — naming and inviting are
-    /// two steps that should feel like one, and the third step is being
-    /// there).
-    let isNew: Bool
 
     var id: UUID { room.id }
 }
@@ -69,12 +69,16 @@ struct MenuScreen: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     let entry: MenuEntry
+    /// Switching rooms; the room being left may have a book open over it.
+    var onSwitch: (UUID) -> Void
 
     @State private var path = NavigationPath()
     @State private var showNewRoom = false
     @State private var inviting: InviteTarget?
     @State private var closeAfterInviting = false
     @State private var confirmDelete = false
+    /// The one-time landing on You has happened (see `root`).
+    @State private var landed = false
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -93,7 +97,7 @@ struct MenuScreen: View {
             // the menu closes behind them.
             NewRoomSheet { room in
                 closeAfterInviting = true
-                inviting = InviteTarget(room: room, isNew: true)
+                inviting = InviteTarget(room: room)
             }
         }
         .sheet(item: $inviting, onDismiss: {
@@ -130,7 +134,6 @@ struct MenuScreen: View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 34) {
-                    header
                     roomsSection
                     if let room = model.currentRoom {
                         thisRoomSection(room)
@@ -144,6 +147,12 @@ struct MenuScreen: View {
                 .padding(.bottom, 44)
                 .readableColumn()
             }
+            .safeAreaInset(edge: .top, spacing: 0) {
+                // Pinned, not scrolled. A full-screen cover has no swipe of
+                // its own, so this control is the *only* drawn way out, and
+                // in the scroll it was the first thing to leave the screen.
+                header
+            }
             .scrollIndicators(.hidden)
             .room()
             .onAppear {
@@ -152,7 +161,11 @@ struct MenuScreen: View {
                 // animation — this is where the menu opened, not somewhere it
                 // travelled to. One turn of the run loop, because the anchor
                 // has to be laid out before it can be scrolled to.
-                guard entry == .you else { return }
+                // Once, on the way in. `onAppear` fires again when a
+                // pushed screen pops back to the root, and landing on You a
+                // second time would throw away the person's own scroll.
+                guard entry == .you, !landed else { return }
+                landed = true
                 DispatchQueue.main.async {
                     proxy.scrollTo(MenuAnchor.you, anchor: .top)
                 }
@@ -169,7 +182,12 @@ struct MenuScreen: View {
             QuietControl(title: Copy.close) { dismiss() }
                 .keyboardShortcut(.cancelAction)
         }
+        .padding(.horizontal, 24)
         .padding(.top, 4)
+        .readableColumn()
+        // The ground behind it, so the rooms scroll under the control
+        // rather than through it.
+        .background(Palette.ground)
     }
 
     // MARK: Rooms (S14)
@@ -180,14 +198,23 @@ struct MenuScreen: View {
             ForEach(model.state.rooms) { room in
                 MenuRoomRow(room: room) {
                     // Tap a room → switch, the menu closes, the room screen
-                    // cross-fades (S14).
+                    // cross-fades (S14). The book closes with it: a reading
+                    // belongs to the room it is in, and leaving it open over
+                    // another room would put somebody else's fire under
+                    // somebody else's page.
+                    onSwitch(room.id)
                     withAnimation(RibbonMotion.arrive) { model.switchRoom(to: room.id) }
                     dismiss()
                 }
             }
             VStack(alignment: .leading, spacing: 0) {
                 MenuRow(title: Copy.startARoomControl) { showNewRoom = true }
-                MenuRow(title: Copy.joinWithAnInvite) { path.append(MenuRoute.joinWithInvite) }
+                // A join goes through the backend and cannot happen without
+                // one. No dead control (§6.1) — the same rule the account
+                // keeps two sections down.
+                if model.remote != nil {
+                    MenuRow(title: Copy.joinWithAnInvite) { path.append(MenuRoute.joinWithInvite) }
+                }
             }
             .padding(.top, 6)
         }
@@ -205,10 +232,12 @@ struct MenuScreen: View {
                     .font(RibbonType.ui(15))
                     .foregroundStyle(Palette.muted)
                     .padding(.vertical, 10)
-            } else {
+            } else if model.remote != nil {
+                // The link resolves through the backend, so without one
+                // there is nothing to hand out and no row for it.
                 MenuRow(title: Copy.inviteSomeone) {
                     closeAfterInviting = false
-                    inviting = InviteTarget(room: room, isNew: false)
+                    inviting = InviteTarget(room: room)
                 }
             }
             RoomControls(room: room, onLeft: { dismiss() })
@@ -394,8 +423,14 @@ private struct MenuRoomRow: View {
                         // always sits beside the words it illustrates; on a
                         // room row there are no such words, so it says its
                         // own state — a state, never a number (Law 2, §11).
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityLabel(state.displayName)
+                        //
+                        // Represented as the words rather than labelled
+                        // around the hidden canvas, so that what the row
+                        // announces does not depend on how the glyph inside
+                        // it happens to hide itself.
+                        .accessibilityRepresentation {
+                            Text(state.displayName)
+                        }
                 }
             }
             .frame(minHeight: 44)

@@ -77,6 +77,9 @@ struct RootView: View {
     /// (S14 + S18 in one screen — MenuScreen.swift, deviations 14). Nil is
     /// the room, which is the only permanent destination.
     @State private var menu: MenuEntry?
+    /// An invite that arrived while the menu was open, held until the menu
+    /// has actually gone (see below).
+    @State private var deferredInvite: PendingInvite?
     /// The finishing sequence's "Start another" lands in the chooser (S13).
     @State private var chooserRequested = false
     @State private var navigationPath = NavigationPath()
@@ -177,7 +180,11 @@ struct RootView: View {
             // in, and you — the whole of what used to be S14 and S18, with
             // the two doors that were missing from both (deviations 14).
             .fullScreenCover(item: $menu) { entry in
-                MenuScreen(entry: entry)
+                MenuScreen(entry: entry, onSwitch: { _ in
+                    // The book belongs to the room it was opened in.
+                    openReading = nil
+                    openTarget = nil
+                })
             }
             .onChange(of: model.isOnboardedPerson) { _, stillHere in
                 // Belt and braces on the menu's own dismissal: whatever
@@ -190,7 +197,22 @@ struct RootView: View {
                 // A tapped invite link is the strongest possible statement
                 // of intent (S16): it closes the menu rather than arriving
                 // underneath it, the way it wins over onboarding's step.
-                if pending != nil { menu = nil }
+                //
+                // Closing the cover and presenting the sheet in one update
+                // is one presentation change too many for SwiftUI, and the
+                // sheet is the one that gets dropped. So the cover goes
+                // first and the join follows it — which is also what it
+                // looks like: the menu leaves, then the invite arrives.
+                guard pending != nil, menu != nil else { return }
+                deferredInvite = pending
+                model.pendingInvite = nil
+                menu = nil
+            }
+            .onChange(of: menu) { _, open in
+                if open == nil, let held = deferredInvite {
+                    deferredInvite = nil
+                    model.pendingInvite = held
+                }
             }
             .sheet(item: pendingInviteBinding) { pending in
                 // A tapped invite while already onboarded: the join flow

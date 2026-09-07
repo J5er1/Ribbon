@@ -31,9 +31,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.IntOffset
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
@@ -302,7 +304,7 @@ private fun RoomStack(model: AppModel, room: Room) {
      * used (S14 + S18 in one screen — MenuScreen.kt, deviations 14). Null is
      * the room, which is the only permanent destination.
      */
-    var menu by remember { mutableStateOf<MenuEntry?>(null) }
+    var menu by rememberSaveable { mutableStateOf<MenuEntry?>(null) }
 
     /** The finishing sequence's "Start another" lands in the chooser (S13). */
     var chooserRequested by remember { mutableStateOf(false) }
@@ -332,157 +334,168 @@ private fun RoomStack(model: AppModel, room: Room) {
     }
 
     Box(Modifier.fillMaxSize()) {
-        // Predictive back (§12.2): the room peels in behind a closing screen.
-        // The pop transitions below are what the system gesture drives, so
-        // the peel is Android's own and not a back button we drew — which is
-        // the one place the platform gesture beats anything we would design.
-        // Swift hides the navigation bar entirely (`.toolbarVisibility`);
-        // a NavHost draws no chrome of its own, so there is none to hide.
-        NavHost(
-            navController = navController,
-            startDestination = Route.ROOM,
-            modifier = Modifier.fillMaxSize(),
-            enterTransition = { slideInHorizontally(slide) { it / 4 } + fadeIn(settle) },
-            exitTransition = { fadeOut(settle) },
-            popEnterTransition = { fadeIn(settle) },
-            popExitTransition = { slideOutHorizontally(slide) { it / 4 } + fadeOut(settle) },
+        // The room and the book, together, so that the menu drawn over
+        // them can be taken out of a screen reader's path in one place. A
+        // layer that covers the screen visually does not cover it for
+        // TalkBack: without this, swiping past the last thing in the menu
+        // walks straight into the room's own header underneath it (§11).
+        Box(
+            Modifier
+                .fillMaxSize()
+                .then(if (menu != null) Modifier.clearAndSetSemantics {} else Modifier),
         ) {
-            composable(
-                Route.ROOM,
-                // The room never slides: it is what the app opened onto.
-                enterTransition = { EnterTransition.None },
+            // Predictive back (§12.2): the room peels in behind a closing screen.
+            // The pop transitions below are what the system gesture drives, so
+            // the peel is Android's own and not a back button we drew — which is
+            // the one place the platform gesture beats anything we would design.
+            // Swift hides the navigation bar entirely (`.toolbarVisibility`);
+            // a NavHost draws no chrome of its own, so there is none to hide.
+            NavHost(
+                navController = navController,
+                startDestination = Route.ROOM,
+                modifier = Modifier.fillMaxSize(),
+                enterTransition = { slideInHorizontally(slide) { it / 4 } + fadeIn(settle) },
                 exitTransition = { fadeOut(settle) },
                 popEnterTransition = { fadeIn(settle) },
-                popExitTransition = { ExitTransition.None },
+                popExitTransition = { slideOutHorizontally(slide) { it / 4 } + fadeOut(settle) },
             ) {
-                // Swift switches rooms inside `withAnimation(RibbonMotion.arrive)`,
-                // and the arrive token's own note calls this out: "cross-fades
-                // between rooms". Keyed on the id so a rename crosses nothing.
-                AnimatedContent(
-                    targetState = room,
-                    contentKey = { it.id },
-                    transitionSpec = {
-                        (fadeIn(arrive) togetherWith fadeOut(arrive))
-                            .using(SizeTransform(clip = false))
-                    },
-                    label = "the-room",
-                ) { current ->
-                    RoomScreen(
-                        model = model,
-                        room = current,
-                        chooserRequested = chooserRequested,
-                        onChooserHandled = { chooserRequested = false },
-                        onOpenReading = { reading, target -> openBook(reading, target) },
-                        onOpenRooms = { menu = MenuEntry.ROOMS },
-                        onYou = { menu = MenuEntry.YOU },
-                        onOpenPerson = { personID, roomID -> openPerson(personID, roomID) },
-                        onOpenEmber = { readingID -> navController.navigate(Route.ember(readingID)) },
-                    )
+                composable(
+                    Route.ROOM,
+                    // The room never slides: it is what the app opened onto.
+                    enterTransition = { EnterTransition.None },
+                    exitTransition = { fadeOut(settle) },
+                    popEnterTransition = { fadeIn(settle) },
+                    popExitTransition = { ExitTransition.None },
+                ) {
+                    // Swift switches rooms inside `withAnimation(RibbonMotion.arrive)`,
+                    // and the arrive token's own note calls this out: "cross-fades
+                    // between rooms". Keyed on the id so a rename crosses nothing.
+                    AnimatedContent(
+                        targetState = room,
+                        contentKey = { it.id },
+                        transitionSpec = {
+                            (fadeIn(arrive) togetherWith fadeOut(arrive))
+                                .using(SizeTransform(clip = false))
+                        },
+                        label = "the-room",
+                    ) { current ->
+                        RoomScreen(
+                            model = model,
+                            room = current,
+                            chooserRequested = chooserRequested,
+                            onChooserHandled = { chooserRequested = false },
+                            onOpenReading = { reading, target -> openBook(reading, target) },
+                            onOpenRooms = { menu = MenuEntry.ROOMS },
+                            onYou = { menu = MenuEntry.YOU },
+                            onOpenPerson = { personID, roomID -> openPerson(personID, roomID) },
+                            onOpenEmber = { readingID -> navController.navigate(Route.ember(readingID)) },
+                        )
+                    }
+                }
+
+                composable(
+                    Route.EMBER_PATTERN,
+                    arguments = listOf(navArgument(Route.READING_ID) { type = NavType.StringType }),
+                ) { entry ->
+                    val readingID = entry.arguments?.getString(Route.READING_ID)?.let { uuid(it) }
+                    val reading = model.state.readings.firstOrNull { it.id == readingID }
+                    if (reading == null) {
+                        // Swift's `if let` falls through to an empty view. There
+                        // is nothing under a NavHost destination to show through,
+                        // so the nearest honest thing is the unlit ground — the
+                        // same nothing the room-less branch draws.
+                        Box(Modifier.fillMaxSize().room())
+                    } else {
+                        EmberRecordScreen(
+                            model = model,
+                            reading = reading,
+                            onOpenVerse = { verse ->
+                                // A quoted verse opens the reading at that verse
+                                // (S11) — the finished book's own pages, not a
+                                // copy.
+                                openBook(reading, verse)
+                            },
+                            onReadAgain = { bookID ->
+                                navController.popBackStack(Route.ROOM, inclusive = false)
+                                val new = model.startReading(bookID = bookID, room = room)
+                                openBook(new, null)
+                            },
+                            onOpenPerson = { personID, roomID -> openPerson(personID, roomID) },
+                        )
+                    }
+                }
+
+                composable(
+                    PersonRoute.PATTERN,
+                    arguments = listOf(
+                        navArgument(PersonRoute.PERSON_ID) { type = NavType.StringType },
+                        navArgument(PersonRoute.ROOM_ID) { type = NavType.StringType },
+                    ),
+                ) { entry ->
+                    val route = PersonRoute.from(entry.arguments)
+                    val personRoom = route?.let { r -> model.state.rooms.firstOrNull { it.id == r.roomID } }
+                    if (route == null || personRoom == null) {
+                        Box(Modifier.fillMaxSize().room())
+                    } else {
+                        PersonScreen(
+                            model = model,
+                            personID = route.personID,
+                            room = personRoom,
+                            onOpenVerse = { verse, readingID ->
+                                // The note names its reading — a finished book's
+                                // note opens that book, not the open one.
+                                val reading = model.state.readings.firstOrNull { it.id == readingID }
+                                if (reading != null) openBook(reading, verse)
+                            },
+                            onDismiss = { navController.popBackStack() },
+                        )
+                    }
                 }
             }
 
-            composable(
-                Route.EMBER_PATTERN,
-                arguments = listOf(navArgument(Route.READING_ID) { type = NavType.StringType }),
-            ) { entry ->
-                val readingID = entry.arguments?.getString(Route.READING_ID)?.let { uuid(it) }
-                val reading = model.state.readings.firstOrNull { it.id == readingID }
-                if (reading == null) {
-                    // Swift's `if let` falls through to an empty view. There
-                    // is nothing under a NavHost destination to show through,
-                    // so the nearest honest thing is the unlit ground — the
-                    // same nothing the room-less branch draws.
-                    Box(Modifier.fillMaxSize().room())
-                } else {
-                    EmberRecordScreen(
+            // The book, over the stack. Swift's `.overlay` with
+            // `.transition(.asymmetric(insertion: .opacity, removal:
+            // .move(edge: .bottom).combined(with: .opacity)))`: it arrives by
+            // fading in on the arrive token and leaves by sliding down off the
+            // bottom on the settle token.
+            //
+            // `AnimatedContent` rather than `AnimatedVisibility` because the
+            // book has to stay drawn while it slides away, and the reading it is
+            // drawing is the state that just went null.
+            //
+            // Composing after the NavHost is load-bearing: back callbacks are
+            // taken in reverse order of registration, so the reading's own
+            // predictive back — which peels the book off the room — wins over
+            // the NavHost's for as long as the book is open.
+            AnimatedContent(
+                targetState = openReading,
+                modifier = Modifier.fillMaxSize(),
+                contentKey = { it?.id },
+                transitionSpec = {
+                    val transform = if (targetState != null) {
+                        fadeIn(arrive) togetherWith ExitTransition.None
+                    } else {
+                        EnterTransition.None togetherWith
+                            (slideOutVertically(slide) { it } + fadeOut(settle))
+                    }
+                    transform.using(SizeTransform(clip = false))
+                },
+                label = "the-book",
+            ) { book ->
+                if (book != null) {
+                    ReadingScreen(
                         model = model,
-                        reading = reading,
-                        onOpenVerse = { verse ->
-                            // A quoted verse opens the reading at that verse
-                            // (S11) — the finished book's own pages, not a
-                            // copy.
-                            openBook(reading, verse)
+                        room = room,
+                        reading = book,
+                        onClose = { closeBook() },
+                        onFinished = { closeBook() },
+                        onStartAnother = {
+                            closeBook()
+                            chooserRequested = true
                         },
-                        onReadAgain = { bookID ->
-                            navController.popBackStack(Route.ROOM, inclusive = false)
-                            val new = model.startReading(bookID = bookID, room = room)
-                            openBook(new, null)
-                        },
-                        onOpenPerson = { personID, roomID -> openPerson(personID, roomID) },
+                        openAt = openTarget,
                     )
                 }
-            }
-
-            composable(
-                PersonRoute.PATTERN,
-                arguments = listOf(
-                    navArgument(PersonRoute.PERSON_ID) { type = NavType.StringType },
-                    navArgument(PersonRoute.ROOM_ID) { type = NavType.StringType },
-                ),
-            ) { entry ->
-                val route = PersonRoute.from(entry.arguments)
-                val personRoom = route?.let { r -> model.state.rooms.firstOrNull { it.id == r.roomID } }
-                if (route == null || personRoom == null) {
-                    Box(Modifier.fillMaxSize().room())
-                } else {
-                    PersonScreen(
-                        model = model,
-                        personID = route.personID,
-                        room = personRoom,
-                        onOpenVerse = { verse, readingID ->
-                            // The note names its reading — a finished book's
-                            // note opens that book, not the open one.
-                            val reading = model.state.readings.firstOrNull { it.id == readingID }
-                            if (reading != null) openBook(reading, verse)
-                        },
-                        onDismiss = { navController.popBackStack() },
-                    )
-                }
-            }
-        }
-
-        // The book, over the stack. Swift's `.overlay` with
-        // `.transition(.asymmetric(insertion: .opacity, removal:
-        // .move(edge: .bottom).combined(with: .opacity)))`: it arrives by
-        // fading in on the arrive token and leaves by sliding down off the
-        // bottom on the settle token.
-        //
-        // `AnimatedContent` rather than `AnimatedVisibility` because the
-        // book has to stay drawn while it slides away, and the reading it is
-        // drawing is the state that just went null.
-        //
-        // Composing after the NavHost is load-bearing: back callbacks are
-        // taken in reverse order of registration, so the reading's own
-        // predictive back — which peels the book off the room — wins over
-        // the NavHost's for as long as the book is open.
-        AnimatedContent(
-            targetState = openReading,
-            modifier = Modifier.fillMaxSize(),
-            contentKey = { it?.id },
-            transitionSpec = {
-                val transform = if (targetState != null) {
-                    fadeIn(arrive) togetherWith ExitTransition.None
-                } else {
-                    EnterTransition.None togetherWith
-                        (slideOutVertically(slide) { it } + fadeOut(settle))
-                }
-                transform.using(SizeTransform(clip = false))
-            },
-            label = "the-book",
-        ) { book ->
-            if (book != null) {
-                ReadingScreen(
-                    model = model,
-                    room = room,
-                    reading = book,
-                    onClose = { closeBook() },
-                    onFinished = { closeBook() },
-                    onStartAnother = {
-                        closeBook()
-                        chooserRequested = true
-                    },
-                    openAt = openTarget,
-                )
             }
         }
 
@@ -517,6 +530,8 @@ private fun RoomStack(model: AppModel, room: Room) {
                     model = model,
                     entry = open,
                     onDismiss = { menu = null },
+                    // The book belongs to the room it was opened in.
+                    onSwitch = { closeBook() },
                 )
             }
         }

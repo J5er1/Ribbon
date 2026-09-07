@@ -9,6 +9,8 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.FiniteAnimationSpec
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -232,6 +234,7 @@ fun MenuScreen(
     model: AppModel,
     entry: MenuEntry,
     onDismiss: () -> Unit,
+    onSwitch: (Uuid) -> Unit,
     modifier: Modifier = Modifier,
     navController: NavHostController = rememberNavController(),
 ) {
@@ -254,8 +257,12 @@ fun MenuScreen(
         }
     }
 
-    val push = tween<Float>(RibbonMotion.SETTLE_MS, easing = RibbonMotion.EaseOut)
-    val slide = tween<IntOffset>(RibbonMotion.SETTLE_MS, easing = RibbonMotion.EaseOut)
+    // §11: under reduce motion a push is a cut, exactly as it is in every
+    // other NavHost here. This one was written without the branch.
+    val push: FiniteAnimationSpec<Float> =
+        if (reduceMotion) snap() else tween(RibbonMotion.SETTLE_MS, easing = RibbonMotion.EaseOut)
+    val slide: FiniteAnimationSpec<IntOffset> =
+        if (reduceMotion) snap() else tween(RibbonMotion.SETTLE_MS, easing = RibbonMotion.EaseOut)
 
     Box(
         modifier
@@ -327,6 +334,7 @@ fun MenuScreen(
                     entry = entry,
                     onOpen = { route -> navController.navigate(route) },
                     onDismiss = onDismiss,
+                    onSwitch = onSwitch,
                 )
             }
             composable(MenuRoute.TEXT) {
@@ -396,6 +404,7 @@ private fun MenuRoot(
     entry: MenuEntry,
     onOpen: (String) -> Unit,
     onDismiss: () -> Unit,
+    onSwitch: (Uuid) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var showNewRoom by remember { mutableStateOf(false) }
@@ -471,7 +480,13 @@ private fun MenuRoot(
                                 room = room,
                                 onClick = {
                                     // Tap a room → switch, the menu closes,
-                                    // the room screen cross-fades (S14).
+                                    // the room screen cross-fades (S14). The
+                                    // book closes with it: a reading belongs
+                                    // to the room it is in, and leaving it
+                                    // open over another room would put
+                                    // somebody else's fire under somebody
+                                    // else's page.
+                                    onSwitch(room.id)
                                     model.switchRoom(room.id)
                                     onDismiss()
                                 },
@@ -480,7 +495,14 @@ private fun MenuRoot(
                     }
                     Column(Modifier.padding(top = 6.dp)) {
                         MenuRow(Copy.START_A_ROOM_CONTROL) { showNewRoom = true }
-                        MenuRow(Copy.JOIN_WITH_AN_INVITE) { onOpen(MenuRoute.JOIN_WITH_INVITE) }
+                        // A join goes through the backend and cannot happen
+                        // without one. No dead control (§6.1) — the same rule
+                        // the account keeps two sections down.
+                        if (model.remote != null) {
+                            MenuRow(Copy.JOIN_WITH_AN_INVITE) {
+                                onOpen(MenuRoute.JOIN_WITH_INVITE)
+                            }
+                        }
                     }
                 }
 
@@ -497,7 +519,10 @@ private fun MenuRoot(
                                 color = Palette.muted,
                                 modifier = Modifier.padding(vertical = 10.dp),
                             )
-                        } else {
+                        } else if (model.remote != null) {
+                            // The link resolves through the backend, so
+                            // without one there is nothing to hand out and no
+                            // row for it.
                             MenuRow(Copy.INVITE_SOMEONE) {
                                 inviting = InviteTarget(room = room, isNew = false)
                             }
