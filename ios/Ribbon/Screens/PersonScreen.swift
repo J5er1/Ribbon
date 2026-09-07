@@ -115,7 +115,7 @@ struct InkPickerSheet: View {
 
     var body: some View {
         VStack(spacing: 26) {
-            SmallCaps("your ink", size: 13)
+            SmallCaps(Copy.yourInk, size: 13)
                 .padding(.top, 30)
             let taken = model.members(of: room).compactMap(\.ink)
             let mine = model.myMembership(in: room)?.ink

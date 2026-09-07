@@ -164,7 +164,7 @@ private struct EmberNoteRow: View {
                 // verse itself — never someone else's note (S11).
                 if note.authorID == model.me?.id, let body = note.body {
                     ShareLink(item: "\(note.verse.formatted) — \(body)") {
-                        SmallCaps("share", size: 11)
+                        SmallCaps(Copy.share, size: 11)
                     }
                     .padding(.leading, 16)
                 }

@@ -616,7 +616,7 @@ private fun StepColumn(
  *   true }` — the paste field waits to be tapped, as it does there.
  */
 @Composable
-private fun CentredTextField(
+internal fun CentredTextField(
     value: String,
     onValueChange: (String) -> Unit,
     placeholder: String,

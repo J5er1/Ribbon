@@ -145,6 +145,106 @@ reasoning.
     change your ink, leave — because a fresh room of one had no route to
     them at all (the second half of deviation 9a, now closed).
 
+    *Superseded in shape by 14*: the two sheets became one menu, so there
+    is no rooms sheet with a You row in it any more. The promise this
+    entry records — your account and settings, one tap from the room —
+    is unchanged.
+
+14. **S14 and S18 are one full-screen menu, and it has two doors the book
+    never gave it.** — changed by the owner's call (September 2026). The
+    book presents the rooms as a sheet from the room's name (S14) and
+    puts You behind it (S18); deviation 13 had already pulled You out to
+    a second sheet, off the room's portrait. What shipped was therefore
+    two half-height sheets, each an unlabelled pile of controls, and
+    between them two things a person could plainly want to do and simply
+    could not:
+
+    - **Accept an invite to a second room.** The link is the whole
+      mechanism (S15) and a tapped link runs S16 from anywhere — but the
+      *paste* field that catches a link which landed somewhere this phone
+      can't tap it from lived on a page of onboarding, which nobody sees
+      twice. Once you had a room, an invite in an email on a laptop had
+      nowhere to go. `AppModel.inviteToken(fromPasted:)` existed and had
+      exactly one caller.
+    - **Invite anyone to a room of two.** The room screen offers the link
+      only while a room of *one* still has its first invite out (S01's
+      "The invite is still out."), and the invite sheet otherwise appears
+      only in the seconds after a room is made (S15). A room holds six;
+      there was no way from two to three.
+
+    Both are now rows in the menu — *Join with an invite* under the
+    rooms, *Invite someone* under the room you are in — and the join
+    pushes the same S16 `JoinFlow` a tapped link runs, inside the menu,
+    so nothing is handed across two presentations.
+
+    The screen itself is full height (`.fullScreenCover`; on Android a
+    layer over the room's stack with its own predictive back) and carries
+    four named sections — **Rooms**, **This room**, **You**, **Account**
+    — each under a small-caps head with a hairline beneath it. Emphasis
+    is the hierarchy: ivory 17 pt rows for what you go to or do, quiet
+    muted small caps for what undoes (leave a room, sign out, delete an
+    account). The room's two header controls still ask two different
+    questions and still answer in one tap — the name opens the menu at
+    the top, your portrait opens it already scrolled to You — so
+    deviation 13's promise is intact.
+
+    Three things are added to a room's row that the book does not list:
+    the name of the book that room is reading, `selected` state for a
+    screen reader, and the fire's own state spoken beside the glyph. The
+    first is an address, not a score (Law 2), and with more than one room
+    it is the thing that tells two small fires apart. The second and
+    third are both §11's rule that colour is never the only signal — the
+    chartreuse hairline for which room you are in, and the fire itself,
+    which hides its own semantics everywhere else because it always sits
+    beside the words it illustrates, and here does not. Everything else S14 asks for is unchanged:
+    tap a room to switch, no swipe on a row, no folders, no reordering,
+    a paused room's fire drawn in the state it actually holds.
+
+15. **What the menu's own review turned up, and what it left alone.**
+    Five things an adversarial pass over 14 found and this build fixes,
+    recorded because two of them are older than the menu and one was a
+    regression the menu itself introduced:
+
+    - **The pushed settings screens lost their top inset** when they
+      stopped living inside a bottom sheet — the sheet had been clearing
+      the status bar for them, and `SettingsScroll`'s own comment still
+      said so. Each screen's first drawn thing is its back chevron, at
+      y = 8..52 dp, under a status bar 24–48 dp tall. Fixed, and the
+      comment corrected. (Android only; iOS's `NavigationStack` clears it.)
+    - **S22's "Start the room again" was a chartreuse capsule with an
+      empty body** on both platforms — a control that says exactly what
+      happens and then does not do it, which is worse than no control and
+      reads as a failure the app never names. The restore half needs
+      billing (deviation 11), so the paused room now says the true thing
+      it already has copy for (`roomPaused`) and offers the other half of
+      S22's own anatomy, `manageInStore` — both of which had been sitting
+      in `Copy` with zero call sites on either platform.
+    - **Nothing in either app was announced as a heading.** The menu's
+      four section heads and the six group labels on the pushed screens
+      are drawn as heads and were read as plain text, so a rotor or a
+      heading swipe had nothing to land on and reaching Account meant
+      swiping past every room. `grep isHeader|heading()` returned nothing
+      across both apps before this.
+    - **Deleting your account left the menu standing** on iOS, over the
+      fresh room the app makes next. It dismisses first now, the way
+      leaving a room does, and `RootView` also clears the menu whenever
+      the person goes — Android's menu is inside the branch that swaps
+      out, so it had this structurally.
+    - **Two controls said the wrong thing about themselves**: the
+      portrait went on offering to "add a portrait" to somebody who had
+      one, and your own name had no minimum tap width and no hint. Both
+      are now conditional and 44 pt/dp in both directions.
+
+    Deliberately left alone, all of them older than this change and none
+    of them the menu's: ink is unreachable below three members and
+    nothing assigns one when a room reaches three (so §4.5's "ink is
+    identity" arrives silently unenforced, and
+    `inksFromWhenTheRoomWasTwo` is still dead copy); presence never
+    populates, so reading quietly, following and thinking-of-you have no
+    reachable control (deviation 9); and the notification switches write
+    preferences nothing reads (deviation 11). Each is a piece of work,
+    not a menu bug.
+
 ## Android (phase three)
 
 The Android build is a second implementation of one product, not a second
@@ -387,6 +487,20 @@ A16. **The ember grows, but it is not the same object travelling.** S11's
     at full size — but it plays on any entry to the record, not only on a
     tap from the shelf, because a true shared-element morph would have to
     be owned by the navigation host rather than by the screen.
+
+A17. **The menu is a layer over the room, not a cover.** iOS presents the
+    menu (deviation 14) with `.fullScreenCover`, which is a presentation of
+    its own with a dismiss of its own. The nearest true thing here is what
+    the book already is: a full-size layer drawn over the room's stack, in
+    the same `Box`, composed last so its own predictive back is taken
+    first. It arrives from the bottom of the screen and leaves the same
+    way, which is what a cover does; under reduce motion both are a cut.
+    Two consequences, both deliberate. The back gesture closes the menu,
+    and peels the room in behind it exactly as it peels the book — iOS has
+    no equivalent, and draws only the `Close` control, which Android draws
+    too. And the menu's four settings screens plus its join live in a
+    `NavHost` of the menu's own, registered *after* the close handler, so
+    back pops a pushed screen first and only an unpushed menu closes.
 
 ## Licensed translations (decided: API.Bible)
 

@@ -19,6 +19,11 @@ enum Copy {
     static let yourName = "Your name"
     static let portraitReason = "They'll see your face when you're reading."
     static let addAPortrait = "Add a portrait"
+    /// The same control, said to somebody who already has a face behind it.
+    static let changeYourPortrait = "Change your portrait"
+    /// What tapping your own name does, for a screen reader — the room
+    /// header names its two doors the same way.
+    static let editsYourName = "Edits your name"
     static let skipPortrait = "Not now"
     static let inviteSend = "Send this to the person you're reading with."
     static let inviteLater = "Invite later"
@@ -38,6 +43,16 @@ enum Copy {
 
     // Reading (S02–S06)
     static let closeTheBook = "Close the book"
+    /// The fire's state as a sentence, for a screen reader — never a
+    /// percentage, never a count (§11, Law 2). The small caps under the fire
+    /// say the bare word; anything that has to *speak* it says this.
+    static func fireIs(_ stateName: String) -> String { "The fire is \(stateName)." }
+    /// The reading surface's own small controls, kept here for the same
+    /// reason as everything else: one file, both platforms.
+    static let transcript = "transcript"
+    static let leaveIt = "leave it"
+    static let openSettings = "open settings"
+    static let share = "share"
     static func isWithYou(_ name: String) -> String { "\(name) is with you" }
     static let backToWhereYouWere = "back to where you were"
     static let readQuietly = "read quietly"
@@ -94,6 +109,83 @@ enum Copy {
     static let pasteInvitePrompt = "Paste the link they sent you"
     static let thatLinkIsntAnInvite = "That doesn't look like an invite link."
 
+    /// The line over the paste field (S15/S17). The link is the whole
+    /// mechanism: tapping it is the way in, and pasting is only there for
+    /// when the link was sent somewhere this device can't tap it from.
+    static let openTheLink = "Open the link they sent you. It brings you straight into their room."
+
+    /// The quiet way out of the invite question, and out of every dead end
+    /// in the join thread (S16/S17) — never a step without a way out.
+    static let startARoomInstead = "Start a room instead"
+
+    /// A dead end, and the menu, still need their own way out — not only the
+    /// swipe. (The line-spacing picker's "Close" is a measure, not a way
+    /// out, and stays its own word.)
+    static let close = "Close"
+
+    /// The name field's own control, in the joiner's voice (S16/S17).
+    static let thatsMe = "That's me"
+
+    /// The code didn't arrive, or arrived too late to use (S16/§6.10).
+    static let sendANewCode = "Send a new code"
+
+    /// The link, handed to whatever the two of them already use to talk
+    /// (S15). The control says exactly what happens.
+    static let sendTheInvite = "Send the invite"
+
+    // The menu (S14 + S18, one screen — see docs/deviations.md 14). Three
+    // section heads, so the rooms, the room you are in, and you are three
+    // things rather than one pile.
+    static let rooms = "Rooms"
+    static let thisRoom = "This room"
+    static let account = "Account"
+
+    /// Inviting someone to the room you are already in (S15). The room
+    /// screen's own line only appears while a room of one still has its
+    /// first invite out; this is the way in from two members to six.
+    static let inviteSomeone = "Invite someone"
+
+    /// Accepting an invite to another room when you already have one (S16).
+    /// The tapped link does this by itself; this is the same door, for a
+    /// link that landed somewhere this phone can't tap it from.
+    static let joinWithAnInvite = "Join with an invite"
+
+    /// The line over the menu's paste field. Onboarding's `openTheLink`
+    /// tells you to open the link, which is exactly what a person standing
+    /// here could not do — the link landed on a laptop, or in a thread this
+    /// phone can't open. So this one states the fact and lets the field's
+    /// own prompt do the asking.
+    static let theLinkBringsYouIn = "The link they sent you brings you into their room."
+
+    /// The room with no name and no members but you (S15) — a room is
+    /// named by whoever is in it, and until somebody is, this.
+    static let yourRoom = "Your room"
+
+    /// The room-name field's placeholder: naming a room is never required.
+    static let optional = "Optional"
+
+    /// Picking an ink when colour is identity (§4.5, §6.7).
+    static let yourInk = "your ink"
+
+    /// The held beat while the invite is fetched (S16) — the wordmark, in
+    /// the quietest voice there is, because nothing in Ribbon is visibly
+    /// loading (§8).
+    static let wordmark = "ribbon"
+
+    /// The join in flight, said once and quietly.
+    static let joining = "joining"
+
+    /// The way back out of a pushed screen: the name Android's drawn chevron
+    /// answers to, and the word on the menu's own way out of a dead invite.
+    static let back = "Back"
+
+    /// What the room header's two controls do, for a screen reader. iOS
+    /// states the consequence (a hint); Android's click label states the
+    /// action. Same fact, each platform's grammar — and both of these are
+    /// consequences, which the second one was not.
+    static let opensYourRooms = "Opens your rooms"
+    static let opensYourAccount = "Opens your account and settings"
+
     // Sign-in (§6.10) — an emailed code, no passwords. The account exists
     // for one reason, said plainly.
     static let accountReason = "An account carries your room between phones."
@@ -114,6 +206,47 @@ enum Copy {
     static let textSize = "Text size"
     static let lineSpacing = "Line spacing"
     static let redLetter = "Words of Jesus in red"
+
+    /// The three stops of the line-spacing control (S20). "Close" here is a
+    /// measure of leading, not a way out — it is a different word from
+    /// `close`, which happens to be spelled the same.
+    static let lineSpacingClose = "Close"
+    static let lineSpacingBook = "Book"
+    static let lineSpacingOpen = "Open"
+
+    /// Between the two ends of quiet hours (S19).
+    static let quietHoursTo = "to"
+
+    /// What quiet hours do not silence (S19): the one notification that is
+    /// a touch rather than a sentence, said plainly so nobody is surprised
+    /// by it.
+    static let thinkingOfYouStillArrives = "Thinking of you still arrives, silently, as a touch."
+
+    /// A licensed translation on the downloads list (S21). The book being
+    /// read stays on the device and the rest doesn't — its license, not our
+    /// design — so the row says what it does instead of a size.
+    static let streams = "streams"
+
+    /// Where the ask lives, said once (S22). A non-paying member never sees
+    /// a price and never learns who pays.
+    static let theAskComesOnce =
+        "When your room's first ember is on the shelf, Ribbon will ask — there, and only there."
+
+    /// Deleting the account asks §6.8's question — `leaveNotesQuestion` —
+    /// and these are its two answers. Neither is the quiet one: deleting is
+    /// deliberate either way, and the notes were left for the other person.
+    static let deleteAndLeaveThem = "Delete, and leave them"
+    static let deleteAndTakeThemBack = "Delete, and take them back"
+
+    /// Megabytes on this device (S21) — a count about a device, not about a
+    /// person, which is the one honest exception to Law 2 and the same
+    /// boundary `noRoomOnPhone` states.
+    static func megabytes(_ count: Int) -> String { "\(count) MB" }
+
+    /// The wordmark and the build, in the quietest voice there is (S18) —
+    /// the one line on that screen that is for us rather than for the
+    /// reader.
+    static func versionLine(_ version: String) -> String { "\(wordmark) \(version)" }
     static let notesLeftForYou = "Notes left for you"
     static let cardsOpen = "The cards open"
     static let whenTheyOpenTheBook = "When they open the book"

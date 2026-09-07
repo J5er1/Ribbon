@@ -1,218 +1,14 @@
 import SwiftUI
-import PhotosUI
 import RibbonCore
 
-// S18 — You: account and app-wide settings. One tap from the room now (the
-// portrait in the room's header), by the owner's call — the book buried it
-// two taps deep; docs/deviations.md records the change. Still not here: no
+// S19–S22 — the four screens You pushes to: text and translation,
+// notifications, downloads, the plan.
+//
+// You itself (S18) is no longer a sheet of its own. It is a section of the
+// menu, with the rooms and the room you are in — MenuScreen.swift, and
+// docs/deviations.md 14. What is still not here is what was never here: no
 // theme picker (dark is the product), no accent picker (chartreuse is the
 // brand's, not the user's), no app-icon picker.
-
-struct YouSheet: View {
-    @Environment(AppModel.self) private var model
-    @Environment(\.dismiss) private var dismiss
-
-    @State private var editingName = false
-    @State private var name = ""
-    @State private var portraitItem: PhotosPickerItem?
-    @State private var confirmDelete = false
-    @FocusState private var nameFocused: Bool
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 28) {
-                    HStack(spacing: 14) {
-                        // Portrait and name, editable in place (S18) —
-                        // presence is faces, so the face can be added or
-                        // changed here, not only at onboarding.
-                        PhotosPicker(selection: $portraitItem, matching: .images) {
-                            PortraitView(
-                                person: model.me, ink: nil, size: 56,
-                                image: model.me.flatMap { model.portrait($0.id) })
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(Copy.addAPortrait)
-                        .onChange(of: portraitItem) { _, item in
-                            Task {
-                                if let data = try? await item?.loadTransferable(type: Data.self),
-                                   let jpeg = downsampledJPEG(data) {
-                                    await model.setPortrait(jpeg)
-                                }
-                            }
-                        }
-                        if editingName {
-                            TextField("", text: $name)
-                                .font(RibbonType.ui(18))
-                                .foregroundStyle(Palette.text)
-                                .focused($nameFocused)
-                                .onAppear { nameFocused = true }
-                                .onSubmit {
-                                    let trimmed = name.trimmingCharacters(in: .whitespaces)
-                                    if !trimmed.isEmpty { model.updateMe(name: trimmed) }
-                                    editingName = false
-                                }
-                        } else {
-                            Text(model.me?.name ?? "")
-                                .font(RibbonType.ui(18))
-                                .foregroundStyle(Palette.text)
-                                .onTapGesture {
-                                    name = model.me?.name ?? ""
-                                    editingName = true
-                                }
-                        }
-                    }
-                    .padding(.top, 26)
-
-                    VStack(alignment: .leading, spacing: 20) {
-                        NavigationLink(Copy.textAndTranslation) { TextSettingsScreen() }
-                        NavigationLink(Copy.notifications) { NotificationSettingsScreen() }
-                        NavigationLink(Copy.downloads) { DownloadsScreen() }
-                        NavigationLink(Copy.plan) { PlanScreen() }
-                    }
-                    .font(RibbonType.ui(17))
-                    .foregroundStyle(Palette.text)
-
-                    if let room = model.currentRoom {
-                        RoomSection(room: room, onLeft: { dismiss() })
-                    }
-
-                    AccountSection()
-
-                    QuietControl(title: Copy.deleteAccount) { confirmDelete = true }
-
-                    SmallCaps(appVersion, size: 11, color: Palette.muted.opacity(0.7))
-                        .padding(.top, 8)
-                }
-                .padding(.horizontal, 24)
-            }
-            .scrollIndicators(.hidden)
-            .room()
-        }
-        .presentationBackground(Palette.ground)
-        .confirmationDialog(
-            // §6.8: the "leave your notes behind?" question, asked once, at
-            // deletion. Leaving them is never not the default.
-            Copy.leaveNotesQuestion, isPresented: $confirmDelete, titleVisibility: .visible
-        ) {
-            Button("Delete, and leave them", role: .destructive) {
-                model.deleteAccount(keepNotesBehind: true)
-            }
-            Button("Delete, and take them back", role: .destructive) {
-                model.deleteAccount(keepNotesBehind: false)
-            }
-        }
-    }
-
-    private var appVersion: String {
-        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
-        return "ribbon \(version)"
-    }
-}
-
-/// The current room's own controls: its name, your ink, the way out. These
-/// lived only on your S12, which a fresh room of one couldn't reach
-/// (deviations 9a) — now they're one tap away with the rest of You.
-private struct RoomSection: View {
-    @Environment(AppModel.self) private var model
-    let room: Room
-    var onLeft: () -> Void
-
-    @State private var editingRoomName = false
-    @State private var roomName = ""
-    @State private var showInkPicker = false
-    @State private var confirmLeave = false
-    @State private var askAboutNotes = false
-    @FocusState private var roomNameFocused: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            SmallCaps(model.displayName(of: room), size: 12)
-            if editingRoomName {
-                TextField(
-                    "", text: $roomName,
-                    prompt: Text(Copy.roomName).foregroundStyle(Palette.muted))
-                    .font(RibbonType.ui(16))
-                    .foregroundStyle(Palette.text)
-                    .focused($roomNameFocused)
-                    .onAppear { roomNameFocused = true }
-                    .onSubmit {
-                        model.renameRoom(room, to: roomName)
-                        editingRoomName = false
-                    }
-            } else {
-                QuietControl(title: Copy.nameThisRoom) {
-                    roomName = room.name ?? ""
-                    editingRoomName = true
-                }
-            }
-            if model.inkIsIdentity(in: room) {
-                QuietControl(title: Copy.changeYourInk) { showInkPicker = true }
-            }
-            QuietControl(title: Copy.leaveThisRoom) { confirmLeave = true }
-        }
-        .padding(.top, 8)
-        .sheet(isPresented: $showInkPicker) {
-            InkPickerSheet(room: room)
-        }
-        .confirmationDialog(
-            Copy.leaveRoomConfirm, isPresented: $confirmLeave, titleVisibility: .visible
-        ) {
-            Button(Copy.leaveThisRoom, role: .destructive) { askAboutNotes = true }
-        }
-        .confirmationDialog(
-            Copy.leaveNotesQuestion, isPresented: $askAboutNotes, titleVisibility: .visible
-        ) {
-            // Leaving them is the default; taking them back is possible
-            // and never the default (§6.8).
-            Button(Copy.leaveThem) {
-                model.leaveRoom(room, keepNotesBehind: true)
-                onLeft()
-            }
-            Button(Copy.takeThemBack) {
-                model.leaveRoom(room, keepNotesBehind: false)
-                onLeft()
-            }
-        }
-    }
-}
-
-/// The account (§6.10): an emailed code, no passwords. Signed out is a
-/// state, not a nag — one quiet line, and the reason stated plainly.
-private struct AccountSection: View {
-    @Environment(AppModel.self) private var model
-
-    @State private var signingIn = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            if model.isSignedIn {
-                if let address = model.accountEmail {
-                    SmallCaps(address, size: 12)
-                }
-                QuietControl(title: Copy.signOut) {
-                    signingIn = false
-                    Task { await model.signOutRemote() }
-                }
-            } else if model.remote == nil {
-                // Remote is not configured in this build; no dead control.
-                EmptyView()
-            } else if signingIn {
-                SignInInline(
-                    onSignedIn: { signingIn = false },
-                    onCancel: { signingIn = false })
-            } else {
-                VStack(alignment: .leading, spacing: 8) {
-                    QuietControl(title: Copy.signIn) { signingIn = true }
-                    Text(Copy.accountReason)
-                        .font(RibbonType.ui(13))
-                        .foregroundStyle(Palette.muted)
-                }
-            }
-        }
-        .padding(.top, 8)
-    }
-}
 
 // S20 — text and translation. Translation is personal, not shared (§2.6);
 // changing it never moves your position or breaks a note's anchor. The
@@ -227,10 +23,12 @@ struct TextSettingsScreen: View {
             VStack(alignment: .leading, spacing: 28) {
                 VStack(alignment: .leading, spacing: 12) {
                     SmallCaps(Copy.translation, size: 12)
+                        .accessibilityAddTraits(.isHeader)
                     // Bundled translations always; licensed ones (NKJV
                     // first) appear the day their edition is configured on
                     // the proxy — never as a dead row.
                     ForEach(model.availableTranslations) { translation in
+                        let chosen = model.me?.translation == translation.id
                         Button {
                             model.setTranslation(translation.id)
                         } label: {
@@ -239,37 +37,51 @@ struct TextSettingsScreen: View {
                                     .font(RibbonType.ui(16))
                                     .foregroundStyle(Palette.text)
                                 Spacer()
-                                if model.me?.translation == translation.id {
+                                if chosen {
                                     Circle().fill(Palette.chartreuse).frame(width: 6, height: 6)
                                 }
                             }
+                            // A row is a target, and no target is shorter
+                            // than a finger (§11, deviation 12).
+                            .frame(minHeight: 44)
                             .padding(.vertical, 6)
+                            .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        // The chartreuse dot is the only drawn sign of which
+                        // translation is yours, and colour is never the only
+                        // signal (§11).
+                        .accessibilityAddTraits(chosen ? [.isSelected] : [])
                     }
                 }
 
                 VStack(alignment: .leading, spacing: 12) {
                     SmallCaps(Copy.textSize, size: 12)
+                        .accessibilityAddTraits(.isHeader)
                     Slider(
                         value: Binding(
                             get: { model.settings.scriptureSize },
                             set: { size in model.updateSettings { $0.scriptureSize = size } }),
                         in: 16...24, step: 0.5)
                         .tint(Palette.chartreuse)
+                        // The small caps above it are a heading, not this
+                        // control's name, so the control is given its own.
+                        .accessibilityLabel(Copy.textSize)
                 }
 
                 VStack(alignment: .leading, spacing: 12) {
                     SmallCaps(Copy.lineSpacing, size: 12)
-                    Picker("", selection: Binding(
+                        .accessibilityAddTraits(.isHeader)
+                    Picker(Copy.lineSpacing, selection: Binding(
                         get: { model.settings.lineSpacingStep },
                         set: { step in model.updateSettings { $0.lineSpacingStep = step } })
                     ) {
-                        Text("Close").tag(0)
-                        Text("Book").tag(1)
-                        Text("Open").tag(2)
+                        Text(Copy.lineSpacingClose).tag(0)
+                        Text(Copy.lineSpacingBook).tag(1)
+                        Text(Copy.lineSpacingOpen).tag(2)
                     }
                     .pickerStyle(.segmented)
+                    .labelsHidden()
                 }
 
                 Toggle(isOn: Binding(
@@ -341,6 +153,7 @@ struct NotificationSettingsScreen: View {
         let prefs = model.notificationPrefs(for: room)
         return VStack(alignment: .leading, spacing: 14) {
             SmallCaps(model.displayName(of: room), size: 12)
+                .accessibilityAddTraits(.isHeader)
             toggle(Copy.notesLeftForYou, prefs.notesLeft) { on in
                 var p = prefs; p.notesLeft = on; model.setNotificationPrefs(p, for: room)
             }
@@ -368,12 +181,13 @@ struct NotificationSettingsScreen: View {
     private var quietHours: some View {
         VStack(alignment: .leading, spacing: 10) {
             SmallCaps(Copy.quietHours, size: 12)
+                .accessibilityAddTraits(.isHeader)
             HStack(spacing: 10) {
                 minutePicker(
                     minutes: Binding(
                         get: { model.settings.quietHoursStart },
                         set: { m in model.updateSettings { $0.quietHoursStart = m } }))
-                Text("to")
+                Text(Copy.quietHoursTo)
                     .font(RibbonType.ui(15))
                     .foregroundStyle(Palette.muted)
                 minutePicker(
@@ -381,7 +195,7 @@ struct NotificationSettingsScreen: View {
                         get: { model.settings.quietHoursEnd },
                         set: { m in model.updateSettings { $0.quietHoursEnd = m } }))
             }
-            Text("Thinking of you still arrives, silently, as a touch.")
+            Text(Copy.thinkingOfYouStillArrives)
                 .font(RibbonType.ui(13))
                 .foregroundStyle(Palette.muted)
         }
@@ -415,6 +229,7 @@ struct DownloadsScreen: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 SmallCaps(Copy.onThisPhone, size: 12)
+                    .accessibilityAddTraits(.isHeader)
                 ForEach(model.availableTranslations) { translation in
                     HStack {
                         Text(translation.fullName)
@@ -422,12 +237,12 @@ struct DownloadsScreen: View {
                             .foregroundStyle(Palette.text)
                         Spacer()
                         if translation.isBundled {
-                            SmallCaps("\(bundledMegabytes(translation.id)) MB", size: 12)
+                            SmallCaps(Copy.megabytes(bundledMegabytes(translation.id)), size: 12)
                         } else {
                             // Licensed text streams; the book being read
                             // stays on the phone, the rest doesn't — its
                             // license, not our design.
-                            SmallCaps("streams", size: 12)
+                            SmallCaps(Copy.streams, size: 12)
                         }
                     }
                 }
@@ -469,12 +284,25 @@ struct PlanScreen: View {
                     .font(RibbonType.ui(17))
                     .foregroundStyle(Palette.text)
                 if let room = model.currentRoom, room.isPaused {
-                    WayInButton(title: Copy.startTheRoomAgain) {
-                        // StoreKit arrives with the backend; nothing to
-                        // restore locally.
+                    // S22's anatomy is "Start the room again if paused ·
+                    // manage in the store", and the restore half needs
+                    // StoreKit, which arrives with billing (deviation 11).
+                    // What stood here was a chartreuse capsule with an empty
+                    // body: a control that says exactly what happens and then
+                    // does not do it, which is worse than no control and
+                    // reads as a failure the app never names. So the room
+                    // says the true thing instead, and the store is where the
+                    // other half of it lives.
+                    Text(Copy.roomPaused)
+                        .font(RibbonType.ui(15))
+                        .foregroundStyle(Palette.text)
+                    Link(destination: URL(string: "https://apps.apple.com/account/subscriptions")!) {
+                        SmallCaps(Copy.manageInStore, size: 13, color: Palette.muted)
+                            .frame(minHeight: 44)
+                            .contentShape(Rectangle())
                     }
                 }
-                Text("When your room's first ember is on the shelf, Ribbon will ask — there, and only there.")
+                Text(Copy.theAskComesOnce)
                     .font(RibbonType.ui(15))
                     .foregroundStyle(Palette.muted)
             }

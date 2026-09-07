@@ -2,18 +2,9 @@
 
 package app.readribbon.screens
 
+import android.content.Intent
 import android.content.res.AssetManager
 import android.text.format.DateFormat
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -22,7 +13,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -33,20 +23,16 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SheetState
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -54,10 +40,8 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TimePicker
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -65,28 +49,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewModelScope
-import androidx.navigation.NavHostController
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.rememberNavController
 import app.readribbon.app.AppModel
 import app.readribbon.app.Copy
 import app.readribbon.core.Room
@@ -94,23 +68,21 @@ import app.readribbon.core.TranslationID
 import app.readribbon.data.RoomNotificationPrefs
 import app.readribbon.design.HairlineRule
 import app.readribbon.design.Palette
-import app.readribbon.design.PortraitView
 import app.readribbon.design.QuietControl
-import app.readribbon.design.RibbonMotion
 import app.readribbon.design.RibbonType
 import app.readribbon.design.SmallCaps
-import app.readribbon.design.WayInButton
 import app.readribbon.design.readableColumn
 import app.readribbon.design.room
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.util.Calendar
 import kotlin.uuid.ExperimentalUuidApi
 
-// S18 — You: account and app-wide settings. One tap from the room now (the
-// portrait in the room's header), by the owner's call — the book buried it
-// two taps deep; docs/deviations.md records the change. Still not here: no
+// S19–S22 — the four screens the menu pushes to: text and translation,
+// notifications, downloads, the plan.
+//
+// You itself (S18) is no longer a sheet of its own. It is a section of the
+// menu, with the rooms and the room you are in — MenuScreen.kt, and
+// docs/deviations.md 14. What is still not here is what was never here: no
 // theme picker (dark is the product), no accent picker (chartreuse is the
 // brand's, not the user's), no app-icon picker.
 //
@@ -120,20 +92,31 @@ import kotlin.uuid.ExperimentalUuidApi
 // `model.settings` or `model.state.rooms` recomposes exactly as `@Observable`
 // does.
 
-/** The face at the top of You — Swift's `size: 56`. */
-private val YouPortraitSize = 56.dp
-
-/** `HStack(spacing: 14)` across the portrait and the name. */
-private val YouHeaderSpan = 14.dp
-
-/** `.padding(.top, 26)` above the portrait, `.padding(.horizontal, 24)`
- *  down the whole sheet, and the `spacing: 28` between its sections. */
-private val YouTop = 26.dp
-private val YouMargin = 24.dp
-private val YouSectionGap = 28.dp
+/**
+ * A group's label, announced as the heading it is drawn as. TalkBack's
+ * heading swipe is how a screen reader skims a screen; without this, reaching
+ * quiet hours past four rooms of switches means swiping through every one of
+ * them (§11).
+ */
+private val HeadingModifier: Modifier = Modifier.semantics { heading() }
 
 /** Each pushed settings screen's own `.padding(24)`. */
 private val ScreenPadding = 24.dp
+
+/**
+ * [QuietControl] pads itself by 8 dp so its 44 dp target clears the glyph;
+ * Swift grows the target outward instead and leaves the words where they
+ * were. Pulling the control back by that same 8 dp puts it on the screen's
+ * own margin — the same correction the menu makes.
+ */
+private val QuietControlInset = (-8).dp
+
+/**
+ * Where a subscription is managed on this platform. The store owns billing,
+ * and §6.11 says a member never sees it — this is the way out for whoever
+ * does.
+ */
+private const val PLAY_SUBSCRIPTIONS = "https://play.google.com/store/account/subscriptions"
 
 /**
  * The smallest a control may be tapped at (§11, deviation 12). Every gesture
@@ -141,15 +124,6 @@ private val ScreenPadding = 24.dp
  * thing is smaller.
  */
 private val MinTarget: Dp = 44.dp
-
-/**
- * [QuietControl] pads itself by 8 dp so its 44 dp target clears the glyph;
- * Swift grows the target outward instead and leaves the words where they
- * were. Pulling the control back by that same 8 dp puts "Name this room"
- * back on the sheet's margin, flush with the small caps above it — the same
- * correction the rooms sheet makes.
- */
-private val QuietControlInset = (-8).dp
 
 /** The selected-translation dot: Swift's `Circle().frame(width: 6, height: 6)`. */
 private val SelectionDot = 6.dp
@@ -172,493 +146,6 @@ private const val FALLBACK_MEGABYTES = 5
 
 /** Where Scripture lives in the assets — one folder per translation. */
 private const val SCRIPTURE_ASSETS = "scripture"
-
-/**
- * The routes You pushes to. Swift's `NavigationLink { TextSettingsScreen() }`
- * is a value destination in a `NavigationStack`; these are the same four
- * destinations as navigation-compose routes, in a graph the sheet owns —
- * which keeps `YouSheet` a single thing to present, exactly as the Swift is.
- */
-private object Route {
-    const val YOU = "you"
-    const val TEXT = "text"
-    const val NOTIFICATIONS = "notifications"
-    const val DOWNLOADS = "downloads"
-    const val PLAN = "plan"
-}
-
-/**
- * You (S18): your face, your name, the four settings screens, this room's own
- * controls, the account, and the way out of all of it.
- *
- * Swift presents this with `.sheet`, over the room, with
- * `.presentationBackground(Palette.ground)`; a modal bottom sheet is the same
- * presentation here, and predictive back peels it away to leave the room
- * behind it.
- *
- * Swift asks for no `presentationDetents`, which is one `.large` detent: You
- * opens at the full height of the screen, not half of it. A Compose sheet
- * offers a half-height stop unless it is told not to, and a settings screen
- * that pushes four more screens behind it has no business opening folded in
- * two — so the partial stop is skipped, as it is on every other single-detent
- * sheet here.
- *
- * @param model the store.
- * @param onDismiss close the sheet. Swift's `@Environment(\.dismiss)` — which
- *   leaving the room calls for itself, because the room this belongs to is
- *   gone.
- */
-@Composable
-fun YouSheet(
-    model: AppModel,
-    onDismiss: () -> Unit,
-    modifier: Modifier = Modifier,
-    sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        modifier = modifier,
-        // `.presentationBackground(Palette.ground)`. The grain goes on top of
-        // it, inside the content, exactly as it does in a room.
-        containerColor = Palette.ground,
-        contentColor = Palette.text,
-        // Swift shows no grabber: `.presentationDragIndicator` is
-        // `.automatic`, and automatic draws nothing for a sheet with a single
-        // detent. The whole sheet still drags, and predictive back closes it.
-        dragHandle = null,
-        // The content carries its own clearance from the system bars, so a
-        // pushed screen can scroll behind a three-button bar rather than be
-        // cut short above it.
-        contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
-    ) {
-        YouNavigation(model = model, onDismiss = onDismiss)
-    }
-}
-
-/**
- * The sheet's body without the sheet around it: You, and the four screens it
- * pushes to.
- *
- * Swift's `NavigationStack` is a nav graph here. Back — including a
- * predictive back gesture — pops a pushed screen first and only then closes
- * the sheet, which is what a `NavigationStack` inside a `.sheet` does on iOS.
- * The push eases rather than springs (§9.1): Material 3 Expressive's physics
- * is taken damped, and nothing in Ribbon overshoots.
- */
-@Composable
-fun YouNavigation(
-    model: AppModel,
-    onDismiss: () -> Unit,
-    modifier: Modifier = Modifier,
-    navController: NavHostController = rememberNavController(),
-) {
-    val push = tween<Float>(RibbonMotion.SETTLE_MS, easing = RibbonMotion.EaseOut)
-    val slide = tween<IntOffset>(RibbonMotion.SETTLE_MS, easing = RibbonMotion.EaseOut)
-
-    NavHost(
-        navController = navController,
-        startDestination = Route.YOU,
-        modifier = modifier,
-        enterTransition = { slideInHorizontally(slide) { it / 4 } + fadeIn(push) },
-        exitTransition = { fadeOut(push) },
-        popEnterTransition = { fadeIn(push) },
-        popExitTransition = { slideOutHorizontally(slide) { it / 4 } + fadeOut(push) },
-    ) {
-        composable(
-            Route.YOU,
-            // The root never slides: it is what the sheet opened onto.
-            enterTransition = { EnterTransition.None },
-            exitTransition = { fadeOut(push) },
-            popEnterTransition = { fadeIn(push) },
-            popExitTransition = { ExitTransition.None },
-        ) {
-            YouContent(
-                model = model,
-                onOpen = { route -> navController.navigate(route) },
-                onDismiss = onDismiss,
-            )
-        }
-        composable(Route.TEXT) {
-            TextSettingsScreen(model = model, onBack = { navController.popBackStack() })
-        }
-        composable(Route.NOTIFICATIONS) {
-            NotificationSettingsScreen(model = model, onBack = { navController.popBackStack() })
-        }
-        composable(Route.DOWNLOADS) {
-            DownloadsScreen(model = model, onBack = { navController.popBackStack() })
-        }
-        composable(Route.PLAN) {
-            PlanScreen(model = model, onBack = { navController.popBackStack() })
-        }
-    }
-}
-
-/**
- * You itself (S18).
- *
- * @param onOpen push one of the four settings screens.
- * @param onDismiss close the sheet.
- */
-@Composable
-fun YouContent(
-    model: AppModel,
-    onOpen: (String) -> Unit,
-    onDismiss: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    var editingName by remember { mutableStateOf(false) }
-    var name by remember { mutableStateOf("") }
-    var confirmDelete by remember { mutableStateOf(false) }
-
-    val context = LocalContext.current
-
-    // Swift's `PhotosPicker` plus its `.onChange` — the picked image is read
-    // and downsampled off the main thread, then handed to the store. Setting
-    // a portrait must finish whatever happens to this sheet, so it runs on
-    // the model's own scope rather than the composition's, which is the same
-    // call the join flow makes about work that must land.
-    val portraitPicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickVisualMedia(),
-    ) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        model.viewModelScope.launch {
-            val jpeg = withContext(Dispatchers.IO) {
-                runCatching {
-                    context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                }.getOrNull()?.let { downsampledJpeg(it) }
-            }
-            if (jpeg != null) model.setPortrait(jpeg)
-        }
-    }
-
-    // The build, in the quietest voice there is. Swift reads the bundle's
-    // short version string; the package's own version name is the same fact
-    // on this platform, and needs no generated BuildConfig to say it.
-    val version = remember(context) {
-        runCatching {
-            context.packageManager.getPackageInfo(context.packageName, 0).versionName
-        }.getOrNull().orEmpty()
-    }
-
-    SettingsScroll(modifier = modifier) {
-        Column(
-            modifier = Modifier.padding(horizontal = YouMargin),
-            verticalArrangement = Arrangement.spacedBy(YouSectionGap),
-        ) {
-            Row(
-                modifier = Modifier.padding(top = YouTop),
-                horizontalArrangement = Arrangement.spacedBy(YouHeaderSpan),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                // Portrait and name, editable in place (S18) — presence is
-                // faces, so the face can be added or changed here, not only
-                // at onboarding.
-                Box(
-                    modifier = Modifier
-                        .sizeIn(minWidth = MinTarget, minHeight = MinTarget)
-                        .clickable(role = Role.Button) {
-                            portraitPicker.launch(
-                                PickVisualMediaRequest(
-                                    ActivityResultContracts.PickVisualMedia.ImageOnly),
-                            )
-                        }
-                        // Swift's `.accessibilityLabel(Copy.addAPortrait)`,
-                        // which replaces the label rather than adding to it:
-                        // the control is the way to a portrait, so the
-                        // portrait's own name is cleared beneath it.
-                        .semantics { contentDescription = Copy.ADD_A_PORTRAIT },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    PortraitView(
-                        person = model.me,
-                        ink = null,
-                        size = YouPortraitSize,
-                        image = model.me?.let { model.portrait(it.id) },
-                        modifier = Modifier.clearAndSetSemantics {},
-                    )
-                }
-                if (editingName) {
-                    val focus = remember { FocusRequester() }
-                    LaunchedEffect(focus) { runCatching { focus.requestFocus() } }
-                    BasicTextField(
-                        value = name,
-                        onValueChange = { name = it },
-                        singleLine = true,
-                        textStyle = RibbonType.ui(18f).copy(color = Palette.text),
-                        cursorBrush = SolidColor(Palette.chartreuse),
-                        keyboardOptions = KeyboardOptions(
-                            capitalization = KeyboardCapitalization.Words,
-                            imeAction = ImeAction.Done,
-                        ),
-                        keyboardActions = KeyboardActions(
-                            onDone = {
-                                val trimmed = name.trim()
-                                if (trimmed.isNotEmpty()) model.updateMe(name = trimmed)
-                                editingName = false
-                            },
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = MinTarget)
-                            .focusRequester(focus),
-                    )
-                } else {
-                    Box(
-                        // A short name draws a short word, and the word is the
-                        // whole control: the target keeps its 44 dp in both
-                        // directions so "Jo" is no harder to tap than
-                        // "Jonathan" (§11, deviation 12).
-                        modifier = Modifier
-                            .sizeIn(minWidth = MinTarget, minHeight = MinTarget)
-                            .clickable(role = Role.Button) {
-                                name = model.me?.name ?: ""
-                                editingName = true
-                            },
-                        contentAlignment = Alignment.CenterStart,
-                    ) {
-                        Text(
-                            text = model.me?.name ?: "",
-                            style = RibbonType.ui(18f),
-                            color = Palette.text,
-                        )
-                    }
-                }
-            }
-
-            Column {
-                // Swift's `spacing: 20` between the four links is folded into
-                // each row's own 44 dp minimum rather than sitting as dead
-                // space between two targets a finger can miss — 44 dp of
-                // pitch against the iOS layout's 42, and no gap between them
-                // that looks tappable and isn't.
-                SettingsRow(Copy.TEXT_AND_TRANSLATION) { onOpen(Route.TEXT) }
-                SettingsRow(Copy.NOTIFICATIONS) { onOpen(Route.NOTIFICATIONS) }
-                SettingsRow(Copy.DOWNLOADS) { onOpen(Route.DOWNLOADS) }
-                SettingsRow(Copy.PLAN) { onOpen(Route.PLAN) }
-            }
-
-            model.currentRoom?.let { room ->
-                RoomSection(model = model, room = room, onLeft = onDismiss)
-            }
-
-            AccountSection(model = model)
-
-            QuietControl(
-                title = Copy.DELETE_ACCOUNT,
-                modifier = Modifier.offset(x = QuietControlInset),
-            ) { confirmDelete = true }
-
-            SmallCaps(
-                Copy.versionLine(version),
-                size = 11f,
-                color = Palette.muted.copy(alpha = 0.7f),
-                modifier = Modifier.padding(top = 8.dp),
-            )
-        }
-        Spacer(Modifier.height(YouSectionGap))
-    }
-
-    if (confirmDelete) {
-        // §6.8: the "leave your notes behind?" question, asked once, at
-        // deletion. Leaving them is never not the default.
-        RibbonConfirmDialog(
-            question = Copy.LEAVE_NOTES_QUESTION,
-            onDismiss = { confirmDelete = false },
-        ) {
-            ConfirmChoice(
-                title = Copy.DELETE_AND_LEAVE_THEM,
-                destructive = true,
-                onClick = {
-                    confirmDelete = false
-                    model.deleteAccount(keepNotesBehind = true)
-                },
-            )
-            ConfirmChoice(
-                title = Copy.DELETE_AND_TAKE_THEM_BACK,
-                destructive = true,
-                onClick = {
-                    confirmDelete = false
-                    model.deleteAccount(keepNotesBehind = false)
-                },
-            )
-            // iOS supplies this button itself; Compose's dialog has only the
-            // choices it is handed, and a question with no way to say no is
-            // not asked plainly.
-            ConfirmChoice(title = Copy.STAY, onClick = { confirmDelete = false })
-        }
-    }
-}
-
-/**
- * One of You's four rows. Swift's `NavigationLink(Copy.textAndTranslation)`,
- * which draws its own chevron; here the row is the target and the words are
- * the whole of it, as they are everywhere else in this app.
- */
-@Composable
-private fun SettingsRow(title: String, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .sizeIn(minHeight = MinTarget)
-            .clickable(role = Role.Button, onClick = onClick),
-        contentAlignment = Alignment.CenterStart,
-    ) {
-        Text(text = title, style = RibbonType.ui(17f), color = Palette.text)
-    }
-}
-
-/**
- * The current room's own controls: its name, your ink, the way out. These
- * lived only on your S12, which a fresh room of one couldn't reach
- * (deviations 9a) — now they're one tap away with the rest of You.
- *
- * @param onLeft the room was left; Swift calls `dismiss()`, because the room
- *   this sheet was opened over is gone.
- */
-@Composable
-private fun RoomSection(
-    model: AppModel,
-    room: Room,
-    onLeft: () -> Unit,
-) {
-    var editingRoomName by remember { mutableStateOf(false) }
-    var roomName by remember { mutableStateOf("") }
-    var showInkPicker by remember { mutableStateOf(false) }
-    var confirmLeave by remember { mutableStateOf(false) }
-
-    Column(
-        modifier = Modifier.padding(top = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        SmallCaps(model.displayName(room), size = 12f)
-        if (editingRoomName) {
-            val focus = remember { FocusRequester() }
-            LaunchedEffect(focus) { runCatching { focus.requestFocus() } }
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = MinTarget),
-                contentAlignment = Alignment.CenterStart,
-            ) {
-                if (roomName.isEmpty()) {
-                    Text(
-                        text = Copy.ROOM_NAME,
-                        style = RibbonType.ui(16f),
-                        color = Palette.muted,
-                    )
-                }
-                BasicTextField(
-                    value = roomName,
-                    onValueChange = { roomName = it },
-                    singleLine = true,
-                    textStyle = RibbonType.ui(16f).copy(color = Palette.text),
-                    cursorBrush = SolidColor(Palette.chartreuse),
-                    keyboardOptions = KeyboardOptions(
-                        capitalization = KeyboardCapitalization.Words,
-                        imeAction = ImeAction.Done,
-                    ),
-                    keyboardActions = KeyboardActions(
-                        onDone = {
-                            model.renameRoom(room, name = roomName)
-                            editingRoomName = false
-                        },
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(focus),
-                )
-            }
-        } else {
-            QuietControl(
-                title = Copy.NAME_THIS_ROOM,
-                modifier = Modifier.offset(x = QuietControlInset),
-            ) {
-                roomName = room.name ?: ""
-                editingRoomName = true
-            }
-        }
-        if (model.inkIsIdentity(room)) {
-            QuietControl(
-                title = Copy.CHANGE_YOUR_INK,
-                modifier = Modifier.offset(x = QuietControlInset),
-            ) { showInkPicker = true }
-        }
-        QuietControl(
-            title = Copy.LEAVE_THIS_ROOM,
-            modifier = Modifier.offset(x = QuietControlInset),
-        ) { confirmLeave = true }
-    }
-
-    if (showInkPicker) {
-        InkPickerSheet(model = model, room = room, onDismiss = { showInkPicker = false })
-    }
-
-    if (confirmLeave) {
-        // The same two questions S12 asks — the confirmation, and then §6.8's
-        // "leave your notes behind?", where leaving them is the default and
-        // taking them back is possible and never the default. They live with
-        // the person screen so the whole way out is one thing to present.
-        LeaveRoomDialogs(
-            model = model,
-            room = room,
-            onDismiss = { confirmLeave = false },
-            onLeft = {
-                confirmLeave = false
-                onLeft()
-            },
-        )
-    }
-}
-
-/**
- * The account (§6.10): an emailed code, no passwords. Signed out is a state,
- * not a nag — one quiet line, and the reason stated plainly.
- */
-@Composable
-private fun AccountSection(model: AppModel) {
-    var signingIn by remember { mutableStateOf(false) }
-
-    Column(
-        modifier = Modifier.padding(top = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        when {
-            model.isSignedIn -> {
-                model.accountEmail?.let { address -> SmallCaps(address, size = 12f) }
-                QuietControl(
-                    title = Copy.SIGN_OUT,
-                    modifier = Modifier.offset(x = QuietControlInset),
-                ) {
-                    signingIn = false
-                    // Signing out must finish whatever happens to this sheet.
-                    model.viewModelScope.launch { model.signOutRemote() }
-                }
-            }
-
-            // Remote is not configured in this build; no dead control.
-            model.remote == null -> Unit
-
-            signingIn -> SignInInline(
-                model = model,
-                onSignedIn = { signingIn = false },
-                onCancel = { signingIn = false },
-            )
-
-            else -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                QuietControl(
-                    title = Copy.SIGN_IN,
-                    modifier = Modifier.offset(x = QuietControlInset),
-                ) { signingIn = true }
-                Text(
-                    text = Copy.ACCOUNT_REASON,
-                    style = RibbonType.ui(13f),
-                    color = Palette.muted,
-                )
-            }
-        }
-    }
-}
 
 // S20 — text and translation. Translation is personal, not shared (§2.6);
 // changing it never moves your position or breaks a note's anchor. The
@@ -684,7 +171,7 @@ fun TextSettingsScreen(
             verticalArrangement = Arrangement.spacedBy(28.dp),
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                SmallCaps(Copy.TRANSLATION, size = 12f)
+                SmallCaps(Copy.TRANSLATION, size = 12f, modifier = HeadingModifier)
                 // Bundled translations always; licensed ones (NKJV first)
                 // appear the day their edition is configured on the proxy —
                 // never as a dead row.
@@ -723,7 +210,7 @@ fun TextSettingsScreen(
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                SmallCaps(Copy.TEXT_SIZE, size = 12f)
+                SmallCaps(Copy.TEXT_SIZE, size = 12f, modifier = HeadingModifier)
                 Slider(
                     value = model.settings.scriptureSize.toFloat(),
                     onValueChange = { size ->
@@ -743,7 +230,7 @@ fun TextSettingsScreen(
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                SmallCaps(Copy.LINE_SPACING, size = 12f)
+                SmallCaps(Copy.LINE_SPACING, size = 12f, modifier = HeadingModifier)
                 val steps = listOf(
                     Copy.LINE_SPACING_CLOSE,
                     Copy.LINE_SPACING_BOOK,
@@ -861,7 +348,7 @@ private fun NotificationRoomSection(model: AppModel, room: Room) {
     fun set(next: RoomNotificationPrefs) = model.setNotificationPrefs(next, room)
 
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        SmallCaps(model.displayName(room), size = 12f)
+        SmallCaps(model.displayName(room), size = 12f, modifier = HeadingModifier)
         RibbonToggle(Copy.NOTES_LEFT_FOR_YOU, prefs.notesLeft) { on ->
             set(prefs.copy(notesLeft = on))
         }
@@ -880,7 +367,7 @@ private fun NotificationRoomSection(model: AppModel, room: Room) {
 @Composable
 private fun QuietHours(model: AppModel) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        SmallCaps(Copy.QUIET_HOURS, size = 12f)
+        SmallCaps(Copy.QUIET_HOURS, size = 12f, modifier = HeadingModifier)
         Row(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -993,7 +480,7 @@ fun DownloadsScreen(
             modifier = Modifier.padding(ScreenPadding),
             verticalArrangement = Arrangement.spacedBy(22.dp),
         ) {
-            SmallCaps(Copy.onThisPhone(context), size = 12f)
+            SmallCaps(Copy.onThisPhone(context), size = 12f, modifier = HeadingModifier)
             model.availableTranslations.forEach { translation ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1066,6 +553,7 @@ fun PlanScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
     SettingsScroll(modifier = modifier) {
         BackControl(onBack)
         Column(
@@ -1079,9 +567,27 @@ fun PlanScreen(
             )
             val room = model.currentRoom
             if (room != null && room.isPaused) {
-                WayInButton(title = Copy.START_THE_ROOM_AGAIN) {
-                    // Swift: "StoreKit arrives with the backend; nothing to
-                    // restore locally." Play Billing is the same story here.
+                // S22's anatomy is "Start the room again if paused · manage
+                // in the store", and the restore half needs billing that
+                // does not exist yet on either platform (deviation 11). What
+                // stood here was a chartreuse capsule with an empty body: a
+                // control that says exactly what happens and then does not
+                // do it, which is worse than no control and reads as a
+                // failure the app never names. So the room says the true
+                // thing instead, and the store is where the other half of it
+                // lives.
+                Text(
+                    text = Copy.ROOM_PAUSED,
+                    style = RibbonType.ui(15f),
+                    color = Palette.text,
+                )
+                QuietControl(
+                    title = Copy.MANAGE_IN_STORE,
+                    modifier = Modifier.offset(x = QuietControlInset),
+                ) {
+                    context.startActivity(
+                        Intent(Intent.ACTION_VIEW, PLAY_SUBSCRIPTIONS.toUri()),
+                    )
                 }
             }
             Text(
@@ -1105,14 +611,18 @@ fun PlanScreen(
  * navigation's inset is added under the last row so a screen scrolls behind
  * the bar rather than stopping above it.
  *
- * These screens live inside a bottom sheet, which already clears the status
- * bar, so only the bottom inset is theirs to carry.
+ * Both insets are theirs to carry. They used to live inside a bottom sheet,
+ * which cleared the status bar for them; the menu is a full-screen layer
+ * now (deviations 14, A17) and nothing above them clears anything, so a
+ * screen without the top inset would draw its own back chevron underneath
+ * the clock.
  */
 @Composable
 private fun SettingsScroll(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val bottomBar = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     Box(modifier = modifier.fillMaxWidth()) {
         Box(Modifier.matchParentSize().room())
@@ -1126,7 +636,7 @@ private fun SettingsScroll(
             Column(
                 modifier = Modifier
                     .readableColumn()
-                    .padding(bottom = bottomBar),
+                    .padding(top = statusBar, bottom = bottomBar),
             ) {
                 content()
             }
@@ -1135,7 +645,7 @@ private fun SettingsScroll(
 }
 
 /**
- * The way back out of a pushed settings screen.
+ * The way back out of a pushed screen — these four, and the menu's own join.
  *
  * iOS gets this for free from `NavigationStack` — a chevron, named for
  * VoiceOver. Compose draws nothing, and a screen whose only way back is a
@@ -1143,7 +653,7 @@ private fun SettingsScroll(
  * 44 dp every other control clears.
  */
 @Composable
-private fun BackControl(onBack: () -> Unit) {
+internal fun BackControl(onBack: () -> Unit) {
     Box(
         modifier = Modifier
             .padding(start = ScreenPadding - 12.dp, top = 8.dp)

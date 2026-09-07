@@ -127,7 +127,7 @@ struct WriteComposer: View {
                     guard !trimmed.isEmpty else { return }
                     onSave(trimmed)
                 } label: {
-                    SmallCaps("leave it", size: 13, color: Palette.chartreuse)
+                    SmallCaps(Copy.leaveIt, size: 13, color: Palette.chartreuse)
                         .frame(minHeight: 44)
                         .contentShape(Rectangle().inset(by: -8))
                 }
@@ -182,7 +182,7 @@ struct SpeakControl: View {
                         UIApplication.shared.open(url)
                     }
                 } label: {
-                    SmallCaps("open settings", size: 13, color: Palette.chartreuse)
+                    SmallCaps(Copy.openSettings, size: 13, color: Palette.chartreuse)
                 }
                 .buttonStyle(.plain)
             } else {

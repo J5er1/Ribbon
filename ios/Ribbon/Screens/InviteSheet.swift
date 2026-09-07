@@ -45,7 +45,7 @@ struct InviteSheet: View {
 
                 if let invite {
                     ShareLink(item: invite.url()) {
-                        Text("Send the invite")
+                        Text(Copy.sendTheInvite)
                             .font(RibbonType.uiMedium(17))
                             .foregroundStyle(Palette.ground)
                             .padding(.horizontal, 28)
@@ -78,7 +78,7 @@ struct NewRoomSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
             SmallCaps(Copy.roomName, size: 12)
-            TextField("", text: $name, prompt: Text("Optional").foregroundStyle(Palette.muted))
+            TextField("", text: $name, prompt: Text(Copy.optional).foregroundStyle(Palette.muted))
                 .font(RibbonType.ui(18))
                 .foregroundStyle(Palette.text)
                 .padding(.horizontal, 14)

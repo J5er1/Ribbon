@@ -184,6 +184,7 @@ fun JoinFlow(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
     onStartInstead: (() -> Unit)? = null,
+    wayOut: String = Copy.CLOSE,
 ) {
     var phase by remember { mutableStateOf<JoinPhase>(JoinPhase.Loading) }
     var preview by remember { mutableStateOf<InvitePreview?>(null) }
@@ -254,7 +255,11 @@ fun JoinFlow(
         model.viewModelScope.launch {
             try {
                 val roomID = model.joinRoom(inviteToken = token)
-                model.pendingInvite = null
+                // Only if it is still the one this flow is about: a second
+                // link tapped while this join was in flight has already
+                // replaced it, and clearing that would throw away an invite
+                // nobody has answered yet.
+                if (model.pendingInvite?.token == token) model.pendingInvite = null
                 if (wasSetDown) return@launch
                 model.switchRoom(roomID)
                 onDone()
@@ -435,6 +440,7 @@ fun JoinFlow(
                         line = current.line,
                         onStartInstead = onStartInstead,
                         onDismiss = onDismiss,
+                        wayOut = wayOut,
                     )
                 }
             }
@@ -689,6 +695,7 @@ private fun DeadStep(
     line: String,
     onStartInstead: (() -> Unit)?,
     onDismiss: () -> Unit,
+    wayOut: String,
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(DeadGap),
@@ -705,8 +712,10 @@ private fun DeadStep(
             QuietControl(title = Copy.START_A_ROOM_INSTEAD, onClick = onStartInstead)
         } else {
             // Presented over the room: a dead end still needs its own way
-            // out, not only the swipe.
-            QuietControl(title = Copy.CLOSE, onClick = onDismiss)
+            // out, not only the swipe. Pushed inside the menu it goes back
+            // one step instead — to the paste field, which is exactly where
+            // "ask for a new one" lands — so the caller names it.
+            QuietControl(title = wayOut, onClick = onDismiss)
         }
     }
 }

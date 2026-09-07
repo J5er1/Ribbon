@@ -101,7 +101,7 @@ struct NoteCard: View {
                                 .fixedSize(horizontal: false, vertical: true)
                                 .multilineTextAlignment(.leading)
                         } else {
-                            SmallCaps("transcript", size: 12)
+                            SmallCaps(Copy.transcript, size: 12)
                         }
                     }
                     .buttonStyle(.plain)

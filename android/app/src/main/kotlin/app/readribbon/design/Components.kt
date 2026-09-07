@@ -33,6 +33,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -233,7 +234,10 @@ fun QuietControl(
     Box(
         modifier = modifier
             .sizeIn(minWidth = 44.dp, minHeight = 44.dp)
-            .clickable(onClick = onClick)
+            // The words are the whole control, so the role has to be said:
+            // without it TalkBack reads the text and never that it is a
+            // thing you can press (§11).
+            .clickable(role = Role.Button, onClick = onClick)
             .padding(horizontal = 8.dp),
         contentAlignment = Alignment.Center,
     ) {
