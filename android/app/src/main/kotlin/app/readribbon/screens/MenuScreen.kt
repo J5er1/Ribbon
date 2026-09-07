@@ -14,6 +14,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -49,9 +50,11 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -403,7 +406,10 @@ private fun MenuRoot(
     // section once it has been placed, and the jump is instant — this is
     // where the menu opened, not somewhere it travelled to.
     var youOffset by remember { mutableIntStateOf(-1) }
-    var landed by remember { mutableStateOf(entry != MenuEntry.YOU) }
+    // Saveable, because `rememberScrollState` is: after a rotation the scroll
+    // is already where the person left it, and landing on You a second time
+    // would throw it away.
+    var landed by rememberSaveable { mutableStateOf(entry != MenuEntry.YOU) }
     LaunchedEffect(youOffset, landed) {
         if (!landed && youOffset >= 0) {
             scroll.scrollTo(youOffset)
@@ -1027,44 +1033,35 @@ private fun JoinWithInviteScreen(
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(horizontal = 40.dp),
                 )
-                Box(
+                // Onboarding's own field, lifted whole: the same centred
+                // line of typing, the same box around it, so the two places
+                // a link can be pasted are one thing drawn twice.
+                CentredTextField(
+                    value = pasted,
+                    onValueChange = { text ->
+                        pasted = text
+                        // A pasted link is complete the moment it lands —
+                        // don't make them find a go button (S17's field,
+                        // kept).
+                        missed = false
+                        if (AppModel.inviteToken(fromPasted = text) != null) accept()
+                    },
+                    placeholder = Copy.PASTE_INVITE_PROMPT,
+                    size = 16f,
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.None,
+                        // A link is never what autocorrect thinks it is.
+                        autoCorrectEnabled = false,
+                        imeAction = ImeAction.Go,
+                    ),
+                    keyboardActions = KeyboardActions(onGo = { accept() }),
                     modifier = Modifier
                         .padding(horizontal = 40.dp)
-                        .fillMaxWidth()
-                        .heightIn(min = MinTarget)
-                        .background(Palette.surface, RoundedCornerShape(10.dp))
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Palette.surface)
+                        .border(1.dp, Palette.rule, RoundedCornerShape(10.dp))
                         .padding(horizontal = 14.dp, vertical = 12.dp),
-                    contentAlignment = Alignment.CenterStart,
-                ) {
-                    if (pasted.isEmpty()) {
-                        Text(
-                            text = Copy.PASTE_INVITE_PROMPT,
-                            style = RibbonType.ui(16f),
-                            color = Palette.muted,
-                        )
-                    }
-                    BasicTextField(
-                        value = pasted,
-                        onValueChange = { text ->
-                            pasted = text
-                            // A pasted link is complete the moment it lands —
-                            // don't make them find a go button (S17's field,
-                            // kept).
-                            missed = false
-                            if (AppModel.inviteToken(fromPasted = text) != null) accept()
-                        },
-                        singleLine = true,
-                        textStyle = RibbonType.ui(16f).copy(color = Palette.text),
-                        cursorBrush = SolidColor(Palette.chartreuse),
-                        keyboardOptions = KeyboardOptions(
-                            autoCorrectEnabled = false,
-                            capitalization = KeyboardCapitalization.None,
-                            imeAction = ImeAction.Go,
-                        ),
-                        keyboardActions = KeyboardActions(onGo = { accept() }),
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
+                )
                 if (missed) {
                     Text(
                         text = Copy.THAT_LINK_ISNT_AN_INVITE,

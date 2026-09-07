@@ -145,6 +145,11 @@ reasoning.
     change your ink, leave — because a fresh room of one had no route to
     them at all (the second half of deviation 9a, now closed).
 
+    *Superseded in shape by 14*: the two sheets became one menu, so there
+    is no rooms sheet with a You row in it any more. The promise this
+    entry records — your account and settings, one tap from the room —
+    is unchanged.
+
 14. **S14 and S18 are one full-screen menu, and it has two doors the book
     never gave it.** — changed by the owner's call (September 2026). The
     book presents the rooms as a sheet from the room's name (S14) and
