@@ -2,6 +2,7 @@
 
 package app.readribbon.screens
 
+import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -54,6 +55,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -80,8 +82,8 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -107,6 +109,7 @@ import app.readribbon.design.readableColumn
 import app.readribbon.design.rememberReduceMotion
 import app.readribbon.design.room
 import app.readribbon.fire.CampfireGlyph
+import app.readribbon.services.Passkeys
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -1022,11 +1025,45 @@ private fun AccountControls(model: AppModel) {
     // Saveable: a code already emailed must still be being waited for after
     // a push and a pop.
     var signingIn by rememberSaveable { mutableStateOf(false) }
+    var passkeyLine by rememberSaveable { mutableStateOf<String?>(null) }
+
+    val scope = rememberCoroutineScope()
+    val activity = LocalActivity.current
+
+    fun addPasskey() {
+        val host = activity ?: return
+        passkeyLine = null
+        scope.launch {
+            passkeyLine = try {
+                model.registerPasskey(host)
+                Copy.PASSKEY_ADDED
+            } catch (_: Passkeys.Cancelled) {
+                // Dismissed the sheet. Nothing happened, and nothing is said.
+                null
+            } catch (_: Throwable) {
+                Copy.PASSKEY_DIDNT_WORK
+            }
+        }
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         when {
             model.isSignedIn -> {
                 model.accountEmail?.let { address -> SmallCaps(address, size = 12f) }
+                // §6.10 wants a passkey where there is one. Offered here, on
+                // the account, because that is what it belongs to — and only
+                // ever added to the emailed code, never in place of it.
+                if (model.passkeysAvailable && activity != null) {
+                    QuietControl(
+                        title = Copy.ADD_A_PASSKEY,
+                        modifier = Modifier.offset(x = QuietControlInset),
+                    ) { addPasskey() }
+                    Text(
+                        text = passkeyLine ?: Copy.PASSKEY_REASON,
+                        style = RibbonType.ui(13f),
+                        color = Palette.muted,
+                    )
+                }
                 QuietControl(
                     title = Copy.SIGN_OUT,
                     modifier = Modifier.offset(x = QuietControlInset),

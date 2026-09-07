@@ -12,6 +12,10 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNamingStrategy
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -191,11 +195,73 @@ class SupabaseClient(
         )
     }
 
-    suspend fun downloadPortrait(personID: Uuid): ByteArray = requestBytes(
-        method = "GET",
-        url = url("storage/v1/object/authenticated/portraits/$personID.jpg"),
-        authenticated = true,
-    )
+    /**
+     * The face, asked for conditionally.
+     *
+     * The object's path is `<person id>.jpg` and never changes, so nothing
+     * in the profile row can say the bytes behind it did. The object's own
+     * tag can: offer the one this device stored, and a 304 with no body is
+     * the server saying the face is still the face.
+     *
+     * Its own connection rather than [requestBytes], which treats every
+     * status outside 200..299 as a failure — and 304 is not one.
+     */
+    suspend fun downloadPortrait(personID: Uuid, ifNoneMatch: String?): PortraitFetch {
+        val bearer = (currentSession() ?: throw SupabaseError.NotSignedIn).accessToken
+        val target = url("storage/v1/object/authenticated/portraits/$personID.jpg")
+        return withContext(Dispatchers.IO) {
+            val connection = (URL(target).openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 20_000
+                readTimeout = 30_000
+                // HttpURLConnection would follow its own cache and hand back
+                // 200 with the old bytes, hiding the 304 this turns on.
+                useCaches = false
+                setRequestProperty("apikey", key)
+                setRequestProperty("Authorization", "Bearer $bearer")
+                ifNoneMatch?.let { setRequestProperty("If-None-Match", it) }
+            }
+            try {
+                when (val status = connection.responseCode) {
+                    HttpURLConnection.HTTP_NOT_MODIFIED -> PortraitFetch.Unchanged
+                    HttpURLConnection.HTTP_NOT_FOUND -> PortraitFetch.Missing
+                    in 200..299 -> PortraitFetch.Changed(
+                        data = connection.inputStream.use { it.readBytes() },
+                        etag = connection.getHeaderField("ETag"),
+                    )
+                    else -> {
+                        val error = runCatching {
+                            connection.errorStream?.readBytes()?.decodeToString()
+                        }.getOrNull().orEmpty()
+                        throw SupabaseError.Http(status, error)
+                    }
+                }
+            } catch (io: IOException) {
+                throw SupabaseError.Http(0, io.message.orEmpty())
+            } finally {
+                connection.disconnect()
+            }
+        }
+    }
+
+    /** What a conditional portrait download found. */
+    sealed interface PortraitFetch {
+        /** The server's copy is the copy this device already has. */
+        data object Unchanged : PortraitFetch
+
+        /** A different face, and the tag to offer next time. */
+        data class Changed(val data: ByteArray, val etag: String?) : PortraitFetch {
+            // A ByteArray in a data class compares by identity, which would
+            // make two equal faces unequal. Nothing here compares one, and
+            // the compiler is right to insist the choice be made explicit.
+            override fun equals(other: Any?): Boolean = this === other
+
+            override fun hashCode(): Int = System.identityHashCode(this)
+        }
+
+        /** No portrait behind the row — deleted, or never uploaded. */
+        data object Missing : PortraitFetch
+    }
 
     suspend fun deletePortrait(personID: Uuid) {
         request(
@@ -203,6 +269,95 @@ class SupabaseClient(
             url = url("storage/v1/object/portraits/$personID.jpg"),
             authenticated = true,
         )
+    }
+
+    // MARK: Passkeys (§6.10 — "a passkey where available")
+    //
+    // Supabase Auth's own WebAuthn support, through its two-step API: the
+    // server hands out a challenge and the WebAuthn options that go with it,
+    // CredentialManager runs the ceremony, and the signed result comes back
+    // here. The options and the credential are passed through as JSON rather
+    // than modelled: they are the W3C shapes, they are the platform's to read
+    // and to produce, and anything this client understood about them would
+    // only be a second place for them to be wrong.
+
+    /** A challenge, and the WebAuthn options that belong to it. */
+    data class PasskeyChallenge(val challengeID: String, val optionsJson: String)
+
+    /** Start registering a passkey for the account that is signed in. */
+    suspend fun passkeyRegistrationOptions(): PasskeyChallenge =
+        passkeyChallenge("auth/v1/passkeys/registration/options", authenticated = true)
+
+    /**
+     * Finish registering. The account keeps the passkey; the session is
+     * unchanged, because it was already signed in.
+     */
+    suspend fun verifyPasskeyRegistration(challengeID: String, credentialJson: String) {
+        postPasskey(
+            path = "auth/v1/passkeys/registration/verify",
+            challengeID = challengeID, credentialJson = credentialJson, authenticated = true)
+    }
+
+    /**
+     * Start signing in with a passkey. Discoverable credentials: no email is
+     * asked for, because the authenticator already knows which account this
+     * is.
+     */
+    suspend fun passkeyAuthenticationOptions(): PasskeyChallenge =
+        passkeyChallenge("auth/v1/passkeys/authentication/options", authenticated = false)
+
+    /** Finish signing in. This is the call that returns a session. */
+    suspend fun verifyPasskeyAuthentication(
+        challengeID: String,
+        credentialJson: String,
+    ): SupabaseSession {
+        val body = postPasskey(
+            path = "auth/v1/passkeys/authentication/verify",
+            challengeID = challengeID, credentialJson = credentialJson, authenticated = false)
+        val next = json.decodeFromString<SupabaseSession>(body)
+        session = next
+        return next
+    }
+
+    private suspend fun passkeyChallenge(
+        path: String,
+        authenticated: Boolean,
+    ): PasskeyChallenge {
+        val body = if (authenticated) {
+            request(method = "POST", url = url(path), authenticated = true)
+        } else {
+            request(
+                method = "POST", url = url(path), authenticated = false,
+                // Signing in has no session to bear; the publishable key is
+                // the whole of the credential, as it is for the emailed code.
+                headers = mapOf("apikey" to key))
+        }
+        val root = Json.parseToJsonElement(body).jsonObject
+        val challengeID = root["challenge_id"]?.jsonPrimitive?.content
+            ?: throw SupabaseError.Http(0, body)
+        val options = root["options"] ?: throw SupabaseError.Http(0, body)
+        return PasskeyChallenge(challengeID = challengeID, optionsJson = options.toString())
+    }
+
+    private suspend fun postPasskey(
+        path: String,
+        challengeID: String,
+        credentialJson: String,
+        authenticated: Boolean,
+    ): String {
+        val payload = buildJsonObject {
+            put("challenge_id", JsonPrimitive(challengeID))
+            put("credential", Json.parseToJsonElement(credentialJson))
+        }.toString()
+        return if (authenticated) {
+            request(
+                method = "POST", url = url(path), body = payload.toByteArray(),
+                authenticated = true)
+        } else {
+            request(
+                method = "POST", url = url(path), body = payload.toByteArray(),
+                authenticated = false, headers = mapOf("apikey" to key))
+        }
     }
 
     // MARK: Plumbing

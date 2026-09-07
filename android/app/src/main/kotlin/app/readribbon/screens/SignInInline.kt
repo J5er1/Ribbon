@@ -1,5 +1,6 @@
 package app.readribbon.screens
 
+import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.FiniteAnimationSpec
@@ -39,6 +40,7 @@ import app.readribbon.app.AppModel
 import app.readribbon.app.Copy
 import app.readribbon.design.Palette
 import app.readribbon.design.QuietControl
+import app.readribbon.services.Passkeys
 import app.readribbon.design.RibbonMotion
 import app.readribbon.design.RibbonType
 import app.readribbon.design.WayInButton
@@ -94,6 +96,30 @@ fun SignInInline(
 
     val scope = rememberCoroutineScope()
     val reduceMotion = rememberReduceMotion()
+
+    // CredentialManager's sheet needs a window, so an Activity context and
+    // not the application one.
+    val activity = LocalActivity.current
+
+    fun signInWithPasskey() {
+        val host = activity ?: return
+        if (busy) return
+        busy = true
+        errorLine = null
+        scope.launch {
+            try {
+                model.signInWithPasskey(host)
+                onSignedIn()
+            } catch (_: Passkeys.Cancelled) {
+                // Not an error: they looked at the sheet and chose the email
+                // field instead. Say nothing.
+            } catch (_: Throwable) {
+                errorLine = Copy.PASSKEY_DIDNT_WORK
+            } finally {
+                busy = false
+            }
+        }
+    }
 
     fun sendCode() {
         val address = email.trim()
@@ -154,6 +180,19 @@ fun SignInInline(
             ) {
                 when (current) {
                     SignInPhase.Email -> {
+                        // The passkey is offered above the field rather than
+                        // instead of it: one tap and no email round-trip, and
+                        // on a phone that has never seen this account it
+                        // still knows which account it is — but it exists
+                        // only where the domain, the signing key and the
+                        // project all agree (Passkeys.kt), so the field
+                        // underneath is the thread that always works.
+                        if (model.passkeysAvailable && activity != null) {
+                            QuietControl(
+                                title = Copy.USE_A_PASSKEY,
+                                onClick = { signInWithPasskey() },
+                            )
+                        }
                         CentredField(
                             value = email,
                             onValueChange = { email = it },

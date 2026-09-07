@@ -50,6 +50,7 @@ import app.readribbon.services.PresenceService
 import app.readribbon.services.PresentPerson
 import app.readribbon.services.RemoteSync
 import app.readribbon.services.RoomGraph
+import app.readribbon.services.SupabaseClient
 import app.readribbon.services.SupabaseError
 import app.readribbon.services.Transcriber
 import kotlinx.coroutines.CoroutineScope
@@ -60,6 +61,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.datetime.TimeZone
 import java.io.File
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 import kotlin.uuid.ExperimentalUuidApi
@@ -394,8 +396,41 @@ class AppModel(
         val remote = this.remote
         if (remote != null && remote.isSignedIn) {
             val membership = state.memberships[index]
-            viewModelScope.launch { runCatching { remote.push(membership = membership) } }
+            viewModelScope.launch {
+                runCatching { remote.push(membership = membership) }
+                // Remembered beside the membership, so that leaving — which
+                // deletes the membership — does not also delete the choice
+                // (§6.10).
+                remote.rememberInk(ink = ink, roomID = room.id, personID = me.id)
+            }
         }
+    }
+
+    /**
+     * Coming back to a room you were in before: put your own ink on again.
+     *
+     * §6.10 asks that a re-invited person's ink and notes reattach rather
+     * than duplicating. The notes always did — they are keyed by the author's
+     * account id. The ink could not, because it lives on the membership row
+     * and leaving deletes it; `room_inks` is the memory that outlives it, and
+     * this is where it is put back on.
+     *
+     * Never over somebody else: in a room of three or more ink *is* identity
+     * (§4.5), so a colour that has since been taken stays taken and the room
+     * asks for a new one the way it always would.
+     */
+    private suspend fun restoreInk(roomID: Uuid) {
+        val remote = this.remote ?: return
+        if (!remote.isSignedIn) return
+        val me = state.me ?: return
+        val room = state.rooms.firstOrNull { it.id == roomID } ?: return
+        val mine = state.memberships.firstOrNull {
+            it.roomID == roomID && it.personID == me.id
+        } ?: return
+        if (mine.ink != null) return
+        val remembered = remote.rememberedInk(roomID = roomID, personID = me.id) ?: return
+        if (members(room).any { it.ink == remembered }) return
+        pickInk(ink = remembered, room = room)
     }
 
     // MARK: - Readings and the fire
@@ -850,12 +885,42 @@ class AppModel(
     suspend fun verifySignInCode(email: String, code: String) {
         val remote = this.remote ?: throw SupabaseError.NotSignedIn
         val uid = remote.verify(email = email, code = code)
+        if (state.me == null) {
+            // Signing in before this device has a person: a new phone, or a
+            // reinstall the keystore didn't outlive. Carrying your room
+            // between phones is the whole reason an account exists (§6.10),
+            // and the account's own profile *is* the person — minting a
+            // second local identity here and merging it afterwards is how a
+            // person ends up with two of themselves.
+            restorePerson(uid)
+        }
         adoptRemoteIdentity(uid)
         reconcileOwnProfile()
         // Pull before push: a room this account left on another device is
         // removed by the merge, so the push can't quietly re-join it.
         refreshFromRemote()
         pushLocalGraph()
+    }
+
+    /**
+     * The account's profile, made this device's person.
+     *
+     * Null means an account with no profile yet — an email that was verified
+     * and never finished onboarding — and there is nothing to restore, so
+     * the caller asks for a name as it would have anyway.
+     */
+    private suspend fun restorePerson(uid: Uuid) {
+        val remote = this.remote ?: return
+        val row = runCatching { remote.fetchOwnProfile() }.getOrNull() ?: return
+        state = state.copy(
+            me = Person(
+                id = uid,
+                name = row.name,
+                portraitPath = null,
+                translation = TranslationID(rawValue = row.translation)))
+        persist()
+        // The face is left to `reconcileOwnProfile`, which runs next and
+        // asks the same question — fetching it here would download it twice.
     }
 
     /**
@@ -874,10 +939,45 @@ class AppModel(
             name = row.name,
             translation = TranslationID(rawValue = row.translation))
         state = state.copy(me = me)
-        if (me.portraitPath == null && row.portraitPath != null) {
-            fetchRemotePortrait(me.id)
-        }
+        if (row.portraitPath != null) refreshPortrait(me.id)
         persist()
+    }
+
+    /**
+     * Whether a passkey is worth offering here: there is a backend to run
+     * the ceremony against. Where there is not, the control is absent rather
+     * than dead (§6.1).
+     *
+     * Unlike iOS there is no OS floor to test — CredentialManager is a
+     * library, and it is present from this build's minSdk up.
+     */
+    val passkeysAvailable: Boolean get() = remote != null
+
+    /**
+     * Add a passkey to the account that is signed in (§6.10). An addition,
+     * never a replacement: the emailed code stays the way in.
+     *
+     * @param context an Activity context — the system sheet needs a window.
+     */
+    suspend fun registerPasskey(context: Context) {
+        val remote = this.remote ?: return
+        if (!remote.isSignedIn) return
+        remote.registerPasskey(context)
+    }
+
+    /**
+     * Sign in with a passkey. The whole of [verifySignInCode] after the code,
+     * because after the session it is the same thread: adopt the account,
+     * restore the person if this device has none, pull, push.
+     */
+    suspend fun signInWithPasskey(context: Context) {
+        val remote = this.remote ?: throw SupabaseError.NotSignedIn
+        val uid = remote.signInWithPasskey(context)
+        if (state.me == null) restorePerson(uid)
+        adoptRemoteIdentity(uid)
+        reconcileOwnProfile()
+        refreshFromRemote()
+        pushLocalGraph()
     }
 
     suspend fun signOutRemote() {
@@ -990,6 +1090,7 @@ class AppModel(
         if (!remote.isSignedIn) throw SupabaseError.NotSignedIn
         val roomID = remote.acceptInvite(token = inviteToken)
         refreshFromRemote()
+        restoreInk(roomID)
         return roomID
     }
 
@@ -1086,15 +1187,16 @@ class AppModel(
 
         val people = next.people.toMutableMap()
         for (row in graph.profiles) {
+            // Your own row is here too, and its face is asked about on the
+            // same terms: a face changed on your other phone has to reach
+            // this one, and only the object's tag can say that it did.
+            if (row.portraitPath != null) refreshPortrait(row.id)
             if (row.id == me.id) continue
             val translation = TranslationID(rawValue = row.translation)
             val profile = (people[row.id]
                 ?: Person(id = row.id, name = row.name, translation = translation))
                 .copy(name = row.name, translation = translation)
             people[row.id] = profile
-            if (portraits[row.id] == null && row.portraitPath != null) {
-                fetchRemotePortrait(row.id)
-            }
         }
         next = next.copy(people = people)
 
@@ -1156,23 +1258,58 @@ class AppModel(
         persist()
     }
 
-    private fun fetchRemotePortrait(personID: Uuid) {
+    /**
+     * When each face was last asked about, this launch. A conditional GET is
+     * cheap — a 304 with no body — but it is still a request, and the room
+     * refreshes on every foreground.
+     */
+    private val portraitCheckedAt = mutableMapOf<Uuid, Instant>()
+
+    /**
+     * Ask whether this person's face has changed, and take it if it has.
+     *
+     * The old rule was "fetch it once, if this device has nothing" — which is
+     * why a changed face never travelled: every device that had already seen
+     * the old one kept it forever. Nothing on the profile row can say the
+     * object changed (the path is `<person id>.jpg`, always), so the object's
+     * own tag is asked instead.
+     */
+    private fun refreshPortrait(personID: Uuid) {
         val remote = this.remote ?: return
+        if (!remote.isSignedIn) return
+        val now = Clock.System.now()
+        val last = portraitCheckedAt[personID]
+        if (last != null && now - last < PORTRAIT_RECHECK) return
+        portraitCheckedAt[personID] = now
         viewModelScope.launch {
-            val data = remote.fetchPortrait(personID = personID) ?: return@launch
+            val found = remote.fetchPortrait(
+                personID = personID,
+                ifNoneMatch = state.portraitETags[personID])
+            val changed = found as? SupabaseClient.PortraitFetch.Changed ?: return@launch
             val path = runCatching {
-                store.writePortrait(data, personID = personID)
+                store.writePortrait(changed.data, personID = personID)
             }.getOrNull() ?: return@launch
-            if (state.me?.id == personID) {
-                state = state.copy(me = state.me?.copy(portraitPath = path))
+            var next = state
+            val mine = next.me
+            next = if (mine != null && mine.id == personID) {
+                next.copy(me = mine.copy(portraitPath = path))
             } else {
-                val person = state.people[personID]
-                if (person != null) {
-                    state = state.copy(
-                        people = state.people + (personID to person.copy(portraitPath = path)))
+                val person = next.people[personID]
+                if (person == null) {
+                    next
+                } else {
+                    next.copy(people = next.people + (personID to person.copy(portraitPath = path)))
                 }
             }
-            decodeImage(data)?.let { portraits[personID] = it }
+            val etag = changed.etag
+            next = next.copy(
+                portraitETags = if (etag == null) {
+                    next.portraitETags - personID
+                } else {
+                    next.portraitETags + (personID to etag)
+                })
+            state = next
+            decodeImage(changed.data)?.let { portraits[personID] = it }
             persist()
         }
     }
@@ -1197,6 +1334,10 @@ class AppModel(
         val path = runCatching { store.writePortrait(data, personID = me.id) }.getOrNull() ?: return
         state = state.copy(me = me.copy(portraitPath = path))
         decodeImage(data)?.let { portraits[me.id] = it }
+        // This device is the truth for this face until the upload lands.
+        // Without the hold-off a refresh a second later would fetch the face
+        // being replaced and put it back.
+        portraitCheckedAt[me.id] = Clock.System.now()
         persist()
         pushProfileRemote(portraitData = data)
     }
@@ -1218,6 +1359,14 @@ class AppModel(
     private fun Reading.snapshot(): Reading = copy(handiwork = handiwork.copy())
 
     companion object {
+
+        /**
+         * How long a face is taken on trust before it is asked about again.
+         * A room holds six; this is a handful of tiny requests an hour, and
+         * the product's own pace says a new face can take a few minutes to
+         * arrive.
+         */
+        private val PORTRAIT_RECHECK = 15.minutes
 
         suspend fun load(context: Context): AppModel {
             val app = context.applicationContext

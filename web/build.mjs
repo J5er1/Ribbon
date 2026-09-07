@@ -252,7 +252,47 @@ writeFileSync(
           },
         ],
       },
+      // Passkeys (§6.10). A passkey is bound to the domain it was made
+      // against, so the domain has to name the app that may use one — the
+      // other half of `webcredentials:readribbon.app` in the app's
+      // entitlement.
+      webcredentials: {
+        apps: [`${teamID}.bible.ribbon.app`],
+      },
     },
+    null,
+    2,
+  ),
+);
+
+// The same handshake, in Android's words. The hash is of the certificate the
+// release APK is *signed* with, and CI signs debug builds with a throwaway
+// key on every run, so there is nothing honest to hard-code: it rides an env
+// var like the team ID does, and the file is emitted with a placeholder and
+// a warning until a real signing key exists.
+const androidCertSHA256 =
+  process.env.RIBBON_ANDROID_CERT_SHA256 ?? "SIGNING_CERT_SHA256";
+if (androidCertSHA256 === "SIGNING_CERT_SHA256") {
+  console.warn(
+    "RIBBON_ANDROID_CERT_SHA256 is not set — assetlinks.json is built with a placeholder and Android passkeys will not work.",
+  );
+}
+writeFileSync(
+  join(dist, ".well-known", "assetlinks.json"),
+  JSON.stringify(
+    [
+      {
+        relation: [
+          "delegate_permission/common.handle_all_urls",
+          "delegate_permission/common.get_login_creds",
+        ],
+        target: {
+          namespace: "android_app",
+          package_name: "app.readribbon",
+          sha256_cert_fingerprints: [androidCertSHA256],
+        },
+      },
+    ],
     null,
     2,
   ),

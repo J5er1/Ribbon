@@ -347,6 +347,25 @@ object Copy {
     const val CODE_ON_ITS_WAY = "A code is on its way to your email."
     const val THE_CODE = "The code"
     const val SIGN_IN = "Sign in"
+
+    // Passkeys (§6.10 — "a passkey where available, an emailed code
+    // otherwise"). Always an addition to the code, never a replacement, so
+    // the words offer rather than instruct.
+    const val USE_A_PASSKEY = "Use a passkey"
+    const val ADD_A_PASSKEY = "Add a passkey"
+    const val PASSKEY_REASON = "Then signing in is your face or your PIN, on any phone."
+
+    /**
+     * The true small thing, said once, where the reason used to be. Nothing
+     * in Ribbon congratulates anybody.
+     */
+    const val PASSKEY_ADDED = "This phone can sign you in now."
+
+    /**
+     * S25's shape: name what happened, name what didn't, and leave the one
+     * thing that still works in front of them.
+     */
+    const val PASSKEY_DIDNT_WORK = "That passkey didn't work. The emailed code still does."
     const val SEND_A_NEW_CODE = "Send a new code"
 
     /** The way past sign-in, wherever a host offers one. Never a wall. */

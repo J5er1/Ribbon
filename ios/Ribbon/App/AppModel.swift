@@ -249,8 +249,41 @@ final class AppModel {
         persist()
         if let remote, remote.isSignedIn {
             let membership = state.memberships[index]
-            Task { try? await remote.push(membership: membership) }
+            let roomID = room.id
+            let personID = me.id
+            Task {
+                try? await remote.push(membership: membership)
+                // Remembered beside the membership, so that leaving —
+                // which deletes the membership — does not also delete the
+                // choice (§6.10).
+                await remote.rememberInk(ink, roomID: roomID, personID: personID)
+            }
         }
+    }
+
+    /// Coming back to a room you were in before: put your own ink on again.
+    ///
+    /// §6.10 asks that a re-invited person's ink and notes reattach rather
+    /// than duplicating. The notes always did — they are keyed by the
+    /// author's account id. The ink could not, because it lives on the
+    /// membership row and leaving deletes it; `room_inks` is the memory that
+    /// outlives it, and this is where it is put back on.
+    ///
+    /// Never over somebody else: in a room of three or more ink *is*
+    /// identity (§4.5), so a colour that has since been taken stays taken and
+    /// the room asks for a new one the way it always would.
+    private func restoreInk(in roomID: UUID) async {
+        guard let remote, remote.isSignedIn, let me = state.me,
+              let room = state.rooms.first(where: { $0.id == roomID }),
+              let index = state.memberships.firstIndex(where: {
+                  $0.roomID == roomID && $0.personID == me.id
+              }),
+              state.memberships[index].ink == nil,
+              let remembered = await remote.rememberedInk(roomID: roomID, personID: me.id)
+        else { return }
+        let taken = Set(members(of: room).compactMap(\.ink))
+        guard !taken.contains(remembered) else { return }
+        pickInk(remembered, in: room)
     }
 
     // MARK: - Readings and the fire
@@ -610,12 +643,35 @@ final class AppModel {
     func verifySignInCode(email: String, code: String) async throws {
         guard let remote else { throw SupabaseError.notSignedIn }
         let uid = try await remote.verify(email: email, code: code)
+        if state.me == nil {
+            // Signing in before this device has a person: a new phone, or a
+            // reinstall the Keychain didn't outlive. Carrying your room
+            // between phones is the whole reason an account exists (§6.10),
+            // and the account's own profile *is* the person — minting a
+            // second local identity here and merging it afterwards is how a
+            // person ends up with two of themselves.
+            await restorePerson(from: uid)
+        }
         adoptRemoteIdentity(uid)
         await reconcileOwnProfile()
         // Pull before push: a room this account left on another device is
         // removed by the merge, so the push can't quietly re-join it.
         await refreshFromRemote()
         await pushLocalGraph()
+    }
+
+    /// The account's profile, made this device's person. Nil means an
+    /// account with no profile yet — an email that was verified and never
+    /// finished onboarding — and there is nothing to restore, so the caller
+    /// asks for a name as it would have anyway.
+    private func restorePerson(from uid: UUID) async {
+        guard let remote, let row = try? await remote.fetchOwnProfile() else { return }
+        state.me = Person(
+            id: uid, name: row.name, portraitPath: nil,
+            translation: TranslationID(rawValue: row.translation))
+        persist()
+        // The face is left to `reconcileOwnProfile`, which runs next and
+        // asks the same question — fetching it here would download it twice.
     }
 
     /// The account is the elder truth: signing in on a fresh device must
@@ -632,10 +688,35 @@ final class AppModel {
         me.name = row.name
         me.translation = TranslationID(rawValue: row.translation)
         state.me = me
-        if me.portraitPath == nil, row.portraitPath != nil {
-            fetchRemotePortrait(me.id)
-        }
+        if row.portraitPath != nil { refreshPortrait(me.id) }
         persist()
+    }
+
+    /// Whether a passkey is worth offering here: the platform can run the
+    /// ceremony, and there is a backend to run it against. Where either is
+    /// false the control is absent rather than dead (§6.1).
+    var passkeysAvailable: Bool { remote != nil && Passkeys.isAvailable }
+
+    /// Add a passkey to the account that is signed in (§6.10). An addition,
+    /// never a replacement: the emailed code stays the way in.
+    func registerPasskey() async throws {
+        guard let remote, remote.isSignedIn, let anchor = keyWindowAnchor() else { return }
+        try await remote.registerPasskey(anchor: anchor)
+    }
+
+    /// Sign in with a passkey. The whole of `verifySignInCode` after the
+    /// code, because after the session it is the same thread: adopt the
+    /// account, restore the person if this device has none, pull, push.
+    func signInWithPasskey() async throws {
+        guard let remote, let anchor = keyWindowAnchor() else { throw SupabaseError.notSignedIn }
+        let uid = try await remote.signInWithPasskey(anchor: anchor)
+        if state.me == nil {
+            await restorePerson(from: uid)
+        }
+        adoptRemoteIdentity(uid)
+        await reconcileOwnProfile()
+        await refreshFromRemote()
+        await pushLocalGraph()
     }
 
     func signOutRemote() async {
@@ -724,6 +805,7 @@ final class AppModel {
         guard let remote, remote.isSignedIn else { throw SupabaseError.notSignedIn }
         let roomID = try await remote.acceptInvite(token: inviteToken)
         await refreshFromRemote()
+        await restoreInk(in: roomID)
         return roomID
     }
 
@@ -816,16 +898,18 @@ final class AppModel {
             }
         }
 
-        for row in graph.profiles where row.id != me.id {
+        for row in graph.profiles {
+            // Your own row is here too, and its face is asked about on the
+            // same terms: a face changed on your other phone has to reach
+            // this one, and only the object's tag can say that it did.
+            if row.portraitPath != nil { refreshPortrait(row.id) }
+            guard row.id != me.id else { continue }
             let translation = TranslationID(rawValue: row.translation)
             var person = state.people[row.id]
                 ?? Person(id: row.id, name: row.name, translation: translation)
             person.name = row.name
             person.translation = translation
             state.people[row.id] = person
-            if portraits[row.id] == nil, row.portraitPath != nil {
-                fetchRemotePortrait(row.id)
-            }
         }
 
         for row in graph.quietDays {
@@ -897,19 +981,43 @@ final class AppModel {
         return events.filter { $0.at >= cutoff }.sorted { $0.at < $1.at }
     }
 
-    private func fetchRemotePortrait(_ personID: UUID) {
-        guard let remote else { return }
+    /// When each face was last asked about, this launch. A conditional GET
+    /// is cheap — a 304 with no body — but it is still a request, and the
+    /// room refreshes on every foreground.
+    private var portraitCheckedAt: [UUID: Date] = [:]
+
+    /// How long a face is taken on trust before it is asked about again. A
+    /// room holds six; this is a handful of tiny requests an hour, and the
+    /// product's own pace says a new face can take a few minutes to arrive.
+    private static let portraitRecheckInterval: TimeInterval = 15 * 60
+
+    /// Ask whether this person's face has changed, and take it if it has.
+    ///
+    /// The old rule was "fetch it once, if this device has nothing" — which
+    /// is why a changed face never travelled: every device that had already
+    /// seen the old one kept it forever. Nothing on the profile row can say
+    /// the object changed (the path is `<person id>.jpg`, always), so the
+    /// object's own tag is asked instead.
+    private func refreshPortrait(_ personID: UUID) {
+        guard let remote, remote.isSignedIn else { return }
+        if let last = portraitCheckedAt[personID],
+           Date().timeIntervalSince(last) < Self.portraitRecheckInterval {
+            return
+        }
+        portraitCheckedAt[personID] = Date()
         Task {
-            guard let data = await remote.fetchPortrait(personID: personID) else { return }
-            if let path = try? await store.writePortrait(data, personID: personID) {
-                if state.me?.id == personID {
-                    state.me?.portraitPath = path
-                } else {
-                    state.people[personID]?.portraitPath = path
-                }
-                if let image = UIImage(data: data) { portraits[personID] = image }
-                persist()
+            let found = await remote.fetchPortrait(
+                personID: personID, ifNoneMatch: state.portraitETags[personID])
+            guard case .changed(let data, let etag) = found else { return }
+            guard let path = try? await store.writePortrait(data, personID: personID) else { return }
+            if state.me?.id == personID {
+                state.me?.portraitPath = path
+            } else {
+                state.people[personID]?.portraitPath = path
             }
+            state.portraitETags[personID] = etag
+            if let image = UIImage(data: data) { portraits[personID] = image }
+            persist()
         }
     }
 
@@ -933,6 +1041,10 @@ final class AppModel {
             me.portraitPath = path
             state.me = me
             if let image = UIImage(data: data) { portraits[me.id] = image }
+            // This device is the truth for this face until the upload lands.
+            // Without the hold-off a refresh a second later would fetch the
+            // face being replaced and put it back.
+            portraitCheckedAt[me.id] = Date()
             persist()
             pushProfileRemote(portraitData: data)
         }

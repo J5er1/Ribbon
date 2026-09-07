@@ -598,12 +598,22 @@ private struct AccountControls: View {
     @Environment(AppModel.self) private var model
 
     @State private var signingIn = false
+    @State private var passkeyLine: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if model.isSignedIn {
                 if let address = model.accountEmail {
                     SmallCaps(address, size: 12)
+                }
+                // §6.10 wants a passkey where there is one. Offered here, on
+                // the account, because that is what it belongs to — and only
+                // ever added to the emailed code, never in place of it.
+                if model.passkeysAvailable {
+                    QuietControl(title: Copy.addAPasskey) { addPasskey() }
+                    Text(passkeyLine ?? Copy.passkeyReason)
+                        .font(RibbonType.ui(13))
+                        .foregroundStyle(Palette.muted)
                 }
                 QuietControl(title: Copy.signOut) {
                     signingIn = false
@@ -621,6 +631,20 @@ private struct AccountControls: View {
                 Text(Copy.accountReason)
                     .font(RibbonType.ui(13))
                     .foregroundStyle(Palette.muted)
+            }
+        }
+    }
+
+    private func addPasskey() {
+        passkeyLine = nil
+        Task {
+            do {
+                try await model.registerPasskey()
+                passkeyLine = Copy.passkeyAdded
+            } catch Passkeys.Failure.cancelled {
+                // Dismissed the sheet. Nothing happened, and nothing is said.
+            } catch {
+                passkeyLine = Copy.passkeyDidntWork
             }
         }
     }

@@ -8,6 +8,12 @@
 	<key>com.apple.developer.associated-domains</key>
 	<array>
 		<string>applinks:readribbon.app</string>
+		<!-- Passkeys (§6.10). A passkey is bound to the domain it was made
+		     against, and the domain has to agree: the site serves a
+		     `webcredentials` section in the same
+		     /.well-known/apple-app-site-association (web/build.mjs), and the
+		     project's WebAuthn relying party is this same bare domain. -->
+		<string>webcredentials:readribbon.app</string>
 	</array>
 </dict>
 </plist>

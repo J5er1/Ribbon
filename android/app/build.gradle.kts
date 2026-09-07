@@ -127,6 +127,10 @@ dependencies {
     implementation(libs.androidx.graphics.shapes)
     implementation(libs.androidx.splashscreen)
     implementation(libs.androidx.browser)
+    // Passkeys (§6.10). CredentialManager runs the WebAuthn ceremony and
+    // speaks the W3C JSON verbatim, so nothing here has to understand it.
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services)
     implementation(libs.androidx.media3.exoplayer)
 
     implementation(libs.kotlinx.coroutines.android)

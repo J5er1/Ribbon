@@ -245,6 +245,151 @@ reasoning.
     preferences nothing reads (deviation 11). Each is a piece of work,
     not a menu bug.
 
+16. **Onboarding has a third door: sign in — S17 and §6.10 disagreed,
+    and §6.10 won.** — noticed by the owner (September 2026). S17's
+    sequence is "start or accept", and both of its answers mint a *new*
+    person. §6.10 says something the thread had no way to honour: "New
+    device: sign in, rooms restore." There was no door at the one moment
+    a person needs it — a second phone, or a reinstall the
+    Keychain/keystore did not outlive. The only route back to your own
+    rooms was to finish onboarding as a stranger, land in a stray room of
+    one, and find *Sign in* at the bottom of the menu — which then
+    adopted the account's id and pushed the stray room to it.
+
+    So the who-step now offers *Sign in* as a third, quiet answer (absent
+    when the build has no backend — no dead control), and
+    `verifySignInCode` handles the case it could not before: with no local
+    person, the account's own profile *becomes* the person
+    (`restorePerson`), its rooms arrive with the pull, and onboarding is
+    over without a name ever being asked for. An account with no profile
+    — an email verified and abandoned — still falls through to the name
+    step, and `completeOnboarding` already gives that person the auth id
+    rather than a fresh one.
+
+    What this does **not** fix, and what is still true of the identity
+    model, all of it §6.10's and none of it new here:
+
+    - ~~**A changed face never travels.**~~ Fixed below (17).
+    - ~~**Re-invited is only half re-attached.**~~ Fixed below (18).
+    - ~~**Sign-in is an emailed code only.**~~ The client half is built
+      below (19); the project's switch is not ours to throw.
+    - **A second device can still make a stray self.** Onboarding *before*
+      signing in mints a local person and a room of one, and the sign-in
+      that follows adopts the account's id and pushes that room to it. One
+      email is still one account — `profiles.id` references
+      `auth.users(id)` — but the local-first seam lets more than one local
+      self reach it. The door above makes this avoidable, not impossible.
+
+17. **A changed face travels, by asking the object rather than the row.**
+    Deviation 10's first honest edge, closed. A portrait reached a device
+    once and only once — `merge` fetched it when the device had nothing,
+    and never again — so everyone who had already seen your old face kept
+    it forever, and your own second phone did too. The remote object is
+    `<person id>.jpg` and never renames, so nothing in the `profiles` row
+    can say the bytes behind it changed.
+
+    The object's own tag can. `downloadPortrait` now offers the ETag this
+    device stored (`AppState.portraitETags`, persisted, so a relaunch
+    re-downloads nothing) and reads three answers: 304 means the face is
+    still the face, 404 means there is none, and 200 carries the new bytes
+    and the new tag. Both clients switch caching off for that one request,
+    because URLSession and HttpURLConnection would each answer it out of
+    their own cache and hide the 304 the whole mechanism turns on.
+
+    Two bounds keep it quiet. A face is taken on trust for 15 minutes
+    before it is asked about again (a room holds six; this is a handful of
+    empty responses an hour), and setting your own portrait starts that
+    window on this device, so an upload still in flight is never overtaken
+    by a fetch of the face it is replacing. No schema change, no migration,
+    and a network failure reads as "unchanged" — the device keeps the face
+    it has, which is what it would have done anyway.
+
+18. **An ink outlives the membership it was chosen on.** §6.10's "lost
+    access entirely" asks that a re-invited person's ink *and* notes
+    reattach rather than duplicating. Notes always did: they are keyed by
+    the author's id, which is the account's. Ink could not — it lives on
+    the membership row on purpose (teal in one room, ochre in another,
+    §4.5) and leaving deletes that row, so `accept_invite` seated you
+    again with no colour. In a room of three or more, where ink *is*
+    identity, that is a stranger arriving rather than the same person
+    coming back.
+
+    `supabase/migrations/20260907170000_ribbon_ink_outlives_membership.sql`
+    adds `room_inks` — one row per person per room, keyed to `profiles`
+    rather than to `memberships` precisely so it is there when the
+    membership is not. Its RLS is `person_id = auth.uid()` in both
+    directions: which ink someone once chose in a room they have left is
+    not a thing the room gets to know, and the current ink of everyone
+    present is already on their membership where the room can see it.
+
+    The membership stays the truth for the *current* ink and every screen
+    still reads it; this is only the memory of what was chosen. `pickInk`
+    writes it, and `joinRoom` reads it after the pull and puts it back on —
+    never over somebody else, so a colour taken in the meantime stays taken
+    and the room asks for a new one the way it always would. Both writes
+    are best-effort: a build talking to a project without the table yet
+    behaves exactly as it did before, which is what makes it safe to ship
+    the client before the migration is applied.
+
+19. **Passkeys, the client half.** §6.10 asks for "a passkey where
+    available, an emailed code otherwise". Only the code half existed.
+    Supabase Auth now ships WebAuthn itself, and its two-step API is
+    built for exactly this case — the server hands out a challenge and
+    the W3C options, the platform runs the ceremony, the signed result
+    goes back — so no edge function and no credential table of our own.
+
+    Both clients call `/auth/v1/passkeys/{registration,authentication}/
+    {options,verify}` directly, as they call everything else, and pass the
+    options and the credential through as JSON without reading either.
+    That is the point: those are the W3C shapes, they belong to the
+    platform, and anything this code understood about them would only be
+    a second place for them to be wrong. iOS reads the four fields
+    `AuthenticationServices` needs and re-encodes the result;
+    CredentialManager takes and returns the JSON verbatim, which is why
+    the Android file is a third the length.
+
+    A passkey is offered, never imposed. `Use a passkey` sits above the
+    email field in the sign-in thread and `Add a passkey` under the
+    account in the menu, both absent where there is no backend; a
+    dismissed sheet says nothing at all, because declining a passkey is a
+    person choosing the other way in, not a failure (§25). Sign-in is
+    discoverable, so a new phone asks for nothing — not even an email —
+    and lands in the same `restorePerson` thread the emailed code does
+    (15).
+
+    **It is off, and it cannot work until three things are done.** None
+    of them can be done from the repo:
+
+    1. **Turn passkeys on for the project.** `/auth/v1/settings` on
+       `noyccfkaotuvhhaoccck` reports `passkeys_enabled: false`, and the
+       options endpoint answers `passkey_disabled` — so the surface is
+       there and the switch is off. It wants `passkey_enabled: true`,
+       `webauthn_rp_id: readribbon.app`, a display name, and
+       `webauthn_rp_origins` including the Android app origin
+       (`android:apk-key-hash:<base64url SHA-256 of the signing cert>`).
+       The RP ID is bound into every passkey ever made against it and
+       cannot be changed later without invalidating all of them.
+    2. **Serve the two association files.** `web/build.mjs` now emits a
+       `webcredentials` section in the apple-app-site-association beside
+       the existing `applinks`, and a `.well-known/assetlinks.json`
+       carrying `delegate_permission/common.get_login_creds`. Both are
+       templated: the first still needs `RIBBON_APPLE_TEAM_ID`, the
+       second needs a new `RIBBON_ANDROID_CERT_SHA256`, and both warn at
+       build time while they hold a placeholder.
+    3. **Sign the Android app with a stable key.** There is none yet — CI
+       signs each debug build with a throwaway key — so there is no
+       fingerprint to put in `assetlinks.json` and no app origin to
+       allow. Android passkeys are blocked on the release signing key,
+       not on this code.
+
+    Until then both controls are simply absent (`passkeysAvailable` is
+    false without a backend) or answer `passkey_disabled`, and the
+    emailed code is the way in exactly as before. **None of this thread
+    has been exercised**: there is no device here, the project has the
+    feature off, and the two `…/verify` paths are the documented
+    `…/options` paths' siblings rather than paths the docs spell out. The
+    first real run is the test.
+
 ## Android (phase three)
 
 The Android build is a second implementation of one product, not a second

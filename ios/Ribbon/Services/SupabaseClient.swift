@@ -69,6 +69,103 @@ actor SupabaseClient {
         return session
     }
 
+    // MARK: Passkeys (§6.10 — "a passkey where available")
+    //
+    // Supabase Auth's own WebAuthn support, through its two-step API: the
+    // server hands out a challenge and the WebAuthn options that go with it,
+    // the platform runs the ceremony, and the signed result comes back here.
+    // The options and the credential are passed through as JSON rather than
+    // modelled: they are the W3C shapes, they are the platform's to read and
+    // to produce, and anything this client understood about them would only
+    // be a second place for them to be wrong.
+
+    /// A challenge, and the WebAuthn options that belong to it.
+    ///
+    /// The options travel as their own JSON rather than as a parsed
+    /// dictionary: this is an actor and the ceremony is on the main one, and
+    /// a `[String: Any]` is not something that may cross between them. Bytes
+    /// are, and bytes are what both ends actually want.
+    struct PasskeyChallenge: Sendable {
+        let challengeID: String
+        /// `PublicKeyCredentialCreationOptions` or
+        /// `PublicKeyCredentialRequestOptions`, with every ArrayBuffer field
+        /// base64url-encoded.
+        let optionsJSON: Data
+    }
+
+    /// Start registering a passkey for the account that is signed in.
+    func passkeyRegistrationOptions() async throws -> PasskeyChallenge {
+        try await passkeyChallenge(path: "auth/v1/passkeys/registration/options", authenticated: true)
+    }
+
+    /// Finish registering. The account keeps the passkey; the session is
+    /// unchanged, because it was already signed in.
+    func verifyPasskeyRegistration(challengeID: String, credentialJSON: Data) async throws {
+        _ = try await postPasskey(
+            path: "auth/v1/passkeys/registration/verify",
+            challengeID: challengeID, credentialJSON: credentialJSON, authenticated: true)
+    }
+
+    /// Start signing in with a passkey. Discoverable credentials: no email
+    /// is asked for, because the authenticator already knows which account
+    /// this is.
+    func passkeyAuthenticationOptions() async throws -> PasskeyChallenge {
+        try await passkeyChallenge(
+            path: "auth/v1/passkeys/authentication/options", authenticated: false)
+    }
+
+    /// Finish signing in. This is the call that returns a session.
+    func verifyPasskeyAuthentication(
+        challengeID: String, credentialJSON: Data
+    ) async throws -> SupabaseSession {
+        let data = try await postPasskey(
+            path: "auth/v1/passkeys/authentication/verify",
+            challengeID: challengeID, credentialJSON: credentialJSON, authenticated: false)
+        let session = try JSONDecoder().decode(SupabaseSession.self, from: data)
+        self.session = session
+        return session
+    }
+
+    private func passkeyChallenge(path: String, authenticated: Bool) async throws -> PasskeyChallenge {
+        var request = URLRequest(url: base.appending(path: path))
+        request.httpMethod = "POST"
+        if authenticated {
+            try apply(headers: &request)
+        } else {
+            request.setValue(key, forHTTPHeaderField: "apikey")
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
+        let data = try await run(request)
+        guard
+            let body = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let challengeID = body["challenge_id"] as? String,
+            let options = body["options"] as? [String: Any],
+            let optionsJSON = try? JSONSerialization.data(withJSONObject: options)
+        else {
+            throw SupabaseError.http(0, String(data: data, encoding: .utf8) ?? "")
+        }
+        return PasskeyChallenge(challengeID: challengeID, optionsJSON: optionsJSON)
+    }
+
+    private func postPasskey(
+        path: String, challengeID: String, credentialJSON: Data, authenticated: Bool
+    ) async throws -> Data {
+        var request = URLRequest(url: base.appending(path: path))
+        request.httpMethod = "POST"
+        if authenticated {
+            try apply(headers: &request)
+        } else {
+            request.setValue(key, forHTTPHeaderField: "apikey")
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
+        // Parsed and re-encoded inside the actor, so the `Any` never leaves
+        // this method.
+        let credential = try JSONSerialization.jsonObject(with: credentialJSON)
+        request.httpBody = try JSONSerialization.data(
+            withJSONObject: ["challenge_id": challengeID, "credential": credential])
+        return try await run(request)
+    }
+
     func restore(_ session: SupabaseSession) {
         self.session = session
     }
@@ -179,11 +276,47 @@ actor SupabaseClient {
         _ = try await run(request)
     }
 
-    func downloadPortrait(personID: UUID) async throws -> Data {
+    /// What a conditional portrait download found.
+    enum PortraitFetch {
+        /// The server's copy is the copy this device already has.
+        case unchanged
+        /// A different face, and the tag to offer next time.
+        case changed(Data, etag: String?)
+        /// No portrait behind the row — deleted, or never uploaded.
+        case missing
+    }
+
+    /// The face, asked for conditionally.
+    ///
+    /// The object's path is `<person id>.jpg` and never changes, so nothing
+    /// in the profile row can say the bytes behind it did. The object's own
+    /// tag can: offer the one this device stored, and a 304 with no body is
+    /// the server saying the face is still the face.
+    func downloadPortrait(personID: UUID, ifNoneMatch: String?) async throws -> PortraitFetch {
         let path = "storage/v1/object/authenticated/portraits/\(personID.uuidString.lowercased()).jpg"
         var request = URLRequest(url: base.appending(path: path))
         try apply(headers: &request)
-        return try await run(request)
+        if let ifNoneMatch {
+            request.setValue(ifNoneMatch, forHTTPHeaderField: "If-None-Match")
+        }
+        // URLSession answers a conditional request out of its own cache when
+        // it can, which would hand back 200 and the old bytes and hide the
+        // 304 this whole mechanism turns on.
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw SupabaseError.http(0, "")
+        }
+        switch http.statusCode {
+        case 304:
+            return .unchanged
+        case 404:
+            return .missing
+        case 200..<300:
+            return .changed(data, etag: http.value(forHTTPHeaderField: "ETag"))
+        default:
+            throw SupabaseError.http(http.statusCode, String(data: data, encoding: .utf8) ?? "")
+        }
     }
 
     func deletePortrait(personID: UUID) async throws {

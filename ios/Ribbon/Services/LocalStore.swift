@@ -50,6 +50,10 @@ struct AppState: Codable {
     var currentRoomID: UUID?
     var settings = AppSettings()
     var hasSeenMarginHint = false
+    /// The tag of the portrait object each face on this device came from,
+    /// so a conditional fetch can be told what it already has. Persisted:
+    /// a relaunch must not re-download every face in the room.
+    var portraitETags: [UUID: String] = [:]
 }
 
 actor LocalStore {

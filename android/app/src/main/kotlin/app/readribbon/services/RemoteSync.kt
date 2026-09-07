@@ -4,6 +4,7 @@ package app.readribbon.services
 
 import android.content.Context
 import app.readribbon.core.FuelEvent
+import app.readribbon.core.Ink
 import app.readribbon.core.Invite
 import app.readribbon.core.Membership
 import app.readribbon.core.Person
@@ -90,6 +91,35 @@ class RemoteSync(
         return session.user.id
     }
 
+    // MARK: Passkeys (§6.10)
+
+    /**
+     * Register a passkey for the account that is already signed in.
+     *
+     * @param context an Activity context — the system sheet needs a window.
+     */
+    suspend fun registerPasskey(context: Context) {
+        val challenge = client.passkeyRegistrationOptions()
+        val credential = Passkeys(context).register(context, challenge.optionsJson)
+        client.verifyPasskeyRegistration(
+            challengeID = challenge.challengeID, credentialJson = credential)
+    }
+
+    /**
+     * Sign in with a passkey. Nothing is typed and nothing is emailed: the
+     * authenticator names the account, and the session comes back with it.
+     */
+    suspend fun signInWithPasskey(context: Context): Uuid {
+        val challenge = client.passkeyAuthenticationOptions()
+        val credential = Passkeys(context).assert(context, challenge.optionsJson)
+        val session = client.verifyPasskeyAuthentication(
+            challengeID = challenge.challengeID, credentialJson = credential)
+        withContext(Dispatchers.IO) { sessions.save(session) }
+        userID = session.user.id
+        email = session.user.email
+        return session.user.id
+    }
+
     suspend fun signOut() {
         client.signOut()
         withContext(Dispatchers.IO) { sessions.clear() }
@@ -146,6 +176,37 @@ class RemoteSync(
                 rowsJson = SupabaseClient.json.encodeToString(listOf(row)))
         }
     }
+
+    /**
+     * The memory of an ink you chose in a room (§6.10). Best-effort on
+     * purpose: it is a nicety, and a build talking to a project without the
+     * table yet must behave exactly as it did before.
+     */
+    suspend fun rememberInk(ink: Ink, roomID: Uuid, personID: Uuid) {
+        runCatching {
+            withAuthRetry {
+                client.upsert(
+                    table = "room_inks",
+                    rowsJson = SupabaseClient.json.encodeToString(listOf(
+                        RoomInkRow(roomId = roomID, personId = personID, ink = ink.name),
+                    )))
+            }
+        }
+    }
+
+    /** The ink this account last chose in this room, if it ever chose one. */
+    suspend fun rememberedInk(roomID: Uuid, personID: Uuid): Ink? = runCatching {
+        val rows = withAuthRetry {
+            SupabaseClient.json.decodeFromString<List<RoomInkRow>>(
+                client.select(
+                    table = "room_inks",
+                    query = listOf(
+                        "room_id" to "eq.${roomID.toString().lowercase()}",
+                        "person_id" to "eq.${personID.toString().lowercase()}",
+                    )))
+        }
+        rows.firstOrNull()?.let { row -> Ink.entries.firstOrNull { it.name == row.ink } }
+    }.getOrNull()
 
     suspend fun push(room: Room) {
         withAuthRetry {
@@ -336,10 +397,20 @@ class RemoteSync(
             quietDays = quietDays)
     }
 
-    suspend fun fetchPortrait(personID: Uuid): ByteArray? =
+    /**
+     * The face, asked for conditionally (§2.7). A network failure reads as
+     * `Unchanged`: the device keeps the face it has, which is what it would
+     * have done anyway.
+     */
+    suspend fun fetchPortrait(
+        personID: Uuid,
+        ifNoneMatch: String?,
+    ): SupabaseClient.PortraitFetch =
         runCatching {
-            withAuthRetry { client.downloadPortrait(personID = personID) }
-        }.getOrNull()
+            withAuthRetry {
+                client.downloadPortrait(personID = personID, ifNoneMatch = ifNoneMatch)
+            }
+        }.getOrNull() ?: SupabaseClient.PortraitFetch.Unchanged
 
     /**
      * The account's own profile row, if the account has one — the seam
@@ -396,6 +467,13 @@ class RemoteSync(
         val name: String,
         val portraitPath: String? = null,
         val translation: String,
+    )
+
+    @Serializable
+    data class RoomInkRow(
+        val roomId: Uuid,
+        val personId: Uuid,
+        val ink: String,
     )
 
     @Serializable
