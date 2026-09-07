@@ -34,6 +34,15 @@ object Copy {
     const val THATS_ME = "That's me"
     const val PORTRAIT_REASON = "They'll see your face when you're reading."
     const val ADD_A_PORTRAIT = "Add a portrait"
+
+    /** The same control, said to somebody who already has a face behind it. */
+    const val CHANGE_YOUR_PORTRAIT = "Change your portrait"
+
+    /**
+     * What tapping your own name does, as a click label — the room header
+     * names its two doors the same way.
+     */
+    const val EDITS_YOUR_NAME = "edit your name"
     const val SKIP_PORTRAIT = "Not now"
     const val INVITE_SEND = "Send this to the person you're reading with."
     const val INVITE_LATER = "Invite later"

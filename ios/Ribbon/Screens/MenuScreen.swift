@@ -110,10 +110,15 @@ struct MenuScreen: View {
             // deletion. Leaving them is never not the default.
             Copy.leaveNotesQuestion, isPresented: $confirmDelete, titleVisibility: .visible
         ) {
+            // The menu closes first, the way leaving a room does: the
+            // person it was about is gone, and a menu left standing would
+            // re-present itself over the fresh room the app makes next.
             Button(Copy.deleteAndLeaveThem, role: .destructive) {
+                dismiss()
                 model.deleteAccount(keepNotesBehind: true)
             }
             Button(Copy.deleteAndTakeThemBack, role: .destructive) {
+                dismiss()
                 model.deleteAccount(keepNotesBehind: false)
             }
         }
@@ -301,6 +306,12 @@ private struct SectionHead: View {
                     SmallCaps(detail, size: 12, color: Palette.muted)
                 }
             }
+            // A head is drawn as a head and has to be announced as one: a
+            // rotor of headings is how a screen reader skims a menu, and
+            // without the trait the sections are four unlabelled piles
+            // again (§11).
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
             HairlineRule()
         }
         .padding(.bottom, 6)
@@ -417,7 +428,12 @@ private struct YouIdentityRow: View {
                     image: model.me.flatMap { model.portrait($0.id) })
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(Copy.addAPortrait)
+            // What the control does depends on whether there is a face
+            // behind it, and it should not go on saying "add" to somebody
+            // who has one.
+            .accessibilityLabel(
+                model.me.flatMap { model.portrait($0.id) } == nil
+                    ? Copy.addAPortrait : Copy.changeYourPortrait)
             .onChange(of: portraitItem) { _, item in
                 Task {
                     if let data = try? await item?.loadTransferable(type: Data.self),
@@ -442,13 +458,19 @@ private struct YouIdentityRow: View {
                     name = model.me?.name ?? ""
                     editingName = true
                 } label: {
+                    // A short name draws a short word, and the word is the
+                    // whole control: the target keeps its 44 pt in both
+                    // directions so "Jo" is no harder to tap than "Jonathan"
+                    // (§11, deviation 12). An empty name still has to be
+                    // findable, so the placeholder stands in its place.
                     Text(model.me?.name ?? "")
                         .font(RibbonType.ui(18))
                         .foregroundStyle(Palette.text)
-                        .frame(minHeight: 44)
+                        .frame(minWidth: 44, minHeight: 44, alignment: .leading)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityHint(Copy.editsYourName)
             }
         }
     }

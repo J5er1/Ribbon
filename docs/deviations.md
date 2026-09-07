@@ -197,7 +197,52 @@ reasoning.
     tap a room to switch, no swipe on a row, no folders, no reordering,
     a paused room's fire drawn in the state it actually holds.
 
-15. **Onboarding has a third door: sign in — S17 and §6.10 disagreed,
+15. **What the menu's own review turned up, and what it left alone.**
+    Five things an adversarial pass over 14 found and this build fixes,
+    recorded because two of them are older than the menu and one was a
+    regression the menu itself introduced:
+
+    - **The pushed settings screens lost their top inset** when they
+      stopped living inside a bottom sheet — the sheet had been clearing
+      the status bar for them, and `SettingsScroll`'s own comment still
+      said so. Each screen's first drawn thing is its back chevron, at
+      y = 8..52 dp, under a status bar 24–48 dp tall. Fixed, and the
+      comment corrected. (Android only; iOS's `NavigationStack` clears it.)
+    - **S22's "Start the room again" was a chartreuse capsule with an
+      empty body** on both platforms — a control that says exactly what
+      happens and then does not do it, which is worse than no control and
+      reads as a failure the app never names. The restore half needs
+      billing (deviation 11), so the paused room now says the true thing
+      it already has copy for (`roomPaused`) and offers the other half of
+      S22's own anatomy, `manageInStore` — both of which had been sitting
+      in `Copy` with zero call sites on either platform.
+    - **Nothing in either app was announced as a heading.** The menu's
+      four section heads and the six group labels on the pushed screens
+      are drawn as heads and were read as plain text, so a rotor or a
+      heading swipe had nothing to land on and reaching Account meant
+      swiping past every room. `grep isHeader|heading()` returned nothing
+      across both apps before this.
+    - **Deleting your account left the menu standing** on iOS, over the
+      fresh room the app makes next. It dismisses first now, the way
+      leaving a room does, and `RootView` also clears the menu whenever
+      the person goes — Android's menu is inside the branch that swaps
+      out, so it had this structurally.
+    - **Two controls said the wrong thing about themselves**: the
+      portrait went on offering to "add a portrait" to somebody who had
+      one, and your own name had no minimum tap width and no hint. Both
+      are now conditional and 44 pt/dp in both directions.
+
+    Deliberately left alone, all of them older than this change and none
+    of them the menu's: ink is unreachable below three members and
+    nothing assigns one when a room reaches three (so §4.5's "ink is
+    identity" arrives silently unenforced, and
+    `inksFromWhenTheRoomWasTwo` is still dead copy); presence never
+    populates, so reading quietly, following and thinking-of-you have no
+    reachable control (deviation 9); and the notification switches write
+    preferences nothing reads (deviation 11). Each is a piece of work,
+    not a menu bug.
+
+16. **Onboarding has a third door: sign in — S17 and §6.10 disagreed,
     and §6.10 won.** — noticed by the owner (September 2026). S17's
     sequence is "start or accept", and both of its answers mint a *new*
     person. §6.10 says something the thread had no way to honour: "New
@@ -221,10 +266,10 @@ reasoning.
     What this does **not** fix, and what is still true of the identity
     model, all of it §6.10's and none of it new here:
 
-    - ~~**A changed face never travels.**~~ Fixed below (16).
-    - ~~**Re-invited is only half re-attached.**~~ Fixed below (17).
+    - ~~**A changed face never travels.**~~ Fixed below (17).
+    - ~~**Re-invited is only half re-attached.**~~ Fixed below (18).
     - ~~**Sign-in is an emailed code only.**~~ The client half is built
-      below (18); the project's switch is not ours to throw.
+      below (19); the project's switch is not ours to throw.
     - **A second device can still make a stray self.** Onboarding *before*
       signing in mints a local person and a room of one, and the sign-in
       that follows adopts the account's id and pushes that room to it. One
@@ -232,7 +277,7 @@ reasoning.
       `auth.users(id)` — but the local-first seam lets more than one local
       self reach it. The door above makes this avoidable, not impossible.
 
-16. **A changed face travels, by asking the object rather than the row.**
+17. **A changed face travels, by asking the object rather than the row.**
     Deviation 10's first honest edge, closed. A portrait reached a device
     once and only once — `merge` fetched it when the device had nothing,
     and never again — so everyone who had already seen your old face kept
@@ -256,7 +301,7 @@ reasoning.
     and a network failure reads as "unchanged" — the device keeps the face
     it has, which is what it would have done anyway.
 
-17. **An ink outlives the membership it was chosen on.** §6.10's "lost
+18. **An ink outlives the membership it was chosen on.** §6.10's "lost
     access entirely" asks that a re-invited person's ink *and* notes
     reattach rather than duplicating. Notes always did: they are keyed by
     the author's id, which is the account's. Ink could not — it lives on
@@ -283,7 +328,7 @@ reasoning.
     behaves exactly as it did before, which is what makes it safe to ship
     the client before the migration is applied.
 
-18. **Passkeys, the client half.** §6.10 asks for "a passkey where
+19. **Passkeys, the client half.** §6.10 asks for "a passkey where
     available, an emailed code otherwise". Only the code half existed.
     Supabase Auth now ships WebAuthn itself, and its two-step API is
     built for exactly this case — the server hands out a challenge and

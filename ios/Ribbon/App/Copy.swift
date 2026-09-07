@@ -19,6 +19,11 @@ enum Copy {
     static let yourName = "Your name"
     static let portraitReason = "They'll see your face when you're reading."
     static let addAPortrait = "Add a portrait"
+    /// The same control, said to somebody who already has a face behind it.
+    static let changeYourPortrait = "Change your portrait"
+    /// What tapping your own name does, for a screen reader — the room
+    /// header names its two doors the same way.
+    static let editsYourName = "Edits your name"
     static let skipPortrait = "Not now"
     static let inviteSend = "Send this to the person you're reading with."
     static let inviteLater = "Invite later"
