@@ -1,3 +1,4 @@
+import AuthenticationServices
 import Foundation
 import Security
 import RibbonCore
@@ -63,6 +64,33 @@ final class RemoteSync {
         SessionKeychain.save(session)
         userID = session.user.id
         self.email = session.user.email ?? email
+        return session.user.id
+    }
+
+    // MARK: Passkeys (§6.10)
+
+    /// Register a passkey for the account that is already signed in.
+    func registerPasskey(anchor: ASPresentationAnchor) async throws {
+        guard #available(iOS 16.0, *) else { throw Passkeys.Failure.cancelled }
+        let challenge = try await client.passkeyRegistrationOptions()
+        let credential = try await Passkeys().register(
+            optionsJSON: challenge.optionsJSON, anchor: anchor)
+        try await client.verifyPasskeyRegistration(
+            challengeID: challenge.challengeID, credentialJSON: credential)
+    }
+
+    /// Sign in with a passkey. Nothing is typed and nothing is emailed: the
+    /// authenticator names the account, and the session comes back with it.
+    func signInWithPasskey(anchor: ASPresentationAnchor) async throws -> UUID {
+        guard #available(iOS 16.0, *) else { throw Passkeys.Failure.cancelled }
+        let challenge = try await client.passkeyAuthenticationOptions()
+        let credential = try await Passkeys().assert(
+            optionsJSON: challenge.optionsJSON, anchor: anchor)
+        let session = try await client.verifyPasskeyAuthentication(
+            challengeID: challenge.challengeID, credentialJSON: credential)
+        SessionKeychain.save(session)
+        userID = session.user.id
+        email = session.user.email
         return session.user.id
     }
 

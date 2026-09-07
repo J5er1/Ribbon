@@ -221,11 +221,10 @@ reasoning.
     What this does **not** fix, and what is still true of the identity
     model, all of it §6.10's and none of it new here:
 
-    - **Sign-in is an emailed code only.** §6.10 asks for "a passkey where
-      available, an emailed code otherwise". The code half is built; the
-      passkey half is not.
     - ~~**A changed face never travels.**~~ Fixed below (16).
     - ~~**Re-invited is only half re-attached.**~~ Fixed below (17).
+    - ~~**Sign-in is an emailed code only.**~~ The client half is built
+      below (18); the project's switch is not ours to throw.
     - **A second device can still make a stray self.** Onboarding *before*
       signing in mints a local person and a room of one, and the sign-in
       that follows adopts the account's id and pushes that room to it. One
@@ -283,6 +282,65 @@ reasoning.
     are best-effort: a build talking to a project without the table yet
     behaves exactly as it did before, which is what makes it safe to ship
     the client before the migration is applied.
+
+18. **Passkeys, the client half.** §6.10 asks for "a passkey where
+    available, an emailed code otherwise". Only the code half existed.
+    Supabase Auth now ships WebAuthn itself, and its two-step API is
+    built for exactly this case — the server hands out a challenge and
+    the W3C options, the platform runs the ceremony, the signed result
+    goes back — so no edge function and no credential table of our own.
+
+    Both clients call `/auth/v1/passkeys/{registration,authentication}/
+    {options,verify}` directly, as they call everything else, and pass the
+    options and the credential through as JSON without reading either.
+    That is the point: those are the W3C shapes, they belong to the
+    platform, and anything this code understood about them would only be
+    a second place for them to be wrong. iOS reads the four fields
+    `AuthenticationServices` needs and re-encodes the result;
+    CredentialManager takes and returns the JSON verbatim, which is why
+    the Android file is a third the length.
+
+    A passkey is offered, never imposed. `Use a passkey` sits above the
+    email field in the sign-in thread and `Add a passkey` under the
+    account in the menu, both absent where there is no backend; a
+    dismissed sheet says nothing at all, because declining a passkey is a
+    person choosing the other way in, not a failure (§25). Sign-in is
+    discoverable, so a new phone asks for nothing — not even an email —
+    and lands in the same `restorePerson` thread the emailed code does
+    (15).
+
+    **It is off, and it cannot work until three things are done.** None
+    of them can be done from the repo:
+
+    1. **Turn passkeys on for the project.** `/auth/v1/settings` on
+       `noyccfkaotuvhhaoccck` reports `passkeys_enabled: false`, and the
+       options endpoint answers `passkey_disabled` — so the surface is
+       there and the switch is off. It wants `passkey_enabled: true`,
+       `webauthn_rp_id: readribbon.app`, a display name, and
+       `webauthn_rp_origins` including the Android app origin
+       (`android:apk-key-hash:<base64url SHA-256 of the signing cert>`).
+       The RP ID is bound into every passkey ever made against it and
+       cannot be changed later without invalidating all of them.
+    2. **Serve the two association files.** `web/build.mjs` now emits a
+       `webcredentials` section in the apple-app-site-association beside
+       the existing `applinks`, and a `.well-known/assetlinks.json`
+       carrying `delegate_permission/common.get_login_creds`. Both are
+       templated: the first still needs `RIBBON_APPLE_TEAM_ID`, the
+       second needs a new `RIBBON_ANDROID_CERT_SHA256`, and both warn at
+       build time while they hold a placeholder.
+    3. **Sign the Android app with a stable key.** There is none yet — CI
+       signs each debug build with a throwaway key — so there is no
+       fingerprint to put in `assetlinks.json` and no app origin to
+       allow. Android passkeys are blocked on the release signing key,
+       not on this code.
+
+    Until then both controls are simply absent (`passkeysAvailable` is
+    false without a backend) or answer `passkey_disabled`, and the
+    emailed code is the way in exactly as before. **None of this thread
+    has been exercised**: there is no device here, the project has the
+    feature off, and the two `…/verify` paths are the documented
+    `…/options` paths' siblings rather than paths the docs spell out. The
+    first real run is the test.
 
 ## Android (phase three)
 

@@ -1,10 +1,17 @@
 import SwiftUI
 import RibbonCore
 
-// The sign-in thread, inline (§6.10): an email, then the emailed code, no
-// passwords. Small enough to sit inside whatever surface needs an account
-// — the invite sheet (a link only works signed in), onboarding's invite
-// step, and You. Never a wall: every host keeps its own quiet way past.
+// The sign-in thread, inline (§6.10): a passkey where there is one, an
+// emailed code otherwise, no passwords. Small enough to sit inside whatever
+// surface needs an account — the invite sheet (a link only works signed in),
+// onboarding's invite step, and the menu. Never a wall: every host keeps its
+// own quiet way past.
+//
+// The passkey is offered above the field rather than instead of it. It is
+// one tap and no email round-trip, and on a phone that has never seen this
+// account it still knows which account it is — but it exists only where the
+// domain, the entitlement and the project all agree (Passkeys.swift), so the
+// field underneath is the thread that always works.
 
 struct SignInInline: View {
     @Environment(AppModel.self) private var model
@@ -22,6 +29,9 @@ struct SignInInline: View {
 
     var body: some View {
         VStack(spacing: 16) {
+            if phase == .email, model.passkeysAvailable {
+                QuietControl(title: Copy.useAPasskey) { signInWithPasskey() }
+            }
             switch phase {
             case .email:
                 TextField("", text: $email, prompt: Text(Copy.yourEmail).foregroundStyle(Palette.muted))
@@ -70,6 +80,24 @@ struct SignInInline: View {
         }
         .onAppear { focused = true }
         .onChange(of: phase) { _, _ in focused = true }
+    }
+
+    private func signInWithPasskey() {
+        guard !busy else { return }
+        busy = true
+        errorLine = nil
+        Task {
+            defer { busy = false }
+            do {
+                try await model.signInWithPasskey()
+                onSignedIn()
+            } catch Passkeys.Failure.cancelled {
+                // Not an error: they looked at the sheet and chose the
+                // email field instead. Say nothing.
+            } catch {
+                errorLine = Copy.passkeyDidntWork
+            }
+        }
     }
 
     private func sendCode() {

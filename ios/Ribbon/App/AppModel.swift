@@ -692,6 +692,33 @@ final class AppModel {
         persist()
     }
 
+    /// Whether a passkey is worth offering here: the platform can run the
+    /// ceremony, and there is a backend to run it against. Where either is
+    /// false the control is absent rather than dead (§6.1).
+    var passkeysAvailable: Bool { remote != nil && Passkeys.isAvailable }
+
+    /// Add a passkey to the account that is signed in (§6.10). An addition,
+    /// never a replacement: the emailed code stays the way in.
+    func registerPasskey() async throws {
+        guard let remote, remote.isSignedIn, let anchor = keyWindowAnchor() else { return }
+        try await remote.registerPasskey(anchor: anchor)
+    }
+
+    /// Sign in with a passkey. The whole of `verifySignInCode` after the
+    /// code, because after the session it is the same thread: adopt the
+    /// account, restore the person if this device has none, pull, push.
+    func signInWithPasskey() async throws {
+        guard let remote, let anchor = keyWindowAnchor() else { throw SupabaseError.notSignedIn }
+        let uid = try await remote.signInWithPasskey(anchor: anchor)
+        if state.me == nil {
+            await restorePerson(from: uid)
+        }
+        adoptRemoteIdentity(uid)
+        await reconcileOwnProfile()
+        await refreshFromRemote()
+        await pushLocalGraph()
+    }
+
     func signOutRemote() async {
         await remote?.signOut()
     }

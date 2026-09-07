@@ -178,6 +178,19 @@ enum Copy {
     static let theCode = "The code"
     static let signIn = "Sign in"
 
+    // Passkeys (§6.10 — "a passkey where available, an emailed code
+    // otherwise"). Always an addition to the code, never a replacement, so
+    // the words offer rather than instruct.
+    static let useAPasskey = "Use a passkey"
+    static let addAPasskey = "Add a passkey"
+    static let passkeyReason = "Then signing in is your face or your PIN, on any phone."
+    /// The true small thing, said once, where the reason used to be. Nothing
+    /// in Ribbon congratulates anybody.
+    static let passkeyAdded = "This phone can sign you in now."
+    /// S25's shape: name what happened, name what didn't, and leave the one
+    /// thing that still works in front of them.
+    static let passkeyDidntWork = "That passkey didn't work. The emailed code still does."
+
     /// The quiet way out of the sign-in thread, wherever it is offered —
     /// never a wall (§6.1, §6.10).
     static let neverMind = "Never mind"

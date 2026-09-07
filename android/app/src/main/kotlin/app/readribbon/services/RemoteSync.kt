@@ -91,6 +91,35 @@ class RemoteSync(
         return session.user.id
     }
 
+    // MARK: Passkeys (§6.10)
+
+    /**
+     * Register a passkey for the account that is already signed in.
+     *
+     * @param context an Activity context — the system sheet needs a window.
+     */
+    suspend fun registerPasskey(context: Context) {
+        val challenge = client.passkeyRegistrationOptions()
+        val credential = Passkeys(context).register(context, challenge.optionsJson)
+        client.verifyPasskeyRegistration(
+            challengeID = challenge.challengeID, credentialJson = credential)
+    }
+
+    /**
+     * Sign in with a passkey. Nothing is typed and nothing is emailed: the
+     * authenticator names the account, and the session comes back with it.
+     */
+    suspend fun signInWithPasskey(context: Context): Uuid {
+        val challenge = client.passkeyAuthenticationOptions()
+        val credential = Passkeys(context).assert(context, challenge.optionsJson)
+        val session = client.verifyPasskeyAuthentication(
+            challengeID = challenge.challengeID, credentialJson = credential)
+        withContext(Dispatchers.IO) { sessions.save(session) }
+        userID = session.user.id
+        email = session.user.email
+        return session.user.id
+    }
+
     suspend fun signOut() {
         client.signOut()
         withContext(Dispatchers.IO) { sessions.clear() }

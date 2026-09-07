@@ -943,6 +943,43 @@ class AppModel(
         persist()
     }
 
+    /**
+     * Whether a passkey is worth offering here: there is a backend to run
+     * the ceremony against. Where there is not, the control is absent rather
+     * than dead (§6.1).
+     *
+     * Unlike iOS there is no OS floor to test — CredentialManager is a
+     * library, and it is present from this build's minSdk up.
+     */
+    val passkeysAvailable: Boolean get() = remote != null
+
+    /**
+     * Add a passkey to the account that is signed in (§6.10). An addition,
+     * never a replacement: the emailed code stays the way in.
+     *
+     * @param context an Activity context — the system sheet needs a window.
+     */
+    suspend fun registerPasskey(context: Context) {
+        val remote = this.remote ?: return
+        if (!remote.isSignedIn) return
+        remote.registerPasskey(context)
+    }
+
+    /**
+     * Sign in with a passkey. The whole of [verifySignInCode] after the code,
+     * because after the session it is the same thread: adopt the account,
+     * restore the person if this device has none, pull, push.
+     */
+    suspend fun signInWithPasskey(context: Context) {
+        val remote = this.remote ?: throw SupabaseError.NotSignedIn
+        val uid = remote.signInWithPasskey(context)
+        if (state.me == null) restorePerson(uid)
+        adoptRemoteIdentity(uid)
+        reconcileOwnProfile()
+        refreshFromRemote()
+        pushLocalGraph()
+    }
+
     suspend fun signOutRemote() {
         remote?.signOut()
     }
