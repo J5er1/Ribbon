@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- §9.3's haptics are VibrationEffect.Compositions, and a composition
+         without this permission fails silently — which is exactly how a
+         missing haptic reads: as no haptic at all. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application
+        android:name=".RibbonApplication"
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Ribbon">
+
+        <!-- No android:screenOrientation here on purpose. Portrait on a
+             phone and every orientation on a tablet (deviation 12) is a
+             decision about the device, and the manifest cannot make it —
+             so MainActivity.orientToTheDevice() makes it, in one place,
+             before the first frame. A manifest lock as well would start a
+             tablet portrait-locked and unlock it a frame later. -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.Ribbon"
+            android:windowSoftInputMode="adjustResize">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- An invite link opens the app. Verified App Links need the
+                 assetlinks.json the web build emits for readribbon.app. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="readribbon.app" android:pathPrefix="/i/" />
+            </intent-filter>
+
+            <!-- The fallback the iOS build also carries, for the paste path. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="ribbon" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

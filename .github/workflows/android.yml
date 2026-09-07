@@ -1,0 +1,72 @@
+name: android
+
+# The Kotlin port of RibbonCore is a plain JVM library, so its tests — the
+# fire engine, the time rules, the book table — run here exactly as the
+# Swift package's do, without a Mac and without an emulator. The app module
+# is compiled and linted; running it on a device is still a local job.
+#
+# The two cores are checked against ported-across test suites on purpose: if
+# the fire curve or the ~750-word scale boundary ever diverges between the
+# platforms, a red build here is where it should surface.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up the Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: RibbonCore (Kotlin) tests
+        working-directory: android
+        run: ./gradlew :core:test
+
+      - name: App unit tests
+        working-directory: android
+        # Includes the wire-format tests: the Android client and the iOS
+        # client write to one Supabase project, so the column names these
+        # rows serialize to are the schema, not a private choice. A renamed
+        # field compiles and round-trips against itself; it fails only in a
+        # real room, on someone else's phone.
+        run: ./gradlew :app:testDebugUnitTest
+
+      - name: Assemble the app
+        working-directory: android
+        run: ./gradlew :app:assembleDebug
+
+      - name: Lint
+        working-directory: android
+        run: ./gradlew :app:lintDebug
+
+      # There is no emulator in the environments this gets built in, so the
+      # only way anyone sees the app actually run is on a real phone. This
+      # is that: download the artifact from the run's summary page, open the
+      # .apk on an Android 13+ device, and allow the install when it asks.
+      # It installs as app.readribbon.debug, so it will not collide with
+      # anything from Play later.
+      #
+      # It is a debug build signed with the runner's throwaway debug key —
+      # fine for installing by hand, useless for distribution, and a new
+      # key each run, so an update over a previous download will ask to
+      # uninstall first.
+      - name: Keep the APK, so it can be installed on a phone
+        uses: actions/upload-artifact@v4
+        with:
+          name: ribbon-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Only the values a resource reference needs: the window background, so
+     the first frame before Compose draws is already the unlit ground, and
+     the adaptive icon's layer behind the mark. Every other colour in the
+     product lives in design/Palette.kt, which is the one source of truth. -->
+<resources>
+    <color name="unlit">#0B0B0A</color>
+</resources>
