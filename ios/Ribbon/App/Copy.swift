@@ -43,6 +43,16 @@ enum Copy {
 
     // Reading (S02–S06)
     static let closeTheBook = "Close the book"
+    /// The fire's state as a sentence, for a screen reader — never a
+    /// percentage, never a count (§11, Law 2). The small caps under the fire
+    /// say the bare word; anything that has to *speak* it says this.
+    static func fireIs(_ stateName: String) -> String { "The fire is \(stateName)." }
+    /// The reading surface's own small controls, kept here for the same
+    /// reason as everything else: one file, both platforms.
+    static let transcript = "transcript"
+    static let leaveIt = "leave it"
+    static let openSettings = "open settings"
+    static let share = "share"
     static func isWithYou(_ name: String) -> String { "\(name) is with you" }
     static let backToWhereYouWere = "back to where you were"
     static let readQuietly = "read quietly"
@@ -165,14 +175,16 @@ enum Copy {
     /// The join in flight, said once and quietly.
     static let joining = "joining"
 
-    /// The way back out of a pushed screen, for a screen reader.
+    /// The way back out of a pushed screen: the name Android's drawn chevron
+    /// answers to, and the word on the menu's own way out of a dead invite.
     static let back = "Back"
 
     /// What the room header's two controls do, for a screen reader. iOS
     /// states the consequence (a hint); Android's click label states the
-    /// action. Same fact, each platform's grammar.
+    /// action. Same fact, each platform's grammar — and both of these are
+    /// consequences, which the second one was not.
     static let opensYourRooms = "Opens your rooms"
-    static let opensYourAccount = "Your account and settings"
+    static let opensYourAccount = "Opens your account and settings"
 
     // Sign-in (§6.10) — an emailed code, no passwords. The account exists
     // for one reason, said plainly.

@@ -18,10 +18,12 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -243,10 +245,25 @@ fun MenuScreen(
     // registration — so a pushed settings screen pops first, and only an
     // unpushed menu closes.
     var backPull by remember { mutableFloatStateOf(0f) }
-    PredictiveBackHandler { progress ->
+    // Registered last, so it wins while the menu is up — and disabled the
+    // moment the menu is going, because `AnimatedContent` keeps the outgoing
+    // content composed for the whole 400 ms exit and a back press in that
+    // window would otherwise be eaten by a handler whose `onDismiss` is
+    // already a no-op. The book's own handler stands down the same way.
+    var closing by remember { mutableStateOf(false) }
+
+    // Every way out goes through one door, so the guard above covers all of
+    // them: the drawn control, a room row, leaving a room, deleting the
+    // account, Escape, and the gesture itself.
+    fun close() {
+        closing = true
+        onDismiss()
+    }
+
+    PredictiveBackHandler(enabled = !closing) { progress ->
         try {
             progress.collect { event -> backPull = event.progress }
-            onDismiss()
+            close()
             backPull = 0f
         } catch (cancelled: CancellationException) {
             backPull = 0f
@@ -256,21 +273,35 @@ fun MenuScreen(
 
     // §11: under reduce motion a push is a cut, exactly as it is in every
     // other NavHost here. This one was written without the branch.
+    // Above the NavHost, because the menu root is one of its destinations and
+    // is disposed while a settings screen is showing — iOS keeps these on the
+    // screen itself for the same reason, one level above its NavigationStack.
+    var showNewRoom by remember { mutableStateOf(false) }
+    var inviting by remember { mutableStateOf<InviteTarget?>(null) }
+
     val push: FiniteAnimationSpec<Float> =
         if (reduceMotion) snap() else tween(RibbonMotion.SETTLE_MS, easing = RibbonMotion.EaseOut)
     val slide: FiniteAnimationSpec<IntOffset> =
         if (reduceMotion) snap() else tween(RibbonMotion.SETTLE_MS, easing = RibbonMotion.EaseOut)
 
+    // A key event reaches only the focused node and its ancestors, and
+    // nothing in the menu is focused when it opens — so without this the
+    // handler below is never visited and the shortcut can never fire.
+    val keys = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { keys.requestFocus() } }
+
     Box(
         modifier
             .fillMaxSize()
+            .focusRequester(keys)
+            .focusable()
             // Esc closes the menu on a hardware keyboard, as
             // `.keyboardShortcut(.cancelAction)` does on iOS — and on the
             // devices that route Escape to the back gesture instead, the
             // predictive-back handler above catches it.
             .onPreviewKeyEvent { event ->
                 if (event.key == Key.Escape && event.type == KeyEventType.KeyUp) {
-                    onDismiss()
+                    close()
                     true
                 } else {
                     false
@@ -330,8 +361,10 @@ fun MenuScreen(
                     model = model,
                     entry = entry,
                     onOpen = { route -> navController.navigate(route) },
-                    onDismiss = onDismiss,
+                    onDismiss = { close() },
                     onSwitch = onSwitch,
+                    onStartRoom = { showNewRoom = true },
+                    onInvite = { room -> inviting = InviteTarget(room = room, isNew = false) },
                 )
             }
             composable(MenuRoute.TEXT) {
@@ -375,7 +408,7 @@ fun MenuScreen(
                             // Joined, and `joinRoom` has already made it the
                             // current room: the menu gets out of the way so
                             // you arrive in it.
-                            onDone = onDismiss,
+                            onDone = { close() },
                             onDismiss = { navController.popBackStack() },
                             // A dead invite here goes back to the field
                             // rather than out of the menu — "ask for a new
@@ -385,6 +418,28 @@ fun MenuScreen(
                     }
                 }
             }
+        }
+
+        if (showNewRoom) {
+            // Naming and inviting are two steps that should feel like one
+            // (S15) — the invite follows the naming, both over the menu, and
+            // the menu closes behind them.
+            NewRoomSheet(
+                model = model,
+                onCreated = { newRoom -> inviting = InviteTarget(room = newRoom, isNew = true) },
+                onDismiss = { showNewRoom = false },
+            )
+        }
+
+        inviting?.let { target ->
+            InviteSheet(
+                room = target.room,
+                model = model,
+                onDismiss = {
+                    inviting = null
+                    if (target.isNew) close()
+                },
+            )
         }
     }
 }
@@ -402,11 +457,11 @@ private fun MenuRoot(
     onOpen: (String) -> Unit,
     onDismiss: () -> Unit,
     onSwitch: (Uuid) -> Unit,
+    onStartRoom: () -> Unit,
+    onInvite: (Room) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var showNewRoom by remember { mutableStateOf(false) }
-    var inviting by remember { mutableStateOf<InviteTarget?>(null) }
-    var confirmDelete by remember { mutableStateOf(false) }
+    var confirmDelete by rememberSaveable { mutableStateOf(false) }
 
     val context = LocalContext.current
     val scroll = rememberScrollState()
@@ -491,7 +546,7 @@ private fun MenuRoot(
                         }
                     }
                     Column(Modifier.padding(top = 6.dp)) {
-                        MenuRow(Copy.START_A_ROOM_CONTROL) { showNewRoom = true }
+                        MenuRow(Copy.START_A_ROOM_CONTROL, onStartRoom)
                         // A join goes through the backend and cannot happen
                         // without one. No dead control (§6.1) — the same rule
                         // the account keeps two sections down.
@@ -520,9 +575,7 @@ private fun MenuRoot(
                             // The link resolves through the backend, so
                             // without one there is nothing to hand out and no
                             // row for it.
-                            MenuRow(Copy.INVITE_SOMEONE) {
-                                inviting = InviteTarget(room = room, isNew = false)
-                            }
+                            MenuRow(Copy.INVITE_SOMEONE) { onInvite(room) }
                         }
                         RoomControls(model = model, room = room, onLeft = onDismiss)
                     }
@@ -559,28 +612,6 @@ private fun MenuRoot(
                 )
             }
         }
-    }
-
-    if (showNewRoom) {
-        // Naming and inviting are two steps that should feel like one (S15) —
-        // the invite follows the naming, both over the menu, and the menu
-        // closes behind them.
-        NewRoomSheet(
-            model = model,
-            onCreated = { newRoom -> inviting = InviteTarget(room = newRoom, isNew = true) },
-            onDismiss = { showNewRoom = false },
-        )
-    }
-
-    inviting?.let { target ->
-        InviteSheet(
-            room = target.room,
-            model = model,
-            onDismiss = {
-                inviting = null
-                if (target.isNew) onDismiss()
-            },
-        )
     }
 
     if (confirmDelete) {
@@ -749,7 +780,7 @@ private fun MenuRoomRow(
             // always sits beside the words it illustrates; on a room row
             // there are no such words, so the box around it says the state —
             // a state, never a number (Law 2, §11).
-            Box(Modifier.semantics { contentDescription = state.displayName }) {
+            Box(Modifier.semantics { contentDescription = Copy.fireIs(state.displayName) }) {
                 // A paused room's fire is drawn in whatever state it actually
                 // holds — never banked by a lapse (S14).
                 CampfireGlyph(
@@ -770,8 +801,12 @@ private fun MenuRoomRow(
  */
 @Composable
 private fun YouIdentityRow(model: AppModel) {
-    var editingName by remember { mutableStateOf(false) }
-    var name by remember { mutableStateOf("") }
+    // Saveable, not remembered: on Android the menu root *is* a NavHost
+    // destination, so pushing one of the settings screens disposes it and
+    // popping back would otherwise throw away a half-typed name. iOS keeps
+    // its root composed under a push and needs none of this.
+    var editingName by rememberSaveable { mutableStateOf(false) }
+    var name by rememberSaveable { mutableStateOf("") }
 
     val context = LocalContext.current
 
@@ -896,8 +931,9 @@ private fun RoomControls(
     room: Room,
     onLeft: () -> Unit,
 ) {
-    var editingRoomName by remember { mutableStateOf(false) }
-    var roomName by remember { mutableStateOf("") }
+    // Saveable for the same reason the name above is.
+    var editingRoomName by rememberSaveable { mutableStateOf(false) }
+    var roomName by rememberSaveable { mutableStateOf("") }
     var showInkPicker by remember { mutableStateOf(false) }
     var confirmLeave by remember { mutableStateOf(false) }
 
@@ -983,7 +1019,9 @@ private fun RoomControls(
  */
 @Composable
 private fun AccountControls(model: AppModel) {
-    var signingIn by remember { mutableStateOf(false) }
+    // Saveable: a code already emailed must still be being waited for after
+    // a push and a pop.
+    var signingIn by rememberSaveable { mutableStateOf(false) }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         when {
@@ -1071,9 +1109,14 @@ private fun JoinWithInviteScreen(
                     .fillMaxSize()
                     .imePadding()
                     .readableColumn(),
-                verticalArrangement = Arrangement.spacedBy(22.dp, Alignment.CenterVertically),
+                // `Spacer(1f); content; Spacer(2f)` — the block sits a third
+                // of the way down, which is where onboarding's paste field
+                // and both join flows put theirs. Centring it here was this
+                // screen's own invention.
+                verticalArrangement = Arrangement.spacedBy(22.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
+                Spacer(Modifier.weight(1f))
                 // The screen says its own name: it is pushed under nothing
                 // but a chevron, and a screen nobody can name is a screen
                 // nobody can go back to on purpose.
@@ -1121,6 +1164,7 @@ private fun JoinWithInviteScreen(
                         color = Palette.muted,
                     )
                 }
+                Spacer(Modifier.weight(2f))
             }
         }
     }

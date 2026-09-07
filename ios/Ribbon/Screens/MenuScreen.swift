@@ -79,6 +79,9 @@ struct MenuScreen: View {
     @State private var confirmDelete = false
     /// The one-time landing on You has happened (see `root`).
     @State private var landed = false
+    /// A room just made, waiting for the naming sheet to finish going away
+    /// before its invite is handed out.
+    @State private var stagedRoom: Room?
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -91,14 +94,21 @@ struct MenuScreen: View {
                     destination(route)
                 }
         }
-        .sheet(isPresented: $showNewRoom) {
+        .sheet(isPresented: $showNewRoom, onDismiss: {
             // Naming and inviting are two steps that should feel like one
             // (S15) — the invite follows the naming, both over the menu, and
-            // the menu closes behind them.
-            NewRoomSheet { room in
-                closeAfterInviting = true
-                inviting = InviteTarget(room: room)
-            }
+            // the menu closes behind them. *After* it, though, not during:
+            // `NewRoomSheet` dismisses itself and calls back in the same
+            // turn, and presenting the second sheet while the first is still
+            // going drops it, leaving the menu holding an item nothing is
+            // showing. So the room is staged, and the invite opens on the
+            // naming sheet's own dismissal.
+            guard let room = stagedRoom else { return }
+            stagedRoom = nil
+            closeAfterInviting = true
+            inviting = InviteTarget(room: room)
+        }) {
+            NewRoomSheet { room in stagedRoom = room }
         }
         .sheet(item: $inviting, onDismiss: {
             if closeAfterInviting {
@@ -429,7 +439,7 @@ private struct MenuRoomRow: View {
                         // announces does not depend on how the glyph inside
                         // it happens to hide itself.
                         .accessibilityRepresentation {
-                            Text(state.displayName)
+                            Text(Copy.fireIs(state.displayName))
                         }
                 }
             }

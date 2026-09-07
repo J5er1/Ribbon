@@ -63,7 +63,7 @@ struct CampfireView: View {
         .frame(height: frameHeight)
         .opacity(dimmed ? 0.92 : 1)
         .accessibilityElement()
-        .accessibilityLabel("The fire is \(state.displayName).")
+        .accessibilityLabel(Copy.fireIs(state.displayName))
     }
 }
 
