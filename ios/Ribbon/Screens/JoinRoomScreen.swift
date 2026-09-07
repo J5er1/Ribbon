@@ -320,7 +320,11 @@ struct JoinFlow: View {
         Task {
             do {
                 let roomID = try await model.joinRoom(inviteToken: token)
-                model.pendingInvite = nil
+                // Only if it is still the one this flow is about: a second
+                // link tapped while this join was in flight has already
+                // replaced it, and clearing that would throw away an invite
+                // nobody has answered yet.
+                if model.pendingInvite?.token == token { model.pendingInvite = nil }
                 guard !wasSetDown else { return }
                 model.switchRoom(to: roomID)
                 onDone()

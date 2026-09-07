@@ -423,8 +423,14 @@ private struct MenuRoomRow: View {
                         // always sits beside the words it illustrates; on a
                         // room row there are no such words, so it says its
                         // own state — a state, never a number (Law 2, §11).
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityLabel(state.displayName)
+                        //
+                        // Represented as the words rather than labelled
+                        // around the hidden canvas, so that what the row
+                        // announces does not depend on how the glyph inside
+                        // it happens to hide itself.
+                        .accessibilityRepresentation {
+                            Text(state.displayName)
+                        }
                 }
             }
             .frame(minHeight: 44)
