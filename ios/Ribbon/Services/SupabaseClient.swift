@@ -69,6 +69,18 @@ actor SupabaseClient {
         return session
     }
 
+    /// Sets an authenticated session using an Auth0-issued ID token.
+    /// Supabase validates this token using Auth0's OIDC Discovery JWKS.
+    func setAuth0Session(idToken: String, userUUID: UUID, email: String? = nil, refreshToken: String = "") -> SupabaseSession {
+        let session = SupabaseSession(
+            accessToken: idToken,
+            refreshToken: refreshToken,
+            user: SupabaseUser(id: userUUID, email: email)
+        )
+        self.session = session
+        return session
+    }
+
     // MARK: Passkeys (§6.10 — "a passkey where available")
     //
     // Supabase Auth's own WebAuthn support, through its two-step API: the

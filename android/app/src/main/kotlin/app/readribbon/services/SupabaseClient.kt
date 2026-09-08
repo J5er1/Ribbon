@@ -89,6 +89,20 @@ class SupabaseClient(
         return decoded
     }
 
+    /**
+     * Sets an authenticated session using an Auth0-issued ID token.
+     * Supabase validates this token using Auth0's OIDC Discovery JWKS.
+     */
+    suspend fun setAuth0Session(idToken: String, userUuid: Uuid, email: String? = null, refreshToken: String = ""): SupabaseSession {
+        val auth0Session = SupabaseSession(
+            accessToken = idToken,
+            refreshToken = refreshToken,
+            user = SupabaseUser(id = userUuid, email = email),
+        )
+        lock.withLock { session = auth0Session }
+        return auth0Session
+    }
+
     suspend fun restore(session: SupabaseSession) = lock.withLock { this.session = session }
 
     suspend fun signOut() = lock.withLock { session = null }
