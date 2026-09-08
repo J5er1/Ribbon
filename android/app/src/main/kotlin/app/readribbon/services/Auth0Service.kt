@@ -45,7 +45,7 @@ object Auth0Service {
             throw Auth0Exception.NotConfigured
         }
 
-        val account = Auth0(Auth0Config.CLIENT_ID, Auth0Config.DOMAIN)
+        val account = Auth0.getInstance(Auth0Config.CLIENT_ID, Auth0Config.DOMAIN)
 
         val credentials = suspendCancellableCoroutine<Credentials> { continuation ->
             WebAuthProvider.login(account)
