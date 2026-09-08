@@ -63,11 +63,11 @@ Kotlin core tests: `cd android && ./gradlew :core:test`.
 
 Any Android 13 or newer device. Either:
 
-- **From CI, no tools.** Open the latest `android` workflow run on GitHub,
-  download the `ribbon-debug-apk` artifact from the run summary, unzip it,
-  open the `.apk` on the phone and allow the install. It lands as
-  `app.readribbon.debug`. Each run signs with a fresh throwaway debug key,
-  so installing a newer one over an older one asks you to uninstall first.
+- **Direct download (1 tap, no tools):** Open `https://readribbon.app/apk`
+  directly in Chrome on any Android 13+ device to download `app-debug.apk`.
+  Tap to install; it lands as `app.readribbon.debug`. Builds are signed with
+  a consistent debug keystore, so updates install cleanly over older versions
+  without needing to uninstall.
 - **Over USB, with the tools.** `./gradlew :app:installDebug` with the
   phone plugged in and USB debugging on, or just Run in Android Studio.
   Slower to set up and worth it — it is the only way to get logcat, the

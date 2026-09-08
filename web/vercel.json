@@ -2,6 +2,18 @@
   "buildCommand": "node build.mjs",
   "outputDirectory": "dist",
   "cleanUrls": true,
+  "redirects": [
+    {
+      "source": "/apk",
+      "destination": "https://github.com/J5er1/Ribbon/releases/download/latest/app-debug.apk",
+      "permanent": false
+    },
+    {
+      "source": "/android",
+      "destination": "https://github.com/J5er1/Ribbon/releases/download/latest/app-debug.apk",
+      "permanent": false
+    }
+  ],
   "rewrites": [
     { "source": "/i/:token*", "destination": "/invite" }
   ],
