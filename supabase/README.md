@@ -21,3 +21,8 @@ What the schema enforces structurally (see the comments in the SQL):
 Auth is email OTP (no passwords). The iOS client (`SupabaseClient.swift`)
 speaks to auth, PostgREST, and storage; Realtime presence channels carry
 the live presence roster and thinking-of-you.
+
+`email-templates/otp.html` is the on-brand sign-in email — paste it into
+the dashboard at Authentication → Emails → Magic Link, the template
+Supabase sends for `signInWithOtp`. See its header comment for the
+reasoning.
