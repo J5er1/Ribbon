@@ -30,7 +30,7 @@ android {
         versionCode = 1
         versionName = "0.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        manifestPlaceholders["auth0Domain"] = "readribbon.auth0.com"
+        manifestPlaceholders["auth0Domain"] = "dev-m45drxnu73cdtjcn.us.auth0.com"
         manifestPlaceholders["auth0Scheme"] = "app.readribbon.debug"
     }
 

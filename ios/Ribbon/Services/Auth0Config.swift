@@ -7,7 +7,7 @@ import Foundation
 /// See /supabase/auth0/README.md for the step-by-step setup guide.
 enum Auth0Config {
     /// Your Auth0 tenant domain, e.g. "ribbon.us.auth0.com" or "dev-xxxx.us.auth0.com".
-    static let domain = ""
+    static let domain = "dev-m45drxnu73cdtjcn.us.auth0.com"
 
     /// Your Auth0 Native Application Client ID.
     static let clientId = ""

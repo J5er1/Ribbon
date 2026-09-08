@@ -9,7 +9,7 @@ package app.readribbon.data
  */
 object Auth0Config {
     /** Your Auth0 tenant domain, e.g. "ribbon.us.auth0.com" or "dev-xxxx.us.auth0.com". */
-    const val DOMAIN = ""
+    const val DOMAIN = "dev-m45drxnu73cdtjcn.us.auth0.com"
 
     /** Your Auth0 Native Application Client ID. */
     const val CLIENT_ID = ""
