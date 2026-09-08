@@ -1445,6 +1445,10 @@ class AppModel(
         }
     }
 
+    fun dismissUpdate() {
+        updateState = UpdateState.Idle
+    }
+
     companion object {
 
         /**

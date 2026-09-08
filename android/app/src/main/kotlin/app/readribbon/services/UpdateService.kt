@@ -82,24 +82,62 @@ object UpdateService {
                 val body = connection.inputStream.bufferedReader().use { it.readText() }
                 val root = json.parseToJsonElement(body).jsonObject
                 val publishedAt = root["published_at"]?.jsonPrimitive?.content ?: ""
+                val releaseName = root["name"]?.jsonPrimitive?.content ?: ""
+                val releaseBody = root["body"]?.jsonPrimitive?.content ?: ""
                 val assets = root["assets"]?.toString() ?: ""
+
                 // Find browser_download_url for app-debug.apk
                 val downloadUrl = if (assets.contains("app-debug.apk")) {
                     "https://github.com/J5er1/Ribbon/releases/download/latest/app-debug.apk"
                 } else {
                     return null
                 }
-                // When version.json isn't present, release publish date presence indicates a build
-                ReleaseInfo(
-                    versionCode = BuildConfig.VERSION_CODE + 1,
-                    versionName = "latest",
-                    publishedAt = publishedAt,
-                    apkUrl = downloadUrl,
-                )
+
+                // If version.json asset exists in the release, fetch and return it directly
+                if (assets.contains("version.json")) {
+                    val info = fetchVersionJson(VERSION_JSON_URL)
+                    if (info != null) return info
+                }
+
+                // Parse real version code from release title or body (e.g. "0.1.71" or "versionCode: 71")
+                val parsedCode = extractVersionCode(releaseName)
+                    ?: extractVersionCode(releaseBody)
+
+                if (parsedCode != null) {
+                    ReleaseInfo(
+                        versionCode = parsedCode,
+                        versionName = "0.1.$parsedCode",
+                        publishedAt = publishedAt,
+                        apkUrl = downloadUrl,
+                    )
+                } else {
+                    // Do not manufacture a version code when one cannot be verified.
+                    null
+                }
             } else {
                 null
             }
         }.getOrNull()
+    }
+
+    /**
+     * Extracts a numeric version code from text if present.
+     * Matches explicit "versionCode: 71", semver "0.1.71", or "build 71".
+     */
+    fun extractVersionCode(text: String): Int? {
+        val explicitMatch = Regex("""versionCode[:\s=]+(\d+)""", RegexOption.IGNORE_CASE).find(text)
+        if (explicitMatch != null) {
+            return explicitMatch.groupValues[1].toIntOrNull()
+        }
+        val semverMatch = Regex("""0\.1\.(\d+)""").find(text)
+        if (semverMatch != null) {
+            return semverMatch.groupValues[1].toIntOrNull()
+        }
+        val buildMatch = Regex("""(?:build|run)\s+(\d+)""", RegexOption.IGNORE_CASE).find(text)
+        if (buildMatch != null) {
+            return buildMatch.groupValues[1].toIntOrNull()
+        }
+        return null
     }
 
     fun canRequestPackageInstalls(context: Context): Boolean {

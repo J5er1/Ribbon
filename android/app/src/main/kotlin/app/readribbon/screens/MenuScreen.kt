@@ -1137,6 +1137,13 @@ private fun UpdateSection(model: AppModel) {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     QuietControl(
+                        title = Copy.SKIP_PORTRAIT,
+                        color = Palette.muted,
+                    ) {
+                        model.dismissUpdate()
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    QuietControl(
                         title = Copy.UPDATE_NOW,
                         color = Palette.chartreuse,
                     ) {
@@ -1185,15 +1192,33 @@ private fun UpdateSection(model: AppModel) {
                     .clip(RoundedCornerShape(8.dp))
                     .background(Palette.surface)
                     .border(1.dp, Palette.rule, RoundedCornerShape(8.dp))
-                    .clickable(role = Role.Button) { model.triggerUpdate(context) }
                     .padding(horizontal = 16.dp, vertical = 14.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 SmallCaps(
                     Copy.UPDATE_READY_TO_INSTALL,
                     color = Palette.chartreuse,
                     size = 13f,
                 )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    QuietControl(
+                        title = Copy.SKIP_PORTRAIT,
+                        color = Palette.muted,
+                    ) {
+                        model.dismissUpdate()
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    QuietControl(
+                        title = Copy.UPDATE_NOW,
+                        color = Palette.chartreuse,
+                    ) {
+                        model.triggerUpdate(context)
+                    }
+                }
             }
         }
         is UpdateState.Error -> {
@@ -1203,18 +1228,34 @@ private fun UpdateSection(model: AppModel) {
                     .clip(RoundedCornerShape(8.dp))
                     .background(Palette.surface)
                     .border(1.dp, Palette.rule, RoundedCornerShape(8.dp))
-                    .clickable(role = Role.Button) {
-                        model.dismissUpdateError()
-                        model.checkForUpdates()
-                    }
                     .padding(horizontal = 16.dp, vertical = 14.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 SmallCaps(
                     Copy.UPDATE_FAILED,
                     color = Palette.muted,
                     size = 12f,
                 )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    QuietControl(
+                        title = Copy.SKIP_PORTRAIT,
+                        color = Palette.muted,
+                    ) {
+                        model.dismissUpdateError()
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    QuietControl(
+                        title = Copy.UPDATE_NOW,
+                        color = Palette.chartreuse,
+                    ) {
+                        model.dismissUpdateError()
+                        model.checkForUpdates()
+                    }
+                }
             }
         }
     }
