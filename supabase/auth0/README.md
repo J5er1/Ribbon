@@ -37,23 +37,30 @@ Supabase requires incoming tokens to have the `role: "authenticated"` claim and 
    * **Trigger**: `Login / Post Login`
    * **Runtime**: `Node 18` or `Node 22`
 3. Click **Create**.
-4. In the left panel of the Action code editor, click the **Dependencies** icon (`+`):
-   * Add package: `uuid` (version: `^9.0.0` or `latest`).
-5. Replace the editor contents with the code from `supabase/auth0/action.js`:
+4. Replace the editor contents with the code below (zero dependencies needed — uses Node.js standard built-in `crypto`):
    ```javascript
-   const { v5: uuidv5 } = require('uuid');
+   const crypto = require('crypto');
    const RIBBON_NAMESPACE = '6ba7b810-9dad-11d1-80b4-00c04fd430c8';
+
+   function computeUuidV5(name, namespace = RIBBON_NAMESPACE) {
+     const ns = Buffer.from(namespace.replace(/-/g, ''), 'hex');
+     const hash = crypto.createHash('sha1').update(ns).update(name, 'utf8').digest();
+     hash[6] = (hash[6] & 0x0f) | 0x50; // Version 5
+     hash[8] = (hash[8] & 0x3f) | 0x80; // Variant RFC 4122
+     const hex = hash.toString('hex');
+     return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+   }
 
    exports.onExecutePostLogin = async (event, api) => {
      api.idToken.setCustomClaim('role', 'authenticated');
-     const userUuid = uuidv5(event.user.user_id, RIBBON_NAMESPACE);
+     const userUuid = computeUuidV5(event.user.user_id);
      api.idToken.setCustomClaim('user_uuid', userUuid);
    };
    ```
-6. Click **Deploy** at the top right.
-7. Go to **Actions → Flows → Login**.
-8. In the right sidebar under "Custom", find **Supabase Claims** and drag it between **Start** and **Complete**.
-9. Click **Apply** at the top right.
+5. Click **Deploy** at the top right.
+6. Go to **Actions → Flows → Login**.
+7. In the right sidebar under "Custom", find **Supabase Claims** and drag it between **Start** and **Complete**.
+8. Click **Apply** at the top right.
 
 ---
 
