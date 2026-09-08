@@ -76,4 +76,4 @@ Once authenticated with Auth0, the app receives the **ID token** (`credentials.i
 Because Supabase is configured with your Auth0 tenant, Supabase automatically:
 1. Validates the signature using Auth0's OIDC Discovery JWKS (`https://YOUR_AUTH0_DOMAIN/.well-known/jwks.json`).
 2. Reads the `role: "authenticated"` claim and grants standard authenticated Postgres privileges.
-3. Resolves `auth.uid()` to the deterministic `user_uuid` claim, allowing all existing RLS policies and table relations to operate without changes.
+3. Resolves `public.current_user_id()` to the deterministic `user_uuid` claim, allowing all existing RLS policies and table relations to operate cleanly for both Auth0 and Supabase native auth.

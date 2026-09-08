@@ -12,7 +12,7 @@ object Auth0Config {
     const val DOMAIN = "dev-m45drxnu73cdtjcn.us.auth0.com"
 
     /** Your Auth0 Native Application Client ID. */
-    const val CLIENT_ID = ""
+    const val CLIENT_ID = "6AVTQwedXsaH7RrtDbhHOMKME8hazHjC"
 
     /** The custom scheme configured for Android redirects. */
     const val SCHEME = "app.readribbon.debug"

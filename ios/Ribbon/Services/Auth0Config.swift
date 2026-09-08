@@ -10,7 +10,7 @@ enum Auth0Config {
     static let domain = "dev-m45drxnu73cdtjcn.us.auth0.com"
 
     /// Your Auth0 Native Application Client ID.
-    static let clientId = ""
+    static let clientId = "6AVTQwedXsaH7RrtDbhHOMKME8hazHjC"
 
     /// The custom URL scheme registered for Auth0 redirection.
     static let scheme = "bible.ribbon.app"
