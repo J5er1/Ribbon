@@ -707,9 +707,33 @@ final class AppModel {
     /// Sign in with a passkey. The whole of `verifySignInCode` after the
     /// code, because after the session it is the same thread: adopt the
     /// account, restore the person if this device has none, pull, push.
+    var auth0Available: Bool {
+        remote != nil && Auth0Config.isConfigured
+    }
+
     func signInWithPasskey() async throws {
         guard let remote, let anchor = keyWindowAnchor() else { throw SupabaseError.notSignedIn }
         let uid = try await remote.signInWithPasskey(anchor: anchor)
+        if state.me == nil {
+            await restorePerson(from: uid)
+        }
+        adoptRemoteIdentity(uid)
+        await reconcileOwnProfile()
+        await refreshFromRemote()
+        await pushLocalGraph()
+    }
+
+    /// Sign in using Auth0 Universal Login. Adopts the deterministic user UUID,
+    /// restores/creates the profile, and starts real-time sync.
+    func signInWithAuth0() async throws {
+        guard let remote, let anchor = keyWindowAnchor() else { throw SupabaseError.notSignedIn }
+        let user = try await Auth0Service.login(anchor: anchor)
+        let uid = try await remote.signInWithAuth0(
+            idToken: user.idToken,
+            userUUID: user.userUUID,
+            email: user.email,
+            refreshToken: user.refreshToken
+        )
         if state.me == nil {
             await restorePerson(from: uid)
         }

@@ -366,6 +366,8 @@ object Copy {
      * thing that still works in front of them.
      */
     const val PASSKEY_DIDNT_WORK = "That passkey didn't work. The emailed code still does."
+    const val SIGN_IN_WITH_AUTH0 = "Continue with Auth0"
+    const val AUTH0_DIDNT_WORK = "Signing in didn't finish. The emailed code still does."
     const val SEND_A_NEW_CODE = "Send a new code"
 
     /** The way past sign-in, wherever a host offers one. Never a wall. */

@@ -2,9 +2,11 @@
 
 package app.readribbon.app
 
+import android.app.Activity
 import android.content.Context
 import android.graphics.BitmapFactory
 import android.net.Uri
+import app.readribbon.services.Auth0Service
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -952,10 +954,10 @@ class AppModel(
      * library, and it is present from this build's minSdk up.
      */
     val passkeysAvailable: Boolean get() = remote != null
+    val auth0Available: Boolean get() = remote != null && app.readribbon.data.Auth0Config.isConfigured
 
     /**
-     * Add a passkey to the account that is signed in (§6.10). An addition,
-     * never a replacement: the emailed code stays the way in.
+     * Register a passkey for the account that is already signed in.
      *
      * @param context an Activity context — the system sheet needs a window.
      */
@@ -973,6 +975,26 @@ class AppModel(
     suspend fun signInWithPasskey(context: Context) {
         val remote = this.remote ?: throw SupabaseError.NotSignedIn
         val uid = remote.signInWithPasskey(context)
+        if (state.me == null) restorePerson(uid)
+        adoptRemoteIdentity(uid)
+        reconcileOwnProfile()
+        refreshFromRemote()
+        pushLocalGraph()
+    }
+
+    /**
+     * Sign in using Auth0 Universal Login. Adopts the deterministic user UUID,
+     * restores/creates the profile, and starts real-time sync.
+     */
+    suspend fun signInWithAuth0(activity: Activity) {
+        val remote = this.remote ?: throw SupabaseError.NotSignedIn
+        val auth0User = Auth0Service.login(activity)
+        val uid = remote.signInWithAuth0(
+            idToken = auth0User.idToken,
+            userUuid = auth0User.userUuid,
+            email = auth0User.email,
+            refreshToken = auth0User.refreshToken,
+        )
         if (state.me == null) restorePerson(uid)
         adoptRemoteIdentity(uid)
         reconcileOwnProfile()

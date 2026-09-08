@@ -30,6 +30,8 @@ android {
         versionCode = 1
         versionName = "0.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        manifestPlaceholders["auth0Domain"] = "readribbon.auth0.com"
+        manifestPlaceholders["auth0Scheme"] = "app.readribbon.debug"
     }
 
     signingConfigs {
@@ -141,6 +143,7 @@ dependencies {
     // speaks the W3C JSON verbatim, so nothing here has to understand it.
     implementation(libs.androidx.credentials)
     implementation(libs.androidx.credentials.play.services)
+    implementation(libs.auth0)
     implementation(libs.androidx.media3.exoplayer)
 
     implementation(libs.kotlinx.coroutines.android)

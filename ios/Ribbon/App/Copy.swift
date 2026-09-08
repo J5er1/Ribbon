@@ -207,6 +207,8 @@ enum Copy {
     /// S25's shape: name what happened, name what didn't, and leave the one
     /// thing that still works in front of them.
     static let passkeyDidntWork = "That passkey didn't work. The emailed code still does."
+    static let signInWithAuth0 = "Continue with Auth0"
+    static let auth0DidntWork = "Signing in didn't finish. The emailed code still does."
 
     /// The quiet way out of the sign-in thread, wherever it is offered —
     /// never a wall (§6.1, §6.10).

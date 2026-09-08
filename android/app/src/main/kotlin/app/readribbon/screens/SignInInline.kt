@@ -101,6 +101,25 @@ fun SignInInline(
     // not the application one.
     val activity = LocalActivity.current
 
+    fun signInWithAuth0() {
+        val host = activity ?: return
+        if (busy) return
+        busy = true
+        errorLine = null
+        scope.launch {
+            try {
+                model.signInWithAuth0(host)
+                onSignedIn()
+            } catch (_: app.readribbon.services.Auth0Exception.Cancelled) {
+                // User closed the browser sheet without signing in; silent (§6.10).
+            } catch (_: Throwable) {
+                errorLine = Copy.AUTH0_DIDNT_WORK
+            } finally {
+                busy = false
+            }
+        }
+    }
+
     fun signInWithPasskey() {
         val host = activity ?: return
         if (busy) return
@@ -187,6 +206,12 @@ fun SignInInline(
                         // only where the domain, the signing key and the
                         // project all agree (Passkeys.kt), so the field
                         // underneath is the thread that always works.
+                        if (model.auth0Available && activity != null) {
+                            QuietControl(
+                                title = Copy.SIGN_IN_WITH_AUTH0,
+                                onClick = { signInWithAuth0() },
+                            )
+                        }
                         if (model.passkeysAvailable && activity != null) {
                             QuietControl(
                                 title = Copy.USE_A_PASSKEY,

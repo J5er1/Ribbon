@@ -19,12 +19,14 @@ splashscreen = "1.2.0"
 media3 = "1.11.0"
 browser = "1.10.0"
 credentials = "1.5.0"
+auth0 = "4.0.1"
 junit = "4.13.2"
 kotlinTest = "2.4.10"
 robolectric = "4.16.1"
 androidxTestExt = "1.3.0"
 
 [libraries]
+auth0 = { module = "com.auth0.android:auth0", version.ref = "auth0" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }

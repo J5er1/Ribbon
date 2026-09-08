@@ -120,6 +120,28 @@ class RemoteSync(
         return session.user.id
     }
 
+    /**
+     * Sign in using an Auth0 ID token. Sets the Supabase session, saves it to persistent storage,
+     * and initializes the local user identity.
+     */
+    suspend fun signInWithAuth0(
+        idToken: String,
+        userUuid: Uuid,
+        email: String?,
+        refreshToken: String = "",
+    ): Uuid {
+        val session = client.setAuth0Session(
+            idToken = idToken,
+            userUuid = userUuid,
+            email = email,
+            refreshToken = refreshToken,
+        )
+        withContext(Dispatchers.IO) { sessions.save(session) }
+        userID = session.user.id
+        this.email = session.user.email ?: email
+        return session.user.id
+    }
+
     suspend fun signOut() {
         client.signOut()
         withContext(Dispatchers.IO) { sessions.clear() }

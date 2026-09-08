@@ -29,8 +29,13 @@ struct SignInInline: View {
 
     var body: some View {
         VStack(spacing: 16) {
-            if phase == .email, model.passkeysAvailable {
-                QuietControl(title: Copy.useAPasskey) { signInWithPasskey() }
+            if phase == .email {
+                if model.auth0Available {
+                    QuietControl(title: Copy.signInWithAuth0) { signInWithAuth0() }
+                }
+                if model.passkeysAvailable {
+                    QuietControl(title: Copy.useAPasskey) { signInWithPasskey() }
+                }
             }
             switch phase {
             case .email:
@@ -80,6 +85,23 @@ struct SignInInline: View {
         }
         .onAppear { focused = true }
         .onChange(of: phase) { _, _ in focused = true }
+    }
+
+    private func signInWithAuth0() {
+        guard !busy else { return }
+        busy = true
+        errorLine = nil
+        Task {
+            defer { busy = false }
+            do {
+                try await model.signInWithAuth0()
+                onSignedIn()
+            } catch Auth0Error.cancelled {
+                // User dismissed the browser sheet; silent (§6.10).
+            } catch {
+                errorLine = Copy.auth0DidntWork
+            }
+        }
     }
 
     private func signInWithPasskey() {

@@ -94,6 +94,26 @@ final class RemoteSync {
         return session.user.id
     }
 
+    /// Sign in with an Auth0-issued ID token. Sets the Supabase session, saves it
+    /// to the keychain, and initializes the local user identity.
+    func signInWithAuth0(
+        idToken: String,
+        userUUID: UUID,
+        email: String?,
+        refreshToken: String = ""
+    ) async throws -> UUID {
+        let session = client.setAuth0Session(
+            idToken: idToken,
+            userUUID: userUUID,
+            email: email,
+            refreshToken: refreshToken
+        )
+        SessionKeychain.save(session)
+        userID = session.user.id
+        self.email = session.user.email ?? email
+        return session.user.id
+    }
+
     func signOut() async {
         await client.signOut()
         SessionKeychain.clear()
