@@ -1851,11 +1851,87 @@ html.js .fire-lines p.on { opacity: 1; transition: opacity 240ms var(--ease) 160
          + Math.sin((t / 7.9 + phase * 0.31) * TAU + 4.2) * 0.15;
   }
 
+  function hash(n) {
+    const s = Math.sin(n * 127.1 + 311.7) * 43758.5453123;
+    return s - Math.floor(s);
+  }
+
+  function noise(x, seed) {
+    const i = Math.floor(x);
+    const f = x - i;
+    const u = f * f * (3 - 2 * f);
+    const a = hash(i + seed * 57.31);
+    const b = hash(i + 1 + seed * 57.31);
+    return (a + (b - a) * u) * 2 - 1;
+  }
+
+  function fract(x) {
+    return x - Math.floor(x);
+  }
+
   const ellipse = (ctx, cx, cy, rx, ry) => {
     ctx.beginPath();
-    ctx.ellipse(cx, cy, Math.max(rx, 0), Math.max(ry, 0), 0, 0, TAU);
+    ctx.ellipse(cx, cy, Math.max(rx, 0.001), Math.max(ry, 0.001), 0, 0, TAU);
     ctx.fill();
   };
+
+  function addSmoothSpine(ctx, points) {
+    if (points.length <= 2) {
+      if (points.length > 0) ctx.lineTo(points[points.length - 1].x, points[points.length - 1].y);
+      return;
+    }
+    for (let i = 1; i < points.length - 1; i++) {
+      const midX = (points[i].x + points[i + 1].x) / 2;
+      const midY = (points[i].y + points[i + 1].y) / 2;
+      ctx.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+    }
+    ctx.lineTo(points[points.length - 1].x, points[points.length - 1].y);
+  }
+
+  function drawTonguePath(ctx, baseX, baseY, height, halfWidth, time, phase, agitation, tempo, sway) {
+    const segments = 8;
+    const left = [];
+    const right = [];
+    const travel = time * 0.55 * tempo;
+    for (let j = 0; j <= segments; j++) {
+      const u = j / segments;
+      const planted = u * u * (3 - 2 * u);
+      const profile = (1 - u) * (1 + 1.6 * u - 0.4 * u * u);
+      const squeezeL = noise(travel - u * 2.6, phase + 3.1);
+      const squeezeR = noise(travel - u * 2.6 + 11.7, phase + 7.7);
+      const bend = noise(travel * 0.7 - u * 1.8, phase + 13.0);
+      const mid = baseX + sway * planted + bend * agitation * planted * halfWidth * 0.5;
+      const reach = halfWidth * profile;
+      const y = baseY - height * u;
+      left.push({ x: mid - reach * (1 + 0.38 * agitation * planted * squeezeL), y });
+      right.push({ x: mid + reach * (1 + 0.38 * agitation * planted * squeezeR), y });
+    }
+    const outline = left.concat(right.slice(0, -1).reverse());
+    ctx.beginPath();
+    ctx.moveTo(outline[0].x, outline[0].y);
+    addSmoothSpine(ctx, outline);
+    ctx.closePath();
+  }
+
+  function drawLumpPath(ctx, centerX, centerY, radius, seed) {
+    const vertices = 6;
+    const pts = [];
+    for (let v = 0; v < vertices; v++) {
+      const angle = (v / vertices) * TAU;
+      const rx = radius * (0.72 + 0.56 * hash(seed + v * 3.77));
+      const ry = radius * 0.62 * (0.72 + 0.56 * hash(seed + v * 9.13));
+      pts.push({ x: centerX + Math.cos(angle) * rx, y: centerY + Math.sin(angle) * ry });
+    }
+    ctx.beginPath();
+    const firstMidX = (pts[vertices - 1].x + pts[0].x) / 2;
+    const firstMidY = (pts[vertices - 1].y + pts[0].y) / 2;
+    ctx.moveTo(firstMidX, firstMidY);
+    for (let v = 0; v < vertices; v++) {
+      const next = pts[(v + 1) % vertices];
+      ctx.quadraticCurveTo(pts[v].x, pts[v].y, (pts[v].x + next.x) / 2, (pts[v].y + next.y) / 2);
+    }
+    ctx.closePath();
+  }
 
   const THROW = {
     catching: { r: [0.50, 0.25], o: 0.16 },
@@ -1872,7 +1948,12 @@ html.js .fire-lines p.on { opacity: 1; transition: opacity 240ms var(--ease) 160
     banked:   [],
   };
 
-  const LIVELINESS = { catching: 0.8, burning: 1.0, steady: 0.35, banked: 0.3 };
+  const CHARACTER = {
+    catching: { live: 0.8, agitation: 0.85, tempo: 1.0, shed: 0.25 },
+    burning:  { live: 1.0, agitation: 1.0,  tempo: 1.2, shed: 0.80 },
+    steady:   { live: 0.35, agitation: 0.45, tempo: 0.6, shed: 0.18 },
+    banked:   { live: 0.0, agitation: 0.0,  tempo: 0.0, shed: 0.00 },
+  };
 
   /* The same tongues, padded to three slots — left, centre, right — so two
      states can be lerped slot against slot. Catching keeps its two licks on
@@ -1894,9 +1975,13 @@ html.js .fire-lines p.on { opacity: 1; transition: opacity 240ms var(--ease) 160
   function fireSpec(name) {
     if (specs[name]) return specs[name];
     const th = THROW[name] || THROW.burning;
+    const ch = CHARACTER[name] || CHARACTER.burning;
     return (specs[name] = {
       r0: th.r[0], r1: th.r[1], o: th.o,
-      live: LIVELINESS[name] != null ? LIVELINESS[name] : 1,
+      live: ch.live,
+      agitation: ch.agitation,
+      tempo: ch.tempo,
+      shed: ch.shed,
       ash: name === "banked" ? 1 : 0,
       tongues: TONGUE_SLOTS[name] || TONGUE_SLOTS.burning,
     });
@@ -1919,19 +2004,14 @@ html.js .fire-lines p.on { opacity: 1; transition: opacity 240ms var(--ease) 160
     }
     return {
       r0: mix(a.r0, b.r0, k), r1: mix(a.r1, b.r1, k), o: mix(a.o, b.o, k),
-      live: mix(a.live, b.live, k), ash: mix(a.ash, b.ash, k),
+      live: mix(a.live, b.live, k),
+      agitation: mix(a.agitation, b.agitation, k),
+      tempo: mix(a.tempo, b.tempo, k),
+      shed: mix(a.shed, b.shed, k),
+      ash: mix(a.ash, b.ash, k),
       tongues,
     };
   }
-
-  /* The five coals sit still; only their warmth moves. */
-  const COALS = [
-    { x:  0.181186, y: 0.181186, r: 1.090593 },
-    { x: -0.085511, y: 0.221166, r: 1.079662 },
-    { x: -0.324873, y: 0.114218, r: 1.192900 },
-    { x: -0.499874, y: 0.302105, r: 1.273276 },
-    { x: -0.587346, y: 0.051349, r: 1.049749 },
-  ];
 
   /* `state` is a name, or a resolved spec when something is moving between
      two of them. */
@@ -1940,74 +2020,213 @@ html.js .fire-lines p.on { opacity: 1; transition: opacity 240ms var(--ease) 160
     const baseY = h * 0.88;
     const cx = w / 2;
     const footprint = Math.min(w * 0.6, h * 1.05);
+    const detailed = h >= 48;
 
-    /* The warm throw — a radial bloom behind everything, squashed so it
-       reads as light on a ground rather than a ball. */
-    const R = footprint * (f.r0 + f.r1 * coalDepth) * (1 + 0.05 * breath(t, 0.13));
-    let g = ctx.createRadialGradient(cx, baseY, 0, cx, baseY, Math.max(R, 0.01));
+    /* The warm throw — a radial bloom behind everything */
+    const throwRadius = footprint * (f.r0 + f.r1 * coalDepth) * (1 + 0.05 * breath(t, 0.13));
+    let g = ctx.createRadialGradient(cx, baseY, 0, cx, baseY, Math.max(throwRadius, 0.01));
     g.addColorStop(0, rgba(C.flameCore, f.o));
     g.addColorStop(0.5, rgba(C.flameDeep, f.o * 0.4));
     g.addColorStop(1, rgba(C.flameDeep, 0));
     ctx.fillStyle = g;
-    ellipse(ctx, cx, baseY - R * 0.62 + R * 0.525, R, R * 0.525);
+    ellipse(ctx, cx, baseY - throwRadius * 0.62 + throwRadius * 0.525, throwRadius, throwRadius * 0.525);
 
-    /* The coal bed — the one thing that may grow. */
-    const bedW = footprint * (0.5 + 0.42 * coalDepth);
-    const bedH = footprint * (0.1 + 0.05 * coalDepth);
-    const bedGlow = mix(0.75 + 0.1 * breath(t, 0.44),
-                        0.5 + 0.08 * breath(t / 2.6, 0.71), f.ash);
-    g = ctx.createRadialGradient(cx, baseY, 0, cx, baseY, Math.max(bedW / 2, 0.01));
+    /* The coal bed — 11 organic lumps + glowing heat */
+    const bedWidth = footprint * (0.5 + 0.42 * coalDepth);
+    const bedHeight = footprint * (0.1 + 0.05 * coalDepth);
+    const bedGlow = mix(0.75 + 0.1 * breath(t, 0.44), 0.5 + 0.08 * breath(t / 2.6, 0.71), f.ash);
+    g = ctx.createRadialGradient(cx, baseY, 0, cx, baseY, Math.max(bedWidth / 2, 0.01));
     g.addColorStop(0, rgba(C.coal, 0.9 * bedGlow));
     g.addColorStop(0.5, rgba(C.coalDim, 0.8 * bedGlow));
     g.addColorStop(1, rgba(C.coalDim, 0));
     ctx.fillStyle = g;
-    ellipse(ctx, cx, baseY, bedW / 2, bedH / 2);
+    ellipse(ctx, cx, baseY, bedWidth / 2, bedHeight / 2);
 
-    for (let i = 0; i < COALS.length; i++) {
-      const c = COALS[i];
-      const r = footprint * 0.022 * c.r;
-      const ember = 0.45 + 0.25 * breath(t / 1.7, i * 0.618);
-      ctx.fillStyle = rgba(C.flameDeep, ember * (1 - 0.3 * f.ash));
-      ellipse(ctx, cx + c.x * bedW * 0.3, baseY - bedH * 0.1 + c.y * bedH * 0.18, r, r);
-    }
+    for (let i = 0; i < 11; i++) {
+      const fi = i;
+      const hx = hash(fi * 12.99 + 4.1);
+      const hy = hash(fi * 78.23 + 9.7);
+      const hr = hash(fi * 39.43 + 2.3);
+      const px = cx + (hx - 0.5) * bedWidth * 0.88;
+      const py = baseY + (hy - 0.5) * bedHeight * 0.5;
+      const r = footprint * (0.024 + 0.02 * hr) * (0.85 + 0.3 * coalDepth);
+      const centerBias = 1 - Math.min(1, Math.abs(px - cx) / (bedWidth / 2));
+      const pulse = 0.5 + 0.5 * breath(t / (2.1 + 2.3 * hash(fi + 31.7)), fi * 0.618);
+      let heat = (0.3 + 0.55 * centerBias) * (0.55 + 0.45 * pulse);
+      if (f.ash > 0.01) heat *= (1 - 0.5 * f.ash);
 
-    /* Banked: coals going under ash. It draws over the bed and under the
-       tongues, so a fire being covered dims and dies down at once. */
-    if (f.ash > 0.002) {
-      const aw = bedW * 1.12, ah = bedH * 1.28;
-      const top = baseY - ah / 2;
-      g = ctx.createLinearGradient(cx, top, cx, top + ah);
-      g.addColorStop(0, rgba(C.text, 0.10 * f.ash));
-      g.addColorStop(1, rgba(C.muted, 0.16 * f.ash));
-      ctx.fillStyle = g;
-      ellipse(ctx, cx, baseY, aw / 2, ah / 2);
-    }
-
-    const liveliness = f.live;
-    for (const tongue of f.tongues) {
-      if (!tongue) continue;
-      const [tx, th, tw, phase] = tongue;
-      if (th < 0.004 || tw < 0.004) continue;
-      const sway = breath(t, phase) * 0.05 * liveliness;
-      const rise = 1 + breath(t * 1.13, phase + 0.3) * 0.14 * liveliness;
-      const baseX = cx + tx * footprint;
-      const tipX = baseX + sway * footprint;
-      const tipY = baseY - th * footprint * rise;
-      const halfW = tw * footprint / 2 * (1 + breath(t * 0.9, phase + 0.6) * 0.08);
-
-      ctx.beginPath();
-      ctx.moveTo(baseX - halfW, baseY);
-      ctx.quadraticCurveTo(baseX - halfW * 1.15, baseY - (baseY - tipY) * 0.55, tipX, tipY);
-      ctx.quadraticCurveTo(baseX + halfW * 1.15, baseY - (baseY - tipY) * 0.50, baseX + halfW, baseY);
-      ctx.closePath();
-
-      g = ctx.createLinearGradient(baseX, baseY, tipX, tipY);
-      g.addColorStop(0, rgba(C.flameDeep, 0.92));
-      g.addColorStop(0.5, rgba(C.flameCore, 0.90));
-      g.addColorStop(1, rgba(C.flameBright, 0.85));
-      ctx.fillStyle = g;
+      drawLumpPath(ctx, px, py, r, fi * 5.77);
+      const gLump = ctx.createRadialGradient(px, py - r * 0.25, 0, px, py - r * 0.25, Math.max(r * 1.5, 0.01));
+      gLump.addColorStop(0, rgba(C.coal, 0.55 + 0.4 * heat));
+      gLump.addColorStop(1, rgba(C.coalDim, 0.9));
+      ctx.fillStyle = gLump;
       ctx.fill();
     }
+
+    /* Fissures — heat between coals (additive) */
+    const fissureCount = detailed ? 7 : 4;
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    for (let k = 0; k < fissureCount; k++) {
+      const fk = k;
+      const x0 = cx + (hash(fk * 3.37 + 7.2) - 0.5) * bedWidth * 0.72;
+      const y0 = baseY + (hash(fk * 5.11 + 2.9) - 0.5) * bedHeight * 0.42;
+      const len = bedWidth * (0.07 + 0.09 * hash(fk * 9.23 + 1.1));
+      const angle = hash(fk * 4.71 + 6.6) * Math.PI;
+      const dx = Math.cos(angle) * len;
+      const dy = Math.sin(angle) * len * 0.3;
+      const flick = 0.5 + 0.5 * breath(t / 1.9, fk * 0.77 + 0.2);
+      const glow = f.ash > 0.01 ? (0.1 + 0.1 * flick) * (1 - 0.5 * f.ash) : (0.22 + 0.3 * flick);
+
+      ctx.beginPath();
+      ctx.moveTo(x0 - dx / 2, y0 - dy / 2);
+      ctx.quadraticCurveTo(x0 + dy * 0.8, y0 - dx * 0.15, x0 + dx / 2, y0 + dy / 2);
+      const gFissure = ctx.createLinearGradient(x0 - dx / 2, y0, x0 + dx / 2, y0);
+      gFissure.addColorStop(0, rgba(C.flameDeep, glow));
+      gFissure.addColorStop(0.5, rgba(C.flameCore, glow * 0.85));
+      gFissure.addColorStop(1, rgba(C.flameDeep, glow * 0.5));
+      ctx.strokeStyle = gFissure;
+      ctx.lineWidth = Math.max(0.7, footprint * 0.012);
+      ctx.lineCap = "round";
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    /* Ash, when banked */
+    if (f.ash > 0.002) {
+      const aw = bedWidth * 1.12, ah = bedHeight * 1.28;
+      const top = baseY - ah / 2;
+      const gAsh = ctx.createLinearGradient(cx, top, cx, top + ah);
+      gAsh.addColorStop(0, rgba(C.text, 0.12 * f.ash));
+      gAsh.addColorStop(1, rgba(C.muted, 0.18 * f.ash));
+      ctx.fillStyle = gAsh;
+      ellipse(ctx, cx, baseY, aw / 2, ah / 2);
+
+      ctx.fillStyle = rgba(C.muted, 0.1 * f.ash);
+      ellipse(ctx, cx - bedWidth * 0.18 + (bedWidth * 0.62) / 2, baseY - bedHeight * 0.52 + (bedHeight * 0.5) / 2, (bedWidth * 0.62) / 2, (bedHeight * 0.5) / 2);
+      if (f.ash >= 0.99) return;
+    }
+
+    /* Flames — Three nested bodies with upward-travelling value noise */
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+
+    function drawFlameLayer(heightF, widthF, agitationF, swayF, phaseShift, stops, blurRadius) {
+      if (blurRadius && ctx.filter) ctx.filter = `blur(${blurRadius}px)`;
+      else if (ctx.filter) ctx.filter = "none";
+
+      for (const tongue of f.tongues) {
+        if (!tongue) continue;
+        const [tx, th, tw, phase] = tongue;
+        if (th < 0.004 || tw < 0.004) continue;
+        const p = phase + phaseShift;
+        const sway = breath(t, phase) * 0.055 * f.live * footprint * swayF;
+        const rise = 1 + breath(t * 1.13, p + 0.3) * 0.11 * f.live;
+        const height = th * footprint * rise * heightF * (1 - f.ash);
+        const halfW = (tw * footprint) / 2 * widthF * (1 - f.ash);
+        const baseX = cx + tx * footprint;
+
+        drawTonguePath(ctx, baseX, baseY, height, halfW, t, p, f.agitation * agitationF, f.tempo, sway);
+
+        const gFlame = ctx.createLinearGradient(baseX, baseY, baseX + sway, baseY - height);
+        for (const [pos, col] of stops) {
+          gFlame.addColorStop(pos, col);
+        }
+        ctx.fillStyle = gFlame;
+        ctx.fill();
+      }
+    }
+
+    const sheathStops = [
+      [0, rgba(C.flameDeep, 0.55)],
+      [0.45, rgba(C.flameDeep, 0.32)],
+      [1, rgba(C.flameDeep, 0)],
+    ];
+    const bodyStops = [
+      [0, rgba(C.flameCore, 0.85)],
+      [0.5, rgba(C.flameCore, 0.5)],
+      [1, rgba(C.flameDeep, 0)],
+    ];
+    const heartStops = [
+      [0, rgba(C.flameBright, 0.95)],
+      [0.55, rgba(C.flameCore, 0.55)],
+      [1, rgba(C.flameCore, 0)],
+    ];
+
+    drawFlameLayer(1.0, 1.0, 1.0, 1.0, 0.0, sheathStops, detailed ? 2.2 : 0);
+    drawFlameLayer(0.72, 0.68, 0.65, 0.8, 0.14, bodyStops, 0);
+    drawFlameLayer(0.42, 0.42, 0.35, 0.55, 0.27, heartStops, 0);
+
+    /* Tip Shedding */
+    if (detailed && f.shed > 0 && f.ash < 0.5) {
+      for (const tongue of f.tongues) {
+        if (!tongue) continue;
+        const [tx, th, tw, phase] = tongue;
+        const period = 3.6 + 2.9 * hash(phase * 71.3);
+        const cycle = (t + phase * 47.1) / period;
+        const turn = Math.floor(cycle);
+        if (hash(turn + phase * 91.7) < f.shed) {
+          const age = cycle - turn;
+          const lift = age * footprint * 0.24;
+          const blobX = cx + tx * footprint + breath(t, phase) * 0.055 * f.live * footprint + breath(t * 0.9, phase + 2.4) * 0.02 * footprint;
+          const blobY = baseY - th * footprint * 0.9 - lift;
+          const r = footprint * (0.022 + 0.04 * tw) * (1 - 0.6 * age);
+          const fade = (1 - age) * Math.min(1, age * 5) * (1 - f.ash);
+
+          const gBlob = ctx.createRadialGradient(blobX, blobY, 0, blobX, blobY, Math.max(r * 1.4, 0.01));
+          gBlob.addColorStop(0, rgba(C.flameCore, 0.5 * fade));
+          gBlob.addColorStop(0.5, rgba(C.flameDeep, 0.28 * fade));
+          gBlob.addColorStop(1, rgba(C.flameDeep, 0));
+          ctx.fillStyle = gBlob;
+          ellipse(ctx, blobX, blobY, r, r * 1.2);
+        }
+      }
+    }
+
+    /* Sparks */
+    const sparkCount = Math.round(f.live * 6 * (1 - f.ash));
+    if (detailed && sparkCount > 0) {
+      for (let i = 0; i < sparkCount; i++) {
+        const fi = i;
+        const period = 2.7 + 2.6 * hash(fi * 7.31 + 5.2);
+        const age = fract(t / period + hash(fi * 13.7 + 1.3));
+        const born = cx + (hash(fi * 29.4 + 8.8) - 0.5) * bedWidth * 0.6;
+        const riseH = footprint * (0.45 + 0.4 * hash(fi * 3.93 + 2.6));
+        const x = born + breath(t * 0.7, fi * 0.83) * 0.05 * age * footprint;
+        const y = baseY - bedHeight * 0.2 - riseH * age;
+        const r = Math.max(0.5, (0.9 + 0.7 * hash(fi * 17.3 + 3.4)) * (1 - 0.55 * age));
+        const fade = (1 - age) * Math.min(1, age * 7) * (1 - f.ash);
+
+        const gSpark = ctx.createRadialGradient(x, y, 0, x, y, Math.max(r * 1.4, 0.01));
+        gSpark.addColorStop(0, rgba(C.flameBright, 0.55 * fade));
+        gSpark.addColorStop(0.5, rgba(C.flameDeep, 0.3 * fade));
+        gSpark.addColorStop(1, rgba(C.flameDeep, 0));
+        ctx.fillStyle = gSpark;
+        ellipse(ctx, x, y, r, r);
+      }
+    }
+
+    /* Hot Air Wisps */
+    if (detailed && h >= 120 && f.ash < 0.5) {
+      if (ctx.filter) ctx.filter = "blur(3px)";
+      let crest = 0.5;
+      for (const tongue of f.tongues) {
+        if (tongue && tongue[1] > crest) crest = tongue[1];
+      }
+      for (let i = 0; i < 2; i++) {
+        const fi = i;
+        const age = fract(t / (5.5 + fi * 1.7) + fi * 0.5);
+        const wx = cx + breath(t * 0.5, fi + 0.9) * 0.08 * footprint;
+        const wy = baseY - crest * footprint - age * footprint * 0.22;
+        const ww = footprint * 0.3;
+        const wh = footprint * 0.1;
+        const fade = 0.035 * Math.sin(Math.PI * age) * (1 - f.ash);
+        ctx.fillStyle = rgba(C.flameDeep, fade);
+        ellipse(ctx, wx, wy, ww / 2, wh / 2);
+      }
+    }
+
+    ctx.restore();
   }
 
   /* An ember — a warm heart in a dark husk, with the bloom beneath that
