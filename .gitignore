@@ -9,6 +9,13 @@ DerivedData/
 core/.build/
 core/.swiftpm/
 
+# Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+fastlane/.env
+
 # Python
 __pycache__/
 *.pyc

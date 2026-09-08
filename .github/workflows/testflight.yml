@@ -1,0 +1,39 @@
+name: TestFlight
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  beta:
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      APP_IDENTIFIER: bible.ribbon.app
+      TEAM_ID: ${{ secrets.TEAM_ID }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_CONTENT }}
+      MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+      MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+      MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # The app targets iOS 26 (see ios/Ribbon.xcodeproj). If macos-15
+      # runners stop shipping a matching Xcode by default, pin a version
+      # here explicitly, e.g. xcode-version: '26.0'.
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+
+      - name: Build and upload to TestFlight
+        run: bundle exec fastlane beta

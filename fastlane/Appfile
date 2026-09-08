@@ -1,0 +1,2 @@
+app_identifier(ENV["APP_IDENTIFIER"] || "bible.ribbon.app")
+team_id(ENV["TEAM_ID"])
