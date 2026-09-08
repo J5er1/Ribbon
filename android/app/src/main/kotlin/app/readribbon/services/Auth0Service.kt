@@ -13,7 +13,10 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.uuid.Uuid
 import kotlinx.coroutines.suspendCancellableCoroutine
-import org.json.JSONObject
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * Result of an Auth0 credentials exchange.
@@ -88,14 +91,14 @@ object Auth0Service {
 
         val payloadBase64 = parts[1]
         val decodedBytes = Base64.getUrlDecoder().decode(padBase64(payloadBase64))
-        val json = JSONObject(String(decodedBytes, Charsets.UTF_8))
+        val json = Json.parseToJsonElement(String(decodedBytes, Charsets.UTF_8)).jsonObject
 
-        val sub = json.optString("sub", "")
-        val email = json.optString("email", "").ifBlank { null }
+        val sub = json["sub"]?.jsonPrimitive?.contentOrNull ?: ""
+        val email = json["email"]?.jsonPrimitive?.contentOrNull
 
         // Priority 1: user_uuid injected by our Auth0 Post-Login Action
-        val customUuid = json.optString("user_uuid", "")
-        val userUuid = if (customUuid.isNotBlank()) {
+        val customUuid = json["user_uuid"]?.jsonPrimitive?.contentOrNull
+        val userUuid = if (!customUuid.isNullOrBlank()) {
             runCatching { Uuid.parse(customUuid) }.getOrNull() ?: computeUuidV5(sub)
         } else {
             computeUuidV5(sub)
