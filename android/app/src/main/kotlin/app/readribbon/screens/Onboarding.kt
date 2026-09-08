@@ -37,15 +37,14 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import app.readribbon.core.Ink
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -494,12 +493,23 @@ private fun IntentStep(
                     }
 
                     if (isSelected) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = null,
-                            tint = Palette.chartreuse,
-                            modifier = Modifier.size(16.dp),
-                        )
+                        Canvas(modifier = Modifier.size(16.dp)) {
+                            val stroke = 2.dp.toPx()
+                            drawLine(
+                                color = Palette.chartreuse,
+                                start = Offset(size.width * 0.2f, size.height * 0.5f),
+                                end = Offset(size.width * 0.45f, size.height * 0.75f),
+                                strokeWidth = stroke,
+                                cap = StrokeCap.Round,
+                            )
+                            drawLine(
+                                color = Palette.chartreuse,
+                                start = Offset(size.width * 0.45f, size.height * 0.75f),
+                                end = Offset(size.width * 0.8f, size.height * 0.25f),
+                                strokeWidth = stroke,
+                                cap = StrokeCap.Round,
+                            )
+                        }
                     }
                 }
             }
@@ -585,12 +595,25 @@ private fun SignInStep(
                     ),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
-                    tint = Palette.muted,
-                    modifier = Modifier.size(18.dp),
-                )
+                Canvas(modifier = Modifier.size(18.dp)) {
+                    val centre = Offset(size.width / 2f, size.height / 2f)
+                    val arm = 4.5.dp.toPx()
+                    val stroke = 1.6.dp.toPx()
+                    drawLine(
+                        color = Palette.muted,
+                        start = Offset(centre.x + arm * 0.5f, centre.y - arm),
+                        end = Offset(centre.x - arm * 0.5f, centre.y),
+                        strokeWidth = stroke,
+                        cap = StrokeCap.Round,
+                    )
+                    drawLine(
+                        color = Palette.muted,
+                        start = Offset(centre.x - arm * 0.5f, centre.y),
+                        end = Offset(centre.x + arm * 0.5f, centre.y + arm),
+                        strokeWidth = stroke,
+                        cap = StrokeCap.Round,
+                    )
+                }
             }
         }
 
