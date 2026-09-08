@@ -252,7 +252,20 @@ drop policy if exists last_read_update on public.last_read;
 create policy last_read_update on public.last_read for update
   using (person_id = (select public.current_user_id()));
 
--- room_inks
+-- room_inks (ink memory that outlives membership; created if not already present)
+create table if not exists public.room_inks (
+  room_id uuid not null references public.rooms (id) on delete cascade,
+  person_id uuid not null references public.profiles (id) on delete cascade,
+  ink text not null check (
+    ink in ('crimson','clay','ochre','moss','teal','indigo','plum','rose')),
+  chosen_at timestamptz not null default now(),
+  primary key (room_id, person_id)
+);
+
+alter table public.room_inks enable row level security;
+grant select, insert, update, delete on public.room_inks to authenticated;
+create index if not exists room_inks_person_idx on public.room_inks (person_id);
+
 drop policy if exists room_inks_own on public.room_inks;
 create policy room_inks_own on public.room_inks for all
   using (person_id = (select public.current_user_id()))
