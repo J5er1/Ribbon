@@ -49,6 +49,27 @@ object Copy {
     const val PICK_A_BOOK = "Pick something to read together"
     const val FIRST_RUN_HINT = "Notes go in the margin. Hold a verse to leave one."
 
+    // Walkthrough Tour (Duolingo-style feature walkthrough)
+    const val WALKTHROUGH_VISION_TITLE = "Read Scripture together."
+    const val WALKTHROUGH_VISION_BODY = "Ribbon is made for reading with one person or a few — a partner on the same couch, or a friend four time zones away."
+    const val WALKTHROUGH_PRESENCE_TITLE = "See each other on the page."
+    const val WALKTHROUGH_PRESENCE_BODY = "A soft presence appears when someone is reading at the same time. Quiet companionship without noisy notifications."
+    const val WALKTHROUGH_PRESENCE_SAMPLE = "Ruth is reading right now"
+    const val WALKTHROUGH_NOTES_TITLE = "Notes left behind."
+    const val WALKTHROUGH_NOTES_BODY = "Pin written reflections or voice memos to specific verses, waiting silently for the other person to discover later."
+    const val WALKTHROUGH_NOTE_SAMPLE = "0:42 · Left this for you"
+    const val WALKTHROUGH_FIRE_TITLE = "A fire kept alive together."
+    const val WALKTHROUGH_FIRE_BODY = "No gamified streak counters or cold badge scores. Just a single warm ember your room keeps burning together."
+    const val WALKTHROUGH_INTENT_TITLE = "Who will you read with?"
+    const val WALKTHROUGH_INTENT_SPOUSE = "My spouse or partner"
+    const val WALKTHROUGH_INTENT_FRIEND = "A close friend"
+    const val WALKTHROUGH_INTENT_GROUP = "A small study or family"
+    const val WALKTHROUGH_INTENT_SOLO = "Starting on my own first"
+    const val ALREADY_HAVE_ACCOUNT = "Already have an account? Sign in"
+    const val CONTINUE_TOUR = "Continue"
+    const val SKIP_TOUR = "Skip"
+    const val GET_STARTED = "Get Started"
+
     // The room (S01)
     fun continueIn(book: String) = "Continue in $book"
     fun begin(book: String) = "Begin $book"

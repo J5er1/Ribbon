@@ -19,15 +19,18 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -37,7 +40,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.ui.graphics.Color
+import app.readribbon.core.Ink
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -103,6 +112,8 @@ import androidx.core.graphics.scale
  */
 private sealed interface Step {
     data object Mark : Step
+    data class Tour(val index: Int) : Step
+    data object Intent : Step
     data object Who : Step
     data object FromInvite : Step
     data object SignIn : Step
@@ -111,11 +122,11 @@ private sealed interface Step {
     data class Join(val token: Uuid) : Step
 }
 
-/** The mark holds for about 900 ms and then dissolves. */
-private const val MARK_HOLD_MS = 900L
+/** The mark holds for about 750 ms and then dissolves into the tour. */
+private const val MARK_HOLD_MS = 750L
 
 /** That dissolve is its own beat — slower than a settle, eased both ways. */
-private const val MARK_DISSOLVE_MS = 600
+private const val MARK_DISSOLVE_MS = 500
 
 /** The portrait well, and the face in it. */
 private val PortraitSide = 96.dp
@@ -133,8 +144,8 @@ private fun <T> dissolveSpec(reduceMotion: Boolean): FiniteAnimationSpec<T> =
     if (reduceMotion) snap() else tween(MARK_DISSOLVE_MS, easing = RibbonMotion.EaseInOut)
 
 /**
- * The whole way in: the mark, who's reading, a name and a face, and the
- * invite — or the join a tapped link brought them here for.
+ * The whole way in: the mark, feature tour, reader intent, a name and a face,
+ * and the invite — or the join a tapped link brought them here for.
  *
  * @param onDone Onboarded; the caller decides what arriving looks like. In
  *   Swift this is the trailing closure `OnboardingFlow { onboarding = false }`.
@@ -146,6 +157,7 @@ fun OnboardingFlow(
     modifier: Modifier = Modifier,
 ) {
     var step: Step by remember { mutableStateOf<Step>(Step.Mark) }
+    var selectedIntent by remember { mutableStateOf(0) }
     var name by remember { mutableStateOf("") }
     var portraitData: ByteArray? by remember { mutableStateOf<ByteArray?>(null) }
     // Swift decodes the picked data to a `UIImage` inline at draw time; a
@@ -223,19 +235,32 @@ fun OnboardingFlow(
             ) { current ->
                 when (current) {
                     Step.Mark -> MarkMoment(
-                        // The outgoing content is still composed while it
-                        // fades, so its hold could otherwise land after a
-                        // link has already moved the thread on. SwiftUI
-                        // cancels the departing view's `.task`; the guard is
-                        // how that reads here.
-                        onElapsed = { if (step is Step.Mark) step = Step.Who },
+                        onElapsed = { if (step is Step.Mark) step = Step.Tour(0) },
+                    )
+
+                    is Step.Tour -> TourStep(
+                        index = current.index,
+                        onContinue = {
+                            step = if (current.index < 3) Step.Tour(current.index + 1) else Step.Intent
+                        },
+                        onBack = if (current.index > 0) {
+                            { step = Step.Tour(current.index - 1) }
+                        } else null,
+                        onSignIn = { step = Step.SignIn },
+                        onHaveInvite = { step = Step.FromInvite },
+                    )
+
+                    Step.Intent -> IntentStep(
+                        selectedIntent = selectedIntent,
+                        onIntentSelected = { selectedIntent = it },
+                        onContinue = { step = Step.Name },
+                        onBack = { step = Step.Tour(3) },
+                        onSignIn = { step = Step.SignIn },
                     )
 
                     Step.Who -> WhoStep(
                         onStartARoom = { step = Step.Name },
                         onHaveAnInvite = { step = Step.FromInvite },
-                        // Absent when this build has no backend — no dead
-                        // control.
                         onSignIn = if (model.remote == null) null else {
                             { step = Step.SignIn }
                         },
@@ -244,21 +269,15 @@ fun OnboardingFlow(
                     Step.SignIn -> SignInStep(
                         model = model,
                         onSignedIn = {
-                            // A profile came back with the account: the
-                            // person and their rooms are already here, so
-                            // onboarding is over. An account without one
-                            // still needs a name.
                             if (model.me != null) onDone() else step = Step.Name
                         },
-                        onCancel = { step = Step.Who },
+                        onCancel = { step = Step.Tour(0) },
                     )
 
                     Step.FromInvite -> FromInviteStep(
                         pasted = pastedInvite,
                         onPastedChange = { text ->
                             pastedInvite = text
-                            // A pasted link is complete the moment it lands —
-                            // don't make them find a go button.
                             pasteMissed = false
                             if (AppModel.inviteToken(fromPasted = text) != null) acceptPasted()
                         },
@@ -275,6 +294,7 @@ fun OnboardingFlow(
                             portraitData = data
                             portraitImage = image
                         },
+                        onBack = { step = Step.Intent },
                         onSubmit = { advanceFromName() },
                     )
 
@@ -332,6 +352,172 @@ private fun MarkMoment(onElapsed: () -> Unit) {
 }
 
 @Composable
+private fun TourStep(
+    index: Int,
+    onContinue: () -> Unit,
+    onBack: (() -> Unit)?,
+    onSignIn: () -> Unit,
+    onHaveInvite: () -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        OnboardingProgressBar(
+            currentStep = index,
+            totalSteps = 6,
+            onBack = onBack,
+            onSignIn = onSignIn,
+        )
+
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            contentAlignment = Alignment.Center,
+        ) {
+            OnboardingTourCard(index = index)
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            WayInButton(
+                title = Copy.CONTINUE_TOUR,
+                modifier = Modifier.padding(horizontal = 40.dp),
+                onClick = onContinue,
+            )
+
+            if (index == 0) {
+                QuietControl(
+                    title = Copy.ALREADY_HAVE_ACCOUNT,
+                    onClick = onSignIn,
+                )
+            } else {
+                QuietControl(
+                    title = Copy.HAVE_AN_INVITE,
+                    onClick = onHaveInvite,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun IntentStep(
+    selectedIntent: Int,
+    onIntentSelected: (Int) -> Unit,
+    onContinue: () -> Unit,
+    onBack: () -> Unit,
+    onSignIn: () -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        OnboardingProgressBar(
+            currentStep = 4,
+            totalSteps = 6,
+            onBack = onBack,
+            onSignIn = onSignIn,
+        )
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        Text(
+            text = Copy.WALKTHROUGH_INTENT_TITLE,
+            style = RibbonType.display(24f),
+            color = Palette.text,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp),
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            val intents = listOf(
+                Pair(Copy.WALKTHROUGH_INTENT_SPOUSE, Ink.Rose),
+                Pair(Copy.WALKTHROUGH_INTENT_FRIEND, Ink.Teal),
+                Pair(Copy.WALKTHROUGH_INTENT_GROUP, Ink.Ochre),
+                Pair(Copy.WALKTHROUGH_INTENT_SOLO, Ink.Plum),
+            )
+
+            intents.forEachIndexed { i, (title, ink) ->
+                val isSelected = selectedIntent == i
+                val dotColor = Color(android.graphics.Color.parseColor(ink.darkHex))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (isSelected) Palette.raised else Palette.surface)
+                        .border(
+                            width = 1.dp,
+                            color = if (isSelected) Palette.chartreuse.copy(alpha = 0.6f) else Palette.rule,
+                            shape = RoundedCornerShape(12.dp),
+                        )
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            role = Role.RadioButton,
+                            onClick = { onIntentSelected(i) },
+                        )
+                        .padding(horizontal = 18.dp, vertical = 15.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .background(dotColor, CircleShape),
+                        )
+                        Text(
+                            text = title,
+                            style = RibbonType.ui(16f),
+                            color = if (isSelected) Palette.text else Palette.muted,
+                        )
+                    }
+
+                    if (isSelected) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = null,
+                            tint = Palette.chartreuse,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        WayInButton(
+            title = Copy.CONTINUE_TOUR,
+            modifier = Modifier
+                .padding(horizontal = 40.dp)
+                .padding(bottom = 24.dp),
+            onClick = onContinue,
+        )
+    }
+}
+
+@Composable
 private fun WhoStep(
     onStartARoom: () -> Unit,
     onHaveAnInvite: () -> Unit,
@@ -377,7 +563,39 @@ private fun SignInStep(
     onSignedIn: () -> Unit,
     onCancel: () -> Unit,
 ) {
-    StepColumn(spacing = 24.dp) {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        role = Role.Button,
+                        onClick = onCancel,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                    tint = Palette.muted,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+
+        Spacer(Modifier.weight(1f))
+
         Text(
             text = Copy.ACCOUNT_REASON,
             style = RibbonType.ui(17f),
@@ -385,12 +603,18 @@ private fun SignInStep(
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 44.dp),
         )
+
+        Spacer(Modifier.height(24.dp))
+
         SignInInline(
             model = model,
             onSignedIn = onSignedIn,
             onCancel = onCancel,
             modifier = Modifier.padding(horizontal = 40.dp),
         )
+
+        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.weight(1f))
     }
 }
 
@@ -400,6 +624,7 @@ private fun NameStep(
     onNameChange: (String) -> Unit,
     portrait: ImageBitmap?,
     onPortraitPicked: (ByteArray, ImageBitmap?) -> Unit,
+    onBack: () -> Unit,
     onSubmit: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -431,7 +656,19 @@ private fun NameStep(
     // own arrival is the moment focus is asked for.
     val nameFocus = remember { FocusRequester() }
 
-    StepColumn(spacing = 26.dp) {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        OnboardingProgressBar(
+            currentStep = 5,
+            totalSteps = 6,
+            onBack = onBack,
+            onSignIn = null,
+        )
+
+        Spacer(Modifier.weight(1f))
+
         Box(
             modifier = Modifier
                 .size(PortraitSide)
@@ -467,6 +704,8 @@ private fun NameStep(
             }
         }
 
+        Spacer(Modifier.height(24.dp))
+
         // The portrait is asked for with the one reason that is true.
         Text(
             text = Copy.PORTRAIT_REASON,
@@ -475,6 +714,8 @@ private fun NameStep(
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth(),
         )
+
+        Spacer(Modifier.height(24.dp))
 
         CentredTextField(
             value = name,
@@ -490,6 +731,8 @@ private fun NameStep(
             focusRequester = nameFocus,
         )
 
+        Spacer(Modifier.height(24.dp))
+
         // Swift dims this control to 0.3 while the name is empty and lets
         // `advanceFromName` guard the tap. `enabled` does both at once — it
         // dims and it refuses — which is the same offer, said once, and it
@@ -500,6 +743,9 @@ private fun NameStep(
             enabled = name.trim().isNotEmpty(),
             onClick = onSubmit,
         )
+
+        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.weight(1f))
     }
 }
 

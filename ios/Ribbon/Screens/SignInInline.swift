@@ -21,6 +21,7 @@ struct SignInInline: View {
 
     enum Phase: Equatable { case email, code }
     @State private var phase: Phase = .email
+    @State private var showEmailForm = false
     @State private var email = ""
     @State private var code = ""
     @State private var errorLine: String?
@@ -31,28 +32,37 @@ struct SignInInline: View {
         VStack(spacing: 16) {
             if phase == .email {
                 if model.auth0Available {
-                    QuietControl(title: Copy.signInWithAuth0) { signInWithAuth0() }
+                    WayInButton(title: Copy.signInWithAuth0) { signInWithAuth0() }
+                        .padding(.horizontal, 30)
+
+                    if !showEmailForm {
+                        QuietControl(title: "Or use an emailed code") {
+                            withAnimation(RibbonMotion.settle) { showEmailForm = true }
+                        }
+                    }
                 }
-                if model.passkeysAvailable {
+                if model.passkeysAvailable && !model.auth0Available {
                     QuietControl(title: Copy.useAPasskey) { signInWithPasskey() }
                 }
             }
             switch phase {
             case .email:
-                TextField("", text: $email, prompt: Text(Copy.yourEmail).foregroundStyle(Palette.muted))
-                    .font(RibbonType.ui(17))
-                    .foregroundStyle(Palette.text)
-                    .multilineTextAlignment(.center)
-                    .keyboardType(.emailAddress)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .focused($focused)
-                    .submitLabel(.send)
-                    .onSubmit(sendCode)
-                WayInButton(title: Copy.sendTheCode) { sendCode() }
-                    .padding(.horizontal, 40)
-                    .disabled(!email.contains("@"))
-                    .opacity(email.contains("@") ? 1 : 0.3)
+                if !model.auth0Available || showEmailForm {
+                    TextField("", text: $email, prompt: Text(Copy.yourEmail).foregroundStyle(Palette.muted))
+                        .font(RibbonType.ui(17))
+                        .foregroundStyle(Palette.text)
+                        .multilineTextAlignment(.center)
+                        .keyboardType(.emailAddress)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .focused($focused)
+                        .submitLabel(.send)
+                        .onSubmit(sendCode)
+                    WayInButton(title: Copy.sendTheCode) { sendCode() }
+                        .padding(.horizontal, 40)
+                        .disabled(!email.contains("@"))
+                        .opacity(email.contains("@") ? 1 : 0.3)
+                }
             case .code:
                 Text(Copy.codeOnItsWay)
                     .font(RibbonType.ui(15))

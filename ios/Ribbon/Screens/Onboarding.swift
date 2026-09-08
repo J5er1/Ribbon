@@ -12,7 +12,8 @@ struct OnboardingFlow: View {
 
     enum Step: Equatable {
         case mark
-        case who
+        case tour(Int) // 0: Vision, 1: Presence, 2: Notes, 3: Fire
+        case intent
         case fromInvite
         case signIn
         case name
@@ -21,6 +22,7 @@ struct OnboardingFlow: View {
     }
 
     @State private var step: Step = .mark
+    @State private var selectedIntent: Int = 0
     @State private var name = ""
     @State private var portraitItem: PhotosPickerItem?
     @State private var portraitData: Data?
@@ -34,9 +36,14 @@ struct OnboardingFlow: View {
             case .mark:
                 markMoment
                     .transition(.opacity)
-            case .who:
-                whoStep
-                    .transition(.opacity)
+            case .tour(let index):
+                tourStep(index)
+                    .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity),
+                                             removal: .move(edge: .leading).combined(with: .opacity)))
+            case .intent:
+                intentStep
+                    .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity),
+                                             removal: .move(edge: .leading).combined(with: .opacity)))
             case .fromInvite:
                 fromInviteStep
                     .transition(.opacity)
@@ -78,7 +85,7 @@ struct OnboardingFlow: View {
         }
     }
 
-    // The mark, and one line. It holds for about 900 ms and then dissolves.
+    // The mark, and one line. It holds for about 750 ms and then dissolves into the tour.
     private var markMoment: some View {
         VStack(spacing: 22) {
             WaveMark()
@@ -88,48 +95,143 @@ struct OnboardingFlow: View {
                 .foregroundStyle(Palette.text)
         }
         .task {
-            try? await Task.sleep(for: .milliseconds(900))
-            withAnimation(.easeInOut(duration: 0.6)) { step = .who }
+            try? await Task.sleep(for: .milliseconds(750))
+            withAnimation(.easeInOut(duration: 0.5)) { step = .tour(0) }
         }
     }
 
-    private var whoStep: some View {
-        VStack(spacing: 26) {
-            Spacer()
-            Text(Copy.whoIsReading)
-                .font(RibbonType.display(24))
-                .foregroundStyle(Palette.text)
-                .multilineTextAlignment(.center)
-            VStack(spacing: 16) {
-                WayInButton(title: Copy.startARoom) {
-                    withAnimation(RibbonMotion.settle) { step = .name }
+    // MARK: - Feature Tour Steps (Duolingo Style)
+    private func tourStep(_ index: Int) -> some View {
+        VStack(spacing: 0) {
+            OnboardingProgressBar(
+                currentStep: index,
+                totalSteps: 6,
+                onBack: index > 0 ? {
+                    withAnimation(RibbonMotion.settle) { step = .tour(index - 1) }
+                } : nil,
+                onSignIn: {
+                    withAnimation(RibbonMotion.settle) { step = .signIn }
                 }
-                QuietControl(title: Copy.haveAnInvite) {
-                    withAnimation(RibbonMotion.settle) { step = .fromInvite }
+            )
+
+            OnboardingTourCard(index: index)
+
+            VStack(spacing: 12) {
+                WayInButton(title: Copy.continueTour) {
+                    withAnimation(RibbonMotion.settle) {
+                        if index < 3 {
+                            step = .tour(index + 1)
+                        } else {
+                            step = .intent
+                        }
+                    }
                 }
-                // The third answer, for the person this is not the first
-                // time for: a new phone, or a reinstall. Without it the
-                // only way back to your own rooms was to make a stranger
-                // and a stray room first and find Sign in underneath them.
-                // Absent when this build has no backend — no dead control.
-                if model.remote != nil {
-                    QuietControl(title: Copy.signIn) {
+                .padding(.horizontal, 40)
+
+                if index == 0 {
+                    QuietControl(title: Copy.alreadyHaveAccount) {
                         withAnimation(RibbonMotion.settle) { step = .signIn }
+                    }
+                } else {
+                    QuietControl(title: Copy.haveAnInvite) {
+                        withAnimation(RibbonMotion.settle) { step = .fromInvite }
                     }
                 }
             }
-            .padding(.horizontal, 56)
-            Spacer()
-            Spacer()
+            .padding(.bottom, 24)
         }
     }
 
-    // The way back to a room you already have. The account is the only
-    // thing that carries one between phones (§6.10), so this is where a
-    // second phone starts — and when the account already has a profile,
-    // its person and its rooms come back and there is nothing left to ask.
+    // MARK: - Intent Step ("Who will you read with?")
+    private var intentStep: some View {
+        VStack(spacing: 20) {
+            OnboardingProgressBar(
+                currentStep: 4,
+                totalSteps: 6,
+                onBack: { withAnimation(RibbonMotion.settle) { step = .tour(3) } },
+                onSignIn: { withAnimation(RibbonMotion.settle) { step = .signIn } }
+            )
+
+            Spacer()
+
+            Text(Copy.walkthroughIntentTitle)
+                .font(RibbonType.display(24))
+                .foregroundStyle(Palette.text)
+                .multilineTextAlignment(.center)
+
+            VStack(spacing: 12) {
+                intentOption(index: 0, title: Copy.walkthroughIntentSpouse, icon: "heart")
+                intentOption(index: 1, title: Copy.walkthroughIntentFriend, icon: "person.2")
+                intentOption(index: 2, title: Copy.walkthroughIntentGroup, icon: "person.3")
+                intentOption(index: 3, title: Copy.walkthroughIntentSolo, icon: "book")
+            }
+            .padding(.horizontal, 28)
+
+            Spacer()
+
+            WayInButton(title: Copy.continueTour) {
+                withAnimation(RibbonMotion.settle) { step = .name }
+            }
+            .padding(.horizontal, 40)
+            .padding(.bottom, 24)
+        }
+    }
+
+    private func intentOption(index: Int, title: String, icon: String) -> some View {
+        Button {
+            selectedIntent = index
+            Haptics.light()
+        } label: {
+            HStack(spacing: 14) {
+                Image(systemName: icon)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(selectedIntent == index ? Palette.chartreuse : Palette.muted)
+                    .frame(width: 24)
+
+                Text(title)
+                    .font(RibbonType.ui(16))
+                    .foregroundStyle(selectedIntent == index ? Palette.text : Palette.muted)
+
+                Spacer()
+
+                if selectedIntent == index {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Palette.chartreuse)
+                }
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 15)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(selectedIntent == index ? Palette.raised : Palette.surface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(selectedIntent == index ? Palette.chartreuse.opacity(0.6) : Palette.rule, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    // The way back to a room you already have.
     private var signInStep: some View {
         VStack(spacing: 24) {
+            HStack {
+                Button {
+                    withAnimation(RibbonMotion.settle) { step = .tour(0) }
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Palette.muted)
+                        .frame(width: 32, height: 32)
+                }
+                .buttonStyle(.plain)
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 8)
+
             Spacer()
             Text(Copy.accountReason)
                 .font(RibbonType.ui(17))
@@ -138,9 +240,6 @@ struct OnboardingFlow: View {
                 .padding(.horizontal, 44)
             SignInInline(
                 onSignedIn: {
-                    // A profile came back with the account: the person and
-                    // their rooms are already here, so onboarding is over.
-                    // An account without one still needs a name.
                     if model.me != nil {
                         onDone()
                     } else {
@@ -148,7 +247,7 @@ struct OnboardingFlow: View {
                     }
                 },
                 onCancel: {
-                    withAnimation(RibbonMotion.settle) { step = .who }
+                    withAnimation(RibbonMotion.settle) { step = .tour(0) }
                 })
                 .padding(.horizontal, 40)
             Spacer()
@@ -157,7 +256,14 @@ struct OnboardingFlow: View {
     }
 
     private var nameStep: some View {
-        VStack(spacing: 26) {
+        VStack(spacing: 24) {
+            OnboardingProgressBar(
+                currentStep: 5,
+                totalSteps: 6,
+                onBack: { withAnimation(RibbonMotion.settle) { step = .intent } },
+                onSignIn: nil
+            )
+
             Spacer()
             PhotosPicker(selection: $portraitItem, matching: .images) {
                 ZStack {

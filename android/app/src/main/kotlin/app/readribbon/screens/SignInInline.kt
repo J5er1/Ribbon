@@ -206,40 +206,49 @@ fun SignInInline(
                         // only where the domain, the signing key and the
                         // project all agree (Passkeys.kt), so the field
                         // underneath is the thread that always works.
+                        var showEmailForm by remember { mutableStateOf(!model.auth0Available) }
+
                         if (model.auth0Available && activity != null) {
-                            QuietControl(
+                            WayInButton(
                                 title = Copy.SIGN_IN_WITH_AUTH0,
                                 onClick = { signInWithAuth0() },
+                                modifier = Modifier.padding(horizontal = 30.dp),
                             )
+                            if (!showEmailForm) {
+                                QuietControl(
+                                    title = "Or use an emailed code",
+                                    onClick = { showEmailForm = true },
+                                )
+                            }
                         }
-                        if (model.passkeysAvailable && activity != null) {
+                        if (model.passkeysAvailable && !model.auth0Available && activity != null) {
                             QuietControl(
                                 title = Copy.USE_A_PASSKEY,
                                 onClick = { signInWithPasskey() },
                             )
                         }
-                        CentredField(
-                            value = email,
-                            onValueChange = { email = it },
-                            placeholder = Copy.YOUR_EMAIL,
-                            size = 17f,
-                            focusRequester = emailFocus,
-                            keyboardOptions = KeyboardOptions(
-                                keyboardType = KeyboardType.Email,
-                                capitalization = KeyboardCapitalization.None,
-                                // An address is never what autocorrect thinks
-                                // it is.
-                                autoCorrectEnabled = false,
-                                imeAction = ImeAction.Send,
-                            ),
-                            keyboardActions = KeyboardActions(onSend = { sendCode() }),
-                        )
-                        WayInButton(
-                            title = Copy.SEND_THE_CODE,
-                            onClick = { sendCode() },
-                            modifier = Modifier.padding(horizontal = 40.dp),
-                            enabled = email.contains("@"),
-                        )
+                        if (showEmailForm || !model.auth0Available) {
+                            CentredField(
+                                value = email,
+                                onValueChange = { email = it },
+                                placeholder = Copy.YOUR_EMAIL,
+                                size = 17f,
+                                focusRequester = emailFocus,
+                                keyboardOptions = KeyboardOptions(
+                                    keyboardType = KeyboardType.Email,
+                                    capitalization = KeyboardCapitalization.None,
+                                    autoCorrectEnabled = false,
+                                    imeAction = ImeAction.Send,
+                                ),
+                                keyboardActions = KeyboardActions(onSend = { sendCode() }),
+                            )
+                            WayInButton(
+                                title = Copy.SEND_THE_CODE,
+                                onClick = { sendCode() },
+                                modifier = Modifier.padding(horizontal = 40.dp),
+                                enabled = email.contains("@"),
+                            )
+                        }
                     }
 
                     SignInPhase.Code -> {

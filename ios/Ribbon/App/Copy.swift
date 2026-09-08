@@ -30,6 +30,27 @@ enum Copy {
     static let pickABook = "Pick something to read together"
     static let firstRunHint = "Notes go in the margin. Hold a verse to leave one."
 
+    // Walkthrough Tour (Duolingo-style feature walkthrough)
+    static let walkthroughVisionTitle = "Read Scripture together."
+    static let walkthroughVisionBody = "Ribbon is made for reading with one person or a few — a partner on the same couch, or a friend four time zones away."
+    static let walkthroughPresenceTitle = "See each other on the page."
+    static let walkthroughPresenceBody = "A soft presence appears when someone is reading at the same time. Quiet companionship without noisy notifications."
+    static let walkthroughPresenceSample = "Ruth is reading right now"
+    static let walkthroughNotesTitle = "Notes left behind."
+    static let walkthroughNotesBody = "Pin written reflections or voice memos to specific verses, waiting silently for the other person to discover later."
+    static let walkthroughNoteSample = "0:42 · Left this for you"
+    static let walkthroughFireTitle = "A fire kept alive together."
+    static let walkthroughFireBody = "No gamified streak counters or cold badge scores. Just a single warm ember your room keeps burning together."
+    static let walkthroughIntentTitle = "Who will you read with?"
+    static let walkthroughIntentSpouse = "My spouse or partner"
+    static let walkthroughIntentFriend = "A close friend"
+    static let walkthroughIntentGroup = "A small study or family"
+    static let walkthroughIntentSolo = "Starting on my own first"
+    static let alreadyHaveAccount = "Already have an account? Sign in"
+    static let continueTour = "Continue"
+    static let skipTour = "Skip"
+    static let getStarted = "Get Started"
+
     // The room (S01)
     static func continueIn(_ book: String) -> String { "Continue in \(book)" }
     static func begin(_ book: String) -> String { "Begin \(book)" }
