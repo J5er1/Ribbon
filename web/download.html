@@ -1,0 +1,692 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0B0B0A">
+<title>Ribbon for Android — Download Preview</title>
+<meta name="description" content="Download the latest Android preview APK for Ribbon. A quiet, shared place to read the Bible together.">
+<link rel="icon" href="/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..700&family=Literata:ital,opsz,wght@0,7..72,300;0,7..72,400;0,7..72,500;0,7..72,600;1,7..72,400&family=Alegreya+Sans:wght@400;500;700&family=Alegreya+Sans+SC:wght@400;500&display=swap">
+
+<style>
+:root {
+  color-scheme: dark;
+  --ground:      #0B0B0A;
+  --surface:     #14120D;
+  --raised:      #1D1A13;
+  --raised-2:    #26221A;
+  --ink:         #F3F0E6;
+  --ink-dim:     #C5BEB0;
+  --muted:       #8E8271;
+  --rule:        #292118;
+  --accent:      #D6E45C;
+  --accent-dim:  #98A63C;
+  --accent-wash: rgba(214, 228, 92, .10);
+  --crimson:     #C9584E;
+  --clay:        #C87A46;
+  --flame-bright:#F3C778;
+  --flame-core:  #E9A63F;
+  --flame-deep:  #C87A46;
+  --coal:        #8A4A24;
+  --serif:       Literata, Georgia, serif;
+  --sans:        "Alegreya Sans", system-ui, sans-serif;
+  --caps:        "Alegreya Sans SC", "Alegreya Sans", Georgia, serif;
+  --display:     Fraunces, Georgia, serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background-color: var(--ground);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1.5rem 1.25rem 4rem;
+}
+
+.shell {
+  width: 100%;
+  max-width: 620px;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+/* Header */
+header.top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  text-decoration: none;
+  color: var(--ink);
+}
+
+.brand-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+}
+
+.wordmark {
+  font-family: var(--display);
+  font-size: 1.5rem;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
+.dot { color: var(--crimson); }
+
+.home-link {
+  font-family: var(--caps);
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-decoration: none;
+  letter-spacing: 0.08em;
+  transition: color 0.2s;
+}
+.home-link:hover { color: var(--ink); }
+
+/* Hero fire & download */
+.hero-card {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 16px;
+  padding: 2.25rem 1.75rem 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 12px 36px rgba(0,0,0,0.4);
+}
+
+/* Fire canvas background inside card */
+.fire-stage {
+  width: 140px;
+  height: 140px;
+  margin-bottom: 1rem;
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.fire-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 16%, #000 84%, transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, #000 16%, #000 84%, transparent 100%);
+}
+
+.hero-title {
+  font-family: var(--serif);
+  font-size: 1.85rem;
+  font-weight: 400;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+  margin-bottom: 0.4rem;
+}
+
+.hero-subtitle {
+  font-family: var(--sans);
+  font-size: 1.05rem;
+  color: var(--muted);
+  max-width: 40ch;
+  margin-bottom: 1.5rem;
+  line-height: 1.45;
+}
+
+/* Badges */
+.meta-pills {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-bottom: 1.75rem;
+}
+
+.pill {
+  font-family: var(--caps);
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  background: var(--raised);
+  border: 1px solid var(--rule);
+  color: var(--ink-dim);
+}
+
+.pill.accent {
+  background: rgba(214, 228, 92, 0.1);
+  border-color: rgba(214, 228, 92, 0.25);
+  color: var(--accent);
+}
+
+/* Big Download Button */
+.download-action {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.download-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  width: 100%;
+  max-width: 360px;
+  padding: 1.1rem 1.6rem;
+  border-radius: 12px;
+  background: var(--accent);
+  color: #0B0B0A;
+  text-decoration: none;
+  font-weight: 600;
+  transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: 0 4px 18px rgba(214, 228, 92, 0.25);
+  cursor: pointer;
+}
+
+.download-btn:hover {
+  background: #E2F162;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(214, 228, 92, 0.35);
+}
+
+.download-btn:active {
+  transform: translateY(0);
+}
+
+.btn-icon {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+}
+
+.btn-label-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+}
+
+.btn-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.btn-sub {
+  font-family: var(--caps);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  opacity: 0.85;
+}
+
+.download-alt {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.download-alt a {
+  color: var(--ink-dim);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.download-alt a:hover { color: var(--ink); }
+
+/* Notice Card */
+.notice-box {
+  background: rgba(201, 88, 78, 0.08);
+  border: 1px solid rgba(201, 88, 78, 0.25);
+  border-radius: 12px;
+  padding: 1.1rem 1.25rem;
+  display: flex;
+  gap: 0.9rem;
+  text-align: left;
+}
+
+.notice-icon {
+  color: var(--crimson);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.notice-text {
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--ink-dim);
+}
+
+.notice-text strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* Section Cards */
+.card-section {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  padding: 1.5rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+}
+
+.section-head {
+  font-family: var(--caps);
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  text-transform: uppercase;
+}
+
+/* Steps */
+.step-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  list-style: none;
+}
+
+.step-item {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.step-num {
+  font-family: var(--display);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--ground);
+  background: var(--muted);
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.step-item:first-child .step-num {
+  background: var(--accent);
+  color: var(--ground);
+}
+
+.step-body {
+  font-size: 0.95rem;
+  color: var(--ink-dim);
+  line-height: 1.5;
+}
+
+.step-body strong {
+  color: var(--ink);
+  display: block;
+  margin-bottom: 0.15rem;
+}
+
+/* Features grid */
+.feature-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.feature-item {
+  display: flex;
+  gap: 0.75rem;
+  font-size: 0.92rem;
+  color: var(--ink-dim);
+  line-height: 1.5;
+}
+
+.feature-dot {
+  color: var(--flame-core);
+  flex-shrink: 0;
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.feature-item strong {
+  color: var(--ink);
+}
+
+/* Dev details footer card */
+.dev-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--rule);
+  font-size: 0.88rem;
+}
+
+@media (max-width: 480px) {
+  .dev-meta { grid-template-columns: 1fr; }
+}
+
+.dev-label {
+  font-family: var(--caps);
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-bottom: 0.2rem;
+}
+
+.dev-value {
+  color: var(--ink);
+}
+
+.dev-value a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.dev-value a:hover {
+  text-decoration: underline;
+}
+
+/* Site footer */
+footer.site-foot {
+  text-align: center;
+  font-family: var(--caps);
+  font-size: 0.8rem;
+  color: var(--muted);
+  letter-spacing: 0.06em;
+  padding-top: 1rem;
+}
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <!-- Top Bar -->
+  <header class="top-bar">
+    <a href="/" class="brand">
+      <img src="/icon.png" alt="Ribbon mark" class="brand-icon" width="32" height="32">
+      <span class="wordmark">Ribbon<span class="dot">.</span></span>
+    </a>
+    <a href="/" class="home-link">Read it together</a>
+  </header>
+
+  <!-- Hero Card -->
+  <main class="hero-card">
+    <div class="fire-stage">
+      <canvas id="fire-hero" class="fire-canvas" width="140" height="140"></canvas>
+    </div>
+
+    <h1 class="hero-title">Ribbon for Android</h1>
+    <p class="hero-subtitle">A quiet, shared place to read Scripture with one person, or a few.</p>
+
+    <div class="meta-pills">
+      <span class="pill accent">Preview Build</span>
+      <span class="pill">Direct APK · ~49 MB</span>
+      <span class="pill">Android 13+ (API 33+)</span>
+      <span class="pill">No Play Store Required</span>
+    </div>
+
+    <div class="download-action">
+      <a href="https://github.com/J5er1/Ribbon/releases/download/latest/app-debug.apk" class="download-btn" id="download-btn">
+        <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/>
+        </svg>
+        <div class="btn-label-group">
+          <span class="btn-title">Download APK</span>
+          <span class="btn-sub">app-debug.apk · Direct download</span>
+        </div>
+      </a>
+
+      <p class="download-alt">
+        Having trouble? <a href="https://github.com/J5er1/Ribbon/releases/download/latest/app-debug.apk">Direct binary link</a> or view on <a href="https://github.com/J5er1/Ribbon/releases/tag/latest" target="_blank" rel="noopener">GitHub Releases</a>.
+      </p>
+    </div>
+  </main>
+
+  <!-- Important Keystore Notice -->
+  <div class="notice-box">
+    <svg class="notice-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"></circle>
+      <line x1="12" y1="8" x2="12" y2="12"></line>
+      <line x1="12" y1="16" x2="12.01" y2="16"></line>
+    </svg>
+    <div class="notice-text">
+      <strong>Updating from an earlier build?</strong>
+      If you tested an early Ribbon prototype prior to today, please <strong>uninstall that previous version first</strong>. This build introduces our permanent repository signing key—once installed, all future builds and updates will install cleanly over it without ever needing to uninstall.
+    </div>
+  </div>
+
+  <!-- How to Install Steps -->
+  <section class="card-section">
+    <h2 class="section-head">How to install on Android</h2>
+    <ol class="step-list">
+      <li class="step-item">
+        <span class="step-num">1</span>
+        <div class="step-body">
+          <strong>Download the APK</strong>
+          Tap the <em>Download APK</em> button above. If Chrome shows <em>"File might be harmful"</em>, tap <strong>Download anyway</strong> (this is Android's standard prompt when installing directly outside Google Play).
+        </div>
+      </li>
+      <li class="step-item">
+        <span class="step-num">2</span>
+        <div class="step-body">
+          <strong>Allow Unknown Apps</strong>
+          Open the downloaded <code>app-debug.apk</code> from your notifications or Downloads folder. If prompted, tap <strong>Settings</strong> and toggle on <strong>"Allow from this source"</strong>.
+        </div>
+      </li>
+      <li class="step-item">
+        <span class="step-num">3</span>
+        <div class="step-body">
+          <strong>Install and Read</strong>
+          Tap <strong>Install</strong>. Ribbon installs cleanly as <code>app.readribbon.debug</code> alongside your regular apps.
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <!-- What's in this Build -->
+  <section class="card-section">
+    <h2 class="section-head">What's in this build</h2>
+    <div class="feature-list">
+      <div class="feature-item">
+        <span class="feature-dot">✦</span>
+        <div><strong>Shared Campfire:</strong> Organic value-noise fire engine with live embers, hot air wisps, and multiple heat bodies, aligned with the iOS Swift painter.</div>
+      </div>
+      <div class="feature-item">
+        <span class="feature-dot">✦</span>
+        <div><strong>Persistent Signing Key:</strong> Unified debug keystore ensuring seamless updates over subsequent releases without signature mismatch errors.</div>
+      </div>
+      <div class="feature-item">
+        <span class="feature-dot">✦</span>
+        <div><strong>Bundled Scripture:</strong> Full offline text for both the Berean Standard Bible (BSB) and World English Bible (WEB).</div>
+      </div>
+      <div class="feature-item">
+        <span class="feature-dot">✦</span>
+        <div><strong>Quiet Margins & Presence:</strong> Shared presence indicators and verse-pinned written or audio note markers.</div>
+      </div>
+      <div class="feature-item">
+        <span class="feature-dot">✦</span>
+        <div><strong>Targeting Android 16 (API 36):</strong> Built natively with Jetpack Compose, Material 3, and Kotlin Coroutines (minimum Android 13).</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Developer & Project Info -->
+  <section class="card-section">
+    <h2 class="section-head">Developer & Project Information</h2>
+    <div class="dev-meta">
+      <div>
+        <div class="dev-label">Developer</div>
+        <div class="dev-value">Jacob Muzychenko</div>
+      </div>
+      <div>
+        <div class="dev-label">GitHub</div>
+        <div class="dev-value"><a href="https://github.com/J5er1" target="_blank" rel="noopener">@J5er1</a></div>
+      </div>
+      <div>
+        <div class="dev-label">Open Source Repository</div>
+        <div class="dev-value"><a href="https://github.com/J5er1/Ribbon" target="_blank" rel="noopener">github.com/J5er1/Ribbon</a></div>
+      </div>
+      <div>
+        <div class="dev-label">Channel</div>
+        <div class="dev-value">Automated CI Preview (<code>main</code>)</div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="site-foot">
+    <p>Ribbon · Read it together · <a href="/" style="color: inherit; text-decoration: underline;">readribbon.app</a></p>
+  </footer>
+</div>
+
+<!-- Campfire Simulation Script (Matching iOS FirePainter) -->
+<script>
+(function() {
+  const canvas = document.getElementById("fire-hero");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  const N = 256;
+  const table = new Float32Array(N);
+  let s = 0x12345679;
+  for (let i = 0; i < N; i++) {
+    s = (Math.imul(s, 1103515245) + 12345) & 0x7fffffff;
+    table[i] = (s >>> 16) / 32768.0;
+  }
+
+  function noise(x, y) {
+    const xi = Math.floor(x);
+    const yi = Math.floor(y);
+    const fx = x - xi;
+    const fy = y - yi;
+    const wx = fx * fx * (3 - 2 * fx);
+    const wy = fy * fy * (3 - 2 * wy);
+    const v00 = table[((xi & 255) + ((yi & 255) << 4)) & 255];
+    const v10 = table[(((xi + 1) & 255) + ((yi & 255) << 4)) & 255];
+    const v01 = table[((xi & 255) + (((yi + 1) & 255) << 4)) & 255];
+    const v11 = table[(((xi + 1) & 255) + (((yi + 1) & 255) << 4)) & 255];
+    const a = v00 + wx * (v10 - v00);
+    const b = v01 + wx * (v11 - v01);
+    return a + wy * (b - a);
+  }
+
+  const sparks = [];
+  for (let i = 0; i < 16; i++) {
+    sparks.push({
+      x: (Math.random() - 0.5) * 40,
+      y: Math.random() * 80,
+      vy: 20 + Math.random() * 35,
+      life: Math.random(),
+      maxLife: 1.2 + Math.random() * 1.5,
+      size: 1 + Math.random() * 1.5
+    });
+  }
+
+  let last = performance.now();
+
+  function draw(now) {
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    const t = now / 1000;
+
+    const w = canvas.width;
+    const h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    const cx = w / 2;
+    const base = h * 0.82;
+
+    // Coal bed glow
+    const coalGrad = ctx.createRadialGradient(cx, base, 4, cx, base, 55);
+    coalGrad.addColorStop(0, "rgba(233, 166, 63, 0.45)");
+    coalGrad.addColorStop(0.5, "rgba(200, 122, 70, 0.2)");
+    coalGrad.addColorStop(1, "rgba(0, 0, 0, 0)");
+    ctx.fillStyle = coalGrad;
+    ctx.beginPath();
+    ctx.arc(cx, base, 55, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Flame bodies
+    const layers = [
+      { color: "rgba(200, 122, 70, 0.5)", width: 34, height: 68, freq: 0.9, speed: 2.2 },
+      { color: "rgba(233, 166, 63, 0.75)", width: 24, height: 55, freq: 1.2, speed: 3.0 },
+      { color: "rgba(243, 199, 120, 0.9)", width: 14, height: 42, freq: 1.6, speed: 3.8 }
+    ];
+
+    layers.forEach(layer => {
+      ctx.fillStyle = layer.color;
+      ctx.beginPath();
+      ctx.moveTo(cx - layer.width, base);
+
+      const steps = 18;
+      for (let i = 0; i <= steps; i++) {
+        const prog = i / steps;
+        const curY = base - prog * layer.height;
+        const n = noise(prog * layer.freq * 2.5, t * layer.speed) - 0.5;
+        const taper = 1 - prog * prog;
+        const curX = cx - (layer.width * taper) + n * 14 * prog;
+        ctx.lineTo(curX, curY);
+      }
+
+      for (let i = steps; i >= 0; i--) {
+        const prog = i / steps;
+        const curY = base - prog * layer.height;
+        const n = noise(prog * layer.freq * 2.5 + 10, t * layer.speed) - 0.5;
+        const taper = 1 - prog * prog;
+        const curX = cx + (layer.width * taper) + n * 14 * prog;
+        ctx.lineTo(curX, curY);
+      }
+
+      ctx.closePath();
+      ctx.fill();
+    });
+
+    // Sparks
+    sparks.forEach(p => {
+      p.y += p.vy * dt;
+      p.life += dt;
+      if (p.life > p.maxLife) {
+        p.life = 0;
+        p.y = 0;
+        p.x = (Math.random() - 0.5) * 36;
+      }
+      const alpha = Math.max(0, 1 - p.life / p.maxLife);
+      const px = cx + p.x + Math.sin(t * 3 + p.x) * 4;
+      const py = base - p.y;
+      ctx.fillStyle = `rgba(243, 199, 120, ${alpha * 0.8})`;
+      ctx.beginPath();
+      ctx.arc(px, py, p.size, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    requestAnimationFrame(draw);
+  }
+
+  requestAnimationFrame(draw);
+})();
+</script>
+
+</body>
+</html>

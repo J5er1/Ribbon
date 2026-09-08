@@ -240,6 +240,7 @@ writeFileSync(
   }),
 );
 cpSync(join(here, "invite.js"), join(dist, "invite.js"));
+cpSync(join(here, "download.html"), join(dist, "download.html"));
 
 // Universal links: an invite link opens the app when it's installed
 // (S16). Apple fetches this file from the domain; the app declares the

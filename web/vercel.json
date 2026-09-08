@@ -7,14 +7,10 @@
       "source": "/apk",
       "destination": "https://github.com/J5er1/Ribbon/releases/download/latest/app-debug.apk",
       "permanent": false
-    },
-    {
-      "source": "/android",
-      "destination": "https://github.com/J5er1/Ribbon/releases/download/latest/app-debug.apk",
-      "permanent": false
     }
   ],
   "rewrites": [
+    { "source": "/android", "destination": "/download" },
     { "source": "/i/:token*", "destination": "/invite" }
   ],
   "headers": [
