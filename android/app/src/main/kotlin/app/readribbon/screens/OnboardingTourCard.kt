@@ -23,6 +23,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -124,7 +125,7 @@ private fun VisionGraphic() {
                 )
         )
         WaveMark(
-            modifier = Modifier.size(80.dp),
+            size = 80.dp,
             tint = Palette.text,
         )
     }
@@ -144,7 +145,7 @@ private fun PresenceGraphic() {
     ) {
         Text(
             text = "In the beginning was the Word, and the Word was with God, and the Word was God.",
-            style = RibbonType.body(17f),
+            style = RibbonType.scripture(17f),
             color = Palette.text.copy(alpha = 0.85f),
             lineHeight = 24.sp,
         )
@@ -170,7 +171,7 @@ private fun PresenceGraphic() {
                 ) {
                     Text(
                         text = "R",
-                        style = RibbonType.uiMedium(10f),
+                        style = RibbonType.ui(10f, FontWeight.Medium),
                         color = Palette.ground,
                     )
                 }
@@ -208,7 +209,7 @@ private fun NotesGraphic() {
             )
             Text(
                 text = "The Light shines in the darkness, and the darkness has not overcome it.",
-                style = RibbonType.body(17f),
+                style = RibbonType.scripture(17f),
                 color = Palette.text.copy(alpha = 0.85f),
                 lineHeight = 24.sp,
             )
