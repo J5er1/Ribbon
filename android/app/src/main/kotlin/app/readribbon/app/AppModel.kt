@@ -51,10 +51,13 @@ import app.readribbon.services.LocalPresenceService
 import app.readribbon.services.PresenceService
 import app.readribbon.services.PresentPerson
 import app.readribbon.services.RemoteSync
+import app.readribbon.services.ReleaseInfo
 import app.readribbon.services.RoomGraph
 import app.readribbon.services.SupabaseClient
 import app.readribbon.services.SupabaseError
 import app.readribbon.services.Transcriber
+import app.readribbon.services.UpdateService
+import app.readribbon.services.UpdateState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -151,6 +154,10 @@ class AppModel(
 
     /** The person being followed, if any. */
     var followingPersonID: Uuid? by mutableStateOf(null)
+
+    /** OTA updates (GitHub Releases / in-app updater) */
+    var updateState: UpdateState by mutableStateOf(UpdateState.Idle)
+        private set
 
     /** Portraits cache (person id → image). */
     private val portraits = mutableStateMapOf<Uuid, ImageBitmap>()
@@ -1380,6 +1387,64 @@ class AppModel(
      */
     private fun Reading.snapshot(): Reading = copy(handiwork = handiwork.copy())
 
+    // MARK: - OTA Updates
+
+    /**
+     * Checks whether an update is available on GitHub Releases.
+     * Silent and non-blocking.
+     */
+    fun checkForUpdates() {
+        if (updateState is UpdateState.Checking || updateState is UpdateState.Downloading) return
+        updateState = UpdateState.Checking
+        viewModelScope.launch {
+            try {
+                val info = UpdateService.checkForUpdate()
+                updateState = if (info != null) {
+                    UpdateState.Available(info)
+                } else {
+                    UpdateState.Idle
+                }
+            } catch (e: Exception) {
+                updateState = UpdateState.Error(e.message ?: "Failed to check for updates")
+            }
+        }
+    }
+
+    /**
+     * Triggers installation or download of the available update.
+     * If permission is missing, opens settings so the user can allow install from Ribbon.
+     */
+    fun triggerUpdate(context: Context) {
+        val current = updateState
+        if (current is UpdateState.ReadyToInstall) {
+            UpdateService.installApk(context, current.apkFile)
+            return
+        }
+        val info = (current as? UpdateState.Available)?.info ?: return
+        if (!UpdateService.canRequestPackageInstalls(context)) {
+            UpdateService.openInstallPermissionSettings(context)
+            return
+        }
+        updateState = UpdateState.Downloading(0f, info)
+        viewModelScope.launch {
+            try {
+                val apkFile = UpdateService.downloadApk(context, info.apkUrl) { progress ->
+                    updateState = UpdateState.Downloading(progress, info)
+                }
+                updateState = UpdateState.ReadyToInstall(info, apkFile)
+                UpdateService.installApk(context, apkFile)
+            } catch (e: Exception) {
+                updateState = UpdateState.Error(e.message ?: "Update download failed")
+            }
+        }
+    }
+
+    fun dismissUpdateError() {
+        if (updateState is UpdateState.Error) {
+            updateState = UpdateState.Idle
+        }
+    }
+
     companion object {
 
         /**
@@ -1399,6 +1464,7 @@ class AppModel(
             if (SupabaseConfig.REMOTE_ENABLED) {
                 model.remote = RemoteSync.restore(app)
             }
+            model.checkForUpdates()
             return model
         }
 

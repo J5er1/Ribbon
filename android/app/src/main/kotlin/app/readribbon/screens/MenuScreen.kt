@@ -110,6 +110,7 @@ import app.readribbon.design.rememberReduceMotion
 import app.readribbon.design.room
 import app.readribbon.fire.CampfireGlyph
 import app.readribbon.services.Passkeys
+import app.readribbon.services.UpdateState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -484,6 +485,11 @@ private fun MenuRoot(
             landed = true
         }
     }
+    LaunchedEffect(Unit) {
+        if (model.updateState is UpdateState.Idle) {
+            model.checkForUpdates()
+        }
+    }
 
     // Edge-to-edge is mandatory (§12.2), so the menu carries both insets
     // itself: the status bar above the way out, the navigation bar under the
@@ -608,10 +614,15 @@ private fun MenuRoot(
                     ) { confirmDelete = true }
                 }
 
+                UpdateSection(model = model)
+
                 SmallCaps(
-                    Copy.versionLine(version),
+                    if (model.updateState is UpdateState.Checking) Copy.CHECKING_FOR_UPDATES else Copy.versionLine(version),
                     size = 11f,
                     color = Palette.muted.copy(alpha = 0.7f),
+                    modifier = Modifier.clickable(role = Role.Button) {
+                        model.checkForUpdates()
+                    },
                 )
             }
         }
@@ -1092,6 +1103,117 @@ private fun AccountControls(model: AppModel) {
                     text = Copy.ACCOUNT_REASON,
                     style = RibbonType.ui(13f),
                     color = Palette.muted,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun UpdateSection(model: AppModel) {
+    val context = LocalContext.current
+    when (val state = model.updateState) {
+        is UpdateState.Idle, is UpdateState.Checking -> {
+            // Quiet: nothing shown when up to date or checking
+        }
+        is UpdateState.Available -> {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Palette.surface)
+                    .border(1.dp, Palette.rule, RoundedCornerShape(8.dp))
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                SmallCaps(
+                    Copy.updateAvailable(state.info.versionName),
+                    color = Palette.text,
+                    size = 13f,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    QuietControl(
+                        title = Copy.UPDATE_NOW,
+                        color = Palette.chartreuse,
+                    ) {
+                        model.triggerUpdate(context)
+                    }
+                }
+            }
+        }
+        is UpdateState.Downloading -> {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Palette.surface)
+                    .border(1.dp, Palette.rule, RoundedCornerShape(8.dp))
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                val pct = (state.progress * 100).toInt()
+                SmallCaps(
+                    Copy.updateDownloading(pct),
+                    color = Palette.muted,
+                    size = 12f,
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(Palette.rule),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(state.progress.coerceIn(0.02f, 1f))
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(Palette.chartreuse),
+                    )
+                }
+            }
+        }
+        is UpdateState.ReadyToInstall -> {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Palette.surface)
+                    .border(1.dp, Palette.rule, RoundedCornerShape(8.dp))
+                    .clickable(role = Role.Button) { model.triggerUpdate(context) }
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                SmallCaps(
+                    Copy.UPDATE_READY_TO_INSTALL,
+                    color = Palette.chartreuse,
+                    size = 13f,
+                )
+            }
+        }
+        is UpdateState.Error -> {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Palette.surface)
+                    .border(1.dp, Palette.rule, RoundedCornerShape(8.dp))
+                    .clickable(role = Role.Button) {
+                        model.dismissUpdateError()
+                        model.checkForUpdates()
+                    }
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                SmallCaps(
+                    Copy.UPDATE_FAILED,
+                    color = Palette.muted,
+                    size = 12f,
                 )
             }
         }

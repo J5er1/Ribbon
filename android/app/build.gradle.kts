@@ -27,8 +27,9 @@ android {
         // transcript would be shipping a voice note nobody deaf can read.
         minSdk = 33
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1"
+        val buildVersionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+        versionCode = buildVersionCode
+        versionName = "0.1.$buildVersionCode"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders["auth0Domain"] = "dev-m45drxnu73cdtjcn.us.auth0.com"
         manifestPlaceholders["auth0Scheme"] = "app.readribbon.debug"

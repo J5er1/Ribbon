@@ -467,6 +467,14 @@ object Copy {
      */
     fun versionLine(version: String) = "$WORDMARK $version"
 
+    // Updates
+    fun updateAvailable(version: String) = "A new version of Ribbon is ready ($version)"
+    const val UPDATE_NOW = "Update"
+    fun updateDownloading(percent: Int) = "Downloading update · $percent%"
+    const val UPDATE_READY_TO_INSTALL = "Ready to install · Tap to restart"
+    const val UPDATE_FAILED = "Couldn't complete update. Tap to retry."
+    const val CHECKING_FOR_UPDATES = "Checking for updates…"
+
     /**
      * Megabytes on this device (S21) — a count about a device, not about a
      * person, which is the one honest exception to Law 2 and the same
