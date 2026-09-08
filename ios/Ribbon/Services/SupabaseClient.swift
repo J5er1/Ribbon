@@ -15,11 +15,28 @@ struct SupabaseSession: Codable {
     var accessToken: String
     var refreshToken: String
     var user: SupabaseUser
+    var isAuth0: Bool = false
 
     enum CodingKeys: String, CodingKey {
         case accessToken = "access_token"
         case refreshToken = "refresh_token"
         case user
+        case isAuth0 = "is_auth0"
+    }
+
+    init(accessToken: String, refreshToken: String, user: SupabaseUser, isAuth0: Bool = false) {
+        self.accessToken = accessToken
+        self.refreshToken = refreshToken
+        self.user = user
+        self.isAuth0 = isAuth0
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        accessToken = try container.decode(String.self, forKey: .accessToken)
+        refreshToken = try container.decode(String.self, forKey: .refreshToken)
+        user = try container.decode(SupabaseUser.self, forKey: .user)
+        isAuth0 = try container.decodeIfPresent(Bool.self, forKey: .isAuth0) ?? false
     }
 }
 
@@ -75,7 +92,8 @@ actor SupabaseClient {
         let session = SupabaseSession(
             accessToken: idToken,
             refreshToken: refreshToken,
-            user: SupabaseUser(id: userUUID, email: email)
+            user: SupabaseUser(id: userUUID, email: email),
+            isAuth0: true
         )
         self.session = session
         return session
@@ -191,11 +209,21 @@ actor SupabaseClient {
     var currentSession: SupabaseSession? { session }
 
     func refresh() async throws {
-        guard let session else { throw SupabaseError.notSignedIn }
+        guard var current = session else { throw SupabaseError.notSignedIn }
+        if current.isAuth0 {
+            guard !current.refreshToken.isEmpty else { return }
+            let refreshed = try await Auth0Service.refreshTokens(refreshToken: current.refreshToken)
+            current.accessToken = refreshed.idToken
+            if !refreshed.refreshToken.isEmpty {
+                current.refreshToken = refreshed.refreshToken
+            }
+            self.session = current
+            return
+        }
         let data = try await post(
             path: "auth/v1/token",
             query: [URLQueryItem(name: "grant_type", value: "refresh_token")],
-            body: ["refresh_token": session.refreshToken],
+            body: ["refresh_token": current.refreshToken],
             authenticated: false)
         self.session = try JSONDecoder().decode(SupabaseSession.self, from: data)
     }

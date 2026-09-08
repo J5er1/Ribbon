@@ -39,6 +39,7 @@ data class SupabaseSession(
     @SerialName("access_token") val accessToken: String,
     @SerialName("refresh_token") val refreshToken: String,
     val user: SupabaseUser,
+    @SerialName("is_auth0") val isAuth0: Boolean = false,
 )
 
 @Serializable
@@ -98,6 +99,7 @@ class SupabaseClient(
             accessToken = idToken,
             refreshToken = refreshToken,
             user = SupabaseUser(id = userUuid, email = email),
+            isAuth0 = true,
         )
         lock.withLock { session = auth0Session }
         return auth0Session
@@ -115,6 +117,13 @@ class SupabaseClient(
 
     suspend fun refresh() {
         val current = currentSession() ?: throw SupabaseError.NotSignedIn
+        if (current.isAuth0) {
+            if (current.refreshToken.isBlank()) return
+            val (newIdToken, newRefreshToken) = Auth0Service.refreshTokens(current.refreshToken)
+            val updated = current.copy(accessToken = newIdToken, refreshToken = newRefreshToken)
+            lock.withLock { session = updated }
+            return
+        }
         val data = post(
             path = "auth/v1/token",
             query = listOf("grant_type" to "refresh_token"),

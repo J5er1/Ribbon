@@ -169,6 +169,42 @@ public enum Auth0Service {
         )
     }
 
+    /// Refreshes the Auth0 session using a refresh token, returning a fresh ID token and new refresh token.
+    public static func refreshTokens(refreshToken: String) async throws -> (idToken: String, refreshToken: String) {
+        guard Auth0Config.isConfigured else { throw Auth0Error.notConfigured }
+
+        let domain = Auth0Config.domain.trimmingCharacters(in: .whitespacesAndNewlines)
+        let clientId = Auth0Config.clientId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let tokenURL = URL(string: "https://\(domain)/oauth/token") else {
+            throw Auth0Error.notConfigured
+        }
+
+        var request = URLRequest(url: tokenURL)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let bodyDict: [String: String] = [
+            "grant_type": "refresh_token",
+            "client_id": clientId,
+            "refresh_token": refreshToken
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: bodyDict)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
+            let errorText = String(data: data, encoding: .utf8) ?? "HTTP status \((response as? HTTPURLResponse)?.statusCode ?? 0)"
+            throw Auth0Error.tokenExchangeFailed(errorText)
+        }
+
+        guard let tokenJSON = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let idToken = tokenJSON["id_token"] as? String else {
+            throw Auth0Error.tokenExchangeFailed("Missing id_token in refresh response")
+        }
+
+        let newRefreshToken = tokenJSON["refresh_token"] as? String ?? refreshToken
+        return (idToken, newRefreshToken)
+    }
+
     /// Parses an Auth0 ID token (JWT) without signature verification (which is verified by Supabase).
     /// Extracts `user_uuid` or calculates a deterministic RFC 4122 Version 5 UUID from `sub`.
     public static func parseIdToken(_ token: String) throws -> (userUUID: UUID, email: String?) {

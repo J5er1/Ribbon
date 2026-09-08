@@ -79,6 +79,30 @@ object Auth0Service {
     }
 
     /**
+     * Refreshes the Auth0 session using a refresh token, returning a fresh ID token and refresh token.
+     */
+    suspend fun refreshTokens(refreshToken: String): Pair<String, String> {
+        if (!Auth0Config.isConfigured) throw Auth0Exception.NotConfigured
+        val account = Auth0.getInstance(Auth0Config.CLIENT_ID, Auth0Config.DOMAIN)
+        val authentication = com.auth0.android.authentication.AuthenticationAPIClient(account)
+        val credentials = suspendCancellableCoroutine<Credentials> { continuation ->
+            authentication.renewAuth(refreshToken)
+                .start(object : Callback<Credentials, AuthenticationException> {
+                    override fun onSuccess(result: Credentials) {
+                        continuation.resume(result)
+                    }
+
+                    override fun onFailure(error: AuthenticationException) {
+                        continuation.resumeWithException(
+                            Auth0Exception.Failed(error.getDescription() ?: error.message ?: "Token refresh failed")
+                        )
+                    }
+                })
+        }
+        return Pair(credentials.idToken, credentials.refreshToken ?: refreshToken)
+    }
+
+    /**
      * Parses an Auth0-issued ID token (JWT) without remote verification (since the token
      * is passed directly to Supabase which validates the signature via OIDC JWKS).
      * Extracts user_uuid (or computes deterministic UUIDv5 from 'sub'), and email.
