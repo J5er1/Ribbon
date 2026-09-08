@@ -162,7 +162,7 @@ public enum Auth0Service {
         let (userUUID, email) = try parseIdToken(idToken)
 
         return Auth0User(
-            idToken = idToken,
+            idToken: idToken,
             userUUID: userUUID,
             email: email,
             refreshToken: refreshToken

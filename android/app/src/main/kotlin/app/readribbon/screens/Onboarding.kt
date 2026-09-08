@@ -83,6 +83,7 @@ import app.readribbon.design.WayInButton
 import app.readribbon.design.readableColumn
 import app.readribbon.design.rememberReduceMotion
 import app.readribbon.design.room
+import app.readribbon.design.color
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -446,15 +447,15 @@ private fun IntentStep(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             val intents = listOf(
-                Pair(Copy.WALKTHROUGH_INTENT_SPOUSE, Ink.Rose),
-                Pair(Copy.WALKTHROUGH_INTENT_FRIEND, Ink.Teal),
-                Pair(Copy.WALKTHROUGH_INTENT_GROUP, Ink.Ochre),
-                Pair(Copy.WALKTHROUGH_INTENT_SOLO, Ink.Plum),
+                Pair(Copy.WALKTHROUGH_INTENT_SPOUSE, Ink.rose),
+                Pair(Copy.WALKTHROUGH_INTENT_FRIEND, Ink.teal),
+                Pair(Copy.WALKTHROUGH_INTENT_GROUP, Ink.ochre),
+                Pair(Copy.WALKTHROUGH_INTENT_SOLO, Ink.plum),
             )
 
             intents.forEachIndexed { i, (title, ink) ->
                 val isSelected = selectedIntent == i
-                val dotColor = Color(android.graphics.Color.parseColor(ink.darkHex))
+                val dotColor = ink.color
 
                 Row(
                     modifier = Modifier

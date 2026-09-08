@@ -32,6 +32,7 @@ import app.readribbon.core.Ink
 import app.readribbon.design.Palette
 import app.readribbon.design.RibbonType
 import app.readribbon.design.WaveMark
+import app.readribbon.design.color
 
 /**
  * Visual card preview for each slide in Ribbon's progressive walkthrough tour.
@@ -133,7 +134,7 @@ private fun VisionGraphic() {
 
 @Composable
 private fun PresenceGraphic() {
-    val teal = Color(android.graphics.Color.parseColor(Ink.Teal.darkHex))
+    val teal = Ink.teal.color
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -187,7 +188,7 @@ private fun PresenceGraphic() {
 
 @Composable
 private fun NotesGraphic() {
-    val ochre = Color(android.graphics.Color.parseColor(Ink.Ochre.darkHex))
+    val ochre = Ink.ochre.color
     Column(
         modifier = Modifier
             .fillMaxWidth()
