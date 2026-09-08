@@ -128,7 +128,7 @@ writeFileSync(
     bodyClass: "chooser",
     body: `
 <main class="chooser-main">
-  <p class="sc crumb"><a href="/">Ribbon</a></p>
+  <p class="sc crumb"><a href="/">Ribbon</a> · <span style="color: var(--muted);">Web app coming soon</span></p>
   <section>
     <h2 class="sc">Good places to start together</h2>
     <ul class="books starters">
@@ -226,8 +226,15 @@ writeFileSync(
 <main class="invite-main">
   <p id="invite-line" class="invite-line">&nbsp;</p>
   <p class="sc invite-sub">Ribbon · read it together</p>
-  <p><a id="invite-action" class="way-in" href="/read/bsb/MRK/1.html">Open the book</a></p>
-  <p class="quiet-line">Joining the room from the browser is on its way. Reading works now.</p>
+  <p class="quiet-line" style="margin-top: 1.4rem; max-width: 38ch; font-size: 1rem; line-height: 1.6; color: var(--ink);">
+    Ribbon is a quiet, shared place to read on iPhone and Android. The app isn't on the store yet — ask the developer personally for an invite.
+  </p>
+  <p class="sc" style="margin-top: 1.6rem; font-size: 0.85rem; color: var(--muted); letter-spacing: 0.08em;">
+    Web app coming soon
+  </p>
+  <p style="margin-top: 0.8rem; font-size: 0.9rem;">
+    <a href="/read/bsb/MRK/1.html" style="color: var(--muted); text-decoration: underline;">Preview Scripture text</a>
+  </p>
 </main>
 `,
   }),

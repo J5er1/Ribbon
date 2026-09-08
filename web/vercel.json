@@ -3,7 +3,7 @@
   "outputDirectory": "dist",
   "cleanUrls": true,
   "rewrites": [
-    { "source": "/i/:token", "destination": "/invite.html" }
+    { "source": "/i/:token*", "destination": "/invite" }
   ],
   "headers": [
     {
