@@ -81,21 +81,28 @@ cpSync(join(repo, "ios", "Ribbon", "Resources", "PaperGrain.png"), join(dist, "g
 cpSync(join(here, "ribbon.css"), join(dist, "ribbon.css"));
 cpSync(join(here, "reading.js"), join(dist, "reading.js"));
 
-// Home (S26's smallest honest version until the full site: the wordmark,
-// the line, and the book itself).
+// Home (S26 / §12.3): one page, the three mechanics three sections deep,
+// each demonstrated rather than described. It carries its own stylesheet and
+// script — ribbon.css dresses the reading pages, and the two would fight —
+// so it gets a head of its own rather than the shared page() wrapper.
+const landing = readFileSync(join(here, "landing.html"), "utf8");
 writeFileSync(
   join(dist, "index.html"),
-  page({
-    title: "Ribbon",
-    bodyClass: "home",
-    body: `
-<main class="home-main">
-  <img class="wordmark" src="/wordmark.png" alt="Ribbon.">
-  <p class="tagline">Read it together.</p>
-  <p><a class="way-in" href="/read/">Open the book</a></p>
-</main>
+  `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0B0B0A">
+<title>Ribbon — read it together</title>
+<meta name="description" content="A quiet, shared place to read the Bible with one person, or a few. See who else is reading, leave a note at a verse, and keep one fire between you.">
+<link rel="icon" href="/icon.png">
+</head>
+<body class="landing">
+${landing}
+</body>
+</html>
 `,
-  }),
 );
 
 // The chooser.
