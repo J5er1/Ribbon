@@ -6,6 +6,7 @@ import android.app.Activity
 import android.content.Context
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.util.Log
 import app.readribbon.services.Auth0Service
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -17,12 +18,15 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.readribbon.core.Bible
+import app.readribbon.core.CardState
 import app.readribbon.core.FireScale
 import app.readribbon.core.FireState
 import app.readribbon.core.FireTuning
 import app.readribbon.core.FuelEvent
 import app.readribbon.core.Handiwork
 import app.readribbon.core.Highlight
+import app.readribbon.core.ReflectionCard
+import app.readribbon.core.ReflectionPrompts
 import app.readribbon.core.Ink
 import app.readribbon.core.Invite
 import app.readribbon.core.Membership
@@ -46,8 +50,9 @@ import app.readribbon.data.AppState
 import app.readribbon.data.LocalStore
 import app.readribbon.data.RoomNotificationPrefs
 import app.readribbon.data.ScriptureStore
-import app.readribbon.data.SupabaseConfig
+import app.readribbon.design.Haptics
 import app.readribbon.services.LocalPresenceService
+import app.readribbon.services.PresenceEvent
 import app.readribbon.services.PresenceService
 import app.readribbon.services.PresentPerson
 import app.readribbon.services.RemoteSync
@@ -55,6 +60,7 @@ import app.readribbon.services.ReleaseInfo
 import app.readribbon.services.RoomGraph
 import app.readribbon.services.SupabaseClient
 import app.readribbon.services.SupabaseError
+import app.readribbon.services.SupabaseRealtimePresenceService
 import app.readribbon.services.Transcriber
 import app.readribbon.services.UpdateService
 import app.readribbon.services.UpdateState
@@ -72,6 +78,7 @@ import kotlin.time.Instant
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 import androidx.core.net.toUri
+import androidx.lifecycle.viewModelScope
 
 // The app's one store. Local-first: every mutation lands in AppState and is
 // persisted; a remote backend (when configured and signed in) syncs the
@@ -162,6 +169,21 @@ class AppModel(
     /** Portraits cache (person id → image). */
     private val portraits = mutableStateMapOf<Uuid, ImageBitmap>()
 
+    init {
+        viewModelScope.launch {
+            presence.events.collect { event ->
+                when (event) {
+                    is PresenceEvent.Roster -> {
+                        presentPeople = event.people
+                    }
+                    is PresenceEvent.ThinkingOfYou -> {
+                        Haptics(appContext).tapOnTheShoulder()
+                    }
+                }
+            }
+        }
+    }
+
     /**
      * Swift persists from `Task.detached(priority: .utility)`, which is not
      * tied to the model's lifetime. `viewModelScope` is, and a save started
@@ -190,6 +212,10 @@ class AppModel(
         if (id == state.me?.id) state.me else state.people[id]
 
     fun portrait(id: Uuid): ImageBitmap? = portraits[id]
+
+    fun room(id: Uuid): Room? = state.rooms.firstOrNull { it.id == id }
+
+    fun room(reading: Reading): Room? = room(reading.roomID)
 
     fun members(room: Room): List<Membership> =
         state.memberships
@@ -299,6 +325,30 @@ class AppModel(
         persist()
     }
 
+    /**
+     * Pushes everything the backend needs for an invite link to resolve:
+     * the creator's profile, the room, their membership, and the invite itself.
+     */
+    suspend fun pushInvite(invite: Invite, room: Room) {
+        val remote = this.remote ?: return
+        if (!remote.isSignedIn) return
+        val me = state.me ?: return
+        var portraitData: ByteArray? = null
+        val path = me.portraitPath
+        if (path != null) {
+            portraitData = runCatching {
+                withContext(Dispatchers.IO) { store.portraitFile(path).readBytes() }
+            }.getOrNull()
+        }
+        remote.push(profile = me, portraitData = portraitData)
+        remote.push(room = room)
+        val membership = myMembership(room)
+        if (membership != null) {
+            remote.push(membership = membership)
+        }
+        remote.push(invite = invite)
+    }
+
     fun createInvite(room: Room): Invite {
         val me = state.me ?: error("invite before person")
         // Reuse a live invite rather than minting link after link.
@@ -318,11 +368,12 @@ class AppModel(
         // out.
         val remote = this.remote
         if (remote != null && remote.isSignedIn) {
-            val membership = myMembership(room)
             viewModelScope.launch {
-                runCatching { remote.push(room = room) }
-                if (membership != null) runCatching { remote.push(membership = membership) }
-                runCatching { remote.push(invite = invite) }
+                runCatching {
+                    pushInvite(invite, room)
+                }.onFailure {
+                    Log.e("AppModel", "pushInvite failed for room ${room.id}", it)
+                }
             }
         }
         return invite
@@ -539,6 +590,13 @@ class AppModel(
         } else {
             state = state.copy(positions = state.positions + position)
         }
+        persist()
+        val remote = this.remote
+        if (remote != null && remote.isSignedIn) {
+            viewModelScope.launch {
+                runCatching { remote.push(position = position) }
+            }
+        }
     }
 
     /** Where I am in a reading — mine, not the room's (§03). */
@@ -638,9 +696,18 @@ class AppModel(
         val me = state.me ?: error("note before person")
         val note = Note(
             readingID = reading.id, authorID = me.id, verse = verse,
-            kind = NoteKind.written, body = body, createdAt = Clock.System.now())
+            kind = NoteKind.written, body = body, createdAt = Clock.System.now(),
+            isPending = true)
         state = state.copy(notes = state.notes + note)
         recordReadingActivity(reading = reading, address = verse)
+        persist()
+        val remote = this.remote
+        if (remote != null && remote.isSignedIn) {
+            viewModelScope.launch {
+                runCatching { remote.push(note = note) }
+                    .onSuccess { markNoteSent(note.id) }
+            }
+        }
         return note
     }
 
@@ -660,15 +727,32 @@ class AppModel(
             readingID = reading.id, authorID = me.id, verse = verse,
             kind = NoteKind.voice, audioPath = audioFile.name,
             waveform = waveform, transcriptState = TranscriptState.pending,
-            createdAt = Clock.System.now())
+            createdAt = Clock.System.now(), isPending = true)
         state = state.copy(notes = state.notes + note)
         recordReadingActivity(reading = reading, address = verse)
+        persist()
         val noteID = note.id
         viewModelScope.launch {
             val transcript = Transcriber.transcribe(appContext, audioFile)
             setTranscript(noteID = noteID, transcript = transcript)
         }
+        val remote = this.remote
+        if (remote != null && remote.isSignedIn) {
+            viewModelScope.launch {
+                runCatching { remote.push(note = note, audioFile = audioFile) }
+                    .onSuccess { markNoteSent(note.id) }
+            }
+        }
         return note
+    }
+
+    private fun markNoteSent(noteID: Uuid) {
+        val index = state.notes.indexOfFirst { it.id == noteID }
+        if (index < 0) return
+        val notes = state.notes.toMutableList()
+        notes[index] = notes[index].copy(isPending = false)
+        state = state.copy(notes = notes)
+        persist()
     }
 
     fun retryTranscript(note: Note) {
@@ -714,6 +798,12 @@ class AppModel(
         notes[index] = notes[index].copy(foundBy = notes[index].foundBy + me.id)
         state = state.copy(notes = notes)
         persist()
+        val remote = this.remote
+        if (remote != null && remote.isSignedIn) {
+            viewModelScope.launch {
+                runCatching { remote.push(noteFoundID = note.id, personID = me.id) }
+            }
+        }
     }
 
     /**
@@ -730,6 +820,12 @@ class AppModel(
         }
         state = state.copy(notes = state.notes.filterNot { it.id == note.id })
         persist()
+        val remote = this.remote
+        if (remote != null && remote.isSignedIn) {
+            viewModelScope.launch {
+                runCatching { remote.deleteNote(id = note.id) }
+            }
+        }
     }
 
     fun editWrittenNote(note: Note, body: String) {
@@ -740,6 +836,13 @@ class AppModel(
         notes[index] = notes[index].copy(body = body)
         state = state.copy(notes = notes)
         persist()
+        val remote = this.remote
+        if (remote != null && remote.isSignedIn) {
+            val updated = notes[index]
+            viewModelScope.launch {
+                runCatching { remote.push(note = updated) }
+            }
+        }
     }
 
     // MARK: - Highlights
@@ -761,13 +864,19 @@ class AppModel(
 
     fun addHighlight(range: VerseRange, ink: Ink, reading: Reading) {
         val me = state.me ?: return
-        state = state.copy(
-            highlights = state.highlights + Highlight(
-                readingID = reading.id, authorID = me.id, range = range, ink = ink,
-                createdAt = Clock.System.now()))
+        val highlight = Highlight(
+            readingID = reading.id, authorID = me.id, range = range, ink = ink,
+            createdAt = Clock.System.now())
+        state = state.copy(highlights = state.highlights + highlight)
         lastUsedInk = ink
         recordReadingActivity(reading = reading, address = range.start)
         persist()
+        val remote = this.remote
+        if (remote != null && remote.isSignedIn) {
+            viewModelScope.launch {
+                runCatching { remote.push(highlight = highlight) }
+            }
+        }
     }
 
     /** You cannot remove someone else's mark (S06). */
@@ -775,6 +884,12 @@ class AppModel(
         if (highlight.authorID != state.me?.id) return
         state = state.copy(highlights = state.highlights.filterNot { it.id == highlight.id })
         persist()
+        val remote = this.remote
+        if (remote != null && remote.isSignedIn) {
+            viewModelScope.launch {
+                runCatching { remote.deleteHighlight(id = highlight.id) }
+            }
+        }
     }
 
     /**
@@ -786,6 +901,85 @@ class AppModel(
             return myMembership(room)?.ink
         }
         return null // free palette; the toolbar offers all eight
+    }
+
+    // MARK: - Reflection Cards (§4.6, S08, S09)
+
+    fun card(reading: Reading, chapter: Int): ReflectionCard {
+        val existing = state.cards.firstOrNull { it.readingID == reading.id && it.chapter == chapter }
+        if (existing != null) return existing
+
+        val prompt = ReflectionPrompts.prompt(chapter)
+        val newCard = ReflectionCard(
+            readingID = reading.id,
+            chapter = chapter,
+            question = prompt,
+            state = CardState.sealed
+        )
+        state = state.copy(cards = state.cards + newCard)
+        persist()
+        val remote = this.remote
+        if (remote != null && remote.isSignedIn) {
+            viewModelScope.launch {
+                runCatching { remote.push(card = newCard) }
+            }
+        }
+        return newCard
+    }
+
+    fun answerCard(card: ReflectionCard, answer: String, room: Room) {
+        val me = state.me ?: return
+        val index = state.cards.indexOfFirst { it.id == card.id }
+        if (index < 0) return
+
+        val cards = state.cards.toMutableList()
+        val newAnswers = cards[index].answers + (me.id to answer)
+        val roomMembers = members(room)
+        val allAnswered = roomMembers.isNotEmpty() && roomMembers.all { newAnswers.containsKey(it.personID) }
+        val newState = if (allAnswered) CardState.open else cards[index].state
+        val openedAt = if (allAnswered && cards[index].openedAt == null) Clock.System.now() else cards[index].openedAt
+
+        cards[index] = cards[index].copy(
+            answers = newAnswers,
+            state = newState,
+            openedAt = openedAt
+        )
+        val updatedCard = cards[index]
+        state = state.copy(cards = cards)
+        persist()
+
+        val remote = this.remote
+        if (remote != null && remote.isSignedIn) {
+            viewModelScope.launch {
+                runCatching {
+                    remote.push(
+                        RemoteSync.CardAnswerRow(
+                            cardId = updatedCard.id,
+                            personId = me.id,
+                            answer = answer,
+                            createdAt = Clock.System.now()
+                        )
+                    )
+                    remote.push(card = updatedCard)
+                }
+            }
+        }
+    }
+
+    fun setDownCard(card: ReflectionCard) {
+        val index = state.cards.indexOfFirst { it.id == card.id }
+        if (index < 0) return
+        val cards = state.cards.toMutableList()
+        cards[index] = cards[index].copy(state = CardState.setDown)
+        val updatedCard = cards[index]
+        state = state.copy(cards = cards)
+        persist()
+        val remote = this.remote
+        if (remote != null && remote.isSignedIn) {
+            viewModelScope.launch {
+                runCatching { remote.push(card = updatedCard) }
+            }
+        }
     }
 
     // MARK: - Settings
@@ -1048,6 +1242,12 @@ class AppModel(
             },
             invites = state.invites.map {
                 if (it.createdBy == old) it.copy(createdBy = uid) else it
+            },
+            cards = state.cards.map { card ->
+                if (card.answers.containsKey(old)) {
+                    val ans = card.answers[old]!!
+                    card.copy(answers = card.answers - old + (uid to ans))
+                } else card
             })
         persist()
     }
@@ -1055,7 +1255,7 @@ class AppModel(
     /**
      * Everything this device can honestly claim on the backend: my
      * profile and portrait, my rooms and membership, live invites, the
-     * readings and their fires, my quiet days.
+     * readings and their fires, my quiet days, notes, highlights, positions, and reflection cards.
      */
     suspend fun pushLocalGraph() {
         val remote = this.remote ?: return
@@ -1082,6 +1282,36 @@ class AppModel(
             for (reading in state.readings) {
                 if (reading.roomID != room.id) continue
                 runCatching { remote.push(reading = reading.snapshot()) }
+                for (note in state.notes) {
+                    if (note.readingID != reading.id || note.authorID != me.id) continue
+                    val audioFile = note.audioPath?.let { store.audioFile(it) }
+                    runCatching { remote.push(note = note, audioFile = audioFile) }
+                }
+                for (hl in state.highlights) {
+                    if (hl.readingID != reading.id || hl.authorID != me.id) continue
+                    runCatching { remote.push(highlight = hl) }
+                }
+                val pos = state.positions.firstOrNull { it.readingID == reading.id && it.personID == me.id }
+                if (pos != null) {
+                    runCatching { remote.push(position = pos) }
+                }
+                for (card in state.cards) {
+                    if (card.readingID != reading.id) continue
+                    runCatching { remote.push(card = card) }
+                    val myAns = card.answers[me.id]
+                    if (myAns != null) {
+                        runCatching {
+                            remote.push(
+                                RemoteSync.CardAnswerRow(
+                                    cardId = card.id,
+                                    personId = me.id,
+                                    answer = myAns,
+                                    createdAt = card.openedAt ?: Clock.System.now()
+                                )
+                            )
+                        }
+                    }
+                }
             }
             for (day in quietDays(room)) {
                 if (day.personID != me.id) continue
@@ -1283,6 +1513,159 @@ class AppModel(
         }
         next = next.copy(readings = readings)
 
+        // Notes
+        val notes = next.notes.toMutableList()
+        val remote = this.remote
+        for (row in graph.notes) {
+            val noteKind = NoteKind.entries.firstOrNull { it.name == row.kind } ?: NoteKind.written
+            val verse = VerseAddress(bookID = row.bookId, chapter = row.chapter, verse = row.verse)
+            val transcriptState = row.transcriptState?.let { raw ->
+                TranscriptState.entries.firstOrNull { it.name == raw }
+            }
+            val i = notes.indexOfFirst { it.id == row.id }
+            if (i >= 0) {
+                notes[i] = notes[i].copy(
+                    body = row.body ?: notes[i].body,
+                    waveform = row.waveform ?: notes[i].waveform,
+                    transcript = row.transcript ?: notes[i].transcript,
+                    transcriptState = transcriptState ?: notes[i].transcriptState,
+                    audioPath = row.audioPath ?: notes[i].audioPath,
+                    isPending = false
+                )
+            } else {
+                val note = Note(
+                    id = row.id,
+                    readingID = row.readingId,
+                    authorID = row.authorId,
+                    verse = verse,
+                    kind = noteKind,
+                    body = row.body,
+                    audioPath = row.audioPath,
+                    waveform = row.waveform,
+                    transcript = row.transcript,
+                    transcriptState = transcriptState,
+                    createdAt = row.createdAt,
+                    foundBy = emptySet(),
+                    isPending = false
+                )
+                notes.add(note)
+                if (noteKind == NoteKind.voice && row.audioPath != null && remote != null) {
+                    viewModelScope.launch {
+                        val file = store.audioFile(row.audioPath)
+                        if (!file.exists()) {
+                            runCatching { remote.downloadAudio(readingID = row.readingId, noteID = row.id, to = file) }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Note founds
+        for (row in graph.noteFounds) {
+            val i = notes.indexOfFirst { it.id == row.noteId }
+            if (i >= 0) {
+                notes[i] = notes[i].copy(foundBy = notes[i].foundBy + row.personId)
+            }
+        }
+        next = next.copy(notes = notes)
+
+        // Highlights
+        val highlights = next.highlights.toMutableList()
+        for (row in graph.highlights) {
+            if (highlights.none { it.id == row.id }) {
+                val range = VerseRange(
+                    start = VerseAddress(bookID = row.bookId, chapter = row.chapter, verse = row.startVerse),
+                    end = VerseAddress(bookID = row.bookId, chapter = row.chapter, verse = row.endVerse)
+                )
+                val ink = Ink.entries.firstOrNull { it.name == row.ink } ?: Ink.ochre
+                highlights.add(
+                    Highlight(
+                        id = row.id,
+                        readingID = row.readingId,
+                        authorID = row.authorId,
+                        range = range,
+                        ink = ink,
+                        createdAt = row.createdAt
+                    )
+                )
+            }
+        }
+        next = next.copy(highlights = highlights)
+
+        // Positions
+        val positions = next.positions.toMutableList()
+        for (row in graph.positions) {
+            val i = positions.indexOfFirst { it.readingID == row.readingId && it.personID == row.personId }
+            if (i >= 0) {
+                if (row.updatedAt > positions[i].updatedAt) {
+                    positions[i] = positions[i].copy(
+                        chapter = row.chapter,
+                        verse = row.verse,
+                        updatedAt = row.updatedAt
+                    )
+                }
+            } else {
+                positions.add(
+                    ReadingPosition(
+                        readingID = row.readingId,
+                        personID = row.personId,
+                        chapter = row.chapter,
+                        verse = row.verse,
+                        updatedAt = row.updatedAt
+                    )
+                )
+            }
+        }
+        next = next.copy(positions = positions)
+
+        // Reflection Cards & Answers
+        val cards = next.cards.toMutableList()
+        val answersByCard = graph.cardAnswers.groupBy { it.cardId }
+        for (row in graph.cards) {
+            val remoteAnswers = answersByCard[row.id]?.associate { it.personId to it.answer } ?: emptyMap()
+            val remoteState = CardState.entries.firstOrNull { it.name == row.state } ?: CardState.sealed
+            val i = cards.indexOfFirst { it.id == row.id }
+            if (i >= 0) {
+                val mergedAnswers = cards[i].answers + remoteAnswers
+                val stateToSet = if (remoteState == CardState.open || remoteState == CardState.setDown) remoteState else cards[i].state
+                cards[i] = cards[i].copy(
+                    answers = mergedAnswers,
+                    state = stateToSet,
+                    openedAt = row.openedAt ?: cards[i].openedAt
+                )
+            } else {
+                cards.add(
+                    ReflectionCard(
+                        id = row.id,
+                        readingID = row.readingId,
+                        chapter = row.chapter,
+                        question = row.question,
+                        answers = remoteAnswers,
+                        state = remoteState,
+                        openedAt = row.openedAt
+                    )
+                )
+            }
+        }
+
+        // Check if sealed cards have all answers
+        for (i in cards.indices) {
+            if (cards[i].state == CardState.sealed) {
+                val reading = next.readings.firstOrNull { it.id == cards[i].readingID }
+                val room = if (reading != null) next.rooms.firstOrNull { it.id == reading.roomID } else null
+                if (room != null) {
+                    val roomMembers = next.memberships.filter { it.roomID == room.id }
+                    if (roomMembers.isNotEmpty() && roomMembers.all { cards[i].answers.containsKey(it.personID) }) {
+                        cards[i] = cards[i].copy(
+                            state = CardState.open,
+                            openedAt = cards[i].openedAt ?: Clock.System.now()
+                        )
+                    }
+                }
+            }
+        }
+        next = next.copy(cards = cards)
+
         state = next
         persist()
     }
@@ -1398,7 +1781,7 @@ class AppModel(
         updateState = UpdateState.Checking
         viewModelScope.launch {
             try {
-                val info = UpdateService.checkForUpdate()
+                val info = UpdateService.checkForUpdate(appContext)
                 updateState = if (info != null) {
                     UpdateState.Available(info)
                 } else {
@@ -1463,7 +1846,12 @@ class AppModel(
             val app = context.applicationContext
             val store = LocalStore(app)
             val state = store.load()
-            val model = AppModel(app, state, store, LocalPresenceService())
+            val presence: PresenceService = if (SupabaseConfig.REMOTE_ENABLED) {
+                SupabaseRealtimePresenceService()
+            } else {
+                LocalPresenceService()
+            }
+            val model = AppModel(app, state, store, presence)
             model.loadPortraits()
             if (SupabaseConfig.REMOTE_ENABLED) {
                 model.remote = RemoteSync.restore(app)
@@ -1483,7 +1871,7 @@ class AppModel(
          */
         fun inviteToken(from: Uri): Uuid? {
             val parts = from.pathSegments.filter { it != "/" }
-            val host = from.host?.lowercase()
+            val host = from.host?.lowercase()?.removePrefix("www.")
             if (host != SupabaseConfig.INVITE_HOST && from.scheme?.lowercase() != "ribbon") {
                 return null
             }

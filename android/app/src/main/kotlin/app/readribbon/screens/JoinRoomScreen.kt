@@ -66,6 +66,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.delay
 import app.readribbon.app.AppModel
 import app.readribbon.app.Copy
 import app.readribbon.app.firstName
@@ -150,6 +151,7 @@ private fun deadLine(error: Throwable): String {
     if (error is SupabaseError.Http) {
         if (error.body.contains("room_full")) return Copy.ROOM_FULL_FOR_JOINER
         if (error.body.contains("invite_expired")) return Copy.INVITE_EXPIRED
+        if (error.body.contains("invite_not_found")) return Copy.INVITE_NOT_FOUND
     }
     return Copy.SERVER_UNREACHABLE
 }
@@ -328,21 +330,29 @@ fun JoinFlow(
             phase = JoinPhase.Dead(Copy.SERVER_UNREACHABLE)
             return@LaunchedEffect
         }
-        try {
-            val found = remote.invitePreview(token)
-            if (found == null) {
-                phase = JoinPhase.Dead(Copy.INVITE_EXPIRED)
+        var attempts = 0
+        while (attempts < 3) {
+            try {
+                val found = remote.invitePreview(token)
+                if (found != null) {
+                    preview = found
+                    phase = when {
+                        found.expired -> JoinPhase.Dead(Copy.INVITE_EXPIRED)
+                        found.full -> JoinPhase.Dead(Copy.ROOM_FULL_FOR_JOINER)
+                        else -> JoinPhase.Preview
+                    }
+                    return@LaunchedEffect
+                }
+            } catch (_: Throwable) {
+                phase = JoinPhase.Dead(Copy.SERVER_UNREACHABLE)
                 return@LaunchedEffect
             }
-            preview = found
-            phase = when {
-                found.expired -> JoinPhase.Dead(Copy.INVITE_EXPIRED)
-                found.full -> JoinPhase.Dead(Copy.ROOM_FULL_FOR_JOINER)
-                else -> JoinPhase.Preview
+            attempts++
+            if (attempts < 3) {
+                delay(1200L)
             }
-        } catch (_: Throwable) {
-            phase = JoinPhase.Dead(Copy.SERVER_UNREACHABLE)
         }
+        phase = JoinPhase.Dead(Copy.INVITE_NOT_FOUND)
     }
 
     Box(modifier = modifier.fillMaxSize().room()) {

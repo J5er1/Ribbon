@@ -123,6 +123,7 @@ enum Copy {
     /// inviter's people, not theirs.
     static let roomFullForJoiner = "This room is full. Ask them to start another."
     static let inviteExpired = "This invite has expired. Ask for a new one."
+    static let inviteNotFound = "We couldn't find this invite. Ask for a new one."
     static func wantsToReadWithYou(_ name: String) -> String { "\(name) wants to read with you." }
     static let join = "Join"
     static let someoneWantsToReadWithYou = "Someone wants to read with you."

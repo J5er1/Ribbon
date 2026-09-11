@@ -47,12 +47,28 @@ final class AppModel {
     static func load() async -> AppModel {
         let store = LocalStore()
         let state = await store.load()
-        let model = AppModel(state: state, store: store, presence: LocalPresenceService())
+        let presence: PresenceService = SupabaseConfig.remoteEnabled ? SupabaseRealtimePresenceService() : LocalPresenceService()
+        let model = AppModel(state: state, store: store, presence: presence)
         await model.loadPortraits()
         if SupabaseConfig.remoteEnabled {
             model.remote = await RemoteSync.restore()
         }
+        model.startListeningToPresence()
         return model
+    }
+
+    private func startListeningToPresence() {
+        Task { [weak self] in
+            guard let self else { return }
+            for await event in self.presence.events {
+                switch event {
+                case .roster(let people):
+                    self.presentPeople = people
+                case .thinkingOfYou(let fromName):
+                    Haptics.shared.tapOnTheShoulder()
+                }
+            }
+        }
     }
 
     private func persist() {
@@ -76,6 +92,14 @@ final class AppModel {
     }
 
     func portrait(_ id: UUID) -> UIImage? { portraits[id] }
+
+    func room(_ id: UUID) -> Room? {
+        state.rooms.first { $0.id == id }
+    }
+
+    func room(of reading: Reading) -> Room? {
+        room(reading.roomID)
+    }
 
     func members(of room: Room) -> [Membership] {
         state.memberships
@@ -167,6 +191,22 @@ final class AppModel {
         persist()
     }
 
+    /// Pushes everything the backend needs for an invite link to resolve:
+    /// the creator's profile, the room, their membership, and the invite itself.
+    func pushInvite(_ invite: Invite, for room: Room) async throws {
+        guard let remote, remote.isSignedIn, let me = state.me else { return }
+        var portraitData: Data?
+        if let path = me.portraitPath {
+            portraitData = try? Data(contentsOf: await store.portraitFileURL(path))
+        }
+        try await remote.push(profile: me, portraitData: portraitData)
+        try await remote.push(room: room)
+        if let membership = myMembership(in: room) {
+            try await remote.push(membership: membership)
+        }
+        try await remote.push(invite: invite)
+    }
+
     @discardableResult
     func createInvite(for room: Room) -> Invite {
         guard let me = state.me else { fatalError("invite before person") }
@@ -183,11 +223,12 @@ final class AppModel {
         // room, in case this room predates sign-in) whenever it's handed
         // out.
         if let remote, remote.isSignedIn {
-            let membership = myMembership(in: room)
             Task {
-                try? await remote.push(room: room)
-                if let membership { try? await remote.push(membership: membership) }
-                try? await remote.push(invite: invite)
+                do {
+                    try await pushInvite(invite, for: room)
+                } catch {
+                    print("[AppModel] pushInvite failed for room \(room.id): \(error)")
+                }
             }
         }
         return invite
@@ -366,6 +407,10 @@ final class AppModel {
         } else {
             state.positions.append(position)
         }
+        persist()
+        if let remote, remote.isSignedIn {
+            Task { try? await remote.push(position: position) }
+        }
     }
 
     /// Where I am in a reading — mine, not the room's (§03).
@@ -441,9 +486,18 @@ final class AppModel {
         guard let me = state.me else { fatalError("note before person") }
         let note = Note(
             readingID: reading.id, authorID: me.id, verse: verse,
-            kind: .written, body: body, createdAt: Date())
+            kind: .written, body: body, createdAt: Date(), isPending: true)
         state.notes.append(note)
         recordReadingActivity(reading: reading, at: verse)
+        persist()
+        if let remote, remote.isSignedIn {
+            let noteToPush = note
+            Task {
+                if (try? await remote.push(note: noteToPush, fileURL: nil)) != nil {
+                    await MainActor.run { self.markNoteSent(noteToPush.id) }
+                }
+            }
+        }
         return note
     }
 
@@ -453,15 +507,30 @@ final class AppModel {
         let note = Note(
             readingID: reading.id, authorID: me.id, verse: verse,
             kind: .voice, audioPath: audioURL.lastPathComponent,
-            waveform: waveform, transcriptState: .pending, createdAt: Date())
+            waveform: waveform, transcriptState: .pending, createdAt: Date(), isPending: true)
         state.notes.append(note)
         recordReadingActivity(reading: reading, at: verse)
+        persist()
         let noteID = note.id
         Task {
             let transcript = await Transcriber.transcribe(url: audioURL)
             self.setTranscript(noteID: noteID, transcript: transcript)
         }
+        if let remote, remote.isSignedIn {
+            let noteToPush = note
+            Task {
+                if (try? await remote.push(note: noteToPush, fileURL: audioURL)) != nil {
+                    await MainActor.run { self.markNoteSent(noteToPush.id) }
+                }
+            }
+        }
         return note
+    }
+
+    func markNoteSent(_ noteID: UUID) {
+        guard let index = state.notes.firstIndex(where: { $0.id == noteID }) else { return }
+        state.notes[index].isPending = false
+        persist()
     }
 
     func retryTranscript(_ note: Note) {
@@ -494,6 +563,11 @@ final class AppModel {
         else { return }
         state.notes[index].foundBy.insert(me.id)
         persist()
+        if let remote, remote.isSignedIn {
+            let noteID = note.id
+            let personID = me.id
+            Task { try? await remote.push(noteFoundID: noteID, personID: personID) }
+        }
     }
 
     /// Take back your own note: the mark and the note vanish with no
@@ -505,6 +579,10 @@ final class AppModel {
         }
         state.notes.removeAll { $0.id == note.id }
         persist()
+        if let remote, remote.isSignedIn {
+            let noteID = note.id
+            Task { try? await remote.deleteNote(id: noteID) }
+        }
     }
 
     func editWrittenNote(_ note: Note, body: String) {
@@ -513,6 +591,10 @@ final class AppModel {
         else { return }
         state.notes[index].body = body
         persist()
+        if let remote, remote.isSignedIn {
+            let updated = state.notes[index]
+            Task { try? await remote.push(note: updated, fileURL: nil) }
+        }
     }
 
     // MARK: - Highlights
@@ -533,11 +615,14 @@ final class AppModel {
 
     func addHighlight(_ range: VerseRange, ink: Ink, in reading: Reading) {
         guard let me = state.me else { return }
-        state.highlights.append(
-            Highlight(readingID: reading.id, authorID: me.id, range: range, ink: ink, createdAt: Date()))
+        let highlight = Highlight(readingID: reading.id, authorID: me.id, range: range, ink: ink, createdAt: Date())
+        state.highlights.append(highlight)
         lastUsedInk = ink
         recordReadingActivity(reading: reading, at: range.start)
         persist()
+        if let remote, remote.isSignedIn {
+            Task { try? await remote.push(highlight: highlight) }
+        }
     }
 
     /// You cannot remove someone else's mark (S06).
@@ -545,6 +630,10 @@ final class AppModel {
         guard highlight.authorID == state.me?.id else { return }
         state.highlights.removeAll { $0.id == highlight.id }
         persist()
+        if let remote, remote.isSignedIn {
+            let id = highlight.id
+            Task { try? await remote.deleteHighlight(id: id) }
+        }
     }
 
     /// My ink for a highlight right now: my membership ink when the room is
@@ -554,6 +643,58 @@ final class AppModel {
             return myMembership(in: room)?.ink
         }
         return nil  // free palette; the toolbar offers all eight
+    }
+
+    // MARK: - Reflection Cards (§4.6, S08, S09)
+
+    func card(for reading: Reading, chapter: Int) -> ReflectionCard {
+        if let existing = state.cards.first(where: { $0.readingID == reading.id && $0.chapter == chapter }) {
+            return existing
+        }
+        let prompt = ReflectionPrompts.prompt(for: chapter)
+        let newCard = ReflectionCard(readingID: reading.id, chapter: chapter, question: prompt, state: .sealed)
+        state.cards.append(newCard)
+        persist()
+        if let remote, remote.isSignedIn {
+            Task { try? await remote.push(card: newCard) }
+        }
+        return newCard
+    }
+
+    func answerCard(_ card: ReflectionCard, answer: String, in room: Room) {
+        guard let me = state.me,
+              let index = state.cards.firstIndex(where: { $0.id == card.id })
+        else { return }
+        state.cards[index].answers[me.id] = answer
+
+        let roomMembers = members(of: room)
+        let allAnswered = !roomMembers.isEmpty && roomMembers.allSatisfy { member in
+            state.cards[index].answers[member.personID] != nil
+        }
+        if allAnswered {
+            state.cards[index].state = .open
+            if state.cards[index].openedAt == nil {
+                state.cards[index].openedAt = Date()
+            }
+        }
+        let updated = state.cards[index]
+        persist()
+        if let remote, remote.isSignedIn {
+            Task {
+                try? await remote.push(cardAnswer: (cardID: updated.id, personID: me.id, body: answer))
+                try? await remote.push(card: updated)
+            }
+        }
+    }
+
+    func setDownCard(_ card: ReflectionCard) {
+        guard let index = state.cards.firstIndex(where: { $0.id == card.id }) else { return }
+        state.cards[index].state = .setDown
+        let updated = state.cards[index]
+        persist()
+        if let remote, remote.isSignedIn {
+            Task { try? await remote.push(card: updated) }
+        }
     }
 
     // MARK: - Settings
@@ -776,12 +917,17 @@ final class AppModel {
         for i in state.invites.indices where state.invites[i].createdBy == old {
             state.invites[i].createdBy = uid
         }
+        for i in state.cards.indices {
+            if let ans = state.cards[i].answers.removeValue(forKey: old) {
+                state.cards[i].answers[uid] = ans
+            }
+        }
         persist()
     }
 
     /// Everything this device can honestly claim on the backend: my
     /// profile and portrait, my rooms and membership, live invites, the
-    /// readings and their fires, my quiet days.
+    /// readings and their fires, my quiet days, notes, highlights, positions, and reflection cards.
     func pushLocalGraph() async {
         guard let remote, remote.isSignedIn, let me = state.me else { return }
         var portraitData: Data?
@@ -799,6 +945,25 @@ final class AppModel {
             }
             for reading in state.readings where reading.roomID == room.id {
                 try? await remote.push(reading: reading)
+                for note in state.notes where note.readingID == reading.id && note.authorID == me.id {
+                    var audioURL: URL?
+                    if let audioPath = note.audioPath {
+                        audioURL = await store.audioFileURL(audioPath)
+                    }
+                    try? await remote.push(note: note, fileURL: audioURL)
+                }
+                for hl in state.highlights where hl.readingID == reading.id && hl.authorID == me.id {
+                    try? await remote.push(highlight: hl)
+                }
+                if let pos = state.positions.first(where: { $0.readingID == reading.id && $0.personID == me.id }) {
+                    try? await remote.push(position: pos)
+                }
+                for card in state.cards where card.readingID == reading.id {
+                    try? await remote.push(card: card)
+                    if let myAns = card.answers[me.id] {
+                        try? await remote.push(cardAnswer: (cardID: card.id, personID: me.id, body: myAns))
+                    }
+                }
             }
             for day in quietDays(for: room) where day.personID == me.id {
                 try? await remote.push(quietDay: day)
@@ -841,7 +1006,7 @@ final class AppModel {
     /// https://readribbon.app/i/<token> or ribbon://i/<token>.
     static func inviteToken(from url: URL) -> UUID? {
         let parts = url.pathComponents.filter { $0 != "/" }
-        let host = url.host()?.lowercased()
+        let host = url.host()?.lowercased().replacingOccurrences(of: "www.", with: "")
         guard host == "readribbon.app" || url.scheme?.lowercased() == "ribbon" else { return nil }
         guard parts.first == "i" || host == "i", let last = parts.last else { return nil }
         return UUID(uuidString: last)
@@ -970,6 +1135,140 @@ final class AppModel {
                     id: row.id, roomID: row.roomId, bookID: row.bookId,
                     startedAt: row.startedAt, finishedAt: row.finishedAt,
                     handiwork: handiwork))
+            }
+        }
+
+        // Notes
+        for row in graph.notes {
+            let noteKind = NoteKind(rawValue: row.kind) ?? .written
+            let verse = VerseAddress(bookID: row.bookId, chapter: row.chapter, verse: row.verse)
+            let transcriptState: TranscriptState? = nil
+            if let i = state.notes.firstIndex(where: { $0.id == row.id }) {
+                state.notes[i].body = row.body ?? state.notes[i].body
+                state.notes[i].waveform = row.waveform ?? state.notes[i].waveform
+                state.notes[i].transcript = row.transcript ?? state.notes[i].transcript
+                state.notes[i].transcriptState = state.notes[i].transcriptState
+                state.notes[i].audioPath = row.audioPath ?? state.notes[i].audioPath
+                state.notes[i].isPending = false
+            } else {
+                let note = Note(
+                    id: row.id,
+                    readingID: row.readingId,
+                    authorID: row.authorId,
+                    verse: verse,
+                    kind: noteKind,
+                    body: row.body,
+                    audioPath: row.audioPath,
+                    waveform: row.waveform,
+                    transcript: row.transcript,
+                    transcriptState: transcriptState,
+                    createdAt: row.createdAt,
+                    foundBy: [],
+                    isPending: false
+                )
+                state.notes.append(note)
+                if noteKind == .voice, let audioPath = row.audioPath, let remote {
+                    Task {
+                        let localURL = await self.store.audioFileURL(audioPath)
+                        if !FileManager.default.fileExists(atPath: localURL.path) {
+                            try? await remote.downloadAudio(readingID: row.readingId, noteID: row.id, to: localURL)
+                        }
+                    }
+                }
+            }
+        }
+
+        // Note founds
+        for row in graph.noteFounds {
+            if let i = state.notes.firstIndex(where: { $0.id == row.noteId }) {
+                state.notes[i].foundBy.insert(row.personId)
+            }
+        }
+
+        // Highlights
+        for row in graph.highlights {
+            if !state.highlights.contains(where: { $0.id == row.id }) {
+                let range = VerseRange(
+                    bookID: row.bookId,
+                    chapter: row.chapter,
+                    startVerse: row.startVerse,
+                    endVerse: row.endVerse
+                )
+                let ink = Ink(rawValue: row.ink) ?? .ochre
+                state.highlights.append(Highlight(
+                    id: row.id,
+                    readingID: row.readingId,
+                    authorID: row.authorId,
+                    range: range,
+                    ink: ink,
+                    createdAt: row.createdAt
+                ))
+            }
+        }
+
+        // Positions
+        for row in graph.positions {
+            if let i = state.positions.firstIndex(where: { $0.readingID == row.readingId && $0.personID == row.personId }) {
+                if row.updatedAt > state.positions[i].updatedAt {
+                    state.positions[i].chapter = row.chapter
+                    state.positions[i].verse = row.verse
+                    state.positions[i].updatedAt = row.updatedAt
+                }
+            } else {
+                state.positions.append(ReadingPosition(
+                    readingID: row.readingId,
+                    personID: row.personId,
+                    chapter: row.chapter,
+                    verse: row.verse,
+                    updatedAt: row.updatedAt
+                ))
+            }
+        }
+
+        // Reflection Cards & Answers
+        let answersByCard = Dictionary(grouping: graph.cardAnswers, by: \.cardId)
+        for row in graph.cards {
+            var answers: [UUID: String] = [:]
+            if let remoteAnswers = answersByCard[row.id] {
+                for a in remoteAnswers {
+                    answers[a.personId] = a.body
+                }
+            }
+            let remoteState = CardState(rawValue: row.state) ?? .sealed
+            if let i = state.cards.firstIndex(where: { $0.id == row.id }) {
+                for (author, ans) in answers {
+                    state.cards[i].answers[author] = ans
+                }
+                if remoteState == .open || remoteState == .setDown {
+                    state.cards[i].state = remoteState
+                }
+                if row.openedAt != nil {
+                    state.cards[i].openedAt = row.openedAt
+                }
+            } else {
+                state.cards.append(ReflectionCard(
+                    id: row.id,
+                    readingID: row.readingId,
+                    chapter: row.chapter,
+                    question: row.question,
+                    answers: answers,
+                    state: remoteState,
+                    openedAt: row.openedAt
+                ))
+            }
+        }
+
+        // Check if sealed cards have all answers
+        for i in state.cards.indices where state.cards[i].state == .sealed {
+            if let reading = state.readings.first(where: { $0.id == state.cards[i].readingID }),
+               let room = state.rooms.first(where: { $0.id == reading.roomID }) {
+                let roomMembers = members(of: room)
+                if !roomMembers.isEmpty && roomMembers.allSatisfy({ state.cards[i].answers[$0.personID] != nil }) {
+                    state.cards[i].state = .open
+                    if state.cards[i].openedAt == nil {
+                        state.cards[i].openedAt = Date()
+                    }
+                }
             }
         }
 

@@ -62,16 +62,15 @@ reasoning.
    boundaries when dragged slowly" — the current drag snaps to verse
    boundaries only, which is also the stated default.
 
-9. **Following, live presence, and thinking-of-you are built against
-   `PresenceService`, whose only shipping implementation is the honest
-   local one (nobody is ever present).** The Supabase Realtime channel
-   client is the next backend step. The UI states exist: reading quietly,
-   idle, the follow thread, being-followed ("Ruth is with you", once, with
-   the tucked portrait), follow-break on your own scroll, and the
-   two-minute back-to-where-you-were offer. Not built: the rubber-band on
-   the first self-scroll of a follow (the first scroll breaks it
-   directly), and the page-fly transition (a plain settle scroll stands
-   in).
+9. **Following, live presence, and thinking-of-you are backed by
+   `SupabaseRealtimePresenceService` on iOS and Android.** (September 2026.)
+   Connected via WebSocket to Phoenix Channels (`realtime:rooms:<room_id>`),
+   tracking presence states (`present`, `idle`, `reading_quietly`), position
+   updates, and broadcasting `thinking_of_you` taps that trigger the
+   haptic "tap on the shoulder" (`Haptics.tapOnTheShoulder()`). A local fallback
+   `LocalPresenceService` remains available for offline operation. The UI
+   states (reading quietly, idle, follow thread, being followed, follow-break
+   on self-scroll, and back-to-where-you-were offer) are live.
 
 9a. **Your own S12 is reachable only where your portrait renders** (an
    ember record's who-read-it row; the presence line shows others, not
@@ -84,34 +83,17 @@ reasoning.
    ships with phase two's ink transition), and leaving your only room is
    an edge the book itself routes through room closing (phase two).
 
-10. **The sign-in thread is wired; the sync engine is half-lit.**
-    (September 2026.) `SupabaseConfig.remoteEnabled = true`: accounts are
-    an emailed code (§6.10, `RemoteSync` + Keychain session), invites are
-    registered with the backend when handed out, links open the app
-    (universal link `readribbon.app/i/…` + `ribbon://` fallback, with a
-    paste-the-link fallback in onboarding), `accept_invite` runs from the
-    S16 join flow, and the **room surface** syncs both ways — rooms,
-    memberships, profiles + portraits, readings, fires, the rolling fuel
-    window, quiet days — so a couple on two phones sees one room, one
-    fire, one shelf, and steady can genuinely happen. Still local-only:
-    notes, highlights, positions, note-founds, and voice audio (their
-    sync, with pending marks and storage transfer, is the full engine —
-    the next piece of work), and live presence (deviation 9). On first
-    sign-in the local person adopts the account's id everywhere
-    (`adoptRemoteIdentity`); fuel-window person ids age out on their own
-    rather than being rewritten. Three honest edges: a portrait travels
-    to a device once (a *changed* face doesn't refresh a device that has
-    one — no version rides the profile row yet); the S16 join preview
-    shows the inviter's *name* but not yet their portrait ("their
-    portrait" per the book) — the portraits bucket is membership-gated
-    and the joiner is anonymous, so the face needs a token-gated edge
-    function or a signed URL in `invite_preview`, which rides the next
-    backend pass; and deleting an account deletes the profile row and
-    everything it cascades, while the bare auth user (an email, nothing
-    else) waits for a service-role function with the full engine.
+10. **The full content sync engine is live on iOS and Android.**
+    (September 2026.) Notes (written and voice memos), note founds,
+    highlights, reading positions, and reflection cards now sync
+    bi-directionally across PostgREST and Supabase Storage (`voice-notes`
+    bucket audio upload and background download). Local-first offline
+    mutations queue with hairline `isPending` state and automatically
+    push upon reconnection. Deletions and "take back" propagate remotely.
 
-11. **Phase-two surfaces are absent, per §15**: cards (S08/S09 — model and
-    schema exist, no UI), notifications delivery (S19 stores per-room
+11. **Phase-two surfaces remaining:**
+    Cards (S08/S09) are now implemented on iOS and Android at the passage
+    end. Remaining phase-two items: notifications delivery (S19 stores per-room
     switches locally; there is no push infrastructure yet), widgets and
     Live Activity (S24), rooms of three-plus ink-transition moment
     (model supports it; the invitation row on S01 is not yet built),
@@ -512,13 +494,14 @@ A10. **`Handiwork` exposes as `var` what Swift marks `private(set)`.**
     synthesized `init(from:)` skips it — strictly *more* of the invariant
     the Swift documents, never less.
 
-A11. **`ReflectionCard.answers` will not round-trip between the two
-    apps.** Swift's `JSONEncoder` writes a dictionary with a non-String key
-    as a flat alternating array; kotlinx-serialization writes a JSON
-    object, because `Uuid`'s descriptor is a string primitive. This is
-    latent — cards are phase two (§15) and `answers` is serialized nowhere
-    yet — and it is listed so that whoever lights the cards up fixes the
-    shape on both sides at once rather than discovering it in a room.
+A11. **`ReflectionCard.answers` round-tripping resolved across platforms.**
+    *(Resolved, September 2026).* Swift's default `JSONEncoder` originally
+    wrote a dictionary with a non-String key (`[UUID: String]`) as a flat
+    alternating array, whereas `kotlinx-serialization` writes a JSON object
+    keyed by UUID string primitives. `ReflectionCard` in `RibbonCore` now uses
+    custom `Codable` serialization that encodes `answers` as a string-keyed JSON
+    object and decodes from either a JSON object or an alternating array,
+    guaranteeing seamless round-tripping across iOS, Android, and PostgREST.
 
 A12. **Transcription is on-device, and that is what set the floor.**
     Deviation 4 holds on both platforms: on Android it is

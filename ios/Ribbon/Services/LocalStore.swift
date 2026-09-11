@@ -46,6 +46,7 @@ struct AppState: Codable {
     var highlights: [Highlight] = []
     var quietDays: [QuietDay] = []
     var positions: [ReadingPosition] = []
+    var cards: [ReflectionCard] = []
     var invites: [Invite] = []
     var currentRoomID: UUID?
     var settings = AppSettings()
@@ -54,6 +55,31 @@ struct AppState: Codable {
     /// so a conditional fetch can be told what it already has. Persisted:
     /// a relaunch must not re-download every face in the room.
     var portraitETags: [UUID: String] = [:]
+
+    enum CodingKeys: String, CodingKey {
+        case me, people, rooms, memberships, readings, notes, highlights, quietDays, positions, cards, invites, currentRoomID, settings, hasSeenMarginHint, portraitETags
+    }
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        me = try container.decodeIfPresent(Person.self, forKey: .me)
+        people = try container.decodeIfPresent([UUID: Person].self, forKey: .people) ?? [:]
+        rooms = try container.decodeIfPresent([Room].self, forKey: .rooms) ?? []
+        memberships = try container.decodeIfPresent([Membership].self, forKey: .memberships) ?? []
+        readings = try container.decodeIfPresent([Reading].self, forKey: .readings) ?? []
+        notes = try container.decodeIfPresent([Note].self, forKey: .notes) ?? []
+        highlights = try container.decodeIfPresent([Highlight].self, forKey: .highlights) ?? []
+        quietDays = try container.decodeIfPresent([QuietDay].self, forKey: .quietDays) ?? []
+        positions = try container.decodeIfPresent([ReadingPosition].self, forKey: .positions) ?? []
+        cards = try container.decodeIfPresent([ReflectionCard].self, forKey: .cards) ?? []
+        invites = try container.decodeIfPresent([Invite].self, forKey: .invites) ?? []
+        currentRoomID = try container.decodeIfPresent(UUID.self, forKey: .currentRoomID)
+        settings = try container.decodeIfPresent(AppSettings.self, forKey: .settings) ?? AppSettings()
+        hasSeenMarginHint = try container.decodeIfPresent(Bool.self, forKey: .hasSeenMarginHint) ?? false
+        portraitETags = try container.decodeIfPresent([UUID: String].self, forKey: .portraitETags) ?? [:]
+    }
 }
 
 actor LocalStore {

@@ -145,6 +145,7 @@ dependencies {
     implementation(libs.androidx.credentials)
     implementation(libs.androidx.credentials.play.services)
     implementation(libs.auth0)
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation(libs.androidx.media3.exoplayer)
 
     implementation(libs.kotlinx.coroutines.android)

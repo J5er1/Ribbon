@@ -47,15 +47,15 @@ object UpdateService {
      * Checks whether a newer build of Ribbon is available on GitHub Releases.
      * Returns the [ReleaseInfo] if [ReleaseInfo.versionCode] > [BuildConfig.VERSION_CODE], or null.
      */
-    suspend fun checkForUpdate(): ReleaseInfo? = withContext(Dispatchers.IO) {
+    suspend fun checkForUpdate(context: Context? = null): ReleaseInfo? = withContext(Dispatchers.IO) {
         // First try the static version.json asset (direct CDN fetch, zero API rate limits).
         val directInfo = fetchVersionJson(VERSION_JSON_URL)
-        if (directInfo != null) {
-            return@withContext if (directInfo.versionCode > BuildConfig.VERSION_CODE) directInfo else null
+        if (directInfo != null && directInfo.versionCode > BuildConfig.VERSION_CODE) {
+            return@withContext directInfo
         }
 
         // Fallback: check GitHub API release endpoint.
-        val apiInfo = fetchFromGitHubApi(GITHUB_API_LATEST_RELEASE)
+        val apiInfo = fetchFromGitHubApi(GITHUB_API_LATEST_RELEASE, context)
         if (apiInfo != null && apiInfo.versionCode > BuildConfig.VERSION_CODE) {
             apiInfo
         } else {
@@ -75,7 +75,7 @@ object UpdateService {
         }.getOrNull()
     }
 
-    private fun fetchFromGitHubApi(urlString: String): ReleaseInfo? {
+    private fun fetchFromGitHubApi(urlString: String, context: Context? = null): ReleaseInfo? {
         return runCatching {
             val connection = openConnectionWithRedirects(urlString)
             if (connection.responseCode in 200..299) {
@@ -96,7 +96,7 @@ object UpdateService {
                 // If version.json asset exists in the release, fetch and return it directly
                 if (assets.contains("version.json")) {
                     val info = fetchVersionJson(VERSION_JSON_URL)
-                    if (info != null) return info
+                    if (info != null && info.versionCode > BuildConfig.VERSION_CODE) return info
                 }
 
                 // Parse real version code from release title or body (e.g. "0.1.71" or "versionCode: 71")
@@ -110,8 +110,24 @@ object UpdateService {
                         publishedAt = publishedAt,
                         apkUrl = downloadUrl,
                     )
+                } else if (publishedAt.isNotBlank() && context != null) {
+                    val installTime = runCatching {
+                        context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime
+                    }.getOrNull() ?: 0L
+                    val publishedMillis = runCatching {
+                        java.time.Instant.parse(publishedAt).toEpochMilli()
+                    }.getOrNull() ?: 0L
+                    if (installTime > 0 && publishedMillis > installTime) {
+                        ReleaseInfo(
+                            versionCode = BuildConfig.VERSION_CODE + 1,
+                            versionName = "latest",
+                            publishedAt = publishedAt,
+                            apkUrl = downloadUrl,
+                        )
+                    } else {
+                        null
+                    }
                 } else {
-                    // Do not manufacture a version code when one cannot be verified.
                     null
                 }
             } else {

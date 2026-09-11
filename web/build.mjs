@@ -219,21 +219,30 @@ ${chapter.blocks.map(renderBlock).join("\n")}
 writeFileSync(
   join(dist, "invite.html"),
   page({
-    title: "Ribbon",
+    title: "Ribbon · read it together",
     bodyClass: "invite",
     head: `<script defer src="/invite.js"></script>`,
     body: `
 <main class="invite-main">
-  <p id="invite-line" class="invite-line">&nbsp;</p>
+  <h1 id="invite-line" class="invite-line">&nbsp;</h1>
   <p class="sc invite-sub">Ribbon · read it together</p>
-  <p class="quiet-line" style="margin-top: 1.4rem; max-width: 38ch; font-size: 1rem; line-height: 1.6; color: var(--ink);">
-    Ribbon is a quiet, shared place to read on iPhone and Android. The app isn't on the store yet — ask the developer personally for an invite.
+
+  <div class="invite-action-group">
+    <a id="open-app-btn" class="btn-primary" href="#">Open in Ribbon</a>
+  </div>
+
+  <p class="invite-body" id="invite-body">
+    Open the invite in Ribbon to join the room and read together.
   </p>
-  <p class="sc" style="margin-top: 1.6rem; font-size: 0.85rem; color: var(--muted); letter-spacing: 0.08em;">
-    Web app coming soon
-  </p>
-  <p style="margin-top: 0.8rem; font-size: 0.9rem;">
-    <a href="/read/bsb/MRK/1.html" style="color: var(--muted); text-decoration: underline;">Preview Scripture text</a>
+
+  <div class="invite-options">
+    <a id="download-android-link" class="quiet-link sc" href="/android">Get the Android preview</a>
+    <button type="button" id="copy-token-btn" class="quiet-btn sc">Copy invite link</button>
+    <span id="copied-toast" class="copied-toast" aria-live="polite">Copied</span>
+  </div>
+
+  <p class="preview-line">
+    <a href="/read/bsb/MRK/1.html" class="preview-link sc">Preview Scripture in browser</a>
   </p>
 </main>
 `,
@@ -264,6 +273,7 @@ writeFileSync(
           {
             appIDs: [`${teamID}.bible.ribbon.app`],
             components: [{ "/": "/i/*", comment: "Invites open in the app." }],
+            paths: ["/i/*"],
           },
         ],
       },
@@ -280,18 +290,21 @@ writeFileSync(
   ),
 );
 
-// The same handshake, in Android's words. The hash is of the certificate the
-// release APK is *signed* with, and CI signs debug builds with a throwaway
-// key on every run, so there is nothing honest to hard-code: it rides an env
-// var like the team ID does, and the file is emitted with a placeholder and
-// a warning until a real signing key exists.
-const androidCertSHA256 =
-  process.env.RIBBON_ANDROID_CERT_SHA256 ?? "SIGNING_CERT_SHA256";
-if (androidCertSHA256 === "SIGNING_CERT_SHA256") {
-  console.warn(
-    "RIBBON_ANDROID_CERT_SHA256 is not set — assetlinks.json is built with a placeholder and Android passkeys will not work.",
-  );
+// Android App Links & Passkeys handshake (§12.2).
+// Debug builds are signed with android/app/debug.keystore (committed in repo),
+// whose SHA-256 fingerprint is:
+// E0:04:0C:C5:A4:80:D8:B3:09:6A:9E:46:5B:C8:80:F5:52:C1:66:DE:40:B6:01:95:6E:27:C7:CD:E1:55:FE:CD
+// Debug builds install as `app.readribbon.debug`; release builds as `app.readribbon`.
+// Both package names and certificates are included so Android App Links verify on both
+// preview/debug installs and release builds.
+const DEBUG_KEYSTORE_SHA256 =
+  "E0:04:0C:C5:A4:80:D8:B3:09:6A:9E:46:5B:C8:80:F5:52:C1:66:DE:40:B6:01:95:6E:27:C7:CD:E1:55:FE:CD";
+
+const releaseCerts = [DEBUG_KEYSTORE_SHA256];
+if (process.env.RIBBON_ANDROID_CERT_SHA256) {
+  releaseCerts.push(process.env.RIBBON_ANDROID_CERT_SHA256);
 }
+
 writeFileSync(
   join(dist, ".well-known", "assetlinks.json"),
   JSON.stringify(
@@ -303,8 +316,19 @@ writeFileSync(
         ],
         target: {
           namespace: "android_app",
+          package_name: "app.readribbon.debug",
+          sha256_cert_fingerprints: [DEBUG_KEYSTORE_SHA256],
+        },
+      },
+      {
+        relation: [
+          "delegate_permission/common.handle_all_urls",
+          "delegate_permission/common.get_login_creds",
+        ],
+        target: {
+          namespace: "android_app",
           package_name: "app.readribbon",
-          sha256_cert_fingerprints: [androidCertSHA256],
+          sha256_cert_fingerprints: releaseCerts,
         },
       },
     ],

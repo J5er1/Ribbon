@@ -167,10 +167,12 @@ fun InviteContent(
     // added under the content rather than clipped off it.
     val bottomBar = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
-    // `.onAppear` — a full room has nothing to hand out, so no link is minted
-    // for one.
     LaunchedEffect(room.id, full) {
-        if (!full) invite = model.createInvite(room)
+        if (!full) {
+            val live = model.createInvite(room)
+            invite = live
+            runCatching { model.pushInvite(live, room) }
+        }
     }
 
     Box(modifier = modifier.fillMaxWidth()) {

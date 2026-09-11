@@ -12,6 +12,7 @@ import app.readribbon.core.Person
 import app.readribbon.core.QuietDay
 import app.readribbon.core.Reading
 import app.readribbon.core.ReadingPosition
+import app.readribbon.core.ReflectionCard
 import app.readribbon.core.Room
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -72,6 +73,7 @@ data class AppState(
     val highlights: List<Highlight> = emptyList(),
     val quietDays: List<QuietDay> = emptyList(),
     val positions: List<ReadingPosition> = emptyList(),
+    val cards: List<ReflectionCard> = emptyList(),
     val invites: List<Invite> = emptyList(),
     val currentRoomID: Uuid? = null,
     val settings: AppSettings = AppSettings(),

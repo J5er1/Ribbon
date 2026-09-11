@@ -239,22 +239,30 @@ struct JoinFlow: View {
             phase = .dead(Copy.serverUnreachable)
             return
         }
-        do {
-            guard let found = try await remote.invitePreview(token: token) else {
-                phase = .dead(Copy.inviteExpired)
+        var attempts = 0
+        while attempts < 3 {
+            do {
+                if let found = try await remote.invitePreview(token: token) {
+                    preview = found
+                    if found.expired {
+                        phase = .dead(Copy.inviteExpired)
+                    } else if found.full {
+                        phase = .dead(Copy.roomFullForJoiner)
+                    } else {
+                        withAnimation(RibbonMotion.arrive) { phase = .preview }
+                    }
+                    return
+                }
+            } catch {
+                phase = .dead(Copy.serverUnreachable)
                 return
             }
-            preview = found
-            if found.expired {
-                phase = .dead(Copy.inviteExpired)
-            } else if found.full {
-                phase = .dead(Copy.roomFullForJoiner)
-            } else {
-                withAnimation(RibbonMotion.arrive) { phase = .preview }
+            attempts += 1
+            if attempts < 3 {
+                try? await Task.sleep(nanoseconds: 1_200_000_000)
             }
-        } catch {
-            phase = .dead(Copy.serverUnreachable)
         }
+        phase = .dead(Copy.inviteNotFound)
     }
 
     private func advanceFromPreview() {
@@ -339,6 +347,7 @@ struct JoinFlow: View {
         if case SupabaseError.http(_, let body) = error {
             if body.contains("room_full") { return Copy.roomFullForJoiner }
             if body.contains("invite_expired") { return Copy.inviteExpired }
+            if body.contains("invite_not_found") { return Copy.inviteNotFound }
         }
         return Copy.serverUnreachable
     }

@@ -285,6 +285,7 @@ object Copy {
      *  inviter's people, not theirs. */
     const val ROOM_FULL_FOR_JOINER = "This room is full. Ask them to start another."
     const val INVITE_EXPIRED = "This invite has expired. Ask for a new one."
+    const val INVITE_NOT_FOUND = "We couldn't find this invite. Ask for a new one."
     fun wantsToReadWithYou(name: String) = "$name wants to read with you."
     const val JOIN = "Join"
     const val SOMEONE_WANTS_TO_READ_WITH_YOU = "Someone wants to read with you."

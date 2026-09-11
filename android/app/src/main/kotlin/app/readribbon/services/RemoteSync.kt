@@ -4,13 +4,18 @@ package app.readribbon.services
 
 import android.content.Context
 import app.readribbon.core.FuelEvent
+import app.readribbon.core.Highlight
 import app.readribbon.core.Ink
 import app.readribbon.core.Invite
 import app.readribbon.core.Membership
+import app.readribbon.core.Note
 import app.readribbon.core.Person
 import app.readribbon.core.QuietDay
 import app.readribbon.core.Reading
+import app.readribbon.core.ReadingPosition
+import app.readribbon.core.ReflectionCard
 import app.readribbon.core.Room
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -20,9 +25,8 @@ import kotlin.uuid.Uuid
 
 // The sign-in thread (§6.10) and the room surface of sync: accounts,
 // invites, joining, and the graph a room renders from — rooms, memberships,
-// profiles, readings, fires, and the rolling fuel window. Notes, highlights
-// and positions still live on-device only; they ride the full sync engine,
-// which is the next piece of work (docs/deviations.md).
+// profiles, readings, fires, the rolling fuel window, notes, highlights,
+// positions, and reflection cards.
 //
 // The app stays local-first: everything here is best-effort and
 // fire-and-forget from the UI's point of view. Nothing blocks reading.
@@ -48,6 +52,12 @@ data class RoomGraph(
     val fires: List<RemoteSync.FireRow> = emptyList(),
     val fuelEvents: List<RemoteSync.FuelEventRow> = emptyList(),
     val quietDays: List<RemoteSync.QuietDayRow> = emptyList(),
+    val notes: List<RemoteSync.NoteRow> = emptyList(),
+    val noteFounds: List<RemoteSync.NoteFoundRow> = emptyList(),
+    val highlights: List<RemoteSync.HighlightRow> = emptyList(),
+    val positions: List<RemoteSync.PositionRow> = emptyList(),
+    val cards: List<RemoteSync.CardRow> = emptyList(),
+    val cardAnswers: List<RemoteSync.CardAnswerRow> = emptyList(),
 )
 
 /**
@@ -356,6 +366,145 @@ class RemoteSync(
         }
     }
 
+    suspend fun push(note: Note, audioFile: File? = null) {
+        if (audioFile != null && audioFile.exists()) {
+            withAuthRetry {
+                client.uploadAudio(readingID = note.readingID, noteID = note.id, file = audioFile)
+            }
+        }
+        withAuthRetry {
+            client.upsert(
+                table = "notes",
+                rowsJson = SupabaseClient.json.encodeToString(listOf(
+                    NoteRow(
+                        id = note.id,
+                        readingId = note.readingID,
+                        authorId = note.authorID,
+                        bookId = note.verse.bookID,
+                        chapter = note.verse.chapter,
+                        verse = note.verse.verse,
+                        kind = note.kind.name,
+                        body = note.body,
+                        audioPath = note.audioPath,
+                        waveform = note.waveform,
+                        transcript = note.transcript,
+                        transcriptState = note.transcriptState?.name,
+                        createdAt = note.createdAt,
+                    )
+                )),
+                onConflict = "id"
+            )
+        }
+    }
+
+    suspend fun push(noteFoundID: Uuid, personID: Uuid) {
+        withAuthRetry {
+            client.upsert(
+                table = "note_founds",
+                rowsJson = SupabaseClient.json.encodeToString(listOf(
+                    NoteFoundRow(
+                        noteId = noteFoundID,
+                        personId = personID,
+                        foundAt = kotlin.time.Clock.System.now(),
+                    )
+                )),
+                onConflict = "note_id,person_id"
+            )
+        }
+    }
+
+    suspend fun deleteNote(id: Uuid) {
+        withAuthRetry {
+            client.delete(
+                table = "notes",
+                query = listOf("id" to "eq.${id.lowercased()}"))
+        }
+    }
+
+    suspend fun push(highlight: Highlight) {
+        withAuthRetry {
+            client.upsert(
+                table = "highlights",
+                rowsJson = SupabaseClient.json.encodeToString(listOf(
+                    HighlightRow(
+                        id = highlight.id,
+                        readingId = highlight.readingID,
+                        authorId = highlight.authorID,
+                        bookId = highlight.range.bookID,
+                        chapter = highlight.range.chapter,
+                        startVerse = highlight.range.startVerse,
+                        endVerse = highlight.range.endVerse,
+                        ink = highlight.ink.name,
+                        createdAt = highlight.createdAt,
+                    )
+                )),
+                onConflict = "id"
+            )
+        }
+    }
+
+    suspend fun deleteHighlight(id: Uuid) {
+        withAuthRetry {
+            client.delete(
+                table = "highlights",
+                query = listOf("id" to "eq.${id.lowercased()}"))
+        }
+    }
+
+    suspend fun push(position: ReadingPosition) {
+        withAuthRetry {
+            client.upsert(
+                table = "positions",
+                rowsJson = SupabaseClient.json.encodeToString(listOf(
+                    PositionRow(
+                        readingId = position.readingID,
+                        personId = position.personID,
+                        chapter = position.chapter,
+                        verse = position.verse,
+                        updatedAt = position.updatedAt,
+                    )
+                )),
+                onConflict = "reading_id,person_id"
+            )
+        }
+    }
+
+    suspend fun push(card: ReflectionCard) {
+        withAuthRetry {
+            client.upsert(
+                table = "cards",
+                rowsJson = SupabaseClient.json.encodeToString(listOf(
+                    CardRow(
+                        id = card.id,
+                        readingId = card.readingID,
+                        chapter = card.chapter,
+                        question = card.question,
+                        state = card.state.name,
+                        openedAt = card.openedAt,
+                        createdAt = card.openedAt ?: kotlin.time.Clock.System.now(),
+                    )
+                )),
+                onConflict = "id"
+            )
+        }
+    }
+
+    suspend fun push(cardAnswer: CardAnswerRow) {
+        withAuthRetry {
+            client.upsert(
+                table = "card_answers",
+                rowsJson = SupabaseClient.json.encodeToString(listOf(cardAnswer)),
+                onConflict = "card_id,person_id"
+            )
+        }
+    }
+
+    suspend fun downloadAudio(readingID: Uuid, noteID: Uuid, to: File) {
+        withAuthRetry {
+            client.downloadAudio(readingID = readingID, noteID = noteID, to = to)
+        }
+    }
+
     // MARK: - Pull: every room I'm in
 
     suspend fun pullRooms(): RoomGraph {
@@ -399,6 +548,13 @@ class RemoteSync(
         val readingIDs = readings.map { it.id }
         var fires: List<FireRow> = emptyList()
         var fuelEvents: List<FuelEventRow> = emptyList()
+        var notes: List<NoteRow> = emptyList()
+        var noteFounds: List<NoteFoundRow> = emptyList()
+        var highlights: List<HighlightRow> = emptyList()
+        var positions: List<PositionRow> = emptyList()
+        var cards: List<CardRow> = emptyList()
+        var cardAnswers: List<CardAnswerRow> = emptyList()
+
         if (readingIDs.isNotEmpty()) {
             val readingList = "in.(${readingIDs.joinToString(",") { it.lowercased() }})"
             fires = withAuthRetry {
@@ -409,6 +565,52 @@ class RemoteSync(
                 SupabaseClient.json.decodeFromString<List<FuelEventRow>>(
                     client.select(table = "fuel_events", query = listOf("reading_id" to readingList)))
             }
+            notes = withAuthRetry {
+                runCatching {
+                    SupabaseClient.json.decodeFromString<List<NoteRow>>(
+                        client.select(table = "notes", query = listOf("reading_id" to readingList)))
+                }.getOrDefault(emptyList())
+            }
+            highlights = withAuthRetry {
+                runCatching {
+                    SupabaseClient.json.decodeFromString<List<HighlightRow>>(
+                        client.select(table = "highlights", query = listOf("reading_id" to readingList)))
+                }.getOrDefault(emptyList())
+            }
+            positions = withAuthRetry {
+                runCatching {
+                    SupabaseClient.json.decodeFromString<List<PositionRow>>(
+                        client.select(table = "positions", query = listOf("reading_id" to readingList)))
+                }.getOrDefault(emptyList())
+            }
+            cards = withAuthRetry {
+                runCatching {
+                    SupabaseClient.json.decodeFromString<List<CardRow>>(
+                        client.select(table = "cards", query = listOf("reading_id" to readingList)))
+                }.getOrDefault(emptyList())
+            }
+
+            val noteIDs = notes.map { it.id }
+            if (noteIDs.isNotEmpty()) {
+                val noteList = "in.(${noteIDs.joinToString(",") { it.lowercased() }})"
+                noteFounds = withAuthRetry {
+                    runCatching {
+                        SupabaseClient.json.decodeFromString<List<NoteFoundRow>>(
+                            client.select(table = "note_founds", query = listOf("note_id" to noteList)))
+                    }.getOrDefault(emptyList())
+                }
+            }
+
+            val cardIDs = cards.map { it.id }
+            if (cardIDs.isNotEmpty()) {
+                val cardList = "in.(${cardIDs.joinToString(",") { it.lowercased() }})"
+                cardAnswers = withAuthRetry {
+                    runCatching {
+                        SupabaseClient.json.decodeFromString<List<CardAnswerRow>>(
+                            client.select(table = "card_answers", query = listOf("card_id" to cardList)))
+                    }.getOrDefault(emptyList())
+                }
+            }
         }
         // Swift mutates one `graph` as it goes; RoomGraph is immutable here,
         // so the pieces are gathered above and assembled once. Same order,
@@ -416,7 +618,9 @@ class RemoteSync(
         return RoomGraph(
             rooms = rooms, memberships = memberships, profiles = profiles,
             readings = readings, fires = fires, fuelEvents = fuelEvents,
-            quietDays = quietDays)
+            quietDays = quietDays, notes = notes, noteFounds = noteFounds,
+            highlights = highlights, positions = positions, cards = cards,
+            cardAnswers = cardAnswers)
     }
 
     /**
@@ -563,6 +767,71 @@ class RemoteSync(
         val localDate: String,
         val timeZone: String,
         val markedAt: Instant,
+    )
+
+    @Serializable
+    data class NoteRow(
+        val id: Uuid,
+        val readingId: Uuid,
+        val authorId: Uuid,
+        val bookId: String,
+        val chapter: Int,
+        val verse: Int,
+        val kind: String,
+        val body: String? = null,
+        val audioPath: String? = null,
+        val waveform: List<Float>? = null,
+        val transcript: String? = null,
+        val transcriptState: String? = null,
+        val createdAt: Instant,
+    )
+
+    @Serializable
+    data class NoteFoundRow(
+        val noteId: Uuid,
+        val personId: Uuid,
+        val foundAt: Instant,
+    )
+
+    @Serializable
+    data class HighlightRow(
+        val id: Uuid,
+        val readingId: Uuid,
+        val authorId: Uuid,
+        val bookId: String,
+        val chapter: Int,
+        val startVerse: Int,
+        val endVerse: Int,
+        val ink: String,
+        val createdAt: Instant,
+    )
+
+    @Serializable
+    data class PositionRow(
+        val readingId: Uuid,
+        val personId: Uuid,
+        val chapter: Int,
+        val verse: Int,
+        val updatedAt: Instant,
+    )
+
+    @Serializable
+    data class CardRow(
+        val id: Uuid,
+        val readingId: Uuid,
+        val chapter: Int,
+        val question: String,
+        val state: String,
+        val openedAt: Instant? = null,
+        val createdAt: Instant,
+    )
+
+    @Serializable
+    data class CardAnswerRow(
+        val cardId: Uuid,
+        val personId: Uuid,
+        val answer: String,
+        val createdAt: Instant,
     )
 
     companion object {

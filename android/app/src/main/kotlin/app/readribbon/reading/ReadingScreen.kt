@@ -39,6 +39,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -85,6 +86,7 @@ import app.readribbon.app.AppModel
 import app.readribbon.app.Copy
 import app.readribbon.core.Bible
 import app.readribbon.core.BibleBook
+import app.readribbon.core.CardState
 import app.readribbon.core.Highlight
 import app.readribbon.core.Ink
 import app.readribbon.core.Note
@@ -288,6 +290,23 @@ fun ReadingScreen(
      */
     var presenceInset by remember { mutableStateOf(0.dp) }
 
+    LaunchedEffect(room.id, model.me?.id, model.readingQuietly) {
+        val me = model.me
+        if (!model.readingQuietly && me != null) {
+            model.presence.join(room.id, me)
+            val pos = openAt ?: model.myPosition(reading)
+            model.presence.update(pos, 0.0, false)
+        } else {
+            model.presence.leave()
+        }
+    }
+
+    DisposableEffect(room.id) {
+        onDispose {
+            scope.launch { model.presence.leave() }
+        }
+    }
+
     val listState = rememberLazyListState()
 
     /**
@@ -445,6 +464,12 @@ fun ReadingScreen(
         if (now - lastPositionSave > POSITION_SAVE_INTERVAL) {
             lastPositionSave = now
             model.savePosition(reading = reading, address = address)
+            if (!model.readingQuietly) {
+                val fraction = (yInChapter.value / maxOf(1f, frame.height)).toDouble().coerceIn(0.0, 1.0)
+                scope.launch {
+                    model.presence.update(position = address, scrollFraction = fraction, isIdle = false)
+                }
+            }
         }
         if (now - lastFuelRecord > FUEL_INTERVAL) {
             recordFuel(address)
@@ -622,6 +647,9 @@ fun ReadingScreen(
                     if (n < chapterCount) {
                         item(key = "passage-end-$n") {
                             PassageEnd(
+                                reading = reading,
+                                chapter = n,
+                                model = model,
                                 nextChapterTitle = book?.chapterHeading(n + 1) ?: "${n + 1}",
                                 onContinue = { scrollToChapter(n + 1) },
                                 onClose = ::close,
@@ -1263,17 +1291,20 @@ private fun FinishingSection(
 
 /**
  * S03 — the passage end: the one place with more than one thing to do.
- * Generous space, a hairline rule at the measure's width, the continue
- * control, and the Wave larger here as the deliberate close. (Cards sit here
- * when they arrive in phase two.)
+ * Generous space, a hairline rule at the measure's width, the card (S08/S09),
+ * the continue control, and the Wave larger here as the deliberate close.
  */
 @Composable
 fun PassageEnd(
+    reading: Reading,
+    chapter: Int,
+    model: AppModel,
     nextChapterTitle: String,
     onContinue: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val room = model.room(reading)
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(26.dp),
@@ -1281,6 +1312,20 @@ fun PassageEnd(
     ) {
         Spacer(Modifier.height(34.dp))
         HairlineRule(Modifier.padding(start = 36.dp, end = 26.dp))
+
+        if (room != null) {
+            val card = model.card(reading, chapter)
+            if (card.state != CardState.setDown) {
+                ReflectionCardView(
+                    card = card,
+                    reading = reading,
+                    room = room,
+                    model = model,
+                    modifier = Modifier.padding(horizontal = 24.dp)
+                )
+            }
+        }
+
         Box(
             modifier = Modifier
                 .sizeIn(minWidth = 44.dp, minHeight = 44.dp)

@@ -834,8 +834,12 @@ private fun InviteStep(
     onDone: () -> Unit,
 ) {
     // `.onAppear`
-    LaunchedEffect(Unit) {
-        model.currentRoom?.let { room -> onInvite(model.createInvite(room)) }
+    LaunchedEffect(model.currentRoom?.id) {
+        model.currentRoom?.let { room ->
+            val live = model.createInvite(room)
+            onInvite(live)
+            runCatching { model.pushInvite(live, room) }
+        }
     }
 
     StepColumn(spacing = 24.dp) {

@@ -33,7 +33,9 @@ struct InviteSheet: View {
                 SignInInline(onSignedIn: {
                     // Re-minting reuses the live invite and registers it
                     // now that the backend knows who's asking.
-                    invite = model.createInvite(for: room)
+                    let live = model.createInvite(for: room)
+                    invite = live
+                    Task { try? await model.pushInvite(live, for: room) }
                 })
                 .padding(.horizontal, 24)
             } else {
@@ -59,9 +61,11 @@ struct InviteSheet: View {
         .frame(maxWidth: .infinity)
         .room()
         .presentationBackground(Palette.ground)
-        .onAppear {
+        .task(id: room.id) {
             if !model.isFull(room) {
-                invite = model.createInvite(for: room)
+                let live = model.createInvite(for: room)
+                invite = live
+                try? await model.pushInvite(live, for: room)
             }
         }
     }

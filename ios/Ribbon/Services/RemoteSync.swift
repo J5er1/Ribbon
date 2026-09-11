@@ -21,7 +21,7 @@ struct InvitePreview: Decodable {
     var full: Bool
 }
 
-/// The room-surface graph, as pulled from the backend.
+/// The complete graph of rooms and reading content, as pulled from the backend.
 struct RoomGraph {
     var rooms: [RemoteSync.RoomRow] = []
     var memberships: [RemoteSync.MembershipRow] = []
@@ -30,6 +30,12 @@ struct RoomGraph {
     var fires: [RemoteSync.FireRow] = []
     var fuelEvents: [RemoteSync.FuelEventRow] = []
     var quietDays: [RemoteSync.QuietDayRow] = []
+    var notes: [RemoteSync.NoteRow] = []
+    var noteFounds: [RemoteSync.NoteFoundRow] = []
+    var highlights: [RemoteSync.HighlightRow] = []
+    var positions: [RemoteSync.PositionRow] = []
+    var cards: [RemoteSync.CardRow] = []
+    var cardAnswers: [RemoteSync.CardAnswerRow] = []
 }
 
 @MainActor
@@ -102,7 +108,7 @@ final class RemoteSync {
         email: String?,
         refreshToken: String = ""
     ) async throws -> UUID {
-        let session = client.setAuth0Session(
+        let session = await client.setAuth0Session(
             idToken: idToken,
             userUUID: userUUID,
             email: email,
@@ -286,6 +292,130 @@ final class RemoteSync {
         }
     }
 
+    // MARK: - Content Push (Notes, Highlights, Positions, Cards)
+
+    func push(note: Note, fileURL: URL? = nil) async throws {
+        if note.kind == .voice, let fileURL {
+            try? await withAuthRetry {
+                try await self.client.uploadAudio(readingID: note.readingID, noteID: note.id, fileURL: fileURL)
+            }
+        }
+        try await withAuthRetry {
+            try await self.client.upsert(
+                into: "notes",
+                rows: [NoteRow(
+                    id: note.id,
+                    readingId: note.readingID,
+                    authorId: note.authorID,
+                    bookId: note.verse.bookID,
+                    chapter: note.verse.chapter,
+                    verse: note.verse.verse,
+                    kind: note.kind.rawValue,
+                    body: note.body,
+                    audioPath: note.audioPath,
+                    waveform: note.waveform,
+                    transcript: note.transcript,
+                    createdAt: note.createdAt
+                )],
+                onConflict: "id")
+        }
+    }
+
+    func push(noteFoundID: UUID, personID: UUID) async throws {
+        try await withAuthRetry {
+            try await self.client.upsert(
+                into: "note_founds",
+                rows: [NoteFoundRow(noteId: noteFoundID, personId: personID, foundAt: Date())],
+                onConflict: "note_id,person_id")
+        }
+    }
+
+    func push(highlight: Highlight) async throws {
+        try await withAuthRetry {
+            try await self.client.upsert(
+                into: "highlights",
+                rows: [HighlightRow(
+                    id: highlight.id,
+                    readingId: highlight.readingID,
+                    authorId: highlight.authorID,
+                    bookId: highlight.range.bookID,
+                    chapter: highlight.range.chapter,
+                    startVerse: highlight.range.startVerse,
+                    endVerse: highlight.range.endVerse,
+                    ink: highlight.ink.rawValue,
+                    createdAt: highlight.createdAt
+                )],
+                onConflict: "id")
+        }
+    }
+
+    func deleteHighlight(id: UUID) async throws {
+        try await withAuthRetry {
+            try await self.client.delete(
+                from: "highlights",
+                query: [URLQueryItem(name: "id", value: "eq.\(id.uuidString.lowercased())")])
+        }
+    }
+
+    func deleteNote(id: UUID) async throws {
+        try await withAuthRetry {
+            try await self.client.delete(
+                from: "notes",
+                query: [URLQueryItem(name: "id", value: "eq.\(id.uuidString.lowercased())")])
+        }
+    }
+
+    func push(position: ReadingPosition) async throws {
+        try await withAuthRetry {
+            try await self.client.upsert(
+                into: "positions",
+                rows: [PositionRow(
+                    readingId: position.readingID,
+                    personId: position.personID,
+                    chapter: position.chapter,
+                    verse: position.verse,
+                    updatedAt: position.updatedAt
+                )],
+                onConflict: "reading_id,person_id")
+        }
+    }
+
+    func push(card: ReflectionCard) async throws {
+        try await withAuthRetry {
+            try await self.client.upsert(
+                into: "cards",
+                rows: [CardRow(
+                    id: card.id,
+                    readingId: card.readingID,
+                    chapter: card.chapter,
+                    question: card.question,
+                    state: card.state.rawValue,
+                    openedAt: card.openedAt
+                )],
+                onConflict: "id")
+        }
+    }
+
+    func push(cardAnswer: (cardID: UUID, personID: UUID, body: String)) async throws {
+        try await withAuthRetry {
+            try await self.client.upsert(
+                into: "card_answers",
+                rows: [CardAnswerRow(
+                    cardId: cardAnswer.cardID,
+                    personId: cardAnswer.personID,
+                    body: cardAnswer.body,
+                    answeredAt: Date()
+                )],
+                onConflict: "card_id,person_id")
+        }
+    }
+
+    func downloadAudio(readingID: UUID, noteID: UUID, to destination: URL) async throws {
+        try await withAuthRetry {
+            try await self.client.downloadAudio(readingID: readingID, noteID: noteID, to: destination)
+        }
+    }
+
     // MARK: - Pull: every room I'm in
 
     func pullRooms() async throws -> RoomGraph {
@@ -342,6 +472,44 @@ final class RemoteSync {
                 try await self.client.select(
                     [FuelEventRow].self, from: "fuel_events",
                     query: [URLQueryItem(name: "reading_id", value: readingList)])
+            }
+            graph.notes = (try? await withAuthRetry {
+                try await self.client.select(
+                    [NoteRow].self, from: "notes",
+                    query: [URLQueryItem(name: "reading_id", value: readingList)])
+            }) ?? []
+            let noteIDs = graph.notes.map(\.id)
+            if !noteIDs.isEmpty {
+                let noteList = "in.(\(noteIDs.map { $0.uuidString.lowercased() }.joined(separator: ",")))"
+                graph.noteFounds = (try? await withAuthRetry {
+                    try await self.client.select(
+                        [NoteFoundRow].self, from: "note_founds",
+                        query: [URLQueryItem(name: "note_id", value: noteList)])
+                }) ?? []
+            }
+            graph.highlights = (try? await withAuthRetry {
+                try await self.client.select(
+                    [HighlightRow].self, from: "highlights",
+                    query: [URLQueryItem(name: "reading_id", value: readingList)])
+            }) ?? []
+            graph.positions = (try? await withAuthRetry {
+                try await self.client.select(
+                    [PositionRow].self, from: "positions",
+                    query: [URLQueryItem(name: "reading_id", value: readingList)])
+            }) ?? []
+            graph.cards = (try? await withAuthRetry {
+                try await self.client.select(
+                    [CardRow].self, from: "cards",
+                    query: [URLQueryItem(name: "reading_id", value: readingList)])
+            }) ?? []
+            let cardIDs = graph.cards.map(\.id)
+            if !cardIDs.isEmpty {
+                let cardList = "in.(\(cardIDs.map { $0.uuidString.lowercased() }.joined(separator: ",")))"
+                graph.cardAnswers = (try? await withAuthRetry {
+                    try await self.client.select(
+                        [CardAnswerRow].self, from: "card_answers",
+                        query: [URLQueryItem(name: "card_id", value: cardList)])
+                }) ?? []
             }
         }
         return graph
@@ -469,6 +637,63 @@ final class RemoteSync {
         var localDate: String
         var timeZone: String
         var markedAt: Date
+    }
+
+    struct NoteRow: Codable {
+        var id: UUID
+        var readingId: UUID
+        var authorId: UUID
+        var bookId: String
+        var chapter: Int
+        var verse: Int
+        var kind: String
+        var body: String?
+        var audioPath: String?
+        var waveform: [Float]?
+        var transcript: String?
+        var createdAt: Date
+    }
+
+    struct NoteFoundRow: Codable {
+        var noteId: UUID
+        var personId: UUID
+        var foundAt: Date
+    }
+
+    struct HighlightRow: Codable {
+        var id: UUID
+        var readingId: UUID
+        var authorId: UUID
+        var bookId: String
+        var chapter: Int
+        var startVerse: Int
+        var endVerse: Int
+        var ink: String
+        var createdAt: Date
+    }
+
+    struct PositionRow: Codable {
+        var readingId: UUID
+        var personId: UUID
+        var chapter: Int
+        var verse: Int
+        var updatedAt: Date
+    }
+
+    struct CardRow: Codable {
+        var id: UUID
+        var readingId: UUID
+        var chapter: Int
+        var question: String
+        var state: String
+        var openedAt: Date?
+    }
+
+    struct CardAnswerRow: Codable {
+        var cardId: UUID
+        var personId: UUID
+        var body: String
+        var answeredAt: Date
     }
 }
 

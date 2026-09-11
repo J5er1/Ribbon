@@ -216,6 +216,58 @@ public struct ReflectionCard: Codable, Hashable, Identifiable, Sendable {
         self.state = state
         self.openedAt = openedAt
     }
+
+    enum CodingKeys: String, CodingKey {
+        case id, readingID, chapter, question, answers, state, openedAt
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        readingID = try container.decode(UUID.self, forKey: .readingID)
+        chapter = try container.decode(Int.self, forKey: .chapter)
+        question = try container.decode(String.self, forKey: .question)
+        state = try container.decode(CardState.self, forKey: .state)
+        openedAt = try container.decodeIfPresent(Date.self, forKey: .openedAt)
+
+        if let stringDict = try? container.decode([String: String].self, forKey: .answers) {
+            var map: [UUID: String] = [:]
+            for (k, v) in stringDict {
+                if let uuid = UUID(uuidString: k) {
+                    map[uuid] = v
+                }
+            }
+            answers = map
+        } else if let array = try? container.decode([String].self, forKey: .answers) {
+            var map: [UUID: String] = [:]
+            var i = 0
+            while i + 1 < array.count {
+                if let uuid = UUID(uuidString: array[i]) {
+                    map[uuid] = array[i + 1]
+                }
+                i += 2
+            }
+            answers = map
+        } else {
+            answers = [:]
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(readingID, forKey: .readingID)
+        try container.encode(chapter, forKey: .chapter)
+        try container.encode(question, forKey: .question)
+        try container.encode(state, forKey: .state)
+        try container.encodeIfPresent(openedAt, forKey: .openedAt)
+
+        var stringDict: [String: String] = [:]
+        for (k, v) in answers {
+            stringDict[k.uuidString.lowercased()] = v
+        }
+        try container.encode(stringDict, forKey: .answers)
+    }
 }
 
 /// A marked day — the grace mechanic (§4.7). Declared by a person, never

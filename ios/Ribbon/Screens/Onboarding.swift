@@ -399,7 +399,9 @@ struct OnboardingFlow: View {
                     .padding(.horizontal, 48)
                 SignInInline(onSignedIn: {
                     if let room = model.currentRoom {
-                        invite = model.createInvite(for: room)
+                        let live = model.createInvite(for: room)
+                        invite = live
+                        Task { try? await model.pushInvite(live, for: room) }
                     }
                 })
                 .padding(.horizontal, 40)
@@ -423,9 +425,11 @@ struct OnboardingFlow: View {
             Spacer()
             Spacer()
         }
-        .onAppear {
+        .task(id: model.currentRoom?.id) {
             if let room = model.currentRoom {
-                invite = model.createInvite(for: room)
+                let live = model.createInvite(for: room)
+                invite = live
+                try? await model.pushInvite(live, for: room)
             }
         }
     }

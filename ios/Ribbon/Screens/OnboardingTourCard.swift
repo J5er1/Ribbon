@@ -91,7 +91,7 @@ struct OnboardingTourCard: View {
     private var presenceVisual: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("In the beginning was the Word, and the Word was with God, and the Word was God.")
-                .font(RibbonType.body(17))
+                .font(RibbonType.scripture(17))
                 .foregroundStyle(Palette.text.opacity(0.85))
                 .lineSpacing(6)
                 .padding(.horizontal, 20)
@@ -136,7 +136,7 @@ struct OnboardingTourCard: View {
                     .padding(.top, 7)
 
                 Text("The Light shines in the darkness, and the darkness has not overcome it.")
-                    .font(RibbonType.body(17))
+                    .font(RibbonType.scripture(17))
                     .foregroundStyle(Palette.text.opacity(0.85))
                     .lineSpacing(5)
             }

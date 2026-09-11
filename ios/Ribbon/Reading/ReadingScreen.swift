@@ -81,6 +81,8 @@ struct ReadingScreen: View {
                             .id(n)
                         if n < (book?.chapterCount ?? 1) {
                             PassageEndView(
+                                reading: reading,
+                                chapter: n,
                                 nextChapterTitle: book?.chapterHeading(n + 1) ?? "\(n + 1)",
                                 onContinue: { withAnimation(RibbonMotion.settle) { proxy.scrollTo(n + 1, anchor: .top) } },
                                 onClose: close)
@@ -120,6 +122,27 @@ struct ReadingScreen: View {
                     proxy.scrollTo(position.chapter, anchor: .top)
                 }
                 recordFuel()
+                if !model.readingQuietly, let me = model.me {
+                    Task {
+                        await model.presence.join(roomID: room.id, person: me)
+                        await model.presence.update(position: position, scrollFraction: 0, isIdle: false)
+                    }
+                }
+            }
+            .onDisappear {
+                Task {
+                    await model.presence.leave()
+                }
+            }
+            .onChange(of: model.readingQuietly) { _, quietly in
+                Task {
+                    if quietly {
+                        await model.presence.leave()
+                    } else if let me = model.me {
+                        await model.presence.join(roomID: room.id, person: me)
+                        await model.presence.update(position: model.myPosition(in: reading), scrollFraction: 0, isIdle: false)
+                    }
+                }
             }
             .onChange(of: scrollCommand) { _, command in
                 if let command {
@@ -590,6 +613,12 @@ struct ReadingScreen: View {
         if Date().timeIntervalSince(lastPositionSave) > 2 {
             lastPositionSave = Date()
             model.savePosition(reading: reading, address: address)
+            if !model.readingQuietly {
+                let fraction = max(0, min(1, Double(yInChapter / max(1, frame.height))))
+                Task {
+                    await model.presence.update(position: address, scrollFraction: fraction, isIdle: false)
+                }
+            }
         }
         if Date().timeIntervalSince(lastFuelRecord) > 25 {
             recordFuel(at: address)
@@ -605,10 +634,13 @@ struct ReadingScreen: View {
 }
 
 // S03 — the passage end: the one place with more than one thing to do.
-// Generous space, a hairline rule at the measure's width, the continue
-// control, and the Wave larger here as the deliberate close. (Cards sit
-// here when they arrive in phase two.)
+// S03 — the passage end: the one place with more than one thing to do.
+// Generous space, a hairline rule at the measure's width, the card (S08/S09),
+// the continue control, and the Wave larger here as the deliberate close.
 struct PassageEndView: View {
+    @Environment(AppModel.self) private var model
+    let reading: Reading
+    let chapter: Int
     let nextChapterTitle: String
     var onContinue: () -> Void
     var onClose: () -> Void
@@ -619,6 +651,15 @@ struct PassageEndView: View {
             HairlineRule()
                 .padding(.leading, 36)
                 .padding(.trailing, 26)
+
+            if let room = model.room(of: reading) {
+                let card = model.card(for: reading, chapter: chapter)
+                if card.state != .setDown {
+                    ReflectionCardView(card: card, reading: reading, room: room)
+                        .padding(.horizontal, 24)
+                }
+            }
+
             Button(action: onContinue) {
                 Text(nextChapterTitle)
                     .font(RibbonType.uiMedium(17))
