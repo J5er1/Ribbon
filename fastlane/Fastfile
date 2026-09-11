@@ -10,11 +10,23 @@ platform :ios do
   lane :beta do
     setup_ci if ENV["CI"]
 
+    raw_key = ENV["ASC_KEY_CONTENT"].to_s.strip
+    decoded_key = begin
+      require "base64"
+      decoded = Base64.decode64(raw_key)
+      decoded.include?("BEGIN") ? decoded : raw_key
+    rescue
+      raw_key
+    end
+    normalized_key = decoded_key.gsub('\n', "\n").strip
+
+    key_path = File.expand_path("fastlane/AuthKey_#{ENV['ASC_KEY_ID']}.p8")
+    File.write(key_path, normalized_key + "\n")
+
     api_key = app_store_connect_api_key(
       key_id: ENV["ASC_KEY_ID"],
       issuer_id: ENV["ASC_ISSUER_ID"],
-      key_content: ENV["ASC_KEY_CONTENT"],
-      is_key_content_base64: true
+      key_filepath: key_path
     )
 
     match(

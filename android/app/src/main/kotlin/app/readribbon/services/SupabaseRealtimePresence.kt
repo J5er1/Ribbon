@@ -75,13 +75,13 @@ class SupabaseRealtimePresenceService(
         currentPerson = person
         presenceStore.clear()
 
-        val baseUrl = SupabaseConfig.url.trimEnd('/')
+        val baseUrl = SupabaseConfig.URL.trimEnd('/')
         val wsBase = when {
             baseUrl.startsWith("https://") -> baseUrl.replaceFirst("https://", "wss://")
             baseUrl.startsWith("http://") -> baseUrl.replaceFirst("http://", "ws://")
             else -> "wss://$baseUrl"
         }
-        val url = "$wsBase/realtime/v1/websocket?apikey=${SupabaseConfig.publishableKey}&vsn=1.0.0"
+        val url = "$wsBase/realtime/v1/websocket?apikey=${SupabaseConfig.PUBLISHABLE_KEY}&vsn=1.0.0"
 
         val request = Request.Builder().url(url).build()
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
@@ -217,7 +217,7 @@ class SupabaseRealtimePresenceService(
                     put("name", person.name)
                     if (position != null) {
                         putJsonObject("position") {
-                            put("book", position.book)
+                            put("book", position.bookID)
                             put("chapter", position.chapter)
                             put("verse", position.verse)
                         }
