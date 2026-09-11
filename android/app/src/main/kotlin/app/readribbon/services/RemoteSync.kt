@@ -501,7 +501,7 @@ class RemoteSync(
 
     suspend fun downloadAudio(readingID: Uuid, noteID: Uuid, to: File) {
         withAuthRetry {
-            client.downloadAudio(readingID = readingID, noteID = noteID, to = to)
+            client.downloadAudio(readingID = readingID, noteID = noteID, destination = to)
         }
     }
 
