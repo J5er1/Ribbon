@@ -7,6 +7,7 @@ import android.content.Context
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.Log
+import app.readribbon.data.SupabaseConfig
 import app.readribbon.services.Auth0Service
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf

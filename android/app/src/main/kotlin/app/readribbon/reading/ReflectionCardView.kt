@@ -134,7 +134,7 @@ fun ReflectionCardView(
                                             person = person,
                                             ink = ink,
                                             size = 22.dp,
-                                            image = person?.let { model.portraits[it.id] }
+                                            image = person?.let { model.portrait(it.id) }
                                         )
                                         val firstName = person?.name?.split(" ")?.firstOrNull() ?: "Reader"
                                         Text(
