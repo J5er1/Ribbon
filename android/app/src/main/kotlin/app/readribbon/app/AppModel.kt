@@ -1575,8 +1575,10 @@ class AppModel(
         for (row in graph.highlights) {
             if (highlights.none { it.id == row.id }) {
                 val range = VerseRange(
-                    start = VerseAddress(bookID = row.bookId, chapter = row.chapter, verse = row.startVerse),
-                    end = VerseAddress(bookID = row.bookId, chapter = row.chapter, verse = row.endVerse)
+                    bookID = row.bookId,
+                    chapter = row.chapter,
+                    startVerse = row.startVerse,
+                    endVerse = row.endVerse
                 )
                 val ink = Ink.entries.firstOrNull { it.name == row.ink } ?: Ink.ochre
                 highlights.add(
