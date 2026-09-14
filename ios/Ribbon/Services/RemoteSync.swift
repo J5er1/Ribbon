@@ -30,6 +30,7 @@ struct RoomGraph {
     var fires: [RemoteSync.FireRow] = []
     var fuelEvents: [RemoteSync.FuelEventRow] = []
     var quietDays: [RemoteSync.QuietDayRow] = []
+    var invites: [RemoteSync.InviteRow] = []
     var notes: [RemoteSync.NoteRow] = []
     var noteFounds: [RemoteSync.NoteFoundRow] = []
     var highlights: [RemoteSync.HighlightRow] = []
@@ -125,6 +126,45 @@ final class RemoteSync {
         SessionKeychain.clear()
         userID = nil
         email = nil
+    }
+
+    /// A token fit for the Realtime socket (§4.2).
+    ///
+    /// A socket outlives a token — Ribbon's are open for as long as the room
+    /// is on screen — and Realtime refuses an expired one outright rather
+    /// than asking for a new one. So the token is checked before every join
+    /// and refreshed when it is within a minute of the end; a channel that
+    /// cannot be authenticated is a room that silently stops being live.
+    func realtimeToken() async -> String? {
+        guard let token = await client.currentSession?.accessToken else { return nil }
+        guard Self.expiresSoon(token) else { return token }
+        try? await client.refresh()
+        guard let refreshed = await client.currentSession else { return nil }
+        SessionKeychain.save(refreshed)
+        userID = refreshed.user.id
+        // Still dead — a refresh token that was itself revoked, or an Auth0
+        // session with none. Joining with no token at all is better than
+        // joining with one the server will reject: the channel comes up
+        // public and the room is live, where the other way it is nothing.
+        return Self.expiresSoon(refreshed.accessToken) ? nil : refreshed.accessToken
+    }
+
+    /// The `exp` claim, read without a JWT library: the payload is the
+    /// middle base64url segment and its expiry is the only field this needs.
+    /// An unreadable token is treated as fine — the server is the authority
+    /// on that, and guessing wrong here would refresh on every join.
+    static func expiresSoon(_ token: String, within: TimeInterval = 60) -> Bool {
+        let parts = token.split(separator: ".")
+        guard parts.count == 3 else { return false }
+        var payload = String(parts[1])
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        payload += String(repeating: "=", count: (4 - payload.count % 4) % 4)
+        guard let data = Data(base64Encoded: payload),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let exp = (json["exp"] as? NSNumber)?.doubleValue
+        else { return false }
+        return Date(timeIntervalSince1970: exp).timeIntervalSinceNow < within
     }
 
     // MARK: - Invites and joining (S16)
@@ -460,6 +500,15 @@ final class RemoteSync {
                 [QuietDayRow].self, from: "quiet_days",
                 query: [URLQueryItem(name: "room_id", value: roomList)])
         }
+        // The link is the whole mechanism (S15), and there should be one of
+        // it per room: without this, a second device has no live invite to
+        // find and mints another rather than re-offering the one that is
+        // already out there.
+        graph.invites = (try? await withAuthRetry {
+            try await self.client.select(
+                [InviteRow].self, from: "invites",
+                query: [URLQueryItem(name: "room_id", value: roomList)])
+        }) ?? []
         let readingIDs = graph.readings.map(\.id)
         if !readingIDs.isEmpty {
             let readingList = "in.(\(readingIDs.map { $0.uuidString.lowercased() }.joined(separator: ",")))"

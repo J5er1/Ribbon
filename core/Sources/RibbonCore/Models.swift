@@ -337,6 +337,19 @@ public struct Invite: Codable, Hashable, Identifiable, Sendable {
         self.expiresAt = createdAt.addingTimeInterval(TimeInterval(Invite.lifetimeDays) * 24 * 3600)
     }
 
+    /// An invite as the backend holds it. The expiry is the column's, not
+    /// this device's arithmetic: a row minted on another phone, or by an
+    /// older build with a different lifetime, still expires when the
+    /// database says it does. (Kotlin's `Invite` has taken `expiresAt` as a
+    /// defaulted parameter all along, for the same reason.)
+    public init(id: UUID, roomID: UUID, createdBy: UUID, createdAt: Date, expiresAt: Date) {
+        self.id = id
+        self.roomID = roomID
+        self.createdBy = createdBy
+        self.createdAt = createdAt
+        self.expiresAt = expiresAt
+    }
+
     /// The link is the whole mechanism (S15). The domain is the one the
     /// room owns: readribbon.app (the brief's ribbon.bible was not
     /// acquired).

@@ -122,25 +122,29 @@ struct ReadingScreen: View {
                     proxy.scrollTo(position.chapter, anchor: .top)
                 }
                 recordFuel()
-                if !model.readingQuietly, let me = model.me {
+                if !model.readingQuietly {
+                    // The channel is the room's and is already open; this is
+                    // the book's half — saying you are in it (§4.2).
                     Task {
-                        await model.presence.join(roomID: room.id, person: me)
-                        await model.presence.update(position: position, scrollFraction: 0, isIdle: false)
+                        await model.presence.present(
+                            position: position, scrollFraction: 0,
+                            isIdle: false, following: model.followingPersonID)
                     }
                 }
             }
             .onDisappear {
-                Task {
-                    await model.presence.leave()
-                }
+                // Out of the book, still in the room: the line stays open so
+                // the room keeps hearing about itself.
+                Task { await model.presence.withdraw() }
             }
             .onChange(of: model.readingQuietly) { _, quietly in
                 Task {
                     if quietly {
-                        await model.presence.leave()
-                    } else if let me = model.me {
-                        await model.presence.join(roomID: room.id, person: me)
-                        await model.presence.update(position: model.myPosition(in: reading), scrollFraction: 0, isIdle: false)
+                        await model.presence.withdraw()
+                    } else {
+                        await model.presence.present(
+                            position: model.myPosition(in: reading), scrollFraction: 0,
+                            isIdle: false, following: model.followingPersonID)
                     }
                 }
             }
@@ -573,12 +577,21 @@ struct ReadingScreen: View {
 
     private func follow(_ person: PresentPerson) {
         // Tap a portrait to follow — a page-fly, no confirmation dialog
-        // (§4.2). With no live presence roster this is unreachable; the
-        // mechanics are here for when the socket is.
+        // (§4.2).
         followBackOffer = (model.myPosition(in: reading), Date().addingTimeInterval(120))
         model.followingPersonID = person.id
         if let position = person.position {
             scrollCommand = position.chapter
+        }
+        // "Ruth is with you" is the other end of this, and it only ever
+        // appears because the follow travels: without this the flag was set
+        // on this phone and never left it.
+        if !model.readingQuietly {
+            Task {
+                await model.presence.present(
+                    position: model.myPosition(in: reading), scrollFraction: 0,
+                    isIdle: false, following: person.id)
+            }
         }
     }
 
@@ -616,7 +629,9 @@ struct ReadingScreen: View {
             if !model.readingQuietly {
                 let fraction = max(0, min(1, Double(yInChapter / max(1, frame.height))))
                 Task {
-                    await model.presence.update(position: address, scrollFraction: fraction, isIdle: false)
+                    await model.presence.present(
+                        position: address, scrollFraction: fraction,
+                        isIdle: false, following: model.followingPersonID)
                 }
             }
         }

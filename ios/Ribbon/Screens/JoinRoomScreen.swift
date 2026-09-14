@@ -4,8 +4,10 @@ import RibbonCore
 
 // S16 — accepting an invite. The screen shows a person, not a product:
 // who is inviting, the room's name, one Join control. Account creation
-// (§6.10 — an emailed code, no passwords) happens here when it has to,
-// because joining is the first moment an account is genuinely needed.
+// (§6.10 — no passwords) happens here when it has to, because joining is
+// the first moment an account is genuinely needed — and it happens through
+// `SignInInline`, the app's one sign-in thread, so a joiner's account is the
+// same kind of account as everyone else's in the room.
 
 struct JoinFlow: View {
     @Environment(AppModel.self) private var model
@@ -25,8 +27,9 @@ struct JoinFlow: View {
         case loading
         case preview
         case name
-        case email
-        case code
+        /// The one sign-in thread (§6.10), whatever it is on this build —
+        /// this screen does not get its own.
+        case signIn
         case joining
         case dead(String)   // expired, full, unreachable — the line to show
     }
@@ -36,17 +39,10 @@ struct JoinFlow: View {
     @State private var name = ""
     @State private var portraitItem: PhotosPickerItem?
     @State private var portraitData: Data?
-    @State private var email = ""
-    @State private var code = ""
-    @State private var errorLine: String?
-    @State private var sendingCode = false
     /// Set down mid-join (the sheet swiped away): the join completes —
     /// they did join — but arriving must not happen underneath them.
     @State private var wasSetDown = false
-    /// One field per step — a shared Bool doesn't reliably carry focus
-    /// from a disappearing field to an appearing one.
-    enum Field { case name, email, code }
-    @FocusState private var focused: Field?
+    @FocusState private var nameFocused: Bool
 
     var body: some View {
         VStack(spacing: 24) {
@@ -60,10 +56,8 @@ struct JoinFlow: View {
                 previewStep
             case .name:
                 nameStep
-            case .email:
-                emailStep
-            case .code:
-                codeStep
+            case .signIn:
+                signInStep
             case .joining:
                 SmallCaps(Copy.joining, size: 12, color: Palette.muted)
             case .dead(let line):
@@ -153,7 +147,7 @@ struct JoinFlow: View {
                 .font(RibbonType.ui(20))
                 .foregroundStyle(Palette.text)
                 .multilineTextAlignment(.center)
-                .focused($focused, equals: .name)
+                .focused($nameFocused)
                 .padding(.horizontal, 40)
                 .submitLabel(.done)
                 .onSubmit(advanceFromName)
@@ -162,74 +156,29 @@ struct JoinFlow: View {
                 .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
                 .opacity(name.trimmingCharacters(in: .whitespaces).isEmpty ? 0.3 : 1)
         }
-        .onAppear { focused = .name }
+        .onAppear { nameFocused = true }
     }
 
-    private var emailStep: some View {
+    /// Joining is the first moment an account is genuinely needed, so this
+    /// is where it happens — and it is the same sign-in the rest of the app
+    /// offers (Auth0 where the build has it, a passkey where the platform
+    /// does, an emailed code underneath either). A second, hand-rolled
+    /// email-and-code pair here would quietly mint a *different* kind of
+    /// account from everyone else's, and the room would seat a stranger.
+    private var signInStep: some View {
         VStack(spacing: 20) {
             Text(Copy.accountReason)
                 .font(RibbonType.ui(16))
                 .foregroundStyle(Palette.text)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 44)
-            TextField("", text: $email, prompt: Text(Copy.yourEmail).foregroundStyle(Palette.muted))
-                .font(RibbonType.ui(18))
-                .foregroundStyle(Palette.text)
-                .multilineTextAlignment(.center)
-                .keyboardType(.emailAddress)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .focused($focused, equals: .email)
-                .padding(.horizontal, 40)
-                .submitLabel(.send)
-                .onSubmit(sendCode)
-            if let errorLine {
-                Text(errorLine)
-                    .font(RibbonType.ui(14))
-                    .foregroundStyle(Palette.muted)
-            }
-            WayInButton(title: Copy.sendTheCode) { sendCode() }
-                .padding(.horizontal, 80)
-                .disabled(!email.contains("@"))
-                .opacity(email.contains("@") ? 1 : 0.3)
+            SignInInline(onSignedIn: { join() })
+                .padding(.horizontal, 24)
             if let onStartInstead {
                 // Never a step without a way out.
                 QuietControl(title: Copy.startARoomInstead, action: onStartInstead)
             }
         }
-        .onAppear { focused = .email }
-    }
-
-    private var codeStep: some View {
-        VStack(spacing: 20) {
-            Text(Copy.codeOnItsWay)
-                .font(RibbonType.ui(16))
-                .foregroundStyle(Palette.text)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 44)
-            TextField("", text: $code, prompt: Text(Copy.theCode).foregroundStyle(Palette.muted))
-                .font(RibbonType.ui(22))
-                .foregroundStyle(Palette.text)
-                .multilineTextAlignment(.center)
-                .keyboardType(.numberPad)
-                .textContentType(.oneTimeCode)
-                .focused($focused, equals: .code)
-                .padding(.horizontal, 60)
-            if let errorLine {
-                Text(errorLine)
-                    .font(RibbonType.ui(14))
-                    .foregroundStyle(Palette.muted)
-            }
-            WayInButton(title: Copy.join) { verifyAndJoin() }
-                .padding(.horizontal, 80)
-                .disabled(code.trimmingCharacters(in: .whitespaces).isEmpty)
-                .opacity(code.trimmingCharacters(in: .whitespaces).isEmpty ? 0.3 : 1)
-            QuietControl(title: Copy.sendANewCode) { sendCode() }
-            if let onStartInstead {
-                QuietControl(title: Copy.startARoomInstead, action: onStartInstead)
-            }
-        }
-        .onAppear { focused = .code }
     }
 
     // MARK: Movement
@@ -270,7 +219,7 @@ struct JoinFlow: View {
             if model.me == nil {
                 phase = .name
             } else if !model.isSignedIn {
-                phase = .email
+                phase = .signIn
             } else {
                 phase = .joining
             }
@@ -284,42 +233,9 @@ struct JoinFlow: View {
         Task {
             await model.completeOnboarding(name: trimmed, portraitData: portraitData, startRoom: false)
             withAnimation(RibbonMotion.settle) {
-                phase = model.isSignedIn ? .joining : .email
+                phase = model.isSignedIn ? .joining : .signIn
             }
             if phase == .joining { join() }
-        }
-    }
-
-    private func sendCode() {
-        let address = email.trimmingCharacters(in: .whitespaces)
-        guard address.contains("@"), !sendingCode else { return }
-        sendingCode = true
-        errorLine = nil
-        Task {
-            defer { sendingCode = false }
-            do {
-                try await model.sendSignInCode(to: address)
-                code = ""
-                withAnimation(RibbonMotion.settle) { phase = .code }
-            } catch {
-                errorLine = Copy.serverUnreachable
-            }
-        }
-    }
-
-    private func verifyAndJoin() {
-        let entered = code.trimmingCharacters(in: .whitespaces)
-        guard !entered.isEmpty else { return }
-        errorLine = nil
-        Task {
-            do {
-                try await model.verifySignInCode(
-                    email: email.trimmingCharacters(in: .whitespaces), code: entered)
-            } catch {
-                errorLine = Copy.signInCodeWrong
-                return
-            }
-            join()
         }
     }
 

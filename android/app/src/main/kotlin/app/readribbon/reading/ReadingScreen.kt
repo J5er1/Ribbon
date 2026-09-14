@@ -291,19 +291,21 @@ fun ReadingScreen(
     var presenceInset by remember { mutableStateOf(0.dp) }
 
     LaunchedEffect(room.id, model.me?.id, model.readingQuietly) {
-        val me = model.me
-        if (!model.readingQuietly && me != null) {
-            model.presence.join(room.id, me)
+        if (!model.readingQuietly && model.me != null) {
+            // The channel is the room's and is already open; this is the
+            // book's half — saying you are in it (§4.2).
             val pos = openAt ?: model.myPosition(reading)
-            model.presence.update(pos, 0.0, false)
+            model.presence.present(pos, 0.0, isIdle = false, following = model.followingPersonID)
         } else {
-            model.presence.leave()
+            model.presence.withdraw()
         }
     }
 
     DisposableEffect(room.id) {
         onDispose {
-            scope.launch { model.presence.leave() }
+            // Out of the book, still in the room: the line stays open so the
+            // room keeps hearing about itself.
+            scope.launch { model.presence.withdraw() }
         }
     }
 
@@ -434,11 +436,23 @@ fun ReadingScreen(
 
     fun follow(person: PresentPerson) {
         // Tap a portrait to follow — a page-fly, no confirmation dialog
-        // (§4.2). With no live presence roster this is unreachable; the
-        // mechanics are here for when the socket is.
+        // (§4.2).
         followBackOffer.beganFollowing(model.myPosition(reading))
         model.followingPersonID = person.id
         person.position?.let { goToChapter(it.chapter) }
+        // "Ruth is with you" is the other end of this, and it only ever
+        // appears because the follow travels: without this the flag was set
+        // on this phone and never left it.
+        if (!model.readingQuietly) {
+            scope.launch {
+                model.presence.present(
+                    position = model.myPosition(reading),
+                    scrollFraction = 0.0,
+                    isIdle = false,
+                    following = person.id,
+                )
+            }
+        }
     }
 
     fun trackReading(chapter: Int, frame: Rect) {
@@ -467,7 +481,12 @@ fun ReadingScreen(
             if (!model.readingQuietly) {
                 val fraction = (yInChapter.value / maxOf(1f, frame.height)).toDouble().coerceIn(0.0, 1.0)
                 scope.launch {
-                    model.presence.update(position = address, scrollFraction = fraction, isIdle = false)
+                    model.presence.present(
+                        position = address,
+                        scrollFraction = fraction,
+                        isIdle = false,
+                        following = model.followingPersonID,
+                    )
                 }
             }
         }

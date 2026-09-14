@@ -162,8 +162,7 @@ actor SupabaseClient {
         if authenticated {
             try apply(headers: &request)
         } else {
-            request.setValue(key, forHTTPHeaderField: "apikey")
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            applyAnon(headers: &request)
         }
         let data = try await run(request)
         guard
@@ -185,8 +184,7 @@ actor SupabaseClient {
         if authenticated {
             try apply(headers: &request)
         } else {
-            request.setValue(key, forHTTPHeaderField: "apikey")
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            applyAnon(headers: &request)
         }
         // Parsed and re-encoded inside the actor, so the `Any` never leaves
         // this method.
@@ -383,10 +381,22 @@ actor SupabaseClient {
         if authenticated {
             try apply(headers: &request)
         } else {
-            request.setValue(key, forHTTPHeaderField: "apikey")
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            applyAnon(headers: &request)
         }
         return try await run(request)
+    }
+
+    /// The unauthenticated headers. PostgREST reads the role out of
+    /// `Authorization`, and falls back to `anon` only when the gateway has
+    /// filled it in from `apikey` — which is a gateway detail, not a
+    /// promise. supabase-js sends both on every anonymous call, and so does
+    /// the web invite page; sending only `apikey` is the difference between
+    /// `invite_preview` answering and the join screen saying the server is
+    /// unreachable.
+    private func applyAnon(headers request: inout URLRequest) {
+        request.setValue(key, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
     }
 
     private func apply(headers request: inout URLRequest) throws {

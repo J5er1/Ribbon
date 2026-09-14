@@ -16,9 +16,13 @@ import app.readribbon.core.ReadingPosition
 import app.readribbon.core.ReflectionCard
 import app.readribbon.core.Room
 import java.io.File
+import java.util.Base64
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import kotlin.time.Instant
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
@@ -52,6 +56,7 @@ data class RoomGraph(
     val fires: List<RemoteSync.FireRow> = emptyList(),
     val fuelEvents: List<RemoteSync.FuelEventRow> = emptyList(),
     val quietDays: List<RemoteSync.QuietDayRow> = emptyList(),
+    val invites: List<RemoteSync.InviteRow> = emptyList(),
     val notes: List<RemoteSync.NoteRow> = emptyList(),
     val noteFounds: List<RemoteSync.NoteFoundRow> = emptyList(),
     val highlights: List<RemoteSync.HighlightRow> = emptyList(),
@@ -157,6 +162,29 @@ class RemoteSync(
         withContext(Dispatchers.IO) { sessions.clear() }
         userID = null
         email = null
+    }
+
+    /**
+     * A token fit for the Realtime socket (§4.2).
+     *
+     * A socket outlives a token — Ribbon's are open for as long as the room
+     * is on screen — and Realtime refuses an expired one outright rather than
+     * asking for a new one. So the token is checked before every join and
+     * refreshed when it is within a minute of the end; a channel that cannot
+     * be authenticated is a room that silently stops being live.
+     */
+    suspend fun realtimeToken(): String? {
+        val token = client.currentSession()?.accessToken ?: return null
+        if (!expiresSoon(token)) return token
+        runCatching { client.refresh() }
+        val refreshed = client.currentSession() ?: return null
+        withContext(Dispatchers.IO) { sessions.save(refreshed) }
+        userID = refreshed.user.id
+        // Still dead — a refresh token that was itself revoked, or an Auth0
+        // session with none. Joining with no token at all is better than
+        // joining with one the server will reject: the channel comes up
+        // public and the room is live, where the other way it is nothing.
+        return if (expiresSoon(refreshed.accessToken)) null else refreshed.accessToken
     }
 
     // MARK: - Invites and joining (S16)
@@ -545,6 +573,16 @@ class RemoteSync(
             SupabaseClient.json.decodeFromString<List<QuietDayRow>>(
                 client.select(table = "quiet_days", query = listOf("room_id" to roomList)))
         }
+        // The link is the whole mechanism (S15), and there should be one of
+        // it per room: without this, a second device has no live invite to
+        // find and mints another rather than re-offering the one that is
+        // already out there.
+        val invites = runCatching {
+            withAuthRetry {
+                SupabaseClient.json.decodeFromString<List<InviteRow>>(
+                    client.select(table = "invites", query = listOf("room_id" to roomList)))
+            }
+        }.getOrDefault(emptyList())
         val readingIDs = readings.map { it.id }
         var fires: List<FireRow> = emptyList()
         var fuelEvents: List<FuelEventRow> = emptyList()
@@ -618,9 +656,9 @@ class RemoteSync(
         return RoomGraph(
             rooms = rooms, memberships = memberships, profiles = profiles,
             readings = readings, fires = fires, fuelEvents = fuelEvents,
-            quietDays = quietDays, notes = notes, noteFounds = noteFounds,
-            highlights = highlights, positions = positions, cards = cards,
-            cardAnswers = cardAnswers)
+            quietDays = quietDays, invites = invites, notes = notes,
+            noteFounds = noteFounds, highlights = highlights,
+            positions = positions, cards = cards, cardAnswers = cardAnswers)
     }
 
     /**
@@ -654,6 +692,7 @@ class RemoteSync(
     }
 
     // MARK: - Plumbing
+
 
     /**
      * Access tokens are short-lived; a 401 means refresh and retry once.
@@ -835,6 +874,29 @@ class RemoteSync(
     )
 
     companion object {
+
+        /**
+         * The `exp` claim, read without a JWT library: the payload is the
+         * middle base64url segment and its expiry is the only field this
+         * needs. An unreadable token is treated as fine — the server is the
+         * authority on that, and guessing wrong here would refresh on every
+         * join.
+         */
+        internal fun expiresSoon(token: String, withinSeconds: Long = 60): Boolean {
+            val parts = token.split(".")
+            if (parts.size != 3) return false
+            // java.util.Base64 rather than android.util.Base64: the same
+            // decoder on every API this app supports, and one a plain JVM
+            // test can run (SessionTokenTest).
+            val payload = runCatching {
+                Base64.getUrlDecoder().decode(parts[1]).toString(Charsets.UTF_8)
+            }.getOrNull() ?: return false
+            val exp = runCatching {
+                SupabaseClient.json.parseToJsonElement(payload)
+                    .jsonObject["exp"]?.jsonPrimitive?.longOrNull
+            }.getOrNull() ?: return false
+            return exp - (System.currentTimeMillis() / 1000) < withinSeconds
+        }
         /**
          * Restores a persisted session, if one exists. Always returns a
          * service — signed out is a state, not an absence.

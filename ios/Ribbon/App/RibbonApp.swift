@@ -51,8 +51,21 @@ struct RibbonApp: App {
                 }
             }
             .onChange(of: scenePhase) { _, phase in
-                if phase == .active, let model {
-                    Task { await model.refreshFromRemote() }
+                guard let model else { return }
+                switch phase {
+                case .active:
+                    Task {
+                        await model.refreshFromRemote()
+                        // The room's live line comes back with the app, and
+                        // only with it: a phone in a pocket is not present,
+                        // and saying otherwise is the one lie presence must
+                        // never tell (§4.2).
+                        await model.openRoomChannel()
+                    }
+                case .background:
+                    Task { await model.closeRoomChannel() }
+                default:
+                    break
                 }
             }
         }

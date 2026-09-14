@@ -1,7 +1,10 @@
 # Ribbon backend
 
 Live project: `ribbon` (`noyccfkaotuvhhaoccck`, us-east-1) in the Aeaura
-Supabase org. Both migrations in `migrations/` are applied.
+Supabase org. Apply `migrations/` in filename order — they are timestamped
+and each one is idempotent, so re-running the set is safe. The newest,
+`20260914120000_ribbon_realtime_room_channel.sql`, has not been applied
+yet; see the Realtime note below for what stays open until it is.
 
 What the schema enforces structurally (see the comments in the SQL):
 
@@ -17,10 +20,30 @@ What the schema enforces structurally (see the comments in the SQL):
   `accept_invite(token)`; `invite_preview(token)` is deliberately
   anon-callable so the S16 screen can show who is inviting before any
   account exists.
+- **The room's live channel is a room's, not the world's.**
+  `20260914120000_ribbon_realtime_room_channel.sql` puts the same
+  membership rule on `realtime.messages` that every table already has, so
+  a private join to `room:<room id>` is refused for a room you are not
+  in. Presence is the most intimate signal the product has (§4.2); it is
+  not the one thing RLS skips.
 
-Auth is email OTP (no passwords). The iOS client (`SupabaseClient.swift`)
-speaks to auth, PostgREST, and storage; Realtime presence channels carry
-the live presence roster and thinking-of-you.
+  **This migration is load-bearing and has to be applied.** Until it is,
+  both clients fall back to a *public* channel on their first refused
+  join — they keep working, and they say so in the log — which means a
+  room's presence and its thinking-of-you taps are readable by anyone
+  holding the publishable key that ships inside the app. Apply it, then
+  restart the app: the private join is retried every time a room is
+  opened, so nothing else needs doing.
+
+Auth is Auth0 where the build is configured for it (see `auth0/`), with
+Supabase's own emailed code underneath; there are no passwords either way,
+and every surface that needs an account goes through the one sign-in
+control so a joiner's account is the same kind of account as everyone
+else's in the room. The clients (`SupabaseClient.swift`,
+`SupabaseClient.kt`) speak to auth, PostgREST, and storage; `RoomChannel`
+holds one authenticated Realtime channel per room, carrying the presence
+roster, thinking-of-you, and the contentless nudge that tells the other
+phones to pull.
 
 `email-templates/otp.html` is the on-brand sign-in email — paste it into
 the dashboard at Authentication → Emails → Magic Link, the template

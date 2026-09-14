@@ -61,13 +61,15 @@ import app.readribbon.services.ReleaseInfo
 import app.readribbon.services.RoomGraph
 import app.readribbon.services.SupabaseClient
 import app.readribbon.services.SupabaseError
-import app.readribbon.services.SupabaseRealtimePresenceService
+import app.readribbon.services.RoomChannel
 import app.readribbon.services.Transcriber
 import app.readribbon.services.UpdateService
 import app.readribbon.services.UpdateState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.TimeZone
@@ -180,8 +182,74 @@ class AppModel(
                     is PresenceEvent.ThinkingOfYou -> {
                         Haptics(appContext).tapOnTheShoulder()
                     }
+                    is PresenceEvent.RoomChanged -> {
+                        roomChangedRemotely(event.roomID)
+                    }
                 }
             }
+        }
+    }
+
+    // MARK: - The room's live line (§4.2)
+
+    /**
+     * A pull the socket asked for, coalesced. Several people leaving notes at
+     * once is one catch-up, not five; and the short wait lets a burst (a
+     * join, then the joiner's profile, then their membership) land as one
+     * arrival rather than three half-built ones.
+     */
+    private var catchUpJob: Job? = null
+
+    private fun roomChangedRemotely(roomID: Uuid) {
+        if (roomID != currentRoom?.id) return
+        catchUpJob?.cancel()
+        catchUpJob = viewModelScope.launch {
+            delay(600)
+            catchUpJob = null
+            refreshFromRemote()
+        }
+    }
+
+    /**
+     * Open — or move — the room's channel. Safe to call whenever the room,
+     * the person or the account changes; it is a no-op when the channel is
+     * already where it should be.
+     */
+    suspend fun openRoomChannel() {
+        val room = currentRoom
+        val me = state.me
+        if (room == null || me == null || !isSignedIn) {
+            presence.disconnect()
+            return
+        }
+        presence.connect(room.id, me)
+    }
+
+    /**
+     * The app going away. The socket goes with it: a phone in a pocket is not
+     * present, and saying otherwise is the one lie presence must never tell
+     * (§4.2).
+     */
+    suspend fun closeRoomChannel() {
+        catchUpJob?.cancel()
+        catchUpJob = null
+        presence.disconnect()
+    }
+
+    /**
+     * Something this device changed that the room renders from. The other
+     * phones hear about it now rather than at their next foreground.
+     *
+     * Every remote write the *room* renders from goes through here, so a new
+     * kind of content cannot quietly forget to be live. Positions and
+     * note-founds deliberately do not: a position is already carried by
+     * presence, several times a minute, and who found a note is the one thing
+     * the room is never told (§6.3).
+     */
+    private fun pushing(work: suspend () -> Unit) {
+        viewModelScope.launch {
+            work()
+            presence.announceChange()
         }
     }
 
@@ -323,7 +391,9 @@ class AppModel(
     fun switchRoom(roomID: Uuid) {
         state = state.copy(currentRoomID = roomID)
         followingPersonID = null
+        presentPeople = emptyList()
         persist()
+        viewModelScope.launch { openRoomChannel() }
     }
 
     /**
@@ -347,16 +417,35 @@ class AppModel(
         if (membership != null) {
             remote.push(membership = membership)
         }
+        // Only ever my own. `invites_update` is the creator's, so pushing a
+        // link somebody else minted is a 403 — and pointless besides: it is
+        // here because the pull brought it back from the row it already has.
+        if (invite.createdBy != me.id) return
+        pendingInvitePushes.add(invite.id)
         remote.push(invite = invite)
+        pendingInvitePushes.remove(invite.id)
     }
+
+    /**
+     * Invites minted here whose push hasn't landed — merge() must not let a
+     * pull that raced them delete a link that is already in somebody's
+     * message thread. The same shape as `pendingRenamePushes`, for the same
+     * reason.
+     */
+    private val pendingInvitePushes: MutableSet<Uuid> = mutableSetOf()
 
     fun createInvite(room: Room): Invite {
         val me = state.me ?: error("invite before person")
-        // Reuse a live invite rather than minting link after link.
+        // Reuse a live invite rather than minting link after link — and
+        // since the pull now brings a room's invites back, "live" includes
+        // the one another member already sent out. A room has one link, not
+        // one per phone. Mine first, so the common case never needs anyone
+        // else's row.
         val invite: Invite
-        val existing = state.invites.firstOrNull {
+        val live = state.invites.filter {
             it.roomID == room.id && it.expiresAt > Clock.System.now()
         }
+        val existing = live.firstOrNull { it.createdBy == me.id } ?: live.firstOrNull()
         if (existing != null) {
             invite = existing
         } else {
@@ -403,7 +492,7 @@ class AppModel(
         if (remote != null && remote.isSignedIn) {
             val updated = state.rooms[i]
             pendingRenamePushes.add(updated.id)
-            viewModelScope.launch {
+            pushing {
                 if (runCatching { remote.push(room = updated) }.isSuccess) {
                     pendingRenamePushes.remove(updated.id)
                 }
@@ -439,8 +528,19 @@ class AppModel(
             val roomID = room.id
             val personID = me.id
             viewModelScope.launch {
+                // The nudge goes first, and it has to: once the membership
+                // row is gone the channel's own policy refuses this device,
+                // and the room would hear nothing at all. The others pull a
+                // beat later, by which time the delete has landed — and their
+                // next foreground is the backstop if it hasn't.
+                presence.announceChange()
                 runCatching { remote.deleteMembership(roomID = roomID, personID = personID) }
+                // The room this device is looking at has changed; the line
+                // follows it.
+                openRoomChannel()
             }
+        } else {
+            viewModelScope.launch { openRoomChannel() }
         }
     }
 
@@ -457,7 +557,7 @@ class AppModel(
         val remote = this.remote
         if (remote != null && remote.isSignedIn) {
             val membership = state.memberships[index]
-            viewModelScope.launch {
+            pushing {
                 runCatching { remote.push(membership = membership) }
                 // Remembered beside the membership, so that leaving — which
                 // deletes the membership — does not also delete the choice
@@ -521,7 +621,7 @@ class AppModel(
         val remote = this.remote ?: return
         if (!remote.isSignedIn) return
         val snapshot = reading.snapshot()
-        viewModelScope.launch { runCatching { remote.push(reading = snapshot) } }
+        pushing { runCatching { remote.push(reading = snapshot) } }
     }
 
     fun quietDays(room: Room): List<QuietDay> =
@@ -564,7 +664,7 @@ class AppModel(
         ) {
             lastPushedFuelAt = event.at
             val updated = state.readings[index].snapshot()
-            viewModelScope.launch {
+            pushing {
                 // The reading row first: a fuel event landing before its
                 // reading exists fails the foreign key and is lost.
                 runCatching { remote.push(reading = updated) }
@@ -655,7 +755,7 @@ class AppModel(
         persist()
         val remote = this.remote
         if (remote != null && remote.isSignedIn) {
-            viewModelScope.launch { runCatching { remote.push(quietDay = day) } }
+            pushing { runCatching { remote.push(quietDay = day) } }
         }
     }
 
@@ -704,7 +804,7 @@ class AppModel(
         persist()
         val remote = this.remote
         if (remote != null && remote.isSignedIn) {
-            viewModelScope.launch {
+            pushing {
                 runCatching { remote.push(note = note) }
                     .onSuccess { markNoteSent(note.id) }
             }
@@ -739,7 +839,7 @@ class AppModel(
         }
         val remote = this.remote
         if (remote != null && remote.isSignedIn) {
-            viewModelScope.launch {
+            pushing {
                 runCatching { remote.push(note = note, audioFile = audioFile) }
                     .onSuccess { markNoteSent(note.id) }
             }
@@ -823,7 +923,7 @@ class AppModel(
         persist()
         val remote = this.remote
         if (remote != null && remote.isSignedIn) {
-            viewModelScope.launch {
+            pushing {
                 runCatching { remote.deleteNote(id = note.id) }
             }
         }
@@ -840,7 +940,7 @@ class AppModel(
         val remote = this.remote
         if (remote != null && remote.isSignedIn) {
             val updated = notes[index]
-            viewModelScope.launch {
+            pushing {
                 runCatching { remote.push(note = updated) }
             }
         }
@@ -874,7 +974,7 @@ class AppModel(
         persist()
         val remote = this.remote
         if (remote != null && remote.isSignedIn) {
-            viewModelScope.launch {
+            pushing {
                 runCatching { remote.push(highlight = highlight) }
             }
         }
@@ -887,7 +987,7 @@ class AppModel(
         persist()
         val remote = this.remote
         if (remote != null && remote.isSignedIn) {
-            viewModelScope.launch {
+            pushing {
                 runCatching { remote.deleteHighlight(id = highlight.id) }
             }
         }
@@ -921,7 +1021,7 @@ class AppModel(
         persist()
         val remote = this.remote
         if (remote != null && remote.isSignedIn) {
-            viewModelScope.launch {
+            pushing {
                 runCatching { remote.push(card = newCard) }
             }
         }
@@ -951,7 +1051,7 @@ class AppModel(
 
         val remote = this.remote
         if (remote != null && remote.isSignedIn) {
-            viewModelScope.launch {
+            pushing {
                 runCatching {
                     remote.push(
                         RemoteSync.CardAnswerRow(
@@ -977,7 +1077,7 @@ class AppModel(
         persist()
         val remote = this.remote
         if (remote != null && remote.isSignedIn) {
-            viewModelScope.launch {
+            pushing {
                 runCatching { remote.push(card = updatedCard) }
             }
         }
@@ -1031,7 +1131,7 @@ class AppModel(
         val remote = this.remote ?: return
         if (!remote.isSignedIn) return
         val me = state.me ?: return
-        viewModelScope.launch {
+        pushing {
             runCatching { remote.push(profile = me, portraitData = portraitData) }
         }
     }
@@ -1277,7 +1377,8 @@ class AppModel(
                 runCatching { remote.push(membership = mine) }
             }
             for (invite in state.invites) {
-                if (invite.roomID != room.id || invite.expiresAt <= Clock.System.now()) continue
+                if (invite.roomID != room.id || invite.createdBy != me.id) continue
+                if (invite.expiresAt <= Clock.System.now()) continue
                 runCatching { remote.push(invite = invite) }
             }
             for (reading in state.readings) {
@@ -1349,8 +1450,23 @@ class AppModel(
         val remote = this.remote ?: throw SupabaseError.NotSignedIn
         if (!remote.isSignedIn) throw SupabaseError.NotSignedIn
         val roomID = remote.acceptInvite(token = inviteToken)
+        // The membership the function minted carries no ink and this device's
+        // profile may be newer than the row the room can see, so both go up
+        // before the pull that renders them.
+        val me = state.me
+        if (me != null) {
+            val portraitData = me.portraitPath?.let { path ->
+                runCatching {
+                    withContext(Dispatchers.IO) { store.portraitFile(path).readBytes() }
+                }.getOrNull()
+            }
+            runCatching { remote.push(profile = me, portraitData = portraitData) }
+        }
         refreshFromRemote()
         restoreInk(roomID)
+        // Arriving is the news the room most wants: whoever invited you sees
+        // you appear without putting their phone down and picking it up.
+        presence.announceChange()
         return roomID
     }
 
@@ -1438,7 +1554,8 @@ class AppModel(
         if (departed.isNotEmpty()) {
             next = next.copy(
                 rooms = next.rooms.filterNot { departed.contains(it.id) },
-                memberships = next.memberships.filterNot { departed.contains(it.roomID) })
+                memberships = next.memberships.filterNot { departed.contains(it.roomID) },
+                invites = next.invites.filterNot { departed.contains(it.roomID) })
             val current = next.currentRoomID
             if (current != null && departed.contains(current)) {
                 next = next.copy(currentRoomID = next.rooms.firstOrNull()?.id)
@@ -1459,6 +1576,27 @@ class AppModel(
             people[row.id] = profile
         }
         next = next.copy(people = people)
+
+        val invites = next.invites.toMutableList()
+        for (row in graph.invites) {
+            // The link is the room's, not the device's: a live invite the
+            // backend already has is the one this phone hands out too, so a
+            // room does not accumulate a link per phone (S15).
+            val invite = Invite(
+                id = row.id, roomID = row.roomId, createdBy = row.createdBy,
+                createdAt = row.createdAt, expiresAt = row.expiresAt)
+            val i = invites.indexOfFirst { it.id == row.id }
+            if (i >= 0) invites[i] = invite else invites.add(invite)
+        }
+        // An invite the backend no longer has (the room went, or it aged out
+        // of a prune) must not go on being offered from here.
+        val pulledInvites = graph.invites.map { it.id }.toSet()
+        invites.removeAll {
+            it.roomID in pulledRooms &&
+                it.id !in pulledInvites &&
+                it.id !in pendingInvitePushes
+        }
+        next = next.copy(invites = invites)
 
         val quietDays = next.quietDays.toMutableList()
         for (row in graph.quietDays) {
@@ -1849,17 +1987,20 @@ class AppModel(
             val app = context.applicationContext
             val store = LocalStore(app)
             val state = store.load()
-            val presence: PresenceService = if (SupabaseConfig.REMOTE_ENABLED) {
-                SupabaseRealtimePresenceService()
+            // The backend comes first: the room's live channel authenticates
+            // with the account's own token, so it cannot be built before
+            // there is an account to ask.
+            val remote = if (SupabaseConfig.REMOTE_ENABLED) RemoteSync.restore(app) else null
+            val presence: PresenceService = if (remote != null) {
+                RoomChannel(accessToken = { remote.realtimeToken() })
             } else {
                 LocalPresenceService()
             }
             val model = AppModel(app, state, store, presence)
+            model.remote = remote
             model.loadPortraits()
-            if (SupabaseConfig.REMOTE_ENABLED) {
-                model.remote = RemoteSync.restore(app)
-            }
             model.checkForUpdates()
+            model.openRoomChannel()
             return model
         }
 

@@ -41,6 +41,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.withContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -207,6 +210,18 @@ fun RibbonRoot(
         LaunchedEffect(model, lifecycle) {
             lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 model.refreshFromRemote()
+                // The room's live line comes back with the app, and only
+                // with it: a phone in a pocket is not present, and saying
+                // otherwise is the one lie presence must never tell (§4.2).
+                // `repeatOnLifecycle` cancels this block on the way out, so
+                // the socket closes exactly when the app stops being looked
+                // at — Swift does the same from `.background`.
+                try {
+                    model.openRoomChannel()
+                    awaitCancellation()
+                } finally {
+                    withContext(NonCancellable) { model.closeRoomChannel() }
+                }
             }
         }
     }
