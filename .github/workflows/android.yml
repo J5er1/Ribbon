@@ -80,6 +80,23 @@ jobs:
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
+      # The in-app updater asks this file first, and it is the only signal
+      # that actually works. A release's `published_at` does not move when
+      # its assets are replaced — this one still reads September 8th — and
+      # the release title carries no version, so UpdateService's two
+      # fallbacks both come up empty and it concludes there is nothing new.
+      # Without a fresh manifest the APK below lands on the release and no
+      # phone is ever told. `versionCode` is the run number because that is
+      # exactly what the APK was built with (app/build.gradle.kts reads
+      # GITHUB_RUN_NUMBER), so the two can never disagree.
+      - name: Write the version manifest the in-app updater reads
+        if: github.ref == 'refs/heads/main'
+        run: |
+          cat > android/app/build/outputs/apk/debug/version.json <<JSON
+          {"versionCode":${{ github.run_number }},"versionName":"0.1.${{ github.run_number }}","apkUrl":"https://github.com/${{ github.repository }}/releases/download/latest/app-debug.apk"}
+          JSON
+          cat android/app/build/outputs/apk/debug/version.json
+
       - name: Publish direct APK download release
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
@@ -87,4 +104,6 @@ jobs:
           tag_name: latest
           name: Latest Android Preview
           prerelease: true
-          files: android/app/build/outputs/apk/debug/app-debug.apk
+          files: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/outputs/apk/debug/version.json
