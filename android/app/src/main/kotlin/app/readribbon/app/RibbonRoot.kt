@@ -412,6 +412,18 @@ private fun RoomStack(model: AppModel, room: Room) {
                     }
                 },
         ) {
+            // The room's own ground, behind everything.
+            //
+            // Nothing used to paint one: whatever showed through the stack
+            // was the Activity's window background, which is `@color/unlit`
+            // and hard-coded to the brand's near-black. That was invisible
+            // while the room was the same near-black and it is not any more.
+            // The peel shrinks the room six percent, so under a wallpaper
+            // whose neutrals carry any chroma at all a frame of a *different*
+            // black appeared around the receding room every time the book was
+            // pulled open. The window background stays what it is, because it
+            // is what the splash holds before any palette is known.
+            Box(Modifier.fillMaxSize().room())
         // The room and the book, together, so that the menu drawn over
         // them can be taken out of a screen reader's path in one place. A
         // layer that covers the screen visually does not cover it for

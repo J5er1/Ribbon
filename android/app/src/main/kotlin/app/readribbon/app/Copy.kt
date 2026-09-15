@@ -549,8 +549,8 @@ object Copy {
      * about saying the true small thing plainly.
      */
     const val THE_FIRE_STAYS_WARM =
-        "The fire keeps its own warmth either way. " +
-            "It is the one thing here the wallpaper never repaints."
+        "The fire keeps its own warmth either way, and so does everybody's ink. " +
+            "Those are the two things here the wallpaper never repaints."
 
     /**
      * The one line under each settings screen's title.

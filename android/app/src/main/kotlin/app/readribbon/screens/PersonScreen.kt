@@ -26,7 +26,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.Text
@@ -439,8 +438,10 @@ fun RibbonConfirmDialog(
  * what happens, so the choices are the verbs and never "OK".
  *
  * @param destructive SwiftUI's destructive role, which has no Compose
- *   equivalent: the scheme's error colour is the palette's deep flame, which
- *   is the one warm red the room owns.
+ *   equivalent. The palette's deep flame, read directly rather than through
+ *   Material's `error` role: a wallpaper's scheme does not set `error`, so
+ *   under Material You that role is Material's own pink. The one warm red the
+ *   room owns is the fire's, and the fire never follows the wallpaper.
  */
 @Composable
 fun ConfirmChoice(
@@ -460,7 +461,7 @@ fun ConfirmChoice(
         Text(
             text = title,
             style = RibbonType.ui(17f),
-            color = if (destructive) MaterialTheme.colorScheme.error else Palette.text,
+            color = if (destructive) Palette.flameDeep else Palette.text,
             textAlign = TextAlign.Center,
         )
     }
