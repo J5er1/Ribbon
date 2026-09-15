@@ -579,7 +579,15 @@ fun ReadingScreen(
     // a progress, not a commitment — releasing mid-gesture eases the book back
     // down where it was, and committing hands the pull on to the slide that
     // takes it away, so the close is one movement rather than two.
-    val peel = rememberBackPeel(enabled = !closing && sheet.committed, onBack = { close() })
+    // Enabled for as long as the page is *on screen*, which is not the same
+    // as being in the book. `committed` only becomes true when the opening
+    // spring lands, roughly half a second after the way in is tapped — and
+    // for that whole window nothing here held back, the NavController's own
+    // callback is disabled at the start destination, and a system back
+    // closed the app rather than the book. The same hole was open for the
+    // length of every close. `close` latches, so a back during the close
+    // is consumed and does nothing, which is what it should do.
+    val peel = rememberBackPeel(enabled = sheet.engaged, onBack = { close() })
 
     // Opening, in two halves, because the page is raised before it is
     // entered. Where it opens is settled at once — the page has to rise

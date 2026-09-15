@@ -54,6 +54,7 @@ import app.readribbon.app.Copy
 import app.readribbon.app.firstName
 import app.readribbon.core.Ink
 import app.readribbon.core.Note
+import app.readribbon.core.NoteKind
 import app.readribbon.core.Room
 import app.readribbon.core.VerseAddress
 import app.readribbon.design.HairlineRule
@@ -289,11 +290,27 @@ private fun PersonNoteRow(
     // (§11), and no duration is ever displayed (S04).
     val words = if (found) (note.body ?: note.transcript)?.takeIf { it.isNotBlank() } else null
 
+    // The kind is drawn — a filled dot against an open ring — and `NoteMark`
+    // is a bare canvas with no semantics, so a voice note's transcript and a
+    // written note's body announced identically. The room's waiting rows were
+    // given the same fix; this is the other place that had it wrong.
+    val spoken = buildString {
+        append(
+            if (note.kind == NoteKind.voice) {
+                Copy.aVoiceNoteAt(note.verse.formatted)
+            } else {
+                Copy.aNoteAt(note.verse.formatted)
+            },
+        )
+        if (words != null) append(". $words")
+    }
+
     Row(
         modifier = modifier
             .fillMaxWidth()
             .sizeIn(minHeight = MIN_TARGET + 8.dp)
             .pressablePaper(RibbonShape.rowShape, role = Role.Button, onClick = onOpen)
+            .semantics(mergeDescendants = true) { contentDescription = spoken }
             .padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,

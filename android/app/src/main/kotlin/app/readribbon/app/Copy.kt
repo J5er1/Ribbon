@@ -297,6 +297,16 @@ object Copy {
      * emotional beat (§11).
      */
     fun whatTheyLeft(name: String) = "What $name left"
+
+    /**
+     * One of their notes, read aloud (§11). The kind is drawn as a mark and
+     * the mark has no words of its own, so the row says which it is before it
+     * says anything else — otherwise a voice note's transcript and a written
+     * note's body announce identically.
+     */
+    fun aVoiceNoteAt(verse: String) = "Voice note at $verse"
+
+    fun aNoteAt(verse: String) = "Note at $verse"
     const val WHAT_YOU_LEFT = "What you left"
 
     const val CHANGE_YOUR_INK = "Change your ink"

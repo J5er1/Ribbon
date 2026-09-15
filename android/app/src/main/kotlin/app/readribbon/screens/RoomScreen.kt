@@ -904,11 +904,33 @@ private fun Seat(
         label = "a-seat-ring",
     )
 
+    // The ring is a drawn shape, and a drawn shape is not a signal for
+    // somebody who cannot see it (§11). The presence line above says the
+    // state of whoever is *first*; everybody after them is named there and
+    // nothing else, so a half ring — the whole of here-but-still — was
+    // carried by geometry alone. The seat says it too, in the same words.
+    val spoken = model.person(personID)?.name?.let { name ->
+        when {
+            present && idle -> Copy.personIsHereButStill(firstName(name))
+            present -> Copy.personIsReading(firstName(name))
+            else -> null
+        }
+    }
+
     Box(
         modifier = Modifier
             .size(SEAT_TOUCH)
             .clip(CircleShape)
-            .pressable(role = Role.Button, onClick = onClick),
+            .pressable(role = Role.Button, onClick = onClick)
+            .then(
+                if (spoken != null) {
+                    Modifier.semantics(mergeDescendants = true) {
+                        contentDescription = spoken
+                    }
+                } else {
+                    Modifier
+                }
+            ),
         contentAlignment = Alignment.Center,
     ) {
         Box(

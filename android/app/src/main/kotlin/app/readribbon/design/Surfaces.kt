@@ -184,6 +184,28 @@ fun Modifier.pressable(
 }
 
 /**
+ * A recess cut into a sheet of paper: the track under a slider, the window a
+ * live preview is shown through, the groove a segmented control runs in.
+ *
+ * The room's own ground rather than a paler surface, so a control sits *in*
+ * its tile rather than on it — and the same edge a tile takes when the fill
+ * alone cannot carry it. Without that, a well on Ribbon's own palette is a
+ * 1.05:1 difference against the tile around it, which is to say no well at
+ * all; the whole recessed register would exist only under a wallpaper.
+ */
+@Composable
+fun Modifier.well(shape: Shape): Modifier {
+    val room = LocalRoomColours.current
+    return this
+        .clip(shape)
+        .background(room.ground)
+        .grain()
+        .then(
+            if (room.tileNeedsEdge) Modifier.border(1.dp, room.rule, shape) else Modifier,
+        )
+}
+
+/**
  * A section's name, over whatever it names.
  *
  * Small caps, the app's running-head voice, and announced as the heading it
@@ -444,6 +466,12 @@ fun GroupScope.SettingValue(
             .fillMaxWidth()
             .sizeIn(minHeight = if (subtitle == null) RowHeight else TallRowHeight)
             .paper(shape)
+            // The one row in this family with no gesture on it, and a gesture
+            // is what merges the others: without this its title, its subtitle
+            // and its value are three separate stops, so a translation on
+            // Downloads takes three swipes and its size can be reached
+            // without the name it belongs to.
+            .semantics(mergeDescendants = true) {}
             .padding(horizontal = TextInset, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),

@@ -237,7 +237,13 @@ fun Modifier.opensTheBook(
         // offered here: a custom click action on a node that is otherwise an
         // inert object. The fire keeps its own "The fire is steady." label —
         // this adds the action, it does not replace the sentence.
-        .semantics {
+        //
+        // **Merging is what makes it reachable.** `CampfireView` clears and
+        // sets its own semantics, which leaves it an unmerged leaf carrying
+        // content — so it takes the screen-reader focus for itself and this
+        // node, with the action on it, is never landed on. Merged, the fire's
+        // own sentence and the action are one stop.
+        .semantics(mergeDescendants = true) {
             role = Role.Button
             onClick(label = label) {
                 onEngaged()

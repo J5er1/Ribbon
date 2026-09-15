@@ -82,6 +82,8 @@ import app.readribbon.design.pressable
 import app.readribbon.design.readableColumn
 import app.readribbon.design.rememberReduceMotion
 import app.readribbon.design.room
+import app.readribbon.design.paper
+import app.readribbon.design.well
 import java.util.Calendar
 import kotlin.uuid.ExperimentalUuidApi
 
@@ -242,9 +244,7 @@ private fun ScriptureSizeWell(model: AppModel) {
     Box(
         Modifier
             .fillMaxWidth()
-            .clip(RibbonShape.rowShape)
-            .background(Palette.ground)
-            .grain()
+            .well(RibbonShape.rowShape)
             .padding(horizontal = 14.dp),
     ) {
         Slider(
@@ -288,9 +288,7 @@ private fun ScripturePreview(model: AppModel) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RibbonShape.rowShape)
-            .background(Palette.ground)
-            .grain()
+            .well(RibbonShape.rowShape)
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -337,18 +335,19 @@ private fun Segments(
         modifier = Modifier
             .fillMaxWidth()
             .height(52.dp)
-            .clip(RibbonShape.rowShape)
-            .background(Palette.ground)
-            .grain(),
+            .well(RibbonShape.rowShape),
     ) {
         val cell = maxWidth / labels.size
+        // Through `paper`, not a bare fill: on Ribbon's own palette the pill
+        // and the groove it runs in are 1.05:1 apart, so a filled pill is no
+        // pill at all and which of three words is chosen would be carried by
+        // the text's brightness alone. The edge comes with the helper.
         Box(
             Modifier
                 .offset(x = cell * at + 4.dp, y = 4.dp)
                 .width(cell - 8.dp)
                 .height(44.dp)
-                .clip(RibbonShape.smallShape)
-                .background(Palette.surface),
+                .paper(RibbonShape.smallShape),
         )
         Row(Modifier.fillMaxWidth()) {
             labels.forEachIndexed { index, label ->
