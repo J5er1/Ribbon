@@ -605,9 +605,6 @@ fun ReadingScreen(
     // recording a reading that did not happen.
     LaunchedEffect(sheet.committed) {
         if (!sheet.committed) return@LaunchedEffect
-        // The hearth's hint has done its job the first time the book is open,
-        // by whichever of the three routes got here (§6.1).
-        model.markBookOpened()
         recordFuel()
     }
 

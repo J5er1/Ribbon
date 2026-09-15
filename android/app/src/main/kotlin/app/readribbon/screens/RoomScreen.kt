@@ -19,6 +19,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -57,6 +58,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import app.readribbon.app.AppModel
@@ -147,9 +149,18 @@ private val HEADER_PORTRAIT = 28.dp
 /** The smallest thing a finger is allowed to have to hit (deviation 12). */
 private val TOUCH = 44.dp
 
-/** A seat around the hearth, and the square that carries it. */
+/**
+ * A seat around the hearth, and the square that carries it.
+ *
+ * Six of them plus the hearth's own insets need 380 dp, and the commonest
+ * Android phone is 360 — so a full room overflowed its card on most of the
+ * devices this ships to, and on *any* device once somebody raises their
+ * display size. [seatSize] measures the room it has and gives the seats back
+ * whatever will fit, never below the 44 dp a finger is owed (§11).
+ */
 private val SEAT = 38.dp
 private val SEAT_TOUCH = 48.dp
+private val SEAT_MIN_TOUCH = 44.dp
 
 /** The gap between drawn seats. A `spacedBy` on the touch squares, so the
  *  drawn circles keep the gap rather than the targets doing. */
@@ -308,13 +319,25 @@ fun RoomScreen(
                     }
                 }
 
-                QuietDayFoot(
-                    model = model,
-                    room = room,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 52.dp, bottom = 40.dp),
-                )
+                // Never after a lapse. §4.7 ends on exactly that — a quiet
+                // day offered to a paused room "would make it an apology" —
+                // and the paused room had been drawing the control anyway,
+                // under a line that had just said the room was paused. Grace
+                // is for the days you chose; it is not the answer to a
+                // billing state.
+                if (!room.isPaused) {
+                    QuietDayFoot(
+                        model = model,
+                        room = room,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 52.dp, bottom = 40.dp),
+                    )
+                } else {
+                    // The foot was carrying the scroll's bottom inset as well
+                    // as the control; the paused room still needs the inset.
+                    Air(40.dp)
+                }
             }
         }
     }
@@ -635,7 +658,7 @@ private fun Hearth(
                         onOpened = { onOpenReading(current, null) },
                     )
                 } else {
-                    UnlitHearth()
+                    UnlitHearth(paused = room.isPaused)
                 }
             }
         }
@@ -693,7 +716,14 @@ private fun TheFire(
                 .opensTheBook(
                     sheet = sheet,
                     label = Copy.continueIn(book.name),
-                    onEngaged = { onBeginOpening(reading) },
+                    onEngaged = {
+                        // Taking hold of the fire *is* discovering the
+                        // gesture, whether or not the pull goes on to commit.
+                        // The hint has done its job and does not come back
+                        // (§6.1).
+                        model.markFirePulled()
+                        onBeginOpening(reading)
+                    },
                     onOpened = onOpened,
                     onAbandoned = onAbandonOpening,
                 )
@@ -755,36 +785,50 @@ private fun TheFire(
  * No fire-shaped hole is reserved and nothing says the room is empty. The
  * hearthline underneath still draws, which is the point: there is a place for
  * a fire here, and it is simply unlit.
+ *
+ * @param paused whether the room is paused, in which case the hearth holds
+ *   its line and says nothing at all. S01's paused room is "one row: The room
+ *   is paused. It can be started again any time." — and that row is printed
+ *   by [WayIn] just below this. Rendering the app told on itself here: the
+ *   paused hearth was saying "Pick something to read together" over a room
+ *   where picking a book is precisely the half that is withheld, which is the
+ *   same failure as a control that names what it does and then does not do
+ *   it. A hearth that is quiet and a line that explains why agree; an
+ *   invitation with no door does not.
  */
 @Composable
-private fun UnlitHearth() {
+private fun UnlitHearth(paused: Boolean) {
     Column(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Air(6.dp)
-        Text(
-            text = Copy.PICK_A_BOOK,
-            style = RibbonType.display(24f),
-            color = Palette.text,
-            textAlign = TextAlign.Center,
-        )
-        // The hearthline draws here too. An unlit hearth is still a hearth,
-        // and the place a fire will stand is more welcoming than the absence
-        // of one.
+        if (!paused) {
+            Text(
+                text = Copy.PICK_A_BOOK,
+                style = RibbonType.display(24f),
+                color = Palette.text,
+                textAlign = TextAlign.Center,
+            )
+        }
+        // The hearthline draws here too — in the paused room most of all. An
+        // unlit hearth is still a hearth, and the place a fire will stand is
+        // more welcoming than the absence of one.
         HairlineRule(
             modifier = Modifier
                 .fillMaxWidth(0.62f)
                 .padding(vertical = 4.dp),
             color = Palette.rule,
         )
-        Text(
-            text = Copy.FIRST_FIRE_HINT,
-            style = RibbonType.ui(14f),
-            color = Palette.muted,
-            textAlign = TextAlign.Center,
-        )
+        if (!paused) {
+            Text(
+                text = Copy.FIRST_FIRE_HINT,
+                style = RibbonType.ui(14f),
+                color = Palette.muted,
+                textAlign = TextAlign.Center,
+            )
+        }
         Air(2.dp)
     }
 }
@@ -847,8 +891,33 @@ private fun Seats(
     // invited and nothing pending.
     val seatKept = model.somebodyIsExpected(room)
 
-    Row(
-        modifier = modifier,
+    // How many squares have to fit: everyone drawn, plus the open seat.
+    val places = minOf(shown.size, Room.capacity) + if (seatKept) 1 else 0
+
+    BoxWithConstraints(modifier = modifier) {
+        // Six 48 dp squares need 288 dp and a 360 dp phone offers 268 inside
+        // the hearth. Rather than wrap a row of faces onto two lines — which
+        // would read as a list rather than as a circle round a fire — the
+        // seats give up a few dp each until they fit, and stop at the 44 dp
+        // minimum a finger is owed. Below even that the row scrolls.
+        val touch = if (places <= 1) {
+            SEAT_TOUCH
+        } else {
+            val each = (maxWidth - SEAT_GAP * (places - 1)) / places
+            each.coerceIn(SEAT_MIN_TOUCH, SEAT_TOUCH)
+        }
+        val face = SEAT * (touch / SEAT_TOUCH)
+
+        Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (touch * places + SEAT_GAP * (places - 1) > maxWidth) {
+                    Modifier.horizontalScroll(rememberScrollState())
+                } else {
+                    Modifier
+                }
+            ),
         horizontalArrangement = Arrangement.spacedBy(SEAT_GAP, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -868,6 +937,8 @@ private fun Seats(
                         personID = personID,
                         present = personID in present,
                         idle = personID in idle,
+                        touch = touch,
+                        face = face,
                         onClick = { onOpenPerson(personID, room.id) },
                     )
                 }
@@ -880,7 +951,8 @@ private fun Seats(
             exit = fadeOut(arrive) + scaleOut(arrive, targetScale = 0.82f),
             label = "an-open-seat",
         ) {
-            OpenSeat(onInvite)
+            OpenSeat(touch = touch, face = face, onInvite = onInvite)
+        }
         }
     }
 }
@@ -892,6 +964,8 @@ private fun Seat(
     personID: Uuid,
     present: Boolean,
     idle: Boolean,
+    touch: Dp,
+    face: Dp,
     onClick: () -> Unit,
 ) {
     val reduceMotion = rememberReduceMotion()
@@ -917,7 +991,7 @@ private fun Seat(
 
     Box(
         modifier = Modifier
-            .size(SEAT_TOUCH)
+            .size(touch)
             .clip(CircleShape)
             .pressable(role = Role.Button, onClick = onClick)
             .then(
@@ -933,7 +1007,7 @@ private fun Seat(
     ) {
         Box(
             modifier = Modifier
-                .size(SEAT + (RING + RING_GAP) * 2)
+                .size(face + (RING + RING_GAP) * 2)
                 .drawBehind {
                     if (ring <= 0f) return@drawBehind
                     val stroke = RING.toPx()
@@ -974,7 +1048,7 @@ private fun Seat(
             PortraitView(
                 person = model.person(personID),
                 ink = model.membership(personID = personID, roomID = room.id)?.ink,
-                size = SEAT,
+                size = face,
                 image = model.portrait(personID),
                 // A seat and that person's own screen are the same face.
                 modifier = Modifier.flows(Flows.seat(room.id, personID)),
@@ -991,7 +1065,7 @@ private fun Seat(
  * instead of a room with a defect.
  */
 @Composable
-private fun OpenSeat(onInvite: () -> Unit) {
+private fun OpenSeat(touch: Dp, face: Dp, onInvite: () -> Unit) {
     // Muted rather than `rule`: a divider's colour is right for a line
     // between two things and far too quiet for a seat, which has to be seen
     // as a place before anyone will tap it. On Ribbon's own paint `rule`
@@ -999,7 +1073,7 @@ private fun OpenSeat(onInvite: () -> Unit) {
     val rule = Palette.muted.copy(alpha = 0.5f)
     Box(
         modifier = Modifier
-            .size(SEAT_TOUCH)
+            .size(touch)
             .clip(CircleShape)
             .pressable(role = Role.Button, onClick = onInvite)
             .semantics { contentDescription = Copy.AN_OPEN_SEAT },
@@ -1007,7 +1081,7 @@ private fun OpenSeat(onInvite: () -> Unit) {
     ) {
         Box(
             Modifier
-                .size(SEAT)
+                .size(face)
                 .drawBehind {
                     val stroke = 1.4.dp.toPx()
                     drawCircle(
@@ -1064,13 +1138,19 @@ private fun WayIn(
             // The gesture, said once. It goes for good the first time the
             // book is opened by any route — the same contract the margin
             // hint keeps (§6.1). A hint that comes back is worse than none.
-            if (!model.hasOpenedTheBook) {
+            if (!model.hasPulledTheFire) {
                 SmallCaps(Copy.PULL_THE_FIRE_UP, size = 11f)
             }
-        } else {
+        } else if (!room.isPaused) {
             // A control says exactly what happens — and it must not simply
             // repeat the sentence above it, which is what "Pick something to
             // read together" twice on one card was doing.
+            //
+            // A paused room gets no chooser, which is how it has always been:
+            // Scripture is never locked (§2.5) so a room with a book open
+            // keeps its way in, but starting a *new* fire is the half a
+            // lapsed subscription does hold. The starter shelf below is
+            // hidden for the same reason, and the two have to agree.
             WayInButton(title = Copy.PICK_A_BOOK_CONTROL, onClick = onPickABook)
         }
 
@@ -1164,7 +1244,14 @@ private fun WaitingSection(
     }
 
     val hasRows = waiting.isNotEmpty() || cardsOpen
-    val hasInvite = alone && !room.isPaused
+    // A *live link*, not merely a room of one. "The invite is still out."
+    // told somebody who had just made their first room and asked nobody that
+    // an invite was outstanding, and offered to send it again — and this pass
+    // promoted that sentence from a quiet line onto a drawn card, which made
+    // a small wrongness a loud one. `somebodyIsExpected` is not the predicate
+    // either: it answers true for a room of one by design, which is what the
+    // open seat wants and this does not.
+    val hasInvite = !room.isPaused && alone && model.hasLiveInvite(room)
     if (!hasRows && !hasInvite) return
 
     val reduceMotion = rememberReduceMotion()

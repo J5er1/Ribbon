@@ -345,7 +345,12 @@ fun WayInButton(
             Text(
                 text = label,
                 style = RibbonType.ui(18f, FontWeight.Medium),
-                color = Palette.ground,
+                // The accent's own contrast pair, not the ground: the fill is
+                // the scheme's `primary` and this is its `onPrimary`. They
+                // happen to work out on a dark dynamic scheme, but only by
+                // accident, and this is the one control on the room that has
+                // to be readable.
+                color = Palette.onAccent,
                 textAlign = TextAlign.Center,
             )
         }

@@ -70,6 +70,7 @@ import app.readribbon.app.AppModel
 import app.readribbon.app.Copy
 import app.readribbon.app.firstName
 import app.readribbon.design.Palette
+import app.readribbon.design.paper
 import app.readribbon.design.QuietControl
 import app.readribbon.design.RibbonMotion
 import app.readribbon.design.RibbonType
@@ -476,9 +477,7 @@ private fun NameStep(
                 .clip(CircleShape)
                 .then(
                     if (portrait == null) {
-                        Modifier
-                            .background(Palette.surface)
-                            .border(1.dp, Palette.rule, CircleShape)
+                        Modifier.paper(CircleShape)
                     } else {
                         Modifier
                     },

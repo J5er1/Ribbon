@@ -471,6 +471,10 @@ class AppModel(
 
     fun isFull(room: Room): Boolean = members(room).size >= Room.capacity
 
+    /** Is a link to this room live — actually handed out, and not expired? */
+    fun hasLiveInvite(room: Room, now: Instant = Clock.System.now()): Boolean =
+        state.invites.any { it.roomID == room.id && it.expiresAt > now }
+
     /**
      * Is somebody still expected in this room?
      *
@@ -483,7 +487,7 @@ class AppModel(
     fun somebodyIsExpected(room: Room, now: Instant = Clock.System.now()): Boolean {
         if (room.isPaused || isFull(room)) return false
         if (members(room).size <= 1) return true
-        return state.invites.any { it.roomID == room.id && it.expiresAt > now }
+        return hasLiveInvite(room, now)
     }
 
     /**
@@ -1157,17 +1161,17 @@ class AppModel(
     }
 
     /**
-     * Has the book ever been opened on this phone?
+     * Has the fire ever been pulled on this phone?
      *
      * The room's hearth offers its gesture until it has, and then never
      * again (§6.1).
      */
-    val hasOpenedTheBook: Boolean get() = state.hasOpenedTheBook
+    val hasPulledTheFire: Boolean get() = state.hasPulledTheFire
 
-    /** It has now. Called by the reading surface as it appears. */
-    fun markBookOpened() {
-        if (state.hasOpenedTheBook) return
-        state = state.copy(hasOpenedTheBook = true)
+    /** It has now. Called only from the drag itself, never from the tap. */
+    fun markFirePulled() {
+        if (state.hasPulledTheFire) return
+        state = state.copy(hasPulledTheFire = true)
         persist()
     }
 

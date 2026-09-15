@@ -198,6 +198,44 @@ class LookBookTest {
         shoot("room-with-a-fire") { Room(m, m.state.rooms.first()) }
     }
 
+    /**
+     * A full room on the phone most people are holding.
+     *
+     * 360 dp is the commonest Android width and the seats are the one thing
+     * on this screen whose size is fixed rather than fluid, so this is the
+     * frame where a room of six either fits or does not. It did not.
+     */
+    @Test @Config(sdk = [34], qualifiers = "w360dp-h800dp-xhdpi")
+    fun roomOfSix() {
+        val others = listOf(ruth, ann) + (1..3).map { Person(name = "Person $it") }
+        val open = reading("ISA", FireScale.large)
+        val state = AppState(
+            me = me,
+            people = (listOf(me) + others).associateBy { it.id },
+            rooms = listOf(room),
+            memberships = (listOf(me) + others).map { membership(it, Ink.teal) },
+            readings = listOf(open),
+            currentRoomID = room.id,
+        )
+        val m = model(state)
+        shoot("room-of-six-360dp") { Room(m, m.state.rooms.first()) }
+    }
+
+    /** A paused room: presence off, waiting rows gone, no new fire. */
+    @Test fun roomPaused() {
+        val paused = room.copy(isPaused = true)
+        val state = AppState(
+            me = me,
+            people = mapOf(me.id to me, ruth.id to ruth),
+            rooms = listOf(paused),
+            memberships = listOf(membership(me, null), membership(ruth, null))
+                .map { it.copy(roomID = paused.id) },
+            currentRoomID = paused.id,
+        )
+        val m = model(state)
+        shoot("room-paused") { Room(m, m.state.rooms.first()) }
+    }
+
     @Test fun roomFirstRun() {
         val state = AppState(
             me = me,

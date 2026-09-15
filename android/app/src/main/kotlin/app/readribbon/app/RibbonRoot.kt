@@ -604,9 +604,10 @@ private fun RoomStack(model: AppModel, room: Room) {
                             .fillMaxSize()
                             // The offset is read inside the layer block, so a
                             // finger dragging the page never recomposes a
-                            // word of Scripture. Clipped away entirely at
-                            // rest, because a page parked off the bottom of
-                            // the screen still costs a layer to composite.
+                            // word of Scripture. At rest it costs nothing at
+                            // all, because at rest there is no page: the
+                            // layer only exists once `beginOpening` or
+                            // `openBook` has put a reading here.
                             .graphicsLayer {
                                 translationY = (1f - sheet.progress) * size.height
                             },
@@ -618,7 +619,15 @@ private fun RoomStack(model: AppModel, room: Room) {
                             sheet = sheet,
                             onClose = { closeBook() },
                             onDismissed = { dropBook() },
-                            onFinished = { dropBook() },
+                            // The finishing closes the book like everything
+                            // else does. It used to cut it away in one frame:
+                            // `dropBook` is for a page something else is
+                            // already drawing over, and "Put it on the shelf"
+                            // is a plain control inside the page's own scroll
+                            // with nothing over it at all — so the app's most
+                            // emotional transition (§6.5) was the one place
+                            // the page vanished rather than left.
+                            onFinished = { closeBook() },
                             onStartAnother = {
                                 dropBook()
                                 chooserRequested = true
