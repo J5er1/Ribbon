@@ -49,6 +49,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
@@ -344,7 +345,10 @@ private fun Segments(
         // the text's brightness alone. The edge comes with the helper.
         Box(
             Modifier
-                .offset(x = cell * at + 4.dp, y = 4.dp)
+                // The lambda overload, because `at` is animating: this way
+                // the pill's travel is a layout change per frame rather than
+                // a recomposition per frame.
+                .offset { IntOffset(((cell * at) + 4.dp).roundToPx(), 4.dp.roundToPx()) }
                 .width(cell - 8.dp)
                 .height(44.dp)
                 .paper(RibbonShape.smallShape),

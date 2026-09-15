@@ -744,6 +744,13 @@ private fun TheFire(
                 state = state,
                 scale = reading.handiwork.scale,
                 coalDepth = reading.handiwork.coalDepth,
+                // S01's offline room: "fire renders in its last known state,
+                // dimmed by ~8%", and nothing else — no banner, no retry, no
+                // line of copy (§13). `CampfireView` has carried this
+                // parameter since it was written and nothing ever passed it,
+                // so the one visible sign the room had of being offline was
+                // not reachable. It is now.
+                dimmed = !model.isOnline,
             )
         }
 

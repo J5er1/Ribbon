@@ -84,8 +84,12 @@ private val TallRowHeight = 76.dp
  * a group read as furniture standing on a floor rather than as a panel
  * bolted to one. It also avoids stacking two tonal surfaces on top of each
  * other, which on some wallpapers is two shades that are nearly the same.
+ *
+ * Public because the group DSL below is not the only place a group is built:
+ * onboarding's four intents are a group too, and a second opinion about the
+ * seam would be visible on the one screen this number matters most.
  */
-private val Seam = 2.dp
+val Seam = 2.dp
 
 /** How far in a title sits from a tile's own edge. */
 private val TextInset = 20.dp

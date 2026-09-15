@@ -14,8 +14,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,14 +22,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
@@ -45,23 +41,19 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.contentType
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewModelScope
@@ -70,7 +62,7 @@ import app.readribbon.app.AppModel
 import app.readribbon.app.Copy
 import app.readribbon.app.firstName
 import app.readribbon.design.Palette
-import app.readribbon.design.paper
+import app.readribbon.design.well
 import app.readribbon.design.QuietControl
 import app.readribbon.design.RibbonMotion
 import app.readribbon.design.RibbonType
@@ -474,14 +466,10 @@ private fun NameStep(
         Box(
             modifier = Modifier
                 .size(PortraitSize)
-                .clip(CircleShape)
-                .then(
-                    if (portrait == null) {
-                        Modifier.paper(CircleShape)
-                    } else {
-                        Modifier
-                    },
-                )
+                // A well, not a card — the same recess onboarding asks for
+                // the same face in. Two screens that want one thing should
+                // not have two opinions about what the empty slot is.
+                .then(if (portrait == null) Modifier.well(CircleShape) else Modifier.clip(CircleShape))
                 .clickable(onClick = onPickPortrait)
                 .semantics(mergeDescendants = true) {
                     contentDescription = Copy.ADD_A_PORTRAIT
@@ -507,7 +495,7 @@ private fun NameStep(
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth(),
         )
-        CentredField(
+        CentredTextField(
             value = name,
             onValueChange = onNameChange,
             placeholder = Copy.YOUR_NAME,
@@ -596,66 +584,3 @@ private fun DeadStep(
     }
 }
 
-/**
- * One centred, undecorated line of typing — the plain `TextField` Swift
- * uses, which draws no box and lets the prompt stand in the muted voice
- * until a character arrives.
- *
- * The field asks for focus as it arrives, which is `.onAppear { focused =
- * … }` on each step: every step's field is a new node, so its own arrival is
- * the moment.
- */
-@Composable
-private fun CentredField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    placeholder: String,
-    size: Float,
-    focusRequester: FocusRequester,
-    keyboardOptions: KeyboardOptions,
-    keyboardActions: KeyboardActions,
-    modifier: Modifier = Modifier,
-) {
-    LaunchedEffect(focusRequester) {
-        runCatching { focusRequester.requestFocus() }
-    }
-    BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
-        singleLine = true,
-        textStyle = RibbonType.ui(size).copy(
-            color = Palette.text,
-            textAlign = TextAlign.Center,
-        ),
-        cursorBrush = SolidColor(Palette.chartreuse),
-        keyboardOptions = keyboardOptions,
-        keyboardActions = keyboardActions,
-        modifier = modifier
-            .fillMaxWidth()
-            .focusRequester(focusRequester),
-        // The 44 dp minimum belongs to the field itself, not to a box drawn
-        // around it: a text field's tappable area is exactly its decoration,
-        // so a taller wrapper would leave the same short line to hit
-        // (deviation 12 — the defect found on iPad, and the same defect
-        // here). One line of type, centred in a target a finger can find.
-        decorationBox = { innerTextField ->
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = TouchTarget),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (value.isEmpty()) {
-                    Text(
-                        text = placeholder,
-                        style = RibbonType.ui(size),
-                        color = Palette.muted,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-                innerTextField()
-            }
-        },
-    )
-}

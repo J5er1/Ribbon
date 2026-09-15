@@ -10,6 +10,8 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import app.readribbon.app.AppModel
 import app.readribbon.core.Bible
@@ -31,7 +33,11 @@ import app.readribbon.data.LocalStore
 import app.readribbon.design.Appearance
 import app.readribbon.design.RibbonTheme
 import app.readribbon.design.rememberBookSheet
+import app.readribbon.app.Copy
 import app.readribbon.screens.AppearanceScreen
+import app.readribbon.screens.BookChooserContent
+import app.readribbon.screens.InviteContent
+import app.readribbon.screens.OnboardingFlow
 import app.readribbon.screens.MenuEntry
 import app.readribbon.screens.MenuScreen
 import app.readribbon.screens.NotificationSettingsScreen
@@ -128,6 +134,34 @@ class LookBookTest {
         capture(name)
         appearance.wallpaperColour = false
         capture("$name-ribbon")
+    }
+
+    /**
+     * The same, for a screen that moves through itself: capture, click, capture.
+     *
+     * The tour is four cards behind one button, so a single frame of it is
+     * not a picture of it. This walks the thread on the wallpaper's palette
+     * and again on Ribbon's own, which is what the tour actually looks like.
+     */
+    private fun shootWalk(name: String, content: @Composable () -> Unit) {
+        val appearance = Appearance(ApplicationProvider.getApplicationContext())
+        appearance.wallpaperColour = true
+        compose.setContent {
+            RibbonTheme(appearance = appearance) { Box(Modifier.fillMaxSize()) { content() } }
+        }
+        capture("$name-mark")
+        // The mark holds for 750 ms under its own `delay`, which the test
+        // clock does not cross on its own.
+        compose.mainClock.advanceTimeBy(1_500)
+        compose.waitForIdle()
+        capture("$name-0")
+        for (i in 1..3) {
+            compose.onNodeWithText(Copy.CONTINUE_TOUR).performClick()
+            compose.waitForIdle()
+            capture("$name-$i")
+        }
+        appearance.wallpaperColour = false
+        capture("$name-3-ribbon")
     }
 
     private fun capture(name: String) {
@@ -394,6 +428,91 @@ class LookBookTest {
 
     @Test fun appearanceSettings() {
         shoot("settings-appearance") { AppearanceScreen(onBack = {}) }
+    }
+
+    // MARK: the front door
+    //
+    // Everything a hesitant partner sees *before* the room. It had no picture
+    // at all until now, which is why it had no pass either: the room got
+    // looked at every time it changed and this did not.
+    //
+    // Driven by clicking rather than by calling the steps directly, because
+    // `Step` is private and should stay that way — and walking the thread is
+    // the honest way to see it anyway.
+
+    /** The mark, and the four tour cards it dissolves into. */
+    @Test fun theWayIn() {
+        val m = model(AppState())
+        shootWalk("way-in") { Onboarding(m) }
+    }
+
+    /** The question the tour ends on. */
+    @Test fun theIntentStep() {
+        val m = model(AppState())
+        shoot("way-in-intent") {
+            Onboarding(m)
+        }
+        compose.mainClock.advanceTimeBy(1_500)
+        compose.waitForIdle()
+        // Four Continues walks the tour out and lands on the intent step.
+        repeat(4) {
+            compose.onNodeWithText(Copy.CONTINUE_TOUR).performClick()
+            compose.waitForIdle()
+        }
+        capture("way-in-intent-ribbon")
+    }
+
+    /** Where a name and a face are asked for — the last step before the room. */
+    @Test fun theNameStep() {
+        val m = model(AppState())
+        shoot("way-in-name") { Onboarding(m) }
+        compose.mainClock.advanceTimeBy(1_500)
+        compose.waitForIdle()
+        // Four through the tour, one more off the intent step.
+        repeat(5) {
+            compose.onNodeWithText(Copy.CONTINUE_TOUR).performClick()
+            compose.waitForIdle()
+        }
+        capture("way-in-name-ribbon")
+    }
+
+    @Composable
+    private fun Onboarding(m: AppModel) {
+        OnboardingFlow(model = m, onDone = {})
+    }
+
+    /** The chooser: the search field, the five good places to start. */
+    @Test fun theChooser() {
+        val state = AppState(
+            me = me,
+            people = mapOf(me.id to me),
+            rooms = listOf(room),
+            memberships = listOf(membership(me, null)),
+            currentRoomID = room.id,
+        )
+        val m = model(state)
+        shoot("chooser") {
+            BookChooserContent(
+                room = m.state.rooms.first(),
+                model = m,
+                onChoose = {},
+            )
+        }
+    }
+
+    /** The invite: what a room of one is actually looking at. */
+    @Test fun theInvite() {
+        val state = AppState(
+            me = me,
+            people = mapOf(me.id to me),
+            rooms = listOf(room),
+            memberships = listOf(membership(me, null)),
+            currentRoomID = room.id,
+        )
+        val m = model(state)
+        shoot("invite") {
+            InviteContent(room = m.state.rooms.first(), model = m)
+        }
     }
 
     private companion object {

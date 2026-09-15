@@ -52,6 +52,7 @@ import app.readribbon.data.LocalStore
 import app.readribbon.data.RoomNotificationPrefs
 import app.readribbon.data.ScriptureStore
 import app.readribbon.design.Haptics
+import app.readribbon.services.Connectivity
 import app.readribbon.services.LocalPresenceService
 import app.readribbon.services.PresenceEvent
 import app.readribbon.services.PresenceService
@@ -132,6 +133,20 @@ class AppModel(
     private val appContext: Context = context.applicationContext
 
     /**
+     * Whether there is a network — read by the fire, and by nothing else.
+     *
+     * S01's offline room dims its fire by about 8% and says nothing at all;
+     * see [Connectivity] for why there is no banner and never will be. It
+     * lives on the model rather than in a composition local because the
+     * callback it registers has to be unregistered, and the model is the one
+     * thing on this screen with a lifetime.
+     */
+    private val connectivity = Connectivity(appContext)
+
+    /** True when the room can reach the people in it. */
+    val isOnline: Boolean get() = connectivity.online
+
+    /**
      * `neverEqualPolicy` rather than the default structural one, and this is
      * load-bearing: `Handiwork` is a struct in Swift and a mutable class in
      * the Kotlin core, so feeding a fire changes an object that both the old
@@ -188,6 +203,17 @@ class AppModel(
                 }
             }
         }
+    }
+
+    /**
+     * The one thing this model registers with the system, unregistered.
+     *
+     * A `NetworkCallback` outlives the object that made it unless it is
+     * handed back, and a leaked one keeps waking a process that has no
+     * screen.
+     */
+    override fun onCleared() {
+        connectivity.stop()
     }
 
     // MARK: - The room's live line (§4.2)

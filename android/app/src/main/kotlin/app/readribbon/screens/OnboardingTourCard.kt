@@ -28,9 +28,15 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.readribbon.app.Copy
+import app.readribbon.core.FireScale
+import app.readribbon.core.FireState
 import app.readribbon.core.Ink
+import app.readribbon.fire.CampfireView
 import app.readribbon.design.Palette
+import app.readribbon.design.RibbonShape
 import app.readribbon.design.RibbonType
+import app.readribbon.design.paper
+import app.readribbon.design.well
 import app.readribbon.design.WaveMark
 import app.readribbon.design.color
 
@@ -138,9 +144,12 @@ private fun PresenceGraphic() {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(Palette.surface.copy(alpha = 0.6f))
-            .border(1.dp, Palette.rule, RoundedCornerShape(16.dp))
+            // The same card the room draws, rather than a second opinion
+            // about what a card is: `paper` fills, grains, and draws an edge
+            // only on a palette where the fill alone cannot be seen. The
+            // hand-rolled version drew an outline on every wallpaper, which
+            // made the front door the one place in the app with borders.
+            .paper(RibbonShape.cardShape)
             .padding(vertical = 16.dp, horizontal = 18.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
@@ -157,9 +166,9 @@ private fun PresenceGraphic() {
         ) {
             Row(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(20.dp))
+                    .clip(CircleShape)
                     .background(Palette.raised)
-                    .border(1.dp, teal.copy(alpha = 0.45f), RoundedCornerShape(20.dp))
+                    .border(1.dp, teal.copy(alpha = 0.45f), CircleShape)
                     .padding(horizontal = 12.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -192,9 +201,7 @@ private fun NotesGraphic() {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(Palette.surface.copy(alpha = 0.6f))
-            .border(1.dp, Palette.rule, RoundedCornerShape(16.dp))
+            .paper(RibbonShape.cardShape)
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -219,9 +226,9 @@ private fun NotesGraphic() {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
+                .clip(RibbonShape.rowShape)
                 .background(Palette.raised)
-                .border(1.dp, ochre.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                .border(1.dp, ochre.copy(alpha = 0.35f), RibbonShape.rowShape)
                 .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -263,45 +270,39 @@ private fun NotesGraphic() {
     }
 }
 
+/**
+ * The fire — the actual one.
+ *
+ * It was a gradient circle over a bar: a picture of a fire, drawn beside a
+ * sentence promising the fire. The product has exactly one central object
+ * and this is the card that introduces it, so showing a stand-in here is the
+ * one place a stand-in cannot be afforded. [CampfireView] is what the room
+ * draws, so it is what this draws — burning, at medium, with the coals half
+ * deep, which is what a fire two people are keeping looks like.
+ *
+ * It costs the tour a 30 Hz canvas for as long as the card is up, and under
+ * reduce motion it holds one instant like every other fire in the app.
+ */
 @Composable
 private fun FireGraphic() {
+    // In a well, for the reason the room's fire is in one: the fire draws
+    // its ambient throw across the whole of its canvas and then clips it at
+    // the edge, which on bare ground is a plainly visible rectangle of
+    // slightly-warmer dark. The recess owns that edge, so there is nothing
+    // to see but the glow inside it — and it is the same hearth the room
+    // will hand them in about four taps, which is the better introduction
+    // anyway.
     Box(
-        modifier = Modifier.size(160.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .well(RibbonShape.cardShape)
+            .padding(vertical = 14.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Box(
-            modifier = Modifier
-                .size(160.dp)
-                .background(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            Palette.flameCore.copy(alpha = 0.35f),
-                            Palette.flameDeep.copy(alpha = 0.15f),
-                            Color.Transparent,
-                        ),
-                    ),
-                    shape = CircleShape,
-                )
+        CampfireView(
+            state = FireState.burning,
+            scale = FireScale.medium,
+            coalDepth = 0.5,
         )
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .background(
-                        brush = Brush.linearGradient(
-                            colors = listOf(Palette.flameBright, Palette.flameCore, Palette.flameDeep),
-                        ),
-                        shape = CircleShape,
-                    )
-            )
-            Box(
-                modifier = Modifier
-                    .size(width = 54.dp, height = 6.dp)
-                    .background(Palette.coalDim.copy(alpha = 0.6f), RoundedCornerShape(3.dp))
-            )
-        }
     }
 }

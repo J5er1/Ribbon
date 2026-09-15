@@ -933,6 +933,63 @@ A24. **There is a look book, because nobody can see this app.** The CI
     right. It is the first Robolectric test in the repo, which is the one
     cost: CI now fetches an `android-all` jar.
 
+A25. **The front door took the same pass as the room — and the tour is an
+    undocumented deviation from S17 that this ledger is now recording
+    rather than resolving.** The room and the settings were rebuilt first
+    and everything a hesitant partner sees *before* the room was left
+    alone, which meant the friendliest part of the app was the part you
+    reached last. Rendering it is what showed the state it was in:
+
+    - The tour card that promises "a fire kept alive together" was drawing
+      a **gradient circle over a bar**. The product has one central object
+      and that was the card introducing it. It is `CampfireView` now — the
+      room's own fire, in a well, for the reason the room's is in one: the
+      fire throws ambient light across its whole canvas and clips it, which
+      is a visible rectangle on bare ground.
+    - The intent step set its three unchosen options in `muted` on a fill
+      that cannot be seen, so **three of four choices read as disabled** on
+      the screen that asks who you will read with. They are `text` in both
+      states now, in the app's own group tiles, with the accent ring and
+      the check carrying the selection between them.
+    - **Three copies of one text field** — the name, the invite code and
+      the sign-in code, which is every place in the app somebody types
+      their way in. Two of the three had drifted; one had deviation 12's
+      exact defect back (the 44 dp minimum on a wrapper rather than on the
+      field's own decoration). All three drew the **caret inside the
+      prompt**: "Your |name", on the first screen that asks you to type.
+      One `CentredTextField` now, with the prompt beside the caret.
+    - Onboarding's tour cards, its portrait well and the join's portrait
+      well were each hand-rolling a background and a border, so the front
+      door was the one place in the app that drew outlines on every
+      wallpaper. They go through `paper` and `well`.
+
+    **What is recorded and not changed:** S17 says onboarding is "a thread,
+    not a screen. Four questions, no tour, no carousel" — and the file's own
+    header says so too, above four tour cards and a six-step progress bar.
+    That predates this pass and removing four screens is a product call, not
+    a friendliness one. It is written down here because an undocumented
+    deviation is the kind that gets mistaken for the design.
+
+A26. **The offline fire is wired.** `CampfireView` has carried a `dimmed`
+    parameter since it was written and **nothing ever passed it**, so S01's
+    "fire renders in its last known state, dimmed by ~8%" was unreachable
+    code. `Connectivity` (a default-network callback asking for
+    `NET_CAPABILITY_VALIDATED`, so a router with no uplink counts as
+    offline) hangs off `AppModel` and the room's fire reads it. That is the
+    entire user-visible surface: no banner, no retry control, no queue
+    count — §13 puts a connectivity banner on the never-ship list, and the
+    presence half of S01's offline state needs no code at all, because
+    presence comes off the wire and is already absent. Costs one normal
+    install-time permission (`ACCESS_NETWORK_STATE`), no prompt.
+
+A27. **The paused room stopped asking for something it withholds.** Its
+    hearth was printing "Pick something to read together" over a room where
+    picking a book is exactly the half a lapse holds, and its foot was
+    offering to mark a quiet day directly under the line that had just said
+    the room was paused — which §4.7 rules out by name ("never surfaced
+    after a lapse, which would make it an apology"). The hearth holds its
+    line and says nothing now, and S01's one row explains the rest.
+
 ## Licensed translations (decided: API.Bible)
 
 Open question §16.8 is now part-decided: **NKJV plus two undecided

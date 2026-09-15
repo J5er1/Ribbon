@@ -143,7 +143,7 @@ through to the join flow and settings. It builds and its tests pass; it has
 not yet been run on a physical device.
 
 Android has since taken a design pass of its own, and the two platforms are
-deliberately no longer identical (docs/deviations.md A18–A24):
+deliberately no longer identical (docs/deviations.md A18–A27):
 
 - **Material You, unharmonised.** The room takes its colour from the
   wallpaper. The fire and the eight inks never move — they are objects in
@@ -156,6 +156,12 @@ deliberately no longer identical (docs/deviations.md A18–A24):
   foot of the page pulls it closed again. One number drives the gesture and
   the movement, so they cannot fall out of step.
 - **The settings are tiles**, and every row says what it actually does.
+- **The front door took the same pass.** The tour's fire is the app's own
+  fire rather than a drawn circle; the intent step's unchosen options are
+  legible rather than greyed; and the name, the invite code and the sign-in
+  code are one field instead of three drifted copies of it.
+- **The offline fire dims**, and that is the whole of it — no banner, no
+  retry, nothing counted.
 - **There is a look book.** `./gradlew :app:testDebugUnitTest` renders every
   screen this touched, on both palettes, to `android/app/build/shots` — and
   CI keeps them as an artifact. Until somebody installs the APK it is the
