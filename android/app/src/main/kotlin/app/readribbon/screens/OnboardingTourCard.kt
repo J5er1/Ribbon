@@ -248,6 +248,7 @@ private fun NotesGraphic() {
                     .background(ochre, CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
+                val ground = Palette.ground
                 Canvas(modifier = Modifier.size(9.dp)) {
                     val path = Path().apply {
                         moveTo(size.width * 0.2f, size.height * 0.1f)
@@ -255,7 +256,7 @@ private fun NotesGraphic() {
                         lineTo(size.width * 0.2f, size.height * 0.9f)
                         close()
                     }
-                    drawPath(path, color = Palette.ground)
+                    drawPath(path, color = ground)
                 }
             }
         }

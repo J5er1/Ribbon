@@ -62,6 +62,22 @@ jobs:
         working-directory: android
         run: ./gradlew :app:lintDebug
 
+      # There is still no emulator here, so the only way anyone sees this app
+      # run is on a real phone (below). The look book is the nearest thing to
+      # a second pair of eyes: it renders the room, the book and every
+      # settings screen to PNGs, on both palettes — the wallpaper's and
+      # Ribbon's own — from the app's real composables against a real store.
+      # Download it from the run's summary page to see what a change actually
+      # looks like before anybody installs anything.
+      - name: Keep the look book, so the screens can be seen
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ribbon-look-book
+          path: android/app/build/shots
+          if-no-files-found: warn
+          retention-days: 14
+
       # There is no emulator in the environments this gets built in, so the
       # only way anyone sees the app actually run is on a real phone. This
       # is that: download the artifact from the run's summary page, open the

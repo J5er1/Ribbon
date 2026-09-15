@@ -1,0 +1,306 @@
+package app.readribbon.look
+
+import android.graphics.Bitmap
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onRoot
+import androidx.test.core.app.ApplicationProvider
+import app.readribbon.app.AppModel
+import app.readribbon.core.Bible
+import app.readribbon.core.FireScale
+import app.readribbon.core.FireState
+import app.readribbon.core.FuelEvent
+import app.readribbon.core.Handiwork
+import app.readribbon.core.Ink
+import app.readribbon.core.Membership
+import app.readribbon.core.Note
+import app.readribbon.core.NoteKind
+import app.readribbon.core.Person
+import app.readribbon.core.Reading
+import app.readribbon.core.ReadingPosition
+import app.readribbon.core.Room
+import app.readribbon.core.VerseAddress
+import app.readribbon.data.AppState
+import app.readribbon.data.LocalStore
+import app.readribbon.design.Appearance
+import app.readribbon.design.RibbonTheme
+import app.readribbon.design.rememberBookSheet
+import app.readribbon.screens.AppearanceScreen
+import app.readribbon.screens.NotificationSettingsScreen
+import app.readribbon.reading.ReadingScreen
+import app.readribbon.screens.RoomScreen
+import app.readribbon.screens.TextSettingsScreen
+import app.readribbon.services.LocalPresenceService
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+import java.io.File
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.hours
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
+
+/**
+ * The look book: every screen this pass touched, rendered to a PNG.
+ *
+ * Not an assertion suite — a way to *see* the app without a phone in the
+ * room. It renders real screens against a real `AppModel` and writes the
+ * frames to `ribbon.shots` (default `build/shots`), which is how the layout
+ * work in this change was checked: the hearth's proportions, the seats and
+ * the open seat, a settings tile with its subtitle, the segmented pill.
+ *
+ * It asserts only that each screen composes and draws something, because a
+ * pixel assertion on a screen that is meant to be redesigned is a test that
+ * has to be deleted every time the design is right.
+ */
+@OptIn(ExperimentalUuidApi::class)
+@RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(sdk = [34], qualifiers = "w411dp-h891dp-xhdpi")
+class LookBookTest {
+
+    @get:Rule val compose = createComposeRule()
+
+    private val out = File(System.getProperty("ribbon.shots") ?: "build/shots").apply { mkdirs() }
+
+    private val now = Clock.System.now()
+    private val me = Person(name = "Jonathan")
+    private val ruth = Person(name = "Ruth Alderman")
+    private val ann = Person(name = "Ann Brooke")
+    private val room = Room(name = null, createdAt = now - 40.hours)
+
+    private fun membership(person: Person, ink: Ink?) =
+        Membership(roomID = room.id, personID = person.id, ink = ink, joinedAt = now - 40.hours)
+
+    private fun reading(book: String, scale: FireScale) = Reading(
+        roomID = room.id,
+        bookID = book,
+        startedAt = now - 30.hours,
+        handiwork = Handiwork(
+            scale = scale,
+            coalDepth = 0.55,
+            lastFuelAt = now - 2.hours,
+            stateAtLastFuel = FireState.steady,
+            recentFuel = listOf(FuelEvent(personID = ruth.id, at = now - 2.hours)),
+        ),
+    )
+
+    private fun model(state: AppState): AppModel {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        return AppModel(
+            context = context,
+            initialState = state,
+            store = LocalStore(context),
+            presence = LocalPresenceService(),
+        )
+    }
+
+    /**
+     * Render a screen on both palettes: the wallpaper's, and Ribbon's own.
+     *
+     * Both, because they are genuinely two different-looking apps and the
+     * card system has to hold in each — on Ribbon's own paint a card is a
+     * drawn outline rather than a paler fill, and that is exactly the kind of
+     * thing that is obvious in a picture and invisible in source.
+     */
+    private fun shoot(name: String, content: @Composable () -> Unit) {
+        val appearance = Appearance(ApplicationProvider.getApplicationContext())
+        appearance.wallpaperColour = true
+        // One composition, two palettes. A test rule takes `setContent` once,
+        // so the switch happens inside the tree — which is also the honest
+        // thing to draw, since that is what flipping the switch in Appearance
+        // does to a running app.
+        compose.setContent {
+            RibbonTheme(appearance = appearance) { Box(Modifier.fillMaxSize()) { content() } }
+        }
+        capture(name)
+        appearance.wallpaperColour = false
+        capture("$name-ribbon")
+    }
+
+    private fun capture(name: String) {
+        compose.waitForIdle()
+        val image = compose.onRoot().captureToImage().asAndroidBitmap()
+        File(out, "$name.png").outputStream().use {
+            image.compress(Bitmap.CompressFormat.PNG, 100, it)
+        }
+        check(image.width > 0 && image.height > 0) { "$name drew nothing" }
+
+        // The one assertion worth making automatically: the screen is not a
+        // single flat colour. It catches the real failure — a screen that
+        // composes, throws nothing, and paints only the ground because a
+        // condition upstream went false — and it does not have to be
+        // rewritten every time the design is right, which is what a pixel
+        // comparison on a screen under redesign would mean.
+        val pixels = IntArray(image.width * image.height)
+        image.getPixels(pixels, 0, image.width, 0, 0, image.width, image.height)
+        val distinct = pixels.asSequence().distinct().take(2).count()
+        check(distinct > 1) { "$name is one flat colour — nothing drew over the ground" }
+    }
+
+    // MARK: the room
+
+    @Test fun roomWithAFire() {
+        val open = reading("MRK", FireScale.medium)
+        val finished = reading("RUT", FireScale.small).copy(finishedAt = now - 20.hours)
+        val state = AppState(
+            me = me,
+            people = mapOf(me.id to me, ruth.id to ruth, ann.id to ann),
+            rooms = listOf(room),
+            memberships = listOf(
+                membership(me, Ink.teal),
+                membership(ruth, Ink.crimson),
+                membership(ann, Ink.moss),
+            ),
+            readings = listOf(finished, open),
+            notes = listOf(
+                Note(
+                    readingID = open.id,
+                    authorID = ruth.id,
+                    verse = VerseAddress(bookID = "MRK", chapter = 4, verse = 9),
+                    kind = NoteKind.voice,
+                    transcript = "This is the one I keep coming back to.",
+                    createdAt = now - 3.hours,
+                ),
+                Note(
+                    readingID = open.id,
+                    authorID = ann.id,
+                    verse = VerseAddress(bookID = "MRK", chapter = 6, verse = 31),
+                    kind = NoteKind.written,
+                    body = "Come away and rest a while.",
+                    createdAt = now - 5.hours,
+                ),
+            ),
+            positions = listOf(
+                ReadingPosition(
+                    readingID = open.id,
+                    personID = me.id,
+                    chapter = 4,
+                    verse = 1,
+                    updatedAt = now - 6.hours,
+                ),
+            ),
+            currentRoomID = room.id,
+        )
+        val m = model(state)
+        shoot("room-with-a-fire") { Room(m, m.state.rooms.first()) }
+    }
+
+    @Test fun roomFirstRun() {
+        val state = AppState(
+            me = me,
+            people = mapOf(me.id to me),
+            rooms = listOf(room),
+            memberships = listOf(membership(me, null)),
+            currentRoomID = room.id,
+        )
+        val m = model(state)
+        shoot("room-first-run") { Room(m, m.state.rooms.first()) }
+    }
+
+    @Composable
+    private fun Room(m: AppModel, r: app.readribbon.core.Room) {
+        val sheet = rememberBookSheet()
+        RoomScreen(
+            model = m,
+            room = r,
+            sheet = sheet,
+            chooserRequested = false,
+            onChooserHandled = {},
+            onOpenReading = { _, _ -> },
+            onBeginOpening = {},
+            onOpenRooms = {},
+            onYou = {},
+            onAbandonOpening = {},
+            onOpenPerson = { _, _ -> },
+            onOpenEmber = {},
+        )
+    }
+
+    @Test fun theBook() {
+        val open = reading("MRK", FireScale.medium)
+        val state = AppState(
+            me = me,
+            people = mapOf(me.id to me, ruth.id to ruth),
+            rooms = listOf(room),
+            memberships = listOf(membership(me, Ink.teal), membership(ruth, Ink.crimson)),
+            readings = listOf(open),
+            notes = listOf(
+                Note(
+                    readingID = open.id,
+                    authorID = ruth.id,
+                    verse = VerseAddress(bookID = "MRK", chapter = 1, verse = 17),
+                    kind = NoteKind.written,
+                    body = "Follow me.",
+                    createdAt = now - 3.hours,
+                ),
+            ),
+            currentRoomID = room.id,
+        )
+        val m = model(state)
+        shoot("reading") {
+            val sheet = rememberBookSheet()
+            LaunchedEffect(sheet) { sheet.animate(open = true) }
+            ReadingScreen(
+                model = m,
+                room = m.state.rooms.first(),
+                reading = open,
+                sheet = sheet,
+                onClose = {},
+                onFinished = {},
+                onStartAnother = {},
+            )
+        }
+    }
+
+    // MARK: the settings
+
+    @Test fun textSettings() {
+        val open = reading("MRK", FireScale.medium)
+        val state = AppState(
+            me = me,
+            people = mapOf(me.id to me),
+            rooms = listOf(room),
+            memberships = listOf(membership(me, null)),
+            readings = listOf(open),
+            currentRoomID = room.id,
+        )
+        val m = model(state)
+        shoot("settings-text") { TextSettingsScreen(model = m, onBack = {}) }
+    }
+
+    @Test fun notificationSettings() {
+        val open = reading("MRK", FireScale.medium)
+        val state = AppState(
+            me = me,
+            people = mapOf(me.id to me),
+            rooms = listOf(room),
+            memberships = listOf(membership(me, null)),
+            readings = listOf(open),
+            currentRoomID = room.id,
+        )
+        val m = model(state)
+        shoot("settings-notifications") { NotificationSettingsScreen(model = m, onBack = {}) }
+    }
+
+    @Test fun appearanceSettings() {
+        shoot("settings-appearance") { AppearanceScreen(onBack = {}) }
+    }
+
+    private companion object {
+        init {
+            // Bible's table is generated and loaded lazily; touching it here
+            // keeps the first screen's measure honest.
+            Bible.goodPlacesToStart
+        }
+    }
+}

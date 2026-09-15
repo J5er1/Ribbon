@@ -47,6 +47,14 @@ object Copy {
     const val INVITE_SEND = "Send this to the person you're reading with."
     const val INVITE_LATER = "Invite later"
     const val PICK_A_BOOK = "Pick something to read together"
+
+    /**
+     * The control under it.
+     *
+     * Not the same words: a control says exactly what happens, and a button
+     * repeating the sentence directly above it says nothing twice.
+     */
+    const val PICK_A_BOOK_CONTROL = "Pick a book"
     const val FIRST_RUN_HINT = "Notes go in the margin. Hold a verse to leave one."
 
     // Walkthrough Tour (Duolingo-style feature walkthrough)
@@ -71,6 +79,62 @@ object Copy {
     const val GET_STARTED = "Get Started"
 
     // The room (S01)
+
+    /**
+     * The first words on the screen.
+     *
+     * The room used to open on its own name in 12 sp small caps, which is a
+     * filing label, and then on a fire. Nothing on the app's front door ever
+     * spoke to the person holding it. This does, once, in the plainest form
+     * the voice allows: three variants, first name only, a full stop, and no
+     * second sentence. §12's rules are doing real work here — an exclamation
+     * point, an emoji, a verse of the day or a line about how long it has
+     * been would each turn this into the church bulletin §13 refuses.
+     *
+     * Nameless until onboarding has a name to use, which is the one case
+     * where the greeting stands alone rather than guessing.
+     */
+    fun greeting(name: String?, hour: Int): String {
+        val part = when (hour) {
+            in 5..11 -> "Good morning"
+            in 12..16 -> "Good afternoon"
+            else -> "Good evening"
+        }
+        return if (name.isNullOrBlank()) "$part." else "$part, ${firstName(name)}."
+    }
+
+    // Presence is now said out loud on the room screen rather than only to a
+    // screen reader: `personIsReading`, `personIsHereButStill` and `alsoHere`
+    // below already existed and had no visible call site anywhere in the app.
+    // The friendliest copy in the product was invisible. Alone, the line is
+    // absent — never a sentence about being alone (§08).
+
+    /** The head over what is waiting (S01's "What's waiting", in the voice). */
+    const val LEFT_FOR_YOU = "Left for you"
+
+    /** The head over the embers (S10). */
+    const val THE_SHELF = "The shelf"
+
+    /**
+     * The hearth's own gesture, said once and then never again — the same
+     * contract the margin hint keeps (§6.1). A hint that comes back is worse
+     * than no hint.
+     */
+    const val PULL_THE_FIRE_UP = "Pull the fire up to open the book"
+
+    /**
+     * First run, under "Pick something to read together". Says what a fire
+     * *is* without saying how long anything takes: a size, as a word.
+     */
+    const val FIRST_FIRE_HINT = "Whatever you pick becomes a fire. A short book makes a small one."
+
+    /**
+     * The empty place in the seats when a room can still hold somebody
+     * (S15). It is a place kept, not an absence — which is why it is drawn
+     * as a seat and says what tapping it does.
+     */
+    const val AN_OPEN_SEAT = "An open seat. Invite someone."
+
     fun continueIn(book: String) = "Continue in $book"
     fun begin(book: String) = "Begin $book"
     const val INVITE_STILL_OUT = "The invite is still out."
@@ -79,6 +143,17 @@ object Copy {
     const val ROOM_PAUSED = "The room is paused. It can be started again any time."
     fun readRecently(name: String, phrase: String) = "$name read $phrase"
     fun leftYouANote(name: String, verse: String) = "$name left you a note at $verse"
+
+    /**
+     * The same row, for a voice note.
+     *
+     * The gutter has told a voice note from a written one since §4.4 — a
+     * solid dot against an open ring — and the room's own waiting row said
+     * "left you a note" for both, so a screen reader was told the wrong
+     * thing about half of them. The drawn mark now has a sentence to match.
+     */
+    fun leftYouAVoiceNote(name: String, verse: String) =
+        "$name left you a voice note at $verse"
     fun bankedTheFire(name: String) = "$name banked the fire"
 
     /**
@@ -395,7 +470,95 @@ object Copy {
     /** The way past sign-in, wherever a host offers one. Never a wall. */
     const val NEVER_MIND = "Never mind"
 
-    // Settings (S18–S22)
+    // Settings (S18–S22, and S26 — Appearance)
+
+    /**
+     * The subtitles under every settings row.
+     *
+     * New in this pass, and half the reason the settings stopped reading as
+     * a list of nouns. A row that says only "Downloads" makes you open it to
+     * find out what it is; a row that says what is actually on the phone has
+     * answered already. Each one states a fact about *your* copy of the app,
+     * never a feature description.
+     */
+    const val TEXT_SUB = "Translation, size, spacing, red letter"
+    const val NOTIFICATIONS_SUB = "Per room, and your quiet hours"
+    const val DOWNLOADS_SUB = "What Scripture is held on this device"
+    const val APPEARANCE_SUB = "Where the room takes its colour from"
+    /**
+     * Not "what it costs". S22 puts the ask in exactly two places — the
+     * shelf after the first ember, and the Plan screen — and a menu row is a
+     * third. The row says what the screen is about; the screen says the rest.
+     */
+    const val PLAN_SUB = "What your room has"
+
+    // S26 — Appearance. New screen (deviation A20).
+    const val APPEARANCE = "Appearance"
+    const val WALLPAPER_COLOUR = "Colour from your wallpaper"
+
+    /**
+     * Why the switch is there, in one sentence that says what happens rather
+     * than what the feature is called. "Material You" is Google's word for
+     * it and means nothing to a reader; "your wallpaper" is the thing they
+     * actually chose.
+     */
+    const val WALLPAPER_COLOUR_WHY =
+        "The room borrows the colours Android draws from your wallpaper. " +
+            "Turn it off for Ribbon's own chartreuse."
+
+    /** What the two states are, said as the state rather than as on or off. */
+    const val FROM_YOUR_WALLPAPER = "from your wallpaper"
+    const val RIBBONS_OWN = "ribbon's own"
+
+    /**
+     * The one thing the wallpaper never repaints, said where somebody might
+     * otherwise wonder whether it was an oversight.
+     */
+    const val THE_FIRE_STAYS_WARM =
+        "The fire keeps its own warmth either way. It is the one thing in here that is not chrome."
+
+    /**
+     * The one line under each settings screen's title.
+     *
+     * New, and doing more than it looks like. Every one of them states a rule
+     * the app has always kept and has never said out loud — that your
+     * translation is yours and not the room's (§2.6), that notifications are
+     * per room because one answer to two different questions is the wrong
+     * answer (S19). A setting you understand is friendlier than a setting
+     * that is merely well spaced.
+     */
+    const val TEXT_LEDE = "How Scripture sets on the page. Yours, not the room's."
+    const val NOTIFICATIONS_LEDE = "Every room asks for something different. These are per room."
+    const val APPEARANCE_LEDE = "Ribbon's colours, or your phone's."
+    const val PLAN_LEDE = "What the room has, and what it costs."
+    fun downloadsLede(context: Context) = "What is on this ${deviceNoun(context)}, and what isn't."
+
+    /** The two groups on the text screen. */
+    const val THE_PAGE = "The page"
+
+    /** The one group on Appearance. */
+    const val COLOUR = "Colour"
+
+    // The subtitles under the switches and the controls. Each says the true
+    // small thing about what the setting does, in the app's own voice —
+    // never a feature description, never a benefit.
+    const val NOTES_LEFT_FOR_YOU_SUB = "When they leave one at a verse."
+    const val CARDS_OPEN_SUB = "When you have both answered."
+    const val WHEN_THEY_OPEN_THE_BOOK_SUB = "So you can read at the same time."
+    const val THINKING_OF_YOU_SUB = "A touch on the shoulder. No words."
+    const val TEXT_SIZE_SUB = "Scripture only. Everything else stays where it is."
+    const val LINE_SPACING_SUB = "How much air between the lines."
+    const val RED_LETTER_SUB = "Where the text marks them."
+
+    /** What a translation is, told as a fact about this phone. */
+    fun bundledSub(context: Context) = "On this ${deviceNoun(context)} already, whole."
+    fun streamsSub(context: Context) =
+        "Streams. The book you are in stays on the ${deviceNoun(context)}."
+
+    /** The two ends of quiet hours, as rows rather than as a sentence. */
+    const val QUIET_HOURS_FROM = "From"
+    const val QUIET_HOURS_UNTIL = "Until"
+
     const val TEXT_AND_TRANSLATION = "Text"
     const val NOTIFICATIONS = "Notifications"
     const val DOWNLOADS = "Downloads"

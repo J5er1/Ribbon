@@ -58,7 +58,9 @@ import app.readribbon.core.RibbonClock
 import app.readribbon.core.Room
 import app.readribbon.core.VerseAddress
 import app.readribbon.design.NoteMark
+import app.readribbon.design.Flows
 import app.readribbon.design.Palette
+import app.readribbon.design.flows
 import app.readribbon.design.PortraitView
 import app.readribbon.design.QuietControl
 import app.readribbon.design.RibbonMotion
@@ -223,12 +225,17 @@ private fun ShelfEmber(
         // spill the same way.
         EmberView(
             scale = reading.handiwork.scale,
-            modifier = Modifier.wrapContentWidth(
-                align = Alignment.CenterHorizontally,
-                unbounded = true,
-            ),
+            // The same ember as the big one on its own record: it grows out
+            // of the shelf rather than the shelf fading out under it
+            // (design/Flow.kt).
+            modifier = Modifier
+                .flows(Flows.ember(reading.id))
+                .wrapContentWidth(
+                    align = Alignment.CenterHorizontally,
+                    unbounded = true,
+                ),
         )
-        SmallCaps(name, size = 12f)
+        SmallCaps(name, size = 12f, modifier = Modifier.flows(Flows.emberName(reading.id)))
     }
 }
 
@@ -305,6 +312,7 @@ fun EmberRecordScreen(
                         scale = reading.handiwork.scale,
                         modifier = Modifier
                             .padding(top = 30.dp, bottom = 16.dp)
+                            .flows(Flows.ember(reading.id))
                             .graphicsLayer {
                                 scaleX = emberScale
                                 scaleY = emberScale
@@ -314,6 +322,7 @@ fun EmberRecordScreen(
                         text = book?.name ?: reading.bookID,
                         style = RibbonType.display(30f),
                         color = Palette.text,
+                        modifier = Modifier.flows(Flows.emberName(reading.id)),
                     )
                     SmallCaps(
                         RibbonClock.emberRange(

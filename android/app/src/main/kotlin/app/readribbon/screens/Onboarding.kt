@@ -493,17 +493,20 @@ private fun IntentStep(
                     }
 
                     if (isSelected) {
+                        // Read out here: a draw lambda is not a composition,
+                        // and the room's accent is a composition local now.
+                        val accent = Palette.accent
                         Canvas(modifier = Modifier.size(16.dp)) {
                             val stroke = 2.dp.toPx()
                             drawLine(
-                                color = Palette.chartreuse,
+                                color = accent,
                                 start = Offset(size.width * 0.2f, size.height * 0.5f),
                                 end = Offset(size.width * 0.45f, size.height * 0.75f),
                                 strokeWidth = stroke,
                                 cap = StrokeCap.Round,
                             )
                             drawLine(
-                                color = Palette.chartreuse,
+                                color = accent,
                                 start = Offset(size.width * 0.45f, size.height * 0.75f),
                                 end = Offset(size.width * 0.8f, size.height * 0.25f),
                                 strokeWidth = stroke,
@@ -595,19 +598,20 @@ private fun SignInStep(
                     ),
                 contentAlignment = Alignment.Center,
             ) {
+                val muted = Palette.muted
                 Canvas(modifier = Modifier.size(18.dp)) {
                     val centre = Offset(size.width / 2f, size.height / 2f)
                     val arm = 4.5.dp.toPx()
                     val stroke = 1.6.dp.toPx()
                     drawLine(
-                        color = Palette.muted,
+                        color = muted,
                         start = Offset(centre.x + arm * 0.5f, centre.y - arm),
                         end = Offset(centre.x - arm * 0.5f, centre.y),
                         strokeWidth = stroke,
                         cap = StrokeCap.Round,
                     )
                     drawLine(
-                        color = Palette.muted,
+                        color = muted,
                         start = Offset(centre.x - arm * 0.5f, centre.y),
                         end = Offset(centre.x + arm * 0.5f, centre.y + arm),
                         strokeWidth = stroke,

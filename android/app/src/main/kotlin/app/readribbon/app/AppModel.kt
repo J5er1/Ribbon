@@ -472,6 +472,21 @@ class AppModel(
     fun isFull(room: Room): Boolean = members(room).size >= Room.capacity
 
     /**
+     * Is somebody still expected in this room?
+     *
+     * A room of one always is — its first invite is the whole point of it —
+     * and a larger room only when a link is actually live. The room's own
+     * open seat reads this: a seat drawn for nobody is an empty state
+     * dressed as an object, and a couple who have no intention of being
+     * three should not be shown a chair nobody was asked to sit in.
+     */
+    fun somebodyIsExpected(room: Room, now: Instant = Clock.System.now()): Boolean {
+        if (room.isPaused || isFull(room)) return false
+        if (members(room).size <= 1) return true
+        return state.invites.any { it.roomID == room.id && it.expiresAt > now }
+    }
+
+    /**
      * Rooms whose rename hasn't landed remotely — merge() must not let a
      * stale pull revert an edit that was never pushed. In-memory only: a
      * relaunch before the push lands re-exposes the edge, accepted for a
@@ -1138,6 +1153,21 @@ class AppModel(
 
     fun markMarginHintSeen() {
         state = state.copy(hasSeenMarginHint = true)
+        persist()
+    }
+
+    /**
+     * Has the book ever been opened on this phone?
+     *
+     * The room's hearth offers its gesture until it has, and then never
+     * again (§6.1).
+     */
+    val hasOpenedTheBook: Boolean get() = state.hasOpenedTheBook
+
+    /** It has now. Called by the reading surface as it appears. */
+    fun markBookOpened() {
+        if (state.hasOpenedTheBook) return
+        state = state.copy(hasOpenedTheBook = true)
         persist()
     }
 

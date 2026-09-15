@@ -23,7 +23,9 @@ core/        RibbonCore — Swift package, Foundation only.
 ios/         The iOS app. Xcode 26+, SwiftUI, iOS 26, dark-only (dark is
              the product). Open ios/Ribbon.xcodeproj — no generators, no pods.
 android/     The Android app (phase three). Jetpack Compose, Material 3
-             Expressive, dark-only. :core is RibbonCore in Kotlin, checked
+             Expressive, dark-only, and — unlike iOS — coloured from the
+             wallpaper by default (Material You; Appearance turns it off,
+             docs/deviations.md A18). :core is RibbonCore in Kotlin, checked
              against the Swift by the same test suites; :app is the app.
              Scripture, the fonts and the grain are not duplicated — they
              are synced out of ios/Ribbon/Resources at build time.
@@ -139,6 +141,25 @@ same test suites), the design system, the campfire and the ember, the
 reading surface with real ink blending, notes, presence, and every screen
 through to the join flow and settings. It builds and its tests pass; it has
 not yet been run on a physical device.
+
+Android has since taken a design pass of its own, and the two platforms are
+deliberately no longer identical (docs/deviations.md A18–A24):
+
+- **Material You, unharmonised.** The room takes its colour from the
+  wallpaper. The fire and the eight inks never move — they are objects in
+  the room rather than the room itself. Appearance (S26) turns it off for
+  Ribbon's own chartreuse.
+- **The room is a hearth.** It greets you by name, says who is here in a
+  sentence rather than only to a screen reader, seats the room's people
+  around the fire, and stands the fire in a recess of the unlit ground.
+- **The fire opens the book.** Take hold of it and pull; the Wave at the
+  foot of the page pulls it closed again. One number drives the gesture and
+  the movement, so they cannot fall out of step.
+- **The settings are tiles**, and every row says what it actually does.
+- **There is a look book.** `./gradlew :app:testDebugUnitTest` renders every
+  screen this touched, on both palettes, to `android/app/build/shots` — and
+  CI keeps them as an artifact. Until somebody installs the APK it is the
+  only way to see this app.
 
 Still ahead on both platforms: the presence socket and the content half of
 sync (notes, highlights, positions), and everything §15 puts in phase two.

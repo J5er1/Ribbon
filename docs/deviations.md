@@ -448,8 +448,9 @@ names Android (§12.2), and from the iOS app where the two platforms could
 not honestly be made identical. Everything §12.2 asks for that is *not*
 listed here is simply built: Expressive shapes and damped spring physics,
 no FAB, no bottom navigation, no visible loading, predictive back,
-mandatory edge-to-edge, Alegreya Sans SC as a real small-caps face rather
-than a textTransform, and dynamic colour declined.
+mandatory edge-to-edge, and Alegreya Sans SC as a real small-caps face
+rather than a textTransform. Dynamic colour was declined and is now
+taken — A18 — which is the largest single departure in this list.
 
 A1. **minSdk is 33, not the literal 36.** §12.2 reads "Target: Android 16+
     (API 36)". The app compiles against and targets exactly that, but taken
@@ -697,6 +698,208 @@ A17. **The menu is a layer over the room, not a cover.** iOS presents the
     too. And the menu's four settings screens plus its join live in a
     `NavHost` of the menu's own, registered *after* the close handler, so
     back pops a pushed screen first and only an unpushed menu closes.
+
+A18. **Material You is on, unharmonised, and §12.2's refusal of it is
+    overturned.** — the owner's call, September 2026. The build book is
+    unusually direct about this one: "Ribbon opts out of dynamic color …
+    a Ribbon tinted lavender because someone's wallpaper is lavender is
+    not Ribbon. Ship a fixed color scheme and set `isDynamicColor = false`
+    explicitly rather than by omission, so nobody turns it on later
+    thinking it was an oversight." Nobody turned it on thinking it was an
+    oversight. It was turned on deliberately, and the reasoning it was
+    weighed against is worth keeping rather than quietly deleting: the
+    argument for a fixed palette is an argument about the brand, and the
+    argument against it is an argument about the person holding the phone.
+    Material You is most of what the Android build was *for*, and a room
+    that takes its colour from the wallpaper is a room in their house.
+
+    **Unharmonised**, which was also the owner's call over the alternative
+    of blending each role back toward chartreuse. The six room roles are
+    read straight off `dynamicDarkColorScheme` with no correction:
+    `surfaceContainerLowest` is the ground, an ordinary container is a
+    card, a high container is a chip, `onSurface`/`onSurfaceVariant` are
+    the two inks, `outlineVariant` is the rule, `primary` is the accent.
+    A half-dynamic palette would look like neither thing.
+
+    **Two things never move, and it is the same reason twice: they are
+    objects in the room rather than the room itself.** The fire — §4.1's
+    "single warm object", whose warmth is the product and not chrome; a
+    blue fire is not a fire, and a warm fire in a cool room is a better
+    picture than either alone. And the eight inks, which are identity
+    (§4.5): repainting a highlight from a wallpaper would change whose it
+    was. Smoke and ash go with the fire, because `FirePainter` is a pure
+    function of a clock rather than a composition and cannot read a
+    composition local anyway.
+
+    **The way back is one switch**, in a new screen — Appearance, S26 —
+    which is the only thing S18's "not here" list gains. Its "no accent
+    picker: chartreuse is the brand's, not the user's" survives intact:
+    the switch offers the wallpaper's colours or the brand's, and never a
+    colour anyone chose by hand. It lives in its own two-value preference
+    file rather than in `AppSettings`, because `AppState` is read off disk
+    asynchronously and a theme that waited for it would paint one palette
+    on the first frame and another a moment later — a repaint on the front
+    door is exactly the instability S01 forbids.
+
+    **The one correction that is made**, and it is not a matter of taste:
+    a card has to be distinguishable from the ground, and some extracted
+    schemes put their lowest and ordinary containers within a hair of each
+    other. `ColorScheme.asRoom` takes the first tonal step that can
+    actually be seen against the ground, and where no step can, the card
+    draws a 1 dp edge in the palette's own `rule` instead of pretending a
+    fill it does not have. Ribbon's own palette is permanently in that
+    second case *by design* — `Brand.surface` on `Brand.ground` is 1.05:1
+    and `Brand.raised` is 1.13:1, which is correct for a room meant to be
+    nearly flat and useless as a card — so with the wallpaper declined a
+    card is a *drawn* card rather than a filled one. That is the more
+    bookish of the two answers anyway.
+
+    Mechanically: `Palette`'s room roles became `@Composable` getters over
+    `LocalRoomColours`. That was chosen over a plain rename so that the
+    compiler would find every colour read outside a composition, which is
+    every colour that could not have followed the wallpaper — it found
+    eleven, all of them in draw lambdas, and each is now hoisted or passed.
+
+A19. **The room is a hearth, not a column.** — the owner's call. S01's
+    anatomy is unchanged in content and rearranged in kind: the room held
+    everything the book asks for and read, in the owner's words, as barren,
+    worst in the two states a new person actually sees. The diagnosis was
+    not "too little on the screen"; it was that nothing on the screen was
+    *grouped*, so six objects floating in a column looked like six objects
+    rather than like a place.
+
+    What changed. The page **greets you** by name, once, in the display
+    face — three variants, first name, a full stop, no second sentence,
+    and §12's rules are doing real work: an exclamation point, an emoji or
+    a verse of the day would each make it the church bulletin §13 refuses.
+    Presence became **a sentence you can read** — `personIsReading`,
+    `personIsHereButStill` and `alsoHere` had existed since the port with
+    no visible call site at all, so the warmest copy in the product was
+    audible only to a screen reader. The fire, the book's name, its state
+    and the way in became **one raised object** with the room's people
+    seated around it, the fire standing in a recess of the room's own
+    unlit ground with a hairline under it. And the **empty states carry
+    something true**: first run offers the five books the chooser already
+    calls good places to start, and a room still expecting somebody shows
+    an open seat.
+
+    Two departures from S01's letter, both deliberate. The seats draw
+    **membership**, with presence as a ring around a seat (a whole ring
+    reading, a half ring here-but-still) where the book says "portraits of
+    whoever is in the book right now" — because the room of one that the
+    book's version draws nothing at all for is exactly the barren case.
+    And the seats are capped at six with no names, no overflow marker and
+    nothing counted, in membership order, because the thing this must
+    never become is the avatar row of a social network (§3).
+
+    The **open seat is scoped to somebody actually being expected** — a
+    room of one, or a live invite — and not to `members.size < capacity`.
+    A couple with no intention of being three would otherwise be shown
+    four empty chairs on their own front door, forever, with nobody asked:
+    an empty state drawn as an object, and a reproach.
+
+    Law 2 is untouched. Nothing here counts anything: not the people, not
+    the notes, not the shelf, and nothing anywhere near the fire.
+
+    One thing was tried and cut: a soft wash of the fire's own light on the
+    floor beneath it. Two alpha falloffs under the hero object is a
+    gradient by construction and a glow behind the one thing §7 and §13
+    protect hardest. The recess and the hairline do the same work with no
+    invented light source.
+
+A20. **The fire opens the book, and the Wave closes it — by hand.** —
+    the owner's call. S01 says "tap fire → nothing (deliberately inert; it
+    is an object, not a button)". It is now the way in: take hold of it and
+    pull, and the book rises under your thumb. The reasoning against was
+    that a fire is an object rather than a control; the reasoning for is
+    that a hearth is an object you can reach into, and a drag is not a
+    button. The Wave at the foot of the book is the same handle in reverse.
+
+    §11's rule that no way in or out of the book may be a gesture only is
+    kept twice over: the fire carries a custom click action, the way-in
+    capsule under it is unchanged, and the Wave's tap is exactly the tap it
+    has been since S02 was written.
+
+    What makes this more than a gesture bolted onto a transition: the book
+    is no longer a transition at all. It used to arrive by fading in and
+    leave by sliding out, as two unrelated `AnimatedContent` specs — which
+    is why opening it and closing it never looked like one thing happening
+    twice. There is now a single number (`BookSheet.progress`) that the
+    page's offset, the room's recession behind it, and the hearth riding up
+    under the finger all read, and that the drag and every tap drive
+    alike. A gesture and an animation made of the same value cannot fall
+    out of step.
+
+    The room recedes under the rising book using exactly the numbers
+    predictive back already uses to peel a screen *off* the room, run the
+    other way — so opening the book and closing it are plainly the same
+    movement, which is what a gesture has to be if it is going to be
+    believed. Reduce motion (§11): both gestures still work and still open
+    and close the book; the number jumps between its ends instead of
+    travelling.
+
+A21. **Springs, where a finger is involved.** §12.2 asks for "physics-based
+    motion … damped, with damping near critical", and until now every
+    token in `RibbonMotion` was a tween. A tween is right for a thing that
+    simply changes — a word swapping under the fire, a cross-dissolve
+    between rooms. It is wrong for a thing a finger is holding, because a
+    drag has a velocity when it is let go of and a tween throws that away:
+    the book would leave the finger's speed behind and travel at the
+    curve's instead, which is the commonest way a gesture reads as cheap.
+    The spring tokens (`cover`, `handled`, `touched`) are critically damped
+    at 1.0 — physical, and they never cross the target, so §9.1's "no
+    bounce, no spring overshoot" holds.
+
+A22. **The app flows rather than cuts.** Every screen change was a
+    substitution: the room faded and the menu slid over it, a settings row
+    was replaced by a settings screen. All of it moved and none of it
+    continued. One `SharedTransitionLayout` now spans the whole room stack
+    with an `AnimatedVisibilityScope` per layer, so the pieces that exist
+    on both sides of a change *are* the same piece and travel: your face in
+    the room's corner and your face at the top of You; the room's fire and
+    the small fire on its row in the menu; an ember on the shelf and the
+    same ember on its record; a settings row's words and the heading of the
+    screen it opens. Keys are built from ids in one place (`Flows`),
+    because a shared element with a mistyped key is not an error — it is an
+    element that silently stops flowing.
+
+A23. **The settings are tiles, and the hairlines under headings are
+    gone.** — the owner's call ("the settings is very condensed, and I
+    think it would look better in a completely new style"). The cause was
+    that the app had no drawn container at all, so a screen could only be a
+    column of sentences and the only lever was how much air to put between
+    them: a lot is barren, a little is condensed, and there was no third
+    option to reach for. There is one now — a group is a set of tiles on
+    the ground, separated by a two-dp seam rather than by a rule.
+
+    The half that matters most is not the shape: **almost every row gained
+    a sentence**. A switch used to be four words on a bare ground and you
+    were left to infer what it did; it now says the true small thing about
+    what it does, in the app's own voice. And each screen gained a display
+    title and one line saying what it is, where a pushed screen used to
+    open on a 12 sp small-caps word.
+
+    Six ruled lines under headings went with it, which is the church
+    bulletin §13 forbids in its most literal form; the edge of a tile does
+    that work instead. What keeps a screen of rounded rectangles from
+    reading as somebody else's Settings app, which is the real risk: the
+    paper grain is carried onto every tile, the corners are large, there
+    are no icons anywhere, the undoing controls (sign out, leave, delete)
+    stay off the tiles on the bare ground, and nothing is drawn that does
+    not say something.
+
+A24. **There is a look book, because nobody can see this app.** The CI
+    environment has no emulator and the Android build has still never run
+    on a physical device, so every layout decision in this pass would
+    otherwise have been made blind. `LookBookTest` renders the room, the
+    book and every settings screen from the app's real composables against
+    a real `AppModel`, on both palettes, and writes them to
+    `app/build/shots`; CI keeps them as an artifact. It asserts only that
+    each screen composes and is not one flat colour — the failure that
+    actually happens — because a pixel comparison on a screen under
+    redesign is a test that has to be deleted every time the design is
+    right. It is the first Robolectric test in the repo, which is the one
+    cost: CI now fetches an `android-all` jar.
 
 ## Licensed translations (decided: API.Bible)
 

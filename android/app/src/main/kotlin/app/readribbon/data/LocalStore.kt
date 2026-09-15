@@ -79,6 +79,14 @@ data class AppState(
     val settings: AppSettings = AppSettings(),
     val hasSeenMarginHint: Boolean = false,
     /**
+     * Whether the book has ever been opened on this device, by any route.
+     *
+     * The room offers the hearth's gesture — "Pull the fire up to open the
+     * book" — until it has been. Same contract as [hasSeenMarginHint] and for
+     * the same reason (§6.1): a hint that comes back is worse than no hint.
+     */
+    val hasOpenedTheBook: Boolean = false,
+    /**
      * The tag of the portrait object each face on this device came from, so
      * a conditional fetch can be told what it already has. Persisted: a
      * relaunch must not re-download every face in the room.

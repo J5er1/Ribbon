@@ -51,10 +51,12 @@ import app.readribbon.app.Copy
 import app.readribbon.core.BlockStyle
 import app.readribbon.core.Ink
 import app.readribbon.core.ScriptureChapter
+import app.readribbon.design.LocalRoomColours
 import app.readribbon.design.LocalHaptics
 import app.readribbon.design.Palette
 import app.readribbon.design.RibbonMotion
 import app.readribbon.design.RibbonType
+import app.readribbon.design.RoomColours
 import app.readribbon.design.color
 import app.readribbon.design.rememberReduceMotion
 import kotlin.math.abs
@@ -193,15 +195,17 @@ fun ChapterText(
     // carve's height is deliberately not in this key: the height lives in
     // the placeholder, which is passed alongside the string, so an
     // animating gap re-lays out the text without re-typesetting it.
+    val room = LocalRoomColours.current
     val page = remember(
         chapter, runningHead, theme, liftedVerses,
         isFirstChapter, showMarginHint, slotVerse, density,
-        bodyStyle, descriptorStyle,
+        bodyStyle, descriptorStyle, room,
     ) {
         buildChapterPage(
             chapter = chapter,
             runningHead = runningHead,
             theme = theme,
+            room = room,
             liftedVerses = liftedVerses,
             isFirstChapter = isFirstChapter,
             showMarginHint = showMarginHint,
@@ -549,6 +553,9 @@ private fun buildChapterPage(
     chapter: ScriptureChapter,
     runningHead: String,
     theme: ReadingTheme,
+    // The room, passed rather than read: this typesets a page, it does not
+    // compose one, and the room's ink follows the wallpaper now.
+    room: RoomColours,
     liftedVerses: IntRange?,
     isFirstChapter: Boolean,
     showMarginHint: Boolean,
@@ -566,7 +573,7 @@ private fun buildChapterPage(
     var placeholderCount = 0
     var noteSlotIndex: Int? = null
 
-    val ivory = Palette.text
+    val ivory = room.text
     val em = theme.fontSize
     val lineHeight = (em * theme.lineHeightMultiple).sp
 
@@ -641,7 +648,7 @@ private fun buildChapterPage(
         beginParagraph(ParagraphStyle())
         builder.withStyle(
             RibbonType.smallCaps(13f).toSpanStyle()
-                .copy(color = Palette.muted, letterSpacing = 0.9.sp),
+                .copy(color = room.muted, letterSpacing = 0.9.sp),
         ) { append(Copy.FIRST_RUN_HINT) }
         spacer(13f * 1.4f)
     }
@@ -729,7 +736,7 @@ private fun buildChapterPage(
             }
 
             var attributes = if (block.s == BlockStyle.d) {
-                descriptorSpan.copy(color = Palette.muted)
+                descriptorSpan.copy(color = room.muted)
             } else {
                 bodySpan.copy(
                     color = if (span.isRedLetter && theme.redLetter) {

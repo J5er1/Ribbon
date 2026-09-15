@@ -66,19 +66,20 @@ fun OnboardingProgressBar(
                     ),
                 contentAlignment = Alignment.Center,
             ) {
+                val muted = Palette.muted
                 Canvas(modifier = Modifier.size(18.dp)) {
                     val centre = Offset(size.width / 2f, size.height / 2f)
                     val arm = 4.5.dp.toPx()
                     val stroke = 1.6.dp.toPx()
                     drawLine(
-                        color = Palette.muted,
+                        color = muted,
                         start = Offset(centre.x + arm * 0.5f, centre.y - arm),
                         end = Offset(centre.x - arm * 0.5f, centre.y),
                         strokeWidth = stroke,
                         cap = StrokeCap.Round,
                     )
                     drawLine(
-                        color = Palette.muted,
+                        color = muted,
                         start = Offset(centre.x - arm * 0.5f, centre.y),
                         end = Offset(centre.x + arm * 0.5f, centre.y + arm),
                         strokeWidth = stroke,

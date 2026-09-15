@@ -508,6 +508,9 @@ private fun InkPickerSwatch(
             },
         contentAlignment = Alignment.Center,
     ) {
+        // Read out here: a draw lambda is not a composition, and the room's
+        // ink is a composition local now.
+        val ivory = Palette.text
         Canvas(Modifier.size(SWATCH_TARGET)) {
             val centre = Offset(size.width / 2f, size.height / 2f)
             drawCircle(
@@ -521,7 +524,7 @@ private fun InkPickerSwatch(
                 // that edge rather than centred on it.
                 val stroke = 1.6.dp.toPx()
                 drawCircle(
-                    color = Palette.text.copy(alpha = 0.8f * ringed),
+                    color = ivory.copy(alpha = 0.8f * ringed),
                     // Closing on the swatch as it fades in, so the ring reads
                     // as something settling around the ink rather than as a
                     // second circle switched on beside it.

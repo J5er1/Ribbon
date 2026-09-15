@@ -1,4 +1,8 @@
-@file:OptIn(ExperimentalUuidApi::class, ExperimentalMaterial3Api::class)
+@file:OptIn(
+    ExperimentalUuidApi::class,
+    ExperimentalMaterial3Api::class,
+    ExperimentalSharedTransitionApi::class,
+)
 
 package app.readribbon.app
 
@@ -6,6 +10,8 @@ import android.net.Uri
 import android.os.Bundle
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.SizeTransform
@@ -24,6 +30,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -32,6 +39,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.IntOffset
@@ -51,8 +60,12 @@ import androidx.navigation.navArgument
 import app.readribbon.core.Reading
 import app.readribbon.core.Room
 import app.readribbon.core.VerseAddress
+import app.readribbon.design.LocalFlowLayer
+import app.readribbon.design.LocalFlowRoot
 import app.readribbon.design.Palette
 import app.readribbon.design.RibbonMotion
+import app.readribbon.design.peeled
+import app.readribbon.design.rememberBookSheet
 import app.readribbon.design.rememberReduceMotion
 import app.readribbon.design.rememberSheetExit
 import app.readribbon.design.room
@@ -325,17 +338,52 @@ private fun RoomStack(model: AppModel, room: Room) {
     val navController = rememberNavController()
     val reduceMotion = rememberReduceMotion()
 
+    /**
+     * How open the book is (design/Hearth.kt).
+     *
+     * The book used to arrive by fading in and leave by sliding out, as two
+     * unrelated transitions hung off `AnimatedContent`. It is now one number
+     * that three things drive — the fire pulled up on the room, the Wave
+     * pulled down at the foot of the page, and a tap on either — and that
+     * everything affected reads: the page's own offset, the room receding
+     * behind it, the hearth riding up under the thumb. A gesture and a
+     * transition made of the same value cannot fall out of step with each
+     * other, which is what they used to do.
+     */
+    val sheet = rememberBookSheet()
+
     // One branch for reduce motion, taken inside the token (§11).
     val arrive: FiniteAnimationSpec<Float> = RibbonMotion.arrive(reduceMotion)
     val settle: FiniteAnimationSpec<Float> = RibbonMotion.settle(reduceMotion)
     val slide: FiniteAnimationSpec<IntOffset> = RibbonMotion.settle(reduceMotion)
 
-    fun openBook(reading: Reading, target: VerseAddress?) {
-        openTarget = target
+    /** Compose the book under the room so a pull has something to raise. */
+    fun beginOpening(reading: Reading) {
+        openTarget = null
         openReading = reading
     }
 
+    /** Open it outright — a waiting row, a quoted verse, the way in. */
+    fun openBook(reading: Reading, target: VerseAddress?) {
+        openTarget = target
+        openReading = reading
+        sheet.animate(open = true)
+    }
+
     fun closeBook() {
+        sheet.animate(open = false) {
+            openReading = null
+            openTarget = null
+        }
+    }
+
+    /**
+     * Put the book down without closing it by hand: the finishing sequence,
+     * a room switch, a tapped invite. There is nothing to animate, because
+     * whatever asked for it is drawing over the top already.
+     */
+    fun dropBook() {
+        sheet.reset()
         openReading = null
         openTarget = null
     }
@@ -344,7 +392,26 @@ private fun RoomStack(model: AppModel, room: Room) {
         navController.navigate(PersonRoute(personID = personID, roomID = roomID).path)
     }
 
-    Box(Modifier.fillMaxSize()) {
+    // One shared-transition scope over the whole stack, so that the pieces
+    // which exist on both sides of a screen change are the *same* piece and
+    // travel rather than being replaced: your face in the room's corner and
+    // your face at the top of You, the room's fire and the small fire on its
+    // row in the menu, an ember on the shelf and the same ember on its own
+    // record. design/Flow.kt says how, and why it is one scope at the root
+    // rather than one per layer.
+    SharedTransitionLayout(Modifier.fillMaxSize()) {
+      CompositionLocalProvider(LocalFlowRoot provides this) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                // The pull's own travel: how far a finger has to go to open
+                // the book, and how far the hearth rides up with it.
+                .onSizeChanged { size ->
+                    if (size.height > 0) {
+                        sheet.travel = size.height * RibbonMotion.OPEN_TRAVEL
+                    }
+                },
+        ) {
         // The room and the book, together, so that the menu drawn over
         // them can be taken out of a screen reader's path in one place. A
         // layer that covers the screen visually does not cover it for
@@ -364,7 +431,17 @@ private fun RoomStack(model: AppModel, room: Room) {
             NavHost(
                 navController = navController,
                 startDestination = Route.ROOM,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    // The room recedes as the book rises over it: the same
+                    // six-percent shrink, twenty-four-dp drop and fade that
+                    // predictive back uses to peel a screen *off* the room,
+                    // run in the other direction. Opening the book and
+                    // closing it are then plainly the same movement, which
+                    // is what a gesture has to be if it is going to be
+                    // believed. Read inside the layer block, so a finger
+                    // moving the book recomposes nothing in the room.
+                    .peeled { sheet.progress },
                 enterTransition = { slideInHorizontally(slide) { it / 4 } + fadeIn(settle) },
                 exitTransition = { fadeOut(settle) },
                 popEnterTransition = { fadeIn(settle) },
@@ -391,6 +468,13 @@ private fun RoomStack(model: AppModel, room: Room) {
                     // content to fade out, but the incoming content still runs
                     // its enter, and the whole room fades in over itself. An id
                     // is equal to itself, so nothing happens at all.
+                    // Which layer this composition is in, so that anything
+                    // drawn here can travel to the same thing drawn somewhere
+                    // else. A NavHost destination's content receiver *is* an
+                    // `AnimatedVisibilityScope`, which is exactly what a
+                    // shared element needs and what it would otherwise have
+                    // to be handed as a parameter.
+                    CompositionLocalProvider(LocalFlowLayer provides this) {
                     AnimatedContent(
                         targetState = room.id,
                         transitionSpec = {
@@ -405,14 +489,18 @@ private fun RoomStack(model: AppModel, room: Room) {
                             // outgoing one is still in state — a switch does not
                             // remove it — so both halves draw a real room.
                             room = model.state.rooms.firstOrNull { it.id == roomID } ?: room,
+                            sheet = sheet,
                             chooserRequested = chooserRequested,
                             onChooserHandled = { chooserRequested = false },
                             onOpenReading = { reading, target -> openBook(reading, target) },
+                            onBeginOpening = { reading -> beginOpening(reading) },
+                            onAbandonOpening = { dropBook() },
                             onOpenRooms = { menu = MenuEntry.ROOMS },
                             onYou = { menu = MenuEntry.YOU },
                             onOpenPerson = { personID, roomID -> openPerson(personID, roomID) },
                             onOpenEmber = { readingID -> navController.navigate(Route.ember(readingID)) },
                         )
+                    }
                     }
                 }
 
@@ -422,6 +510,7 @@ private fun RoomStack(model: AppModel, room: Room) {
                 ) { entry ->
                     val readingID = entry.arguments?.getString(Route.READING_ID)?.let { uuid(it) }
                     val reading = model.state.readings.firstOrNull { it.id == readingID }
+                    CompositionLocalProvider(LocalFlowLayer provides this) {
                     if (reading == null) {
                         // Swift's `if let` falls through to an empty view. There
                         // is nothing under a NavHost destination to show through,
@@ -446,6 +535,7 @@ private fun RoomStack(model: AppModel, room: Room) {
                             onOpenPerson = { personID, roomID -> openPerson(personID, roomID) },
                         )
                     }
+                    }
                 }
 
                 composable(
@@ -457,6 +547,7 @@ private fun RoomStack(model: AppModel, room: Room) {
                 ) { entry ->
                     val route = PersonRoute.from(entry.arguments)
                     val personRoom = route?.let { r -> model.state.rooms.firstOrNull { it.id == r.roomID } }
+                    CompositionLocalProvider(LocalFlowLayer provides this) {
                     if (route == null || personRoom == null) {
                         Box(Modifier.fillMaxSize().room())
                     } else {
@@ -473,51 +564,52 @@ private fun RoomStack(model: AppModel, room: Room) {
                             onDismiss = { navController.popBackStack() },
                         )
                     }
+                    }
                 }
             }
 
-            // The book, over the stack. Swift's `.overlay` with
-            // `.transition(.asymmetric(insertion: .opacity, removal:
-            // .move(edge: .bottom).combined(with: .opacity)))`: it arrives by
-            // fading in on the arrive token and leaves by sliding down off the
-            // bottom on the settle token.
+            // The book, over the stack, and no longer a transition at all.
             //
-            // `AnimatedContent` rather than `AnimatedVisibility` because the
-            // book has to stay drawn while it slides away, and the reading it is
-            // drawing is the state that just went null.
+            // It used to arrive by fading in and leave by sliding out, as two
+            // unrelated `AnimatedContent` specs — which is why opening it and
+            // closing it never looked like the same thing happening twice.
+            // Now it is a sheet at `sheet.progress`: fully off the bottom at
+            // 0, in place at 1, and wherever the finger has taken it in
+            // between. The fire pulls it up, the Wave pulls it down, and both
+            // taps run the identical movement.
             //
-            // Composing after the NavHost is load-bearing: back callbacks are
+            // Composed after the NavHost is load-bearing: back callbacks are
             // taken in reverse order of registration, so the reading's own
             // predictive back — which peels the book off the room — wins over
             // the NavHost's for as long as the book is open.
-            AnimatedContent(
-                targetState = openReading,
-                modifier = Modifier.fillMaxSize(),
-                contentKey = { it?.id },
-                transitionSpec = {
-                    val transform = if (targetState != null) {
-                        fadeIn(arrive) togetherWith ExitTransition.None
-                    } else {
-                        EnterTransition.None togetherWith
-                            (slideOutVertically(slide) { it } + fadeOut(settle))
+            openReading?.let { book ->
+                key(book.id) {
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            // The offset is read inside the layer block, so a
+                            // finger dragging the page never recomposes a
+                            // word of Scripture. Clipped away entirely at
+                            // rest, because a page parked off the bottom of
+                            // the screen still costs a layer to composite.
+                            .graphicsLayer {
+                                translationY = (1f - sheet.progress) * size.height
+                            },
+                    ) {
+                        ReadingScreen(
+                            model = model,
+                            room = room,
+                            reading = book,
+                            sheet = sheet,
+                            onClose = { closeBook() },
+                            onFinished = { dropBook() },
+                            onStartAnother = {
+                                dropBook()
+                                chooserRequested = true
+                            },
+                            openAt = openTarget,
+                        )
                     }
-                    transform.using(SizeTransform(clip = false))
-                },
-                label = "the-book",
-            ) { book ->
-                if (book != null) {
-                    ReadingScreen(
-                        model = model,
-                        room = room,
-                        reading = book,
-                        onClose = { closeBook() },
-                        onFinished = { closeBook() },
-                        onStartAnother = {
-                            closeBook()
-                            chooserRequested = true
-                        },
-                        openAt = openTarget,
-                    )
                 }
             }
         }
@@ -548,14 +640,19 @@ private fun RoomStack(model: AppModel, room: Room) {
             },
             label = "the-menu",
         ) { open ->
-            if (open != null) {
-                MenuScreen(
-                    model = model,
-                    entry = open,
-                    onDismiss = { menu = null },
-                    // The book belongs to the room it was opened in.
-                    onSwitch = { closeBook() },
-                )
+            // Same scope, new layer: your face and the room's fire travel
+            // between the room and the menu rather than one being swapped for
+            // the other (design/Flow.kt).
+            CompositionLocalProvider(LocalFlowLayer provides this) {
+                if (open != null) {
+                    MenuScreen(
+                        model = model,
+                        entry = open,
+                        onDismiss = { menu = null },
+                        // The book belongs to the room it was opened in.
+                        onSwitch = { dropBook() },
+                    )
+                }
             }
         }
 
@@ -597,5 +694,7 @@ private fun RoomStack(model: AppModel, room: Room) {
                 }
             }
         }
+        }
+      }
     }
 }
