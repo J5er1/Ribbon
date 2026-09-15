@@ -394,11 +394,14 @@ private fun RoomStack(model: AppModel, room: Room) {
 
     // One shared-transition scope over the whole stack, so that the pieces
     // which exist on both sides of a screen change are the *same* piece and
-    // travel rather than being replaced: your face in the room's corner and
-    // your face at the top of You, the room's fire and the small fire on its
-    // row in the menu, an ember on the shelf and the same ember on its own
-    // record. design/Flow.kt says how, and why it is one scope at the root
-    // rather than one per layer.
+    // travel rather than being replaced: a seat at the hearth and that
+    // person's own screen, an ember on the shelf and the same ember on its
+    // record, a settings row's words and the heading it opens.
+    //
+    // Nothing pairs the room with the menu, and design/Flow.kt's header says
+    // why — a flow needs one of its halves to be leaving, and the menu is a
+    // layer over a room that stays composed underneath it. Everything that
+    // flows here is a NavHost push.
     SharedTransitionLayout(Modifier.fillMaxSize()) {
       CompositionLocalProvider(LocalFlowRoot provides this) {
         Box(
@@ -653,9 +656,10 @@ private fun RoomStack(model: AppModel, room: Room) {
             },
             label = "the-menu",
         ) { open ->
-            // Same scope, new layer: your face and the room's fire travel
-            // between the room and the menu rather than one being swapped for
-            // the other (design/Flow.kt).
+            // Same scope, new layer — not so that anything travels between
+            // the room and the menu (nothing can; see design/Flow.kt), but so
+            // that the menu's own NavHost pushes have a layer above them to
+            // hang their flows on.
             CompositionLocalProvider(LocalFlowLayer provides this) {
                 if (open != null) {
                     MenuScreen(

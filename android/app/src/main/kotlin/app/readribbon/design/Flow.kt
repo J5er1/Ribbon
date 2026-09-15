@@ -84,8 +84,26 @@ object Flows {
     /** That ember's book name, which is the same name on both screens. */
     fun emberName(readingID: Uuid): String = "ember-name:$readingID"
 
-    /** A seat at the hearth, and that person's own screen. */
-    fun seat(personID: Uuid): String = "seat:$personID"
+    /**
+     * A seat at the hearth, and that person's own screen.
+     *
+     * Keyed by the room as well as the person, because switching rooms
+     * cross-fades one room over another and *you* have a seat in both: a
+     * person-only key would have had two live halves with neither leaving
+     * for the length of every switch.
+     */
+    fun seat(roomID: Uuid, personID: Uuid): String = "seat:$roomID:$personID"
+
+    // The five settings doors, named once. `settingsTitle` takes a free-form
+    // string, and both halves of each pair used to spell theirs out by hand
+    // in two different files — which is exactly the failure this object was
+    // written to prevent: a key that does not match is not an error, it is an
+    // element that silently stops flowing.
+    const val TEXT = "text"
+    const val NOTIFICATIONS = "notifications"
+    const val APPEARANCE = "appearance"
+    const val DOWNLOADS = "downloads"
+    const val PLAN = "plan"
 
     /** That screen's heading, which was the row's own words a moment ago. */
     fun settingsTitle(route: String): String = "settings-title:$route"

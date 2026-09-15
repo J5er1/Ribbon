@@ -36,9 +36,15 @@ import kotlinx.coroutines.launch
 // simply *changes* gets a tween — a word swapping under the fire, a
 // cross-dissolve between rooms, a note unfurling. A thing a finger is
 // *holding* gets a spring, because a spring can be handed the velocity the
-// finger let go at and a tween cannot. Everything gesture-driven in the app
-// — the hearth pulling the book open, the Wave pulling it closed, a card
-// taking a press — is on the springs at the foot of this object.
+// finger let go at and a tween cannot. The hearth pulling the book open, the
+// Wave pulling it closed and a card taking a press are all on the springs at
+// the foot of this object.
+//
+// The one gesture that is not, and it is not an oversight: the predictive
+// back peel below. Android hands a back gesture along as a *progress* and
+// never as a speed — `BackEventCompat` carries a fraction and a touch point
+// and nothing else — so there is no velocity to give a spring. Its two ends
+// stay on the tweens they were written with.
 //
 // Every token comes in two: the motion, and the same thing held still for
 // reduce motion (§11). A screen asks for `RibbonMotion.settle(reduceMotion)`

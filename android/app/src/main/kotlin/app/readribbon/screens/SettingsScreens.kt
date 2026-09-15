@@ -177,7 +177,7 @@ fun TextSettingsScreen(
     val context = LocalContext.current
 
     SettingsScaffold(
-        route = "text",
+        route = Flows.TEXT,
         title = Copy.TEXT_AND_TRANSLATION,
         lede = Copy.TEXT_LEDE,
         onBack = onBack,
@@ -394,7 +394,7 @@ fun NotificationSettingsScreen(
     modifier: Modifier = Modifier,
 ) {
     SettingsScaffold(
-        route = "notifications",
+        route = Flows.NOTIFICATIONS,
         title = Copy.NOTIFICATIONS,
         lede = Copy.NOTIFICATIONS_LEDE,
         onBack = onBack,
@@ -550,7 +550,7 @@ fun AppearanceScreen(
     val appearance = LocalAppearance.current
 
     SettingsScaffold(
-        route = "appearance",
+        route = Flows.APPEARANCE,
         title = Copy.APPEARANCE,
         lede = Copy.APPEARANCE_LEDE,
         onBack = onBack,
@@ -591,7 +591,7 @@ fun DownloadsScreen(
     val translations = model.availableTranslations
 
     SettingsScaffold(
-        route = "downloads",
+        route = Flows.DOWNLOADS,
         title = Copy.DOWNLOADS,
         lede = Copy.downloadsLede(context),
         onBack = onBack,
@@ -661,7 +661,7 @@ fun PlanScreen(
     val paused = room != null && room.isPaused
 
     SettingsScaffold(
-        route = "plan",
+        route = Flows.PLAN,
         title = Copy.PLAN,
         lede = Copy.PLAN_LEDE,
         onBack = onBack,

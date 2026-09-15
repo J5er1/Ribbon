@@ -368,15 +368,23 @@ fun MenuScreen(
                 popEnterTransition = { fadeIn(push) },
                 popExitTransition = { ExitTransition.None },
             ) {
-                MenuRoot(
-                    model = model,
-                    entry = entry,
-                    onOpen = { route -> navController.navigate(route) },
-                    onDismiss = { close() },
-                    onSwitch = onSwitch,
-                    onStartRoom = { showNewRoom = true },
-                    onInvite = { room -> inviting = InviteTarget(room = room, isNew = false) },
-                )
+                // The root is a layer like its five siblings, and it is the
+                // one that holds the *leaving* half of every settings-title
+                // flow. Without this its rows bound themselves to the menu's
+                // own outer scope, which stays visible for as long as the
+                // menu is open — so both halves of the key were live and
+                // neither was going anywhere.
+                CompositionLocalProvider(LocalFlowLayer provides this) {
+                    MenuRoot(
+                        model = model,
+                        entry = entry,
+                        onOpen = { route -> navController.navigate(route) },
+                        onDismiss = { close() },
+                        onSwitch = onSwitch,
+                        onStartRoom = { showNewRoom = true },
+                        onInvite = { room -> inviting = InviteTarget(room = room, isNew = false) },
+                    )
+                }
             }
             composable(MenuRoute.TEXT) {
                 // Same shared-transition scope as the room's stack, a new
@@ -646,13 +654,13 @@ private fun MenuRoot(
                             title = Copy.TEXT_AND_TRANSLATION,
                             subtitle = Copy.TEXT_SUB,
                             onClick = { onOpen(MenuRoute.TEXT) },
-                            modifier = Modifier.flowsAsWords(Flows.settingsTitle("text")),
+                            modifier = Modifier.flowsAsWords(Flows.settingsTitle(Flows.TEXT)),
                         )
                         Setting(
                             title = Copy.NOTIFICATIONS,
                             subtitle = Copy.NOTIFICATIONS_SUB,
                             onClick = { onOpen(MenuRoute.NOTIFICATIONS) },
-                            modifier = Modifier.flowsAsWords(Flows.settingsTitle("notifications")),
+                            modifier = Modifier.flowsAsWords(Flows.settingsTitle(Flows.NOTIFICATIONS)),
                         )
                         Setting(
                             title = Copy.APPEARANCE,
@@ -667,19 +675,19 @@ private fun MenuRoot(
                                 Copy.RIBBONS_OWN
                             },
                             onClick = { onOpen(MenuRoute.APPEARANCE) },
-                            modifier = Modifier.flowsAsWords(Flows.settingsTitle("appearance")),
+                            modifier = Modifier.flowsAsWords(Flows.settingsTitle(Flows.APPEARANCE)),
                         )
                         Setting(
                             title = Copy.DOWNLOADS,
                             subtitle = Copy.downloadsSub(LocalContext.current),
                             onClick = { onOpen(MenuRoute.DOWNLOADS) },
-                            modifier = Modifier.flowsAsWords(Flows.settingsTitle("downloads")),
+                            modifier = Modifier.flowsAsWords(Flows.settingsTitle(Flows.DOWNLOADS)),
                         )
                         Setting(
                             title = Copy.PLAN,
                             subtitle = Copy.PLAN_SUB,
                             onClick = { onOpen(MenuRoute.PLAN) },
-                            modifier = Modifier.flowsAsWords(Flows.settingsTitle("plan")),
+                            modifier = Modifier.flowsAsWords(Flows.settingsTitle(Flows.PLAN)),
                         )
                     }
                 }

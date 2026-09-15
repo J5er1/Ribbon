@@ -367,8 +367,6 @@ private fun RoomHeader(
                 .padding(horizontal = 6.dp),
             contentAlignment = Alignment.CenterStart,
         ) {
-            // The room's name is the same name that heads its row in the
-            // menu, so it travels there rather than being replaced by it.
             SmallCaps(model.displayName(room), size = 14f)
         }
 
@@ -979,7 +977,7 @@ private fun Seat(
                 size = SEAT,
                 image = model.portrait(personID),
                 // A seat and that person's own screen are the same face.
-                modifier = Modifier.flows(Flows.seat(personID)),
+                modifier = Modifier.flows(Flows.seat(room.id, personID)),
             )
         }
     }

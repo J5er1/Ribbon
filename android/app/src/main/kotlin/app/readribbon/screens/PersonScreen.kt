@@ -177,7 +177,7 @@ fun PersonScreen(
                     // a room row in the menu: it travels here and grows.
                     modifier = Modifier
                         .padding(top = 12.dp)
-                        .flows(Flows.seat(personID)),
+                        .flows(Flows.seat(room.id, personID)),
                 )
                 Text(
                     text = person?.name ?: "",

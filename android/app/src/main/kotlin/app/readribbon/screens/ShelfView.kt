@@ -267,21 +267,17 @@ fun EmberRecordScreen(
     /**
      * Ember → ember record. iOS gets this from the zoom navigation
      * transition, where the tapped ember *is* the one that grows. Compose's
-     * shared-element transition would need a `SharedTransitionLayout`
+     * shared-element transition would have needed a `SharedTransitionLayout`
      * wrapping the whole NavHost, which is the root's to own and not this
-     * screen's — so the become is a damped scale here: the record's ember
-     * arrives at the shelf's size and settles up to 1.6× on the settle
-     * token's ease-out curve. Eased, never sprung, so it never overshoots.
-     * Under reduce motion it is simply drawn at its full size (§11).
+     * screen's — so the become was a damped scale applied here, on top of
+     * the ember's own layout size.
+     *
+     * The root owns one now (deviation A22), so the shelf's ember and this
+     * one are the same object and the transition carries it. The scale is
+     * gone with the reason for it: two growths on two curves inside one set
+     * of animating bounds is a fight, not a movement. The record simply
+     * draws its ember larger, and the flow does the rest.
      */
-    var grown by remember(reading.id) { mutableStateOf(false) }
-    LaunchedEffect(reading.id) { grown = true }
-    val emberScale by animateFloatAsState(
-        targetValue = if (grown) EMBER_RECORD_SCALE else 1f,
-        animationSpec = RibbonMotion.settle(reduceMotion),
-        label = "ember-becomes-a-record",
-    )
-
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -311,13 +307,10 @@ fun EmberRecordScreen(
                 ) {
                     EmberView(
                         scale = reading.handiwork.scale,
+                        magnify = EMBER_RECORD_SCALE,
                         modifier = Modifier
                             .padding(top = 30.dp, bottom = 16.dp)
-                            .flows(Flows.ember(reading.id))
-                            .graphicsLayer {
-                                scaleX = emberScale
-                                scaleY = emberScale
-                            },
+                            .flows(Flows.ember(reading.id)),
                     )
                     Text(
                         text = book?.name ?: reading.bookID,

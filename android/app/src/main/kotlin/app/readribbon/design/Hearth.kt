@@ -3,8 +3,12 @@ package app.readribbon.design
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitVerticalTouchSlopOrCancellation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.gestures.verticalDrag
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -15,6 +19,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.onClick
@@ -110,10 +117,23 @@ class BookSheet internal constructor(
         private set
 
     /**
+     * Where the pull was when this drag took hold.
+     *
+     * The commit is measured from here rather than from the closed end, and
+     * that is not a refinement. `OPEN_COMMIT` is a third *of the travel*: a
+     * third from zero opens, but measured from zero a close would only have
+     * committed once the page had been dragged two thirds of the way back —
+     * so closing by the Wave asked for twice the drag of opening by the
+     * fire, on a gesture that is meant to be the same one in reverse.
+     */
+    private var grabbed = 0f
+
+    /**
      * Take hold. Called when a drag starts on either handle; composes the
      * book so there is something to pull.
      */
     internal fun engage() {
+        grabbed = pull.value
         engaged = true
     }
 
@@ -133,10 +153,20 @@ class BookSheet internal constructor(
      * [RibbonMotion]).
      */
     internal fun release(velocity: Float, onOpened: () -> Unit, onClosed: () -> Unit) {
-        val far = pull.value >= RibbonMotion.OPEN_COMMIT
-        val flung = velocity > RibbonMotion.OPEN_FLING
-        val shoved = velocity < -RibbonMotion.OPEN_FLING
-        val opening = (far || flung) && !shoved
+        val moved = pull.value - grabbed
+        val opening = when {
+            // Intent first: a flick says the person knows the gesture, and
+            // making them drag the whole third anyway is the app not
+            // believing them.
+            velocity > RibbonMotion.OPEN_FLING -> true
+            velocity < -RibbonMotion.OPEN_FLING -> false
+            // Then distance, measured from where the hand took hold — so a
+            // third of the way is a third of the way in both directions.
+            moved >= RibbonMotion.OPEN_COMMIT -> true
+            moved <= -RibbonMotion.OPEN_COMMIT -> false
+            // Not far enough either way: back where it came from.
+            else -> grabbed >= 0.5f
+        }
         settle(opening, velocity / travel, onOpened, onClosed)
     }
 
@@ -212,27 +242,63 @@ fun Modifier.opensTheBook(
     onOpened: () -> Unit,
     onAbandoned: () -> Unit,
 ): Modifier {
-    val state = rememberDraggableState { delta -> sheet.drag(-delta) }
+    val engage by rememberUpdatedState(onEngaged)
+    val opened by rememberUpdatedState(onOpened)
+    val abandoned by rememberUpdatedState(onAbandoned)
+
     return this
-        .draggable(
-            state = state,
-            orientation = Orientation.Vertical,
-            // The book has to exist before it can rise, so taking hold of the
-            // fire is what puts it there — composed, at zero, under the room.
-            // Letting go short of the commit takes it away again.
-            onDragStarted = {
-                onEngaged()
+        // Hand-written rather than `draggable`, and for one reason: the fire
+        // is the largest and most central object in the room, and the room
+        // scrolls. `draggable` claims the gesture in *both* directions once
+        // slop is passed, and a child wins that pass over the scroll it sits
+        // in — so a thumb put on the fire and swiped down to read back up the
+        // page moved nothing at all, while quietly building a whole reading
+        // screen and tearing it down again.
+        //
+        // Only an upward pull is ours. A downward one is never consumed, so
+        // it falls through to the room, which is what a finger on the middle
+        // of a page expects.
+        .pointerInput(sheet) {
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false)
+                val velocity = VelocityTracker()
+                velocity.addPosition(down.uptimeMillis, down.position)
+
+                var ours = false
+                val past = awaitVerticalTouchSlopOrCancellation(down.id) { change, over ->
+                    if (over < 0f) {
+                        ours = true
+                        change.consume()
+                    }
+                }
+                if (!ours || past == null) return@awaitEachGesture
+
+                // The book has to exist before it can rise, so taking hold of
+                // the fire is what puts it there — composed, at zero, under
+                // the room.
+                engage()
                 sheet.engage()
-            },
-            onDragStopped = { velocity ->
+                velocity.addPosition(past.uptimeMillis, past.position)
+                sheet.drag(-past.positionChange().y)
+
+                verticalDrag(past.id) { change ->
+                    velocity.addPosition(change.uptimeMillis, change.position)
+                    sheet.drag(-change.positionChange().y)
+                    change.consume()
+                }
+
                 // A pull let go of short of the commit is not a close — it is
                 // an opening that did not happen, and the page it raised has
                 // to be taken back out of the tree. Leaving it composed is
                 // not invisible: it would hold the back gesture and go on
                 // being a screen nobody can see.
-                sheet.release(-velocity, onOpened = onOpened, onClosed = onAbandoned)
-            },
-        )
+                sheet.release(
+                    velocity = -velocity.calculateVelocity().y,
+                    onOpened = opened,
+                    onClosed = abandoned,
+                )
+            }
+        }
         // The gesture's tap equivalent, and the only thing a screen reader is
         // offered here: a custom click action on a node that is otherwise an
         // inert object. The fire keeps its own "The fire is steady." label —
