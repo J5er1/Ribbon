@@ -4,6 +4,7 @@ package app.readribbon.screens
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.MutableTransitionState
@@ -387,11 +388,20 @@ private fun PresenceLine(
     // reported them, so nobody's face slides sideways because somebody else's
     // heartbeat landed first.
     val here = present.map { it.id }
-    // Seeded with whoever is already known, so returning to the room — from the
-    // book, from a rotation — does not replay everybody's arrival. Presence
-    // usually lands a moment *after* the room draws, and that genuinely is an
-    // arrival, so it animates.
     val shown = remember(room.id) { mutableStateListOf<Uuid>().apply { addAll(here) } }
+
+    // Whether the row is past its own first frame.
+    //
+    // Returning to the room — from a person's screen, from the book, from a
+    // rotation — composes this row again, and replaying everybody's arrival for
+    // people who never left is a lie about who just walked in. So a face drawn
+    // in the row's first composition is one the row was seeded with and is
+    // simply there; a face that appears after it genuinely arrived. Presence
+    // usually lands a moment *after* the room draws, which is why that is the
+    // line rather than "was anyone here at the start" — somebody who leaves and
+    // comes back an hour later has to be allowed to arrive again.
+    var seeded by remember(room.id) { mutableStateOf(false) }
+    LaunchedEffect(room.id) { seeded = true }
     LaunchedEffect(here, reduceMotion) {
         here.forEach { if (it !in shown) shown.add(it) }
         if (shown.any { it !in here }) {
@@ -432,7 +442,13 @@ private fun PresenceLine(
                 // draws is the one that must *not* animate: the app opening on
                 // the room says nothing (§05), and six portraits swelling in
                 // at launch would be an entrance.
-                val face = remember { MutableTransitionState(false) }
+                //
+                // Which means the seed is the whole point: a hardcoded `false`
+                // is the documented way to *force* the entrance rather than
+                // suppress it, and would replay every arrival on every return
+                // to the room. Same shape as `note.id in standing` in the
+                // waiting rows below.
+                val face = remember { MutableTransitionState(!seeded) }
                 face.targetState = personID in here
                 AnimatedVisibility(
                     visibleState = face,
@@ -459,18 +475,23 @@ private fun PresenceLine(
                 }
             }
         }
-        // Already showing when the room drew: simply there, no entrance.
+        // Already showing when the room drew: simply there, no entrance. It
+        // fades *in* — the faces have gone and the room is quiet again — but it
+        // leaves on the frame the first face lands, without a fade.
+        //
+        // The two share a row, and a fade out would mean sharing it: the row's
+        // leading inset shrinks by the portrait pull-back and a 44 dp square is
+        // inserted ahead of the line, so a line still fading would jump sideways
+        // and be drawn across the face arriving over it. The face is the event;
+        // nobody mourns the line, and going quietly is what it did before any of
+        // this animated at all.
         AnimatedVisibility(
             visible = lastReader != null,
             enter = fadeIn(arrive),
-            exit = fadeOut(arrive),
+            exit = ExitTransition.None,
             label = "the-last-reader",
         ) {
-            // Held across the leaving fade: the line's own text is gone by the
-            // time the exit runs, the way the banked-fire line below is.
-            var lastLine by remember { mutableStateOf(lastReader) }
-            LaunchedEffect(lastReader) { if (lastReader != null) lastLine = lastReader }
-            lastLine?.let { reader ->
+            lastReader?.let { reader ->
                 Box(
                     modifier = Modifier
                         .sizeIn(minHeight = TOUCH)
