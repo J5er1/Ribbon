@@ -2,14 +2,11 @@
 
 package app.readribbon.reading
 
-import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -48,7 +45,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -96,12 +92,12 @@ import app.readribbon.design.RibbonMotion
 import app.readribbon.design.RibbonType
 import app.readribbon.design.SmallCaps
 import app.readribbon.design.color
+import app.readribbon.design.rememberBackPeel
 import app.readribbon.design.rememberReduceMotion
 import app.readribbon.services.PresentPerson
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
@@ -170,12 +166,6 @@ private val THINKING_HOLD_MS = RibbonMotion.INK_FILL_MS.toLong()
 /** The release when a hold is let go early. */
 private const val HOLD_RELEASE_MS = 150
 
-private fun <T> openSpec(reduceMotion: Boolean): FiniteAnimationSpec<T> =
-    if (reduceMotion) snap() else tween(RibbonMotion.OPEN_MS, easing = RibbonMotion.EaseOut)
-
-private fun <T> arriveSpec(reduceMotion: Boolean): FiniteAnimationSpec<T> =
-    if (reduceMotion) snap() else tween(RibbonMotion.ARRIVE_MS, easing = RibbonMotion.EaseOut)
-
 /**
  * The presence form: the lozenge at the right edge, and the panel it
  * becomes.
@@ -216,31 +206,34 @@ fun PresenceForm(
     // Absence is the honest rendering of absence.
     val present = people.isNotEmpty() || model.readingQuietly
 
-    // Predictive back closes the panel: the room peels in behind it as the
-    // gesture is pulled, and the panel is only actually let go when the
-    // gesture completes. A cancelled back leaves the panel exactly as it
-    // was, which is the whole point of the API.
-    var backPull by remember { mutableFloatStateOf(0f) }
-    PredictiveBackHandler(enabled = expanded) { progress ->
-        try {
-            progress.collect { event -> backPull = event.progress }
-            expanded = false
-            backPull = 0f
-        } catch (cancelled: CancellationException) {
-            backPull = 0f
-            throw cancelled
-        }
-    }
+    // Predictive back closes the panel: the panel draws back toward the edge
+    // it came out of as the gesture is pulled, and is only actually let go
+    // when the gesture completes. A cancelled back eases the panel back
+    // exactly where it was, which is the whole point of the API.
+    //
+    // `carriesOn = false`, unlike the book's and the menu's: this panel is not
+    // going anywhere, it is collapsing in place. So a committed pull relaxes
+    // to nothing as the panel closes — a pull left standing would still be
+    // held against the panel the next time it opened, and hold it shut.
+    val peel = rememberBackPeel(
+        enabled = expanded,
+        carriesOn = false,
+        onBack = { expanded = false },
+    )
 
-    // 0 is the lozenge, 1 is the panel; the back gesture pulls it back
-    // toward the lozenge it came from without committing to it. Damped, and
-    // held rather than moved under reduce-motion (§11).
+    // 0 is the lozenge, 1 is the panel; the back gesture pulls it back toward
+    // the lozenge it came from without committing to it. Damped, and held
+    // rather than moved under reduce-motion (§11).
     val opened by animateFloatAsState(
         targetValue = if (expanded) 1f else 0f,
-        animationSpec = if (reduceMotion) snap() else RibbonMotion.open(),
+        animationSpec = RibbonMotion.open(reduceMotion),
         label = "presence-morph",
     )
-    val morph = (opened * (1f - backPull)).coerceIn(0f, 1f)
+    // Subtracted rather than multiplied. A product of the two reads as a
+    // *bump* on the way out — the collapse pulls `opened` down while the
+    // relaxing pull pushes `(1 - pull)` back up, and for the middle of the
+    // close the product rises before it falls. A difference only ever falls.
+    val morph = (opened - peel.progress).coerceIn(0f, 1f)
 
     BoxWithConstraints(
         modifier = modifier
@@ -261,10 +254,10 @@ fun PresenceForm(
 
         AnimatedVisibility(
             visible = present,
-            enter = slideInHorizontally(arriveSpec(reduceMotion)) { it } +
-                fadeIn(arriveSpec(reduceMotion)),
-            exit = slideOutHorizontally(arriveSpec(reduceMotion)) { it } +
-                fadeOut(arriveSpec(reduceMotion)),
+            enter = slideInHorizontally(RibbonMotion.arrive(reduceMotion)) { it } +
+                fadeIn(RibbonMotion.arrive(reduceMotion)),
+            exit = slideOutHorizontally(RibbonMotion.arrive(reduceMotion)) { it } +
+                fadeOut(RibbonMotion.arrive(reduceMotion)),
             label = "presence-form",
         ) {
             Column(
@@ -284,7 +277,7 @@ fun PresenceForm(
                         people = people,
                         expanded = expanded,
                         morph = morph,
-                        backPull = backPull,
+                        peel = peel.progress,
                         panelWidth = panelWidth,
                         reduceMotion = reduceMotion,
                         onExpand = { expanded = true },
@@ -319,8 +312,8 @@ fun PresenceForm(
                 }
                 AnimatedVisibility(
                     visible = announcing != null,
-                    enter = fadeIn(arriveSpec(reduceMotion)),
-                    exit = fadeOut(arriveSpec(reduceMotion)),
+                    enter = fadeIn(RibbonMotion.arrive(reduceMotion)),
+                    exit = fadeOut(RibbonMotion.arrive(reduceMotion)),
                     label = "is-with-you",
                 ) {
                     val name = announcing?.let { model.person(it.id)?.name ?: it.name }
@@ -353,7 +346,7 @@ private fun PresenceSurface(
     people: List<PresentPerson>,
     expanded: Boolean,
     morph: Float,
-    backPull: Float,
+    peel: Float,
     panelWidth: Dp,
     reduceMotion: Boolean,
     onExpand: () -> Unit,
@@ -419,12 +412,15 @@ private fun PresenceSurface(
 
     Box(
         modifier = Modifier
+            // The panel shrinks back toward the edge it came out of as the
+            // back gesture is pulled — the same shrink the book and the menu
+            // use, measured from that edge rather than from the middle. No
+            // lift and no fade: those belong to a screen coming off the room,
+            // and this is a panel drawing back into it.
             .graphicsLayer {
-                // The panel shrinks back toward the edge it came out of as
-                // the back gesture is pulled.
-                val scale = 1f - 0.06f * backPull
-                scaleX = scale
-                scaleY = scale
+                val shrink = 1f - RibbonMotion.PEEL_SHRINK * peel
+                scaleX = shrink
+                scaleY = shrink
                 transformOrigin = TransformOrigin(1f, 0.5f)
             }
             // Every touch target is at least 44 dp even when the drawn
@@ -441,8 +437,11 @@ private fun PresenceSurface(
                 // iOS capsule strokes itself with.
                 .border(1.dp, Palette.rule, shape),
             transitionSpec = {
-                (fadeIn(openSpec(reduceMotion)) togetherWith fadeOut(openSpec(reduceMotion)))
-                    .using(SizeTransform(clip = false) { _, _ -> openSpec(reduceMotion) })
+                val open = RibbonMotion.open<Float>(reduceMotion)
+                (fadeIn(open) togetherWith fadeOut(open))
+                    .using(
+                        SizeTransform(clip = false) { _, _ -> RibbonMotion.open(reduceMotion) },
+                    )
             },
             contentAlignment = Alignment.CenterEnd,
             label = "presence-panel",

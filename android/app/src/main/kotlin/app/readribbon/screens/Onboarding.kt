@@ -137,9 +137,8 @@ private val ColumnMeasure = 420.dp
 /** The visible field is small; the tappable field is never under 44 dp. */
 private val TouchTarget = 44.dp
 
-private fun <T> settleSpec(reduceMotion: Boolean): FiniteAnimationSpec<T> =
-    if (reduceMotion) snap() else tween(RibbonMotion.SETTLE_MS, easing = RibbonMotion.EaseOut)
-
+/** The mark dissolving into the room — this file's own duration, still
+ *  a cut under reduce motion like every other token (§11). */
 private fun <T> dissolveSpec(reduceMotion: Boolean): FiniteAnimationSpec<T> =
     if (reduceMotion) snap() else tween(MARK_DISSOLVE_MS, easing = RibbonMotion.EaseInOut)
 
@@ -227,7 +226,7 @@ fun OnboardingFlow(
                         if (initialState is Step.Mark) {
                             dissolveSpec(reduceMotion)
                         } else {
-                            settleSpec(reduceMotion)
+                            RibbonMotion.settle(reduceMotion)
                         }
                     fadeIn(spec) togetherWith fadeOut(spec)
                 },

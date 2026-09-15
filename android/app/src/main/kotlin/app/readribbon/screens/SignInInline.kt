@@ -3,9 +3,6 @@ package app.readribbon.screens
 import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
-import androidx.compose.animation.core.FiniteAnimationSpec
-import androidx.compose.animation.core.snap
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -61,9 +58,6 @@ private enum class SignInPhase { Email, Code }
 
 /** The visible field is small; the tappable field is never under 44 dp. */
 private val TouchTarget = 44.dp
-
-private fun <T> settleSpec(reduceMotion: Boolean): FiniteAnimationSpec<T> =
-    if (reduceMotion) snap() else tween(RibbonMotion.SETTLE_MS, easing = RibbonMotion.EaseOut)
 
 /**
  * The two-step sign-in, laid out inline wherever an account is genuinely
@@ -188,8 +182,11 @@ fun SignInInline(
             targetState = phase,
             modifier = Modifier.fillMaxWidth(),
             transitionSpec = {
-                (fadeIn(settleSpec(reduceMotion)) togetherWith fadeOut(settleSpec(reduceMotion)))
-                    .using(SizeTransform(clip = false) { _, _ -> settleSpec(reduceMotion) })
+                val settle = RibbonMotion.settle<Float>(reduceMotion)
+                (fadeIn(settle) togetherWith fadeOut(settle))
+                    .using(
+                        SizeTransform(clip = false) { _, _ -> RibbonMotion.settle(reduceMotion) },
+                    )
             },
             label = "sign-in-phase",
         ) { current ->

@@ -5,6 +5,12 @@ package app.readribbon.screens
 import android.content.Intent
 import android.content.res.AssetManager
 import android.text.format.DateFormat
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FiniteAnimationSpec
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -69,9 +75,11 @@ import app.readribbon.data.RoomNotificationPrefs
 import app.readribbon.design.HairlineRule
 import app.readribbon.design.Palette
 import app.readribbon.design.QuietControl
+import app.readribbon.design.RibbonMotion
 import app.readribbon.design.RibbonType
 import app.readribbon.design.SmallCaps
 import app.readribbon.design.readableColumn
+import app.readribbon.design.rememberReduceMotion
 import app.readribbon.design.room
 import kotlinx.coroutines.launch
 import java.util.Calendar
@@ -164,6 +172,8 @@ fun TextSettingsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val arrive: FiniteAnimationSpec<Float> = RibbonMotion.arrive(rememberReduceMotion())
+
     SettingsScroll(modifier = modifier) {
         BackControl(onBack)
         Column(
@@ -197,7 +207,18 @@ fun TextSettingsScreen(
                             color = Palette.text,
                             modifier = Modifier.weight(1f),
                         )
-                        if (chosen) {
+                        // The dot moving from one translation to another is
+                        // the whole answer this screen gives back, and it used
+                        // to happen between two frames: the old dot gone and
+                        // the new one there, with nothing in between to say
+                        // they were the same dot. Both ends now fade, so the
+                        // eye follows the change down the list.
+                        AnimatedVisibility(
+                            visible = chosen,
+                            enter = fadeIn(arrive) + scaleIn(arrive, initialScale = 0.4f),
+                            exit = fadeOut(arrive) + scaleOut(arrive, targetScale = 0.4f),
+                            label = "the-chosen-translation",
+                        ) {
                             Box(
                                 Modifier
                                     .size(SelectionDot)

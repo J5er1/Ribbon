@@ -755,3 +755,16 @@ written, this ledger records the difference.
 - **Search field** in the chooser also searches Scripture text of every
   bundled book (S23's scripture search); note search on the shelf is
   phase-aligned with cards and not yet built.
+- **Four motion tokens the book does not name**, all in
+  `RibbonMotion` (Android) because Android has two kinds of motion §9.1
+  never had to describe. The **peel** — 6% smaller, 24 dp down, 28% toward
+  the ground — is the shape of a predictive-back gesture, shared by the
+  book, the menu and the presence panel so that everything comes away from
+  the room the same way; it was three copies of the same three numbers.
+  `RELEASE_MS` (220) is a back gesture *let go of*, which is quicker than
+  anything arriving because nothing is arriving — the screen is being put
+  back where it already was. `PRESS_IN_MS` (90) and `PRESS_OUT_MS` (220)
+  are the two halves of the state layer that stands in for the ripple
+  (§12.2): up almost at once, because a finger is already on the glass,
+  and down at leisure, because by then the fade is the only thing left
+  saying the tap was received.

@@ -48,6 +48,7 @@ import app.readribbon.design.Palette
 import app.readribbon.design.RibbonType
 import app.readribbon.design.SmallCaps
 import app.readribbon.design.WayInButton
+import app.readribbon.design.rememberSheetExit
 import app.readribbon.design.room
 import kotlin.uuid.ExperimentalUuidApi
 
@@ -129,6 +130,7 @@ fun InviteSheet(
     sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
 ) {
     ModalBottomSheet(
+        // Already animated away by the sheet itself: the person dismissed it.
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         modifier = modifier,
@@ -295,7 +297,12 @@ fun NewRoomSheet(
     modifier: Modifier = Modifier,
     sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
 ) {
+    // Naming a room closes the form and opens its invite (S15); the form has
+    // to be gone before the invite arrives over the same ground.
+    val leave = rememberSheetExit(sheetState)
+
     ModalBottomSheet(
+        // Already animated away by the sheet itself: the person dismissed it.
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         modifier = modifier,
@@ -304,7 +311,11 @@ fun NewRoomSheet(
         dragHandle = null,
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
     ) {
-        NewRoomContent(model = model, onCreated = onCreated, onDismiss = onDismiss)
+        NewRoomContent(
+            model = model,
+            onCreated = { room -> leave { onCreated(room) } },
+            onDismiss = { leave(onDismiss) },
+        )
     }
 }
 

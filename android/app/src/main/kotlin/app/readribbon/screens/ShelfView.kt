@@ -6,8 +6,6 @@ import android.content.Intent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.snap
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -272,8 +270,7 @@ fun EmberRecordScreen(
     LaunchedEffect(reading.id) { grown = true }
     val emberScale by animateFloatAsState(
         targetValue = if (grown) EMBER_RECORD_SCALE else 1f,
-        animationSpec =
-            if (reduceMotion) snap() else tween(RibbonMotion.SETTLE_MS, easing = RibbonMotion.EaseOut),
+        animationSpec = RibbonMotion.settle(reduceMotion),
         label = "ember-becomes-a-record",
     )
 
@@ -433,10 +430,8 @@ private fun EmberNoteRow(
     val reduceMotion = rememberReduceMotion()
     var open by remember(note.id) { mutableStateOf(false) }
 
-    val settle: FiniteAnimationSpec<Float> =
-        if (reduceMotion) snap() else tween(RibbonMotion.SETTLE_MS, easing = RibbonMotion.EaseOut)
-    val settleSize: FiniteAnimationSpec<IntSize> =
-        if (reduceMotion) snap() else tween(RibbonMotion.SETTLE_MS, easing = RibbonMotion.EaseOut)
+    val settle: FiniteAnimationSpec<Float> = RibbonMotion.settle(reduceMotion)
+    val settleSize: FiniteAnimationSpec<IntSize> = RibbonMotion.settle(reduceMotion)
 
     val ink = model.membership(personID = note.authorID, roomID = roomID)?.ink ?: Ink.clay
 
