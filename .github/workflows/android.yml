@@ -26,8 +26,17 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      # `packages` is set only to drop the action's default `tools` from
+      # it. That package is the long-obsolete SDK Tools bundle, Google has
+      # withdrawn it from the repository, and sdkmanager exits 1 rather
+      # than skipping a package it cannot find — so the default fails the
+      # job during setup, before a line of Kotlin is compiled. Nothing in
+      # this build ever used it: Gradle resolves the platform and
+      # build-tools itself, under the licences this action accepts.
       - name: Set up the Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
