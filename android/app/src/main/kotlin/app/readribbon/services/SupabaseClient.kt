@@ -437,7 +437,14 @@ class SupabaseClient(
                 readTimeout = 30_000
                 setRequestProperty("apikey", key)
                 setRequestProperty("Content-Type", "application/json")
-                bearer?.let { setRequestProperty("Authorization", "Bearer $it") }
+                // PostgREST reads the role out of `Authorization`, and falls
+                // back to `anon` only when the gateway has filled it in from
+                // `apikey` — which is a gateway detail, not a promise.
+                // supabase-js sends both on every anonymous call, and so does
+                // the web invite page; sending only `apikey` is the
+                // difference between `invite_preview` answering and the join
+                // screen saying the server is unreachable.
+                setRequestProperty("Authorization", "Bearer ${bearer ?: key}")
                 headers.forEach { (name, value) -> setRequestProperty(name, value) }
                 if (body != null) {
                     doOutput = true

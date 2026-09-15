@@ -63,14 +63,16 @@ reasoning.
    boundaries only, which is also the stated default.
 
 9. **Following, live presence, and thinking-of-you are backed by
-   `SupabaseRealtimePresenceService` on iOS and Android.** (September 2026.)
-   Connected via WebSocket to Phoenix Channels (`realtime:rooms:<room_id>`),
-   tracking presence states (`present`, `idle`, `reading_quietly`), position
-   updates, and broadcasting `thinking_of_you` taps that trigger the
-   haptic "tap on the shoulder" (`Haptics.tapOnTheShoulder()`). A local fallback
-   `LocalPresenceService` remains available for offline operation. The UI
-   states (reading quietly, idle, follow thread, being followed, follow-break
-   on self-scroll, and back-to-where-you-were offer) are live.
+   `RoomChannel` on iOS and Android.** (September 2026; rebuilt September
+   14th — see 20.) One authenticated WebSocket per room, to Phoenix
+   Channels at `realtime:room:<room id>`, carrying presence (where each
+   reader is, whether they have gone still, who they are following),
+   `thinking_of_you` broadcasts that fire the haptic tap on the shoulder
+   (`Haptics.tapOnTheShoulder()`), and a contentless `room_changed` nudge
+   (20). A local `LocalPresenceService` remains the honest backend when
+   the app is built without one. The UI states (reading quietly, idle,
+   follow thread, being followed, follow-break on self-scroll, and
+   back-to-where-you-were offer) are live.
 
 9a. **Your own S12 is reachable only where your portrait renders** (an
    ember record's who-read-it row; the presence line shows others, not
@@ -371,6 +373,72 @@ reasoning.
     feature off, and the two `…/verify` paths are the documented
     `…/options` paths' siblings rather than paths the docs spell out. The
     first real run is the test.
+
+20. **The room is live while you are looking at it, and the socket is
+    the room's rather than the book's.** (September 2026.) The first cut
+    of the Realtime client was joined from the reading screen only, so a
+    room learned nothing until its next foreground: you could sit on S01
+    while somebody accepted your invite, left a note and fed the fire,
+    and see none of it. It also could not survive its own network: the
+    reconnect path called `join(room:person:)`, whose first line returns
+    early when the room is unchanged and the socket non-nil — which it
+    always was, because the failed socket was still held. One dropped
+    connection ended presence for the session, silently. And the two
+    platforms never saw each other at all: Android keyed its topic and
+    its presence ids off `Uuid.toHexString()`, which drops the dashes,
+    so `realtime:room:1111…` and `realtime:room:11111111-2222-…` were two
+    different rooms.
+
+    `RoomChannel` (both platforms) replaces it:
+
+    - **The channel is the room's.** It is open whenever the app is
+      foregrounded on a room, and *presence is not announced by opening
+      it* — `present(…)` says you are in the book, `withdraw()` says you
+      are not, and the line stays up either way. Reading quietly still
+      announces nothing at all.
+    - **It is private.** The account's access token goes up with the
+      join and Realtime checks it against `realtime.messages` RLS
+      (`20260914120000_ribbon_realtime_room_channel.sql`), so a room you
+      are not in refuses you. Before this the channel carried only the
+      publishable key that ships inside the app: a stranger who guessed a
+      room id could have watched its presence. Because the policies live
+      in a migration that a given project may not have yet, a refused
+      private join downgrades that connection to a public one and logs
+      why, rather than leaving the room dead.
+    - **A contentless change nudge.** Every remote write the room renders
+      from goes through one seam (`pushing`) that pushes and then
+      broadcasts `room_changed` — the room id and nothing else. The other
+      phones coalesce it into one pull ~600 ms later. The database stays
+      the only copy of the truth; positions and note-founds deliberately
+      do not nudge (a position already rides presence, and who found a
+      note is the one thing the room is never told, §6.3).
+    - **It reconnects.** Exponential backoff with jitter, a heartbeat
+      whose unanswered beats are themselves a failure signal, a
+      generation counter so a dead socket cannot speak for its
+      replacement, and a re-`track` on rejoin so a reader is not quietly
+      withdrawn from a book they never left.
+    - **Idle and following now travel.** §4.2's "here, but still" and
+      "Ruth is with you" were both written and both dead: nothing ever
+      set `isIdle`, and `followingPersonID` was sent as null on iOS and
+      omitted on Android. The channel watches for ~4 minutes without
+      movement, and following is carried in the presence meta.
+
+    The wire format is the contract between the two builds, so it is one
+    object (`RoomChannelWire`) with `RoomChannelWireTest` asserting every
+    shape exactly; the Swift builds the same messages by hand beside a
+    note pointing at it. **Not exercised against the live project**: this
+    is a socket, there are no two phones here, and the migration has not
+    been applied. The first real run is the test.
+
+21. **Joining goes through the app's one sign-in thread.** S16's join
+    screen carried its own email-and-code pair, straight to Supabase's
+    own GoTrue — while every other surface offers `SignInInline`, which
+    leads with Auth0 where the build has it (it does). A joiner therefore
+    signed in by a different door from everybody else in the room, and
+    got a different *kind* of account id for it: `public.current_user_id()`
+    resolves a native Supabase subject to itself and an Auth0 subject to
+    a UUIDv5 of it, so the two are not the same person and never become
+    one. Both join screens now host `SignInInline` at that step.
 
 ## Android (phase three)
 

@@ -47,13 +47,24 @@ final class AppModel {
     static func load() async -> AppModel {
         let store = LocalStore()
         let state = await store.load()
-        let presence: PresenceService = SupabaseConfig.remoteEnabled ? SupabaseRealtimePresenceService() : LocalPresenceService()
-        let model = AppModel(state: state, store: store, presence: presence)
-        await model.loadPortraits()
-        if SupabaseConfig.remoteEnabled {
-            model.remote = await RemoteSync.restore()
+        // The backend comes first: the room's live channel authenticates with
+        // the account's own token, so it cannot be built before there is an
+        // account to ask.
+        let remote = SupabaseConfig.remoteEnabled ? await RemoteSync.restore() : nil
+        let presence: PresenceService
+        if let remote {
+            presence = RoomChannel(accessToken: { [weak remote] in
+                guard let remote else { return nil }
+                return await remote.realtimeToken()
+            })
+        } else {
+            presence = LocalPresenceService()
         }
+        let model = AppModel(state: state, store: store, presence: presence)
+        model.remote = remote
+        await model.loadPortraits()
         model.startListeningToPresence()
+        await model.openRoomChannel()
         return model
     }
 
@@ -64,10 +75,66 @@ final class AppModel {
                 switch event {
                 case .roster(let people):
                     self.presentPeople = people
-                case .thinkingOfYou(let fromName):
+                case .thinkingOfYou:
                     Haptics.shared.tapOnTheShoulder()
+                case .roomChanged(let roomID):
+                    self.roomChangedRemotely(roomID)
                 }
             }
+        }
+    }
+
+    // MARK: - The room's live line (§4.2)
+
+    /// A pull the socket asked for, coalesced. Several people leaving notes
+    /// at once is one catch-up, not five; and the short wait lets a burst
+    /// (a join, then the joiner's profile, then their membership) land as
+    /// one arrival rather than three half-built ones.
+    private var catchUpTask: Task<Void, Never>?
+
+    private func roomChangedRemotely(_ roomID: UUID) {
+        guard roomID == currentRoom?.id else { return }
+        catchUpTask?.cancel()
+        catchUpTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(600))
+            guard !Task.isCancelled, let self else { return }
+            self.catchUpTask = nil
+            await self.refreshFromRemote()
+        }
+    }
+
+    /// Open — or move — the room's channel. Safe to call whenever the room,
+    /// the person or the account changes; it is a no-op when the channel is
+    /// already where it should be.
+    func openRoomChannel() async {
+        guard let room = currentRoom, let me = state.me, isSignedIn else {
+            await presence.disconnect()
+            return
+        }
+        await presence.connect(roomID: room.id, person: me)
+    }
+
+    /// The app going away. The socket goes with it: a phone in a pocket is
+    /// not present, and saying otherwise is the one lie presence must never
+    /// tell (§4.2).
+    func closeRoomChannel() async {
+        catchUpTask?.cancel()
+        catchUpTask = nil
+        await presence.disconnect()
+    }
+
+    /// Something this device changed that the room renders from. The other
+    /// phones hear about it now rather than at their next foreground.
+    ///
+    /// Every remote write the *room* renders from goes through here, so a
+    /// new kind of content cannot quietly forget to be live. Positions and
+    /// note-founds deliberately do not: a position is already carried by
+    /// presence, several times a minute, and who found a note is the one
+    /// thing the room is never told (§6.3).
+    private func pushing(_ work: @escaping @MainActor () async -> Void) {
+        Task { [weak self] in
+            await work()
+            await self?.presence.announceChange()
         }
     }
 
@@ -188,7 +255,9 @@ final class AppModel {
     func switchRoom(to roomID: UUID) {
         state.currentRoomID = roomID
         followingPersonID = nil
+        presentPeople = []
         persist()
+        Task { [weak self] in await self?.openRoomChannel() }
     }
 
     /// Pushes everything the backend needs for an invite link to resolve:
@@ -204,15 +273,32 @@ final class AppModel {
         if let membership = myMembership(in: room) {
             try await remote.push(membership: membership)
         }
+        // Only ever my own. `invites_update` is the creator's, so pushing a
+        // link somebody else minted is a 403 — and pointless besides: it is
+        // here because the pull brought it back from the row it already has.
+        guard invite.createdBy == me.id else { return }
+        pendingInvitePushes.insert(invite.id)
         try await remote.push(invite: invite)
+        pendingInvitePushes.remove(invite.id)
     }
+
+    /// Invites minted here whose push hasn't landed — merge() must not let a
+    /// pull that raced them delete a link that is already in somebody's
+    /// message thread. The same shape as `pendingRenamePushes`, for the same
+    /// reason.
+    private var pendingInvitePushes: Set<UUID> = []
 
     @discardableResult
     func createInvite(for room: Room) -> Invite {
         guard let me = state.me else { fatalError("invite before person") }
-        // Reuse a live invite rather than minting link after link.
+        // Reuse a live invite rather than minting link after link — and
+        // since the pull now brings a room's invites back, "live" includes
+        // the one another member already sent out. A room has one link, not
+        // one per phone. Mine first, so the common case never needs anyone
+        // else's row.
+        let live = state.invites.filter { $0.roomID == room.id && $0.expiresAt > Date() }
         let invite: Invite
-        if let existing = state.invites.first(where: { $0.roomID == room.id && $0.expiresAt > Date() }) {
+        if let existing = live.first(where: { $0.createdBy == me.id }) ?? live.first {
             invite = existing
         } else {
             invite = Invite(roomID: room.id, createdBy: me.id, createdAt: Date())
@@ -253,9 +339,9 @@ final class AppModel {
         if let remote, remote.isSignedIn {
             let updated = state.rooms[i]
             pendingRenamePushes.insert(updated.id)
-            Task {
+            pushing { [weak self] in
                 if (try? await remote.push(room: updated)) != nil {
-                    pendingRenamePushes.remove(updated.id)
+                    self?.pendingRenamePushes.remove(updated.id)
                 }
             }
         }
@@ -278,7 +364,20 @@ final class AppModel {
         if let remote, remote.isSignedIn {
             let roomID = room.id
             let personID = me.id
-            Task { try? await remote.deleteMembership(roomID: roomID, personID: personID) }
+            Task { [weak self] in
+                // The nudge goes first, and it has to: once the membership
+                // row is gone the channel's own policy refuses this device,
+                // and the room would hear nothing at all. The others pull a
+                // beat later, by which time the delete has landed — and
+                // their next foreground is the backstop if it hasn't.
+                await self?.presence.announceChange()
+                try? await remote.deleteMembership(roomID: roomID, personID: personID)
+                // The room this device is looking at has changed; the line
+                // follows it.
+                await self?.openRoomChannel()
+            }
+        } else {
+            Task { [weak self] in await self?.openRoomChannel() }
         }
     }
 
@@ -292,7 +391,7 @@ final class AppModel {
             let membership = state.memberships[index]
             let roomID = room.id
             let personID = me.id
-            Task {
+            pushing {
                 try? await remote.push(membership: membership)
                 // Remembered beside the membership, so that leaving —
                 // which deletes the membership — does not also delete the
@@ -355,7 +454,7 @@ final class AppModel {
 
     private func pushReadingRemote(_ reading: Reading) {
         guard let remote, remote.isSignedIn else { return }
-        Task { try? await remote.push(reading: reading) }
+        pushing { try? await remote.push(reading: reading) }
     }
 
     func quietDays(for room: Room) -> [QuietDay] {
@@ -386,7 +485,7 @@ final class AppModel {
            event.personID == me.id, event.at != lastPushedFuelAt {
             lastPushedFuelAt = event.at
             let updated = state.readings[index]
-            Task {
+            pushing {
                 // The reading row first: a fuel event landing before its
                 // reading exists fails the foreign key and is lost.
                 try? await remote.push(reading: updated)
@@ -446,7 +545,7 @@ final class AppModel {
         state.quietDays.append(day)
         persist()
         if let remote, remote.isSignedIn {
-            Task { try? await remote.push(quietDay: day) }
+            pushing { try? await remote.push(quietDay: day) }
         }
     }
 
@@ -492,9 +591,9 @@ final class AppModel {
         persist()
         if let remote, remote.isSignedIn {
             let noteToPush = note
-            Task {
+            pushing { [weak self] in
                 if (try? await remote.push(note: noteToPush, fileURL: nil)) != nil {
-                    await MainActor.run { self.markNoteSent(noteToPush.id) }
+                    self?.markNoteSent(noteToPush.id)
                 }
             }
         }
@@ -518,9 +617,9 @@ final class AppModel {
         }
         if let remote, remote.isSignedIn {
             let noteToPush = note
-            Task {
+            pushing { [weak self] in
                 if (try? await remote.push(note: noteToPush, fileURL: audioURL)) != nil {
-                    await MainActor.run { self.markNoteSent(noteToPush.id) }
+                    self?.markNoteSent(noteToPush.id)
                 }
             }
         }
@@ -581,7 +680,7 @@ final class AppModel {
         persist()
         if let remote, remote.isSignedIn {
             let noteID = note.id
-            Task { try? await remote.deleteNote(id: noteID) }
+            pushing { try? await remote.deleteNote(id: noteID) }
         }
     }
 
@@ -593,7 +692,7 @@ final class AppModel {
         persist()
         if let remote, remote.isSignedIn {
             let updated = state.notes[index]
-            Task { try? await remote.push(note: updated, fileURL: nil) }
+            pushing { try? await remote.push(note: updated, fileURL: nil) }
         }
     }
 
@@ -621,7 +720,7 @@ final class AppModel {
         recordReadingActivity(reading: reading, at: range.start)
         persist()
         if let remote, remote.isSignedIn {
-            Task { try? await remote.push(highlight: highlight) }
+            pushing { try? await remote.push(highlight: highlight) }
         }
     }
 
@@ -632,7 +731,7 @@ final class AppModel {
         persist()
         if let remote, remote.isSignedIn {
             let id = highlight.id
-            Task { try? await remote.deleteHighlight(id: id) }
+            pushing { try? await remote.deleteHighlight(id: id) }
         }
     }
 
@@ -656,7 +755,7 @@ final class AppModel {
         state.cards.append(newCard)
         persist()
         if let remote, remote.isSignedIn {
-            Task { try? await remote.push(card: newCard) }
+            pushing { try? await remote.push(card: newCard) }
         }
         return newCard
     }
@@ -680,7 +779,7 @@ final class AppModel {
         let updated = state.cards[index]
         persist()
         if let remote, remote.isSignedIn {
-            Task {
+            pushing {
                 try? await remote.push(cardAnswer: (cardID: updated.id, personID: me.id, body: answer))
                 try? await remote.push(card: updated)
             }
@@ -693,7 +792,7 @@ final class AppModel {
         let updated = state.cards[index]
         persist()
         if let remote, remote.isSignedIn {
-            Task { try? await remote.push(card: updated) }
+            pushing { try? await remote.push(card: updated) }
         }
     }
 
@@ -737,7 +836,7 @@ final class AppModel {
 
     private func pushProfileRemote(portraitData: Data? = nil) {
         guard let remote, remote.isSignedIn, let me = state.me else { return }
-        Task { try? await remote.push(profile: me, portraitData: portraitData) }
+        pushing { try? await remote.push(profile: me, portraitData: portraitData) }
     }
 
     func markMarginHintSeen() {
@@ -940,7 +1039,9 @@ final class AppModel {
             if let mine = myMembership(in: room) {
                 try? await remote.push(membership: mine)
             }
-            for invite in state.invites where invite.roomID == room.id && invite.expiresAt > Date() {
+            for invite in state.invites
+            where invite.roomID == room.id && invite.createdBy == me.id
+                && invite.expiresAt > Date() {
                 try? await remote.push(invite: invite)
             }
             for reading in state.readings where reading.roomID == room.id {
@@ -993,8 +1094,21 @@ final class AppModel {
     func joinRoom(inviteToken: UUID) async throws -> UUID {
         guard let remote, remote.isSignedIn else { throw SupabaseError.notSignedIn }
         let roomID = try await remote.acceptInvite(token: inviteToken)
+        // The membership the function minted carries no ink and this
+        // device's profile may be newer than the row the room can see, so
+        // both go up before the pull that renders them.
+        if let me = state.me {
+            var portraitData: Data?
+            if let path = me.portraitPath {
+                portraitData = try? Data(contentsOf: await store.portraitFileURL(path))
+            }
+            try? await remote.push(profile: me, portraitData: portraitData)
+        }
         await refreshFromRemote()
         await restoreInk(in: roomID)
+        // Arriving is the news the room most wants: whoever invited you sees
+        // you appear without putting their phone down and picking it up.
+        await presence.announceChange()
         return roomID
     }
 
@@ -1082,6 +1196,7 @@ final class AppModel {
             let departed = Set(departedRooms)
             state.rooms.removeAll { departed.contains($0.id) }
             state.memberships.removeAll { departed.contains($0.roomID) }
+            state.invites.removeAll { departed.contains($0.roomID) }
             if let current = state.currentRoomID, departed.contains(current) {
                 state.currentRoomID = state.rooms.first?.id
             }
@@ -1099,6 +1214,28 @@ final class AppModel {
             person.name = row.name
             person.translation = translation
             state.people[row.id] = person
+        }
+
+        for row in graph.invites {
+            // The link is the room's, not the device's: a live invite the
+            // backend already has is the one this phone hands out too, so a
+            // room does not accumulate a link per phone (S15).
+            let invite = Invite(
+                id: row.id, roomID: row.roomId, createdBy: row.createdBy,
+                createdAt: row.createdAt, expiresAt: row.expiresAt)
+            if let i = state.invites.firstIndex(where: { $0.id == row.id }) {
+                state.invites[i] = invite
+            } else {
+                state.invites.append(invite)
+            }
+        }
+        // An invite the backend no longer has (the room went, or it aged
+        // out of a prune) must not go on being offered from here.
+        let pulledInvites = Set(graph.invites.map(\.id))
+        state.invites.removeAll { invite in
+            pulledRooms.contains(invite.roomID)
+                && !pulledInvites.contains(invite.id)
+                && !pendingInvitePushes.contains(invite.id)
         }
 
         for row in graph.quietDays {

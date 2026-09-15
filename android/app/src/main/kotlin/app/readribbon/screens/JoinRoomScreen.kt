@@ -133,8 +133,12 @@ private sealed interface JoinPhase {
     data object Loading : JoinPhase
     data object Preview : JoinPhase
     data object Name : JoinPhase
-    data object Email : JoinPhase
-    data object Code : JoinPhase
+
+    /**
+     * The one sign-in thread (§6.10), whatever it is on this build — this
+     * screen does not get its own.
+     */
+    data object SignIn : JoinPhase
     data object Joining : JoinPhase
 
     /** expired, full, unreachable — the line to show */
@@ -142,7 +146,7 @@ private sealed interface JoinPhase {
 }
 
 /** Which field is asking for the keyboard. Swift's `JoinFlow.Field`. */
-private enum class Field { Name, Email, Code }
+private enum class Field { Name }
 
 /**
  * The database names what happened; the screen says it plainly.
@@ -193,10 +197,6 @@ fun JoinFlow(
     var name by remember { mutableStateOf("") }
     var portraitData by remember { mutableStateOf<ByteArray?>(null) }
     var portraitImage by remember { mutableStateOf<ImageBitmap?>(null) }
-    var email by remember { mutableStateOf("") }
-    var code by remember { mutableStateOf("") }
-    var errorLine by remember { mutableStateOf<String?>(null) }
-    var sendingCode by remember { mutableStateOf(false) }
 
     /**
      * Set down mid-join (the sheet swiped away): the join completes —
@@ -274,7 +274,7 @@ fun JoinFlow(
     fun advanceFromPreview() {
         phase = when {
             model.me == null -> JoinPhase.Name
-            !model.isSignedIn -> JoinPhase.Email
+            !model.isSignedIn -> JoinPhase.SignIn
             else -> JoinPhase.Joining
         }
         if (phase == JoinPhase.Joining) join()
@@ -286,41 +286,8 @@ fun JoinFlow(
         model.viewModelScope.launch {
             model.completeOnboarding(
                 name = trimmed, portraitData = portraitData, startRoom = false)
-            phase = if (model.isSignedIn) JoinPhase.Joining else JoinPhase.Email
+            phase = if (model.isSignedIn) JoinPhase.Joining else JoinPhase.SignIn
             if (phase == JoinPhase.Joining) join()
-        }
-    }
-
-    fun sendCode() {
-        val address = email.trim()
-        if (!address.contains("@") || sendingCode) return
-        sendingCode = true
-        errorLine = null
-        model.viewModelScope.launch {
-            try {
-                model.sendSignInCode(address)
-                code = ""
-                phase = JoinPhase.Code
-            } catch (_: Throwable) {
-                errorLine = Copy.SERVER_UNREACHABLE
-            } finally {
-                sendingCode = false
-            }
-        }
-    }
-
-    fun verifyAndJoin() {
-        val entered = code.trim()
-        if (entered.isEmpty()) return
-        errorLine = null
-        model.viewModelScope.launch {
-            try {
-                model.verifySignInCode(email = email.trim(), code = entered)
-            } catch (_: Throwable) {
-                errorLine = Copy.SIGN_IN_CODE_WRONG
-                return@launch
-            }
-            join()
         }
     }
 
@@ -425,22 +392,9 @@ fun JoinFlow(
                         onSubmit = { advanceFromName() },
                     )
 
-                    JoinPhase.Email -> EmailStep(
-                        email = email,
-                        onEmailChange = { email = it },
-                        errorLine = errorLine,
-                        focusRequester = focusRequesters.getValue(Field.Email),
-                        onSend = { sendCode() },
-                        onStartInstead = onStartInstead,
-                    )
-
-                    JoinPhase.Code -> CodeStep(
-                        code = code,
-                        onCodeChange = { code = it },
-                        errorLine = errorLine,
-                        focusRequester = focusRequesters.getValue(Field.Code),
-                        onJoin = { verifyAndJoin() },
-                        onSendNewCode = { sendCode() },
+                    JoinPhase.SignIn -> SignInStep(
+                        model = model,
+                        onSignedIn = { join() },
                         onStartInstead = onStartInstead,
                     )
 
@@ -579,13 +533,18 @@ private fun NameStep(
     }
 }
 
+/**
+ * Joining is the first moment an account is genuinely needed, so this is
+ * where it happens — and it is the same sign-in the rest of the app offers
+ * (Auth0 where the build has it, a passkey where the platform does, an
+ * emailed code underneath either). A second, hand-rolled email-and-code pair
+ * here would quietly mint a *different* kind of account from everyone
+ * else's, and the room would seat a stranger.
+ */
 @Composable
-private fun EmailStep(
-    email: String,
-    onEmailChange: (String) -> Unit,
-    errorLine: String?,
-    focusRequester: FocusRequester,
-    onSend: () -> Unit,
+private fun SignInStep(
+    model: AppModel,
+    onSignedIn: () -> Unit,
     onStartInstead: (() -> Unit)?,
 ) {
     Column(
@@ -599,103 +558,14 @@ private fun EmailStep(
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth().padding(horizontal = SentenceMargin),
         )
-        CentredField(
-            value = email,
-            onValueChange = onEmailChange,
-            placeholder = Copy.YOUR_EMAIL,
-            size = 18f,
-            focusRequester = focusRequester,
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Email,
-                capitalization = KeyboardCapitalization.None,
-                // An address is never what autocorrect thinks it is.
-                autoCorrectEnabled = false,
-                imeAction = ImeAction.Send,
-            ),
-            keyboardActions = KeyboardActions(onSend = { onSend() }),
-            modifier = Modifier.padding(horizontal = FieldMargin),
-        )
-        errorLine?.let { line ->
-            Text(
-                text = line,
-                style = RibbonType.ui(14f),
-                color = Palette.muted,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-        WayInButton(
-            title = Copy.SEND_THE_CODE,
+        SignInInline(
+            model = model,
             modifier = Modifier.padding(horizontal = ButtonMargin),
-            enabled = email.contains("@"),
-            onClick = onSend,
+            onSignedIn = onSignedIn,
         )
-        // Never a step without a way out.
-        onStartInstead?.let { start ->
-            QuietControl(title = Copy.START_A_ROOM_INSTEAD, onClick = start)
-        }
-    }
-}
-
-@Composable
-private fun CodeStep(
-    code: String,
-    onCodeChange: (String) -> Unit,
-    errorLine: String?,
-    focusRequester: FocusRequester,
-    onJoin: () -> Unit,
-    onSendNewCode: () -> Unit,
-    onStartInstead: (() -> Unit)?,
-) {
-    Column(
-        verticalArrangement = Arrangement.spacedBy(StepGap),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(
-            text = Copy.CODE_ON_ITS_WAY,
-            style = RibbonType.ui(16f),
-            color = Palette.text,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = SentenceMargin),
-        )
-        CentredField(
-            value = code,
-            onValueChange = onCodeChange,
-            placeholder = Copy.THE_CODE,
-            size = 22f,
-            focusRequester = focusRequester,
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Number,
-                autoCorrectEnabled = false,
-                imeAction = ImeAction.Done,
-            ),
-            keyboardActions = KeyboardActions(),
-            // `.textContentType(.oneTimeCode)`: the code arrives by email but
-            // may equally arrive by message, and the platform offers to fill
-            // it in rather than making them copy it out. A number pad has no
-            // return key, so `ImeAction.Done` is what puts the keyboard away.
-            modifier = Modifier
-                .padding(horizontal = CodeFieldMargin)
-                .semantics { contentType = ContentType.SmsOtpCode },
-        )
-        errorLine?.let { line ->
-            Text(
-                text = line,
-                style = RibbonType.ui(14f),
-                color = Palette.muted,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-        WayInButton(
-            title = Copy.JOIN,
-            modifier = Modifier.padding(horizontal = ButtonMargin),
-            enabled = code.trim().isNotEmpty(),
-            onClick = onJoin,
-        )
-        QuietControl(title = Copy.SEND_A_NEW_CODE, onClick = onSendNewCode)
-        onStartInstead?.let { start ->
-            QuietControl(title = Copy.START_A_ROOM_INSTEAD, onClick = start)
+        if (onStartInstead != null) {
+            // Never a step without a way out.
+            QuietControl(title = Copy.START_A_ROOM_INSTEAD, onClick = onStartInstead)
         }
     }
 }
