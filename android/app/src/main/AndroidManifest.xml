@@ -2,6 +2,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- S01's offline state is "fire renders in its last known state, dimmed
+         by ~8%". Asking whether there is a network at all needs this; it is a
+         normal permission, granted at install, with no prompt and no runtime
+         request (§6.1 forbids prompts at launch, and this is not one). -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- §9.3's haptics are VibrationEffect.Compositions, and a composition
          without this permission fails silently — which is exactly how a

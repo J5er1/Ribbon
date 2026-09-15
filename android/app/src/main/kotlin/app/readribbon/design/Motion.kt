@@ -3,10 +3,13 @@ package app.readribbon.design
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
+import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.FiniteAnimationSpec
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
@@ -27,7 +30,21 @@ import kotlinx.coroutines.launch
 // The split with the platform (§12.2): Material 3 Expressive's physics-based
 // motion is used damped, with damping near critical, so motion is physical
 // but never overshoots. Everything Ribbon itself draws obeys the tokens
-// below. Where Expressive would spring, Ribbon eases.
+// below.
+//
+// The division of labour between the two halves of this file: a thing that
+// simply *changes* gets a tween — a word swapping under the fire, a
+// cross-dissolve between rooms, a note unfurling. A thing a finger is
+// *holding* gets a spring, because a spring can be handed the velocity the
+// finger let go at and a tween cannot. The hearth pulling the book open, the
+// Wave pulling it closed and a card taking a press are all on the springs at
+// the foot of this object.
+//
+// The one gesture that is not, and it is not an oversight: the predictive
+// back peel below. Android hands a back gesture along as a *progress* and
+// never as a speed — `BackEventCompat` carries a fraction and a touch point
+// and nothing else — so there is no velocity to give a spring. Its two ends
+// stay on the tweens they were written with.
 //
 // Every token comes in two: the motion, and the same thing held still for
 // reduce motion (§11). A screen asks for `RibbonMotion.settle(reduceMotion)`
@@ -108,6 +125,91 @@ object RibbonMotion {
      * two flames beat together.
      */
     const val FLICKER_PERIOD_SECONDS = 3.4f
+
+    // MARK: Springs — the half of §12.2 that had never been used
+    //
+    // "Physics-based motion: yes, damped. Use the spatial spring tokens with
+    // damping near critical, so motion is physical but never overshoots."
+    // Everything above is a tween, and a tween is right for a thing that
+    // simply changes — a word, a fade, a cross-dissolve. It is wrong for a
+    // thing a finger is holding.
+    //
+    // A drag has a velocity when it is let go of, and a tween throws that
+    // away: the book would leave the finger's speed behind and travel at the
+    // curve's instead, which is the single most common way a gesture reads
+    // as cheap. A spring takes the velocity as its initial condition and
+    // carries it, so the movement the finger started is the movement that
+    // finishes.
+    //
+    // Damping ratio 1.0 is critical — the fastest approach that never
+    // crosses the target — which is how the product gets physical motion
+    // without the overshoot §9.1 forbids. Nothing here bounces.
+
+    /** Critically damped: physical, and it never passes the mark. */
+    const val DAMPING = 1f
+
+    /**
+     * A thing the size of the screen: the book rising, the menu arriving.
+     * Low stiffness, because a big object is slow.
+     */
+    fun <T> cover(still: Boolean = false): AnimationSpec<T> =
+        if (still) {
+            snap()
+        } else {
+            spring(dampingRatio = DAMPING, stiffness = 180f)
+        }
+
+    /**
+     * A thing the size of a hand: a card lifting, the hearth swelling under
+     * a press, a row settling into place.
+     */
+    fun <T> handled(still: Boolean = false): AnimationSpec<T> =
+        if (still) {
+            snap()
+        } else {
+            spring(dampingRatio = DAMPING, stiffness = Spring.StiffnessMediumLow)
+        }
+
+    /**
+     * A thing the size of a fingertip: a switch, a dot moving down a list, a
+     * chip taking a press. Quick enough to feel like a direct response.
+     */
+    fun <T> touched(still: Boolean = false): AnimationSpec<T> =
+        if (still) {
+            snap()
+        } else {
+            spring(dampingRatio = DAMPING, stiffness = Spring.StiffnessMedium)
+        }
+
+    // MARK: The hearth gesture (S01 → S02)
+
+    /**
+     * How far up the fire has to be pulled before letting go opens the book:
+     * a third of the way.
+     *
+     * Deliberately short. The gesture's job is to *start* the opening, not
+     * to perform all of it — asking for the whole screen's height would make
+     * a two-hand gesture out of the app's front door.
+     */
+    const val OPEN_COMMIT = 0.33f
+
+    /**
+     * The flick that opens the book however far it got: px/s, upward.
+     *
+     * Below this, distance decides. Above it, intent does — a fast short
+     * flick is somebody who knows the gesture, and making them drag the
+     * whole third anyway is the app not believing them.
+     */
+    const val OPEN_FLING = 900f
+
+    /**
+     * How much of the room's height one full pull is worth.
+     *
+     * Less than all of it: a gesture that has to travel the whole screen to
+     * complete reads as a long way to go, and the fire sits around a third
+     * of the way down to begin with.
+     */
+    const val OPEN_TRAVEL = 0.55f
 }
 
 /**

@@ -74,6 +74,16 @@ private fun isRegularWidth(): Boolean {
 fun EmberView(
     scale: FireScale,
     modifier: Modifier = Modifier,
+    /**
+     * How much larger than its shelf size this ember is drawn.
+     *
+     * A real measured size rather than a `graphicsLayer` scale, because the
+     * ember on the shelf and the ember on its own record are one shared
+     * element now: the transition animates *bounds*, and a scale applied
+     * inside those bounds is a second growth on a different curve fighting
+     * the first. One object, one movement.
+     */
+    magnify: Float = 1f,
 ) {
     val seed = rememberSaveable { Random.nextDouble(0.0, 1000.0) }
     val reduceMotion = rememberReduceMotion()
@@ -104,7 +114,7 @@ fun EmberView(
 
     Canvas(
         modifier = modifier
-            .size(width = emberSize * 1.7f, height = emberSize * 1.35f)
+            .size(width = emberSize * 1.7f * magnify, height = emberSize * 1.35f * magnify)
             .clearAndSetSemantics {},
     ) {
         drawEmber(time = time)

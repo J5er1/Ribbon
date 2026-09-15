@@ -7,17 +7,13 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -27,7 +23,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -225,7 +220,7 @@ fun SignInInline(
                             )
                         }
                         if (showEmailForm || !model.auth0Available) {
-                            CentredField(
+                            CentredTextField(
                                 value = email,
                                 onValueChange = { email = it },
                                 placeholder = Copy.YOUR_EMAIL,
@@ -256,7 +251,7 @@ fun SignInInline(
                             textAlign = TextAlign.Center,
                             modifier = Modifier.fillMaxWidth(),
                         )
-                        CentredField(
+                        CentredTextField(
                             value = code,
                             onValueChange = { code = it },
                             placeholder = Copy.THE_CODE,
@@ -300,57 +295,3 @@ fun SignInInline(
     }
 }
 
-/**
- * One centred, undecorated line of typing — the plain `TextField` Swift
- * uses, which draws no box and lets the prompt stand in the muted voice
- * until a character arrives.
- *
- * The field asks for focus as it arrives, which is `.onAppear { focused =
- * true }` and the `.onChange(of: phase)` that follows it: each phase's field
- * is a new node, so its own arrival is the moment.
- */
-@Composable
-private fun CentredField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    placeholder: String,
-    size: Float,
-    focusRequester: FocusRequester,
-    keyboardOptions: KeyboardOptions,
-    keyboardActions: KeyboardActions,
-) {
-    LaunchedEffect(focusRequester) {
-        runCatching { focusRequester.requestFocus() }
-    }
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = TouchTarget),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (value.isEmpty()) {
-            Text(
-                text = placeholder,
-                style = RibbonType.ui(size),
-                color = Palette.muted,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-        BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            singleLine = true,
-            textStyle = RibbonType.ui(size).copy(
-                color = Palette.text,
-                textAlign = TextAlign.Center,
-            ),
-            cursorBrush = SolidColor(Palette.chartreuse),
-            keyboardOptions = keyboardOptions,
-            keyboardActions = keyboardActions,
-            modifier = Modifier
-                .fillMaxWidth()
-                .focusRequester(focusRequester),
-        )
-    }
-}

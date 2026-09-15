@@ -57,6 +57,8 @@ import app.readribbon.core.Room
 import app.readribbon.core.TranslationID
 import app.readribbon.data.ScriptureStore
 import app.readribbon.design.Palette
+import app.readribbon.design.pressablePaper
+import app.readribbon.design.well
 import app.readribbon.design.RibbonType
 import app.readribbon.design.SmallCaps
 import app.readribbon.design.rememberSheetExit
@@ -230,9 +232,11 @@ private fun SearchField(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .clip(shape)
-            .background(Palette.surface)
-            .border(width = 1.dp, color = Palette.rule, shape = shape)
+            // A field is a recess, and the edge decision belongs to one
+            // place (design/Surfaces.kt): a hand-rolled border draws itself
+            // on every wallpaper, so this was the one outlined thing on a
+            // screen of un-outlined ones.
+            .well(shape)
             .heightIn(min = TouchTarget)
             .padding(horizontal = 14.dp, vertical = 10.dp),
         contentAlignment = Alignment.CenterStart,
@@ -282,10 +286,7 @@ private fun StarterCard(book: BibleBook, onChoose: (String) -> Unit) {
     Column(
         modifier = Modifier
             .size(width = 104.dp, height = 92.dp)
-            .clip(shape)
-            .background(Palette.surface)
-            .border(width = 1.dp, color = Palette.rule, shape = shape)
-            .clickable { onChoose(book.id) }
+            .pressablePaper(shape) { onChoose(book.id) }
             // Swift's `.accessibilityLabel` on a Button *replaces* what the
             // button would otherwise say. Clearing the subtree is that same
             // replacement: the drawn fire and the name are one label, not

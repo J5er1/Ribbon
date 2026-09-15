@@ -47,8 +47,11 @@ fun DrawScope.drawWave(
     side: Float,
     front: Path,
     back: Path,
-    tint: Color = Palette.chartreuse,
-    ground: Color = Palette.ground,
+    // A draw scope is not a composition, so these cannot read the room —
+    // they fall back to the brand's own. Every caller in the app is a
+    // composable and passes the room's, which is what actually gets drawn.
+    tint: Color = Brand.chartreuse,
+    ground: Color = Brand.ground,
 ) {
     scale(scale = side / WaveGeometry.GRID_SIZE, pivot = Offset.Zero) {
         drawPath(back, tint)

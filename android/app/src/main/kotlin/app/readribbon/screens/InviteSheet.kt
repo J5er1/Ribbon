@@ -45,6 +45,7 @@ import app.readribbon.app.Copy
 import app.readribbon.core.Invite
 import app.readribbon.core.Room
 import app.readribbon.design.Palette
+import app.readribbon.design.well
 import app.readribbon.design.RibbonType
 import app.readribbon.design.SmallCaps
 import app.readribbon.design.WayInButton
@@ -375,9 +376,7 @@ private fun RoomNameField(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .clip(shape)
-            .background(Palette.surface)
-            .border(width = 1.dp, color = Palette.rule, shape = shape)
+            .well(shape)
             .heightIn(min = TouchTarget)
             .padding(horizontal = FieldH, vertical = FieldV),
         contentAlignment = Alignment.CenterStart,
