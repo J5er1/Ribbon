@@ -76,7 +76,7 @@ import app.readribbon.design.SettingSwitch
 import app.readribbon.design.SettingValue
 import app.readribbon.design.SettingsGroup
 import app.readribbon.design.SmallCaps
-import app.readribbon.design.flows
+import app.readribbon.design.flowsAsWords
 import app.readribbon.design.grain
 import app.readribbon.design.pressable
 import app.readribbon.design.readableColumn
@@ -746,7 +746,7 @@ private fun SettingsScaffold(
                 ScreenTitle(
                     title = title,
                     subtitle = lede,
-                    modifier = Modifier.flows(Flows.settingsTitle(route)),
+                    modifier = Modifier.flowsAsWords(Flows.settingsTitle(route)),
                 )
                 Air(26.dp)
                 content()

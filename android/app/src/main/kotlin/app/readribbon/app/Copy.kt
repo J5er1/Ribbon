@@ -289,6 +289,16 @@ object Copy {
     const val THE_FIRE_SETTLES_INTO_AN_EMBER = "The fire settles into an ember."
 
     // A person (S12)
+
+    /**
+     * The head over what somebody has left in this room.
+     *
+     * "Left" always, never posted or sent — being found later is the
+     * emotional beat (§11).
+     */
+    fun whatTheyLeft(name: String) = "What $name left"
+    const val WHAT_YOU_LEFT = "What you left"
+
     const val CHANGE_YOUR_INK = "Change your ink"
     const val LEAVE_THIS_ROOM = "Leave this room"
     const val LEAVE_ROOM_CONFIRM = "Leave this room? You'll keep the books on your shelf."
@@ -484,7 +494,6 @@ object Copy {
     const val TEXT_SUB = "Translation, size, spacing, red letter"
     const val NOTIFICATIONS_SUB = "Per room, and your quiet hours"
     const val DOWNLOADS_SUB = "What Scripture is held on this device"
-    const val APPEARANCE_SUB = "Where the room takes its colour from"
     /**
      * Not "what it costs". S22 puts the ask in exactly two places — the
      * shelf after the first ember, and the Plan screen — and a menu row is a
@@ -506,9 +515,13 @@ object Copy {
         "The room borrows the colours Android draws from your wallpaper. " +
             "Turn it off for Ribbon's own chartreuse."
 
-    /** What the two states are, said as the state rather than as on or off. */
-    const val FROM_YOUR_WALLPAPER = "from your wallpaper"
-    const val RIBBONS_OWN = "ribbon's own"
+    /**
+     * The two states, said as the state rather than as on or off — and
+     * sentence case, because on the menu's row this is the line under the
+     * title rather than a small-caps value beside it.
+     */
+    const val FROM_YOUR_WALLPAPER = "From your wallpaper"
+    const val RIBBONS_OWN = "Ribbon's own colours"
 
     /**
      * The one thing the wallpaper never repaints, said where somebody might

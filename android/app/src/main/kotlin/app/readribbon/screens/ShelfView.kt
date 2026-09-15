@@ -61,6 +61,7 @@ import app.readribbon.design.NoteMark
 import app.readribbon.design.Flows
 import app.readribbon.design.Palette
 import app.readribbon.design.flows
+import app.readribbon.design.flowsAsWords
 import app.readribbon.design.PortraitView
 import app.readribbon.design.QuietControl
 import app.readribbon.design.RibbonMotion
@@ -235,7 +236,7 @@ private fun ShelfEmber(
                     unbounded = true,
                 ),
         )
-        SmallCaps(name, size = 12f, modifier = Modifier.flows(Flows.emberName(reading.id)))
+        SmallCaps(name, size = 12f, modifier = Modifier.flowsAsWords(Flows.emberName(reading.id)))
     }
 }
 
@@ -322,7 +323,7 @@ fun EmberRecordScreen(
                         text = book?.name ?: reading.bookID,
                         style = RibbonType.display(30f),
                         color = Palette.text,
-                        modifier = Modifier.flows(Flows.emberName(reading.id)),
+                        modifier = Modifier.flowsAsWords(Flows.emberName(reading.id)),
                     )
                     SmallCaps(
                         RibbonClock.emberRange(

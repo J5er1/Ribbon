@@ -863,6 +863,30 @@ A22. **The app flows rather than cuts.** Every screen change was a
     because a shared element with a mistyped key is not an error — it is an
     element that silently stops flowing.
 
+    **Two rules came out of building it, and both are load-bearing.** A key
+    pairs exactly two halves, one leaving and one arriving; a key live in
+    three places at once is not a transition but an ambiguity, and your own
+    face is drawn three times the moment the menu opens (the room's corner,
+    your own seat, the menu's identity row). So the corner and the seat
+    carry different keys, and every key in `Flows` is chosen so that no two
+    surfaces that can be on screen together share one. And words set
+    differently on the two sides — a row's title at 17 sp and a screen's
+    heading at 30 sp in the display face — go through `flowsAsWords`
+    (`sharedBounds`) rather than `flows` (`sharedElement`), because one
+    drawing carried between two frames stretches type on the way.
+
+A22a. **The person screen took the same pass.** It was the barren room's
+    defect in its purest form — a portrait, a name, and then a column of
+    bare references to notes you could not read — and the room's new seats
+    make it far more reachable than it was. It now has a head, its notes are
+    tiles, and a note shows its own words (or a voice note's transcript;
+    never a duration, S04) **once it has been found in the margin, or if it
+    is yours**. §6.3's whole beat is being found later, and a list that read
+    every unfound note aloud would spend it before anybody opened the book;
+    an unfound one gives its address, which is an invitation to go. It also
+    draws a way back, which it never had — §11's tap equivalent, the same
+    one every pushed settings screen carries.
+
 A23. **The settings are tiles, and the hairlines under headings are
     gone.** — the owner's call ("the settings is very condensed, and I
     think it would look better in a completely new style"). The cause was

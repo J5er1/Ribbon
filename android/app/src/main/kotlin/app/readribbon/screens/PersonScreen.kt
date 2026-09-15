@@ -47,9 +47,11 @@ import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.readribbon.app.AppModel
 import app.readribbon.app.Copy
+import app.readribbon.app.firstName
 import app.readribbon.core.Ink
 import app.readribbon.core.Note
 import app.readribbon.core.Room
@@ -57,7 +59,14 @@ import app.readribbon.core.VerseAddress
 import app.readribbon.design.HairlineRule
 import app.readribbon.design.InkDot
 import app.readribbon.design.NoteMark
+import app.readribbon.design.BackChevron
+import app.readribbon.design.Flows
 import app.readribbon.design.Palette
+import app.readribbon.design.RibbonShape
+import app.readribbon.design.SectionLabel
+import app.readribbon.design.flows
+import app.readribbon.design.paper
+import app.readribbon.design.pressable
 import app.readribbon.design.RibbonMotion
 import app.readribbon.design.PortraitView
 import app.readribbon.design.QuietControl
@@ -151,12 +160,23 @@ fun PersonScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(18.dp),
             ) {
+                // The way back, drawn. Android's own gesture is the way
+                // everyone will actually use, but a screen whose only way out
+                // is a gesture has no tap equivalent (§11) — the same reason
+                // every pushed settings screen draws one.
+                Box(Modifier.fillMaxWidth().padding(start = 12.dp, top = 8.dp)) {
+                    BackChevron(onBack = onDismiss, label = Copy.BACK)
+                }
                 PortraitView(
                     person = person,
                     ink = membership?.ink,
                     size = 108.dp,
                     image = model.portrait(personID),
-                    modifier = Modifier.padding(top = 40.dp),
+                    // The same face that was tapped in the room's seats, or on
+                    // a room row in the menu: it travels here and grows.
+                    modifier = Modifier
+                        .padding(top = 12.dp)
+                        .flows(Flows.seat(personID)),
                 )
                 Text(
                     text = person?.name ?: "",
@@ -179,19 +199,29 @@ fun PersonScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 30.dp)
-                            .padding(top = 20.dp),
+                            .padding(horizontal = 24.dp)
+                            .padding(top = 16.dp),
                         horizontalAlignment = Alignment.Start,
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
-                        // Swift's 12 pt VStack spacing is folded into each
-                        // row's own 44 dp minimum rather than sitting as dead
-                        // space between two targets a finger can miss — the
-                        // same call the highlight bar's ink columns make.
+                        SectionLabel(
+                            if (isMe) Copy.WHAT_YOU_LEFT else Copy.whatTheyLeft(
+                                firstName(person?.name ?: ""),
+                            ),
+                        )
                         theirNotes.forEach { note ->
                             PersonNoteRow(
                                 note = note,
                                 ink = membership?.ink ?: Ink.clay,
                                 mine = isMe,
+                                // A note's own words are shown here only once
+                                // it has been found in the margin, or if it is
+                                // yours. §6.3's whole beat is being found
+                                // later, and a list that reads every unfound
+                                // note aloud would spend it before anybody
+                                // opened the book. An unfound one gives its
+                                // address, which is an invitation to go.
+                                found = isMe || note.foundBy.contains(model.me?.id),
                                 onOpen = { onOpenVerse(note.verse, note.readingID) },
                             )
                         }
@@ -233,8 +263,13 @@ fun PersonScreen(
 }
 
 /**
- * One note they left, as a mark and an address. Tapping it opens the verse
- * where it lives.
+ * One note they left: its mark, its address, and — once it has been found —
+ * what it actually says. Tapping it opens the verse where it lives.
+ *
+ * It was a mark and an address on a bare ground, which made this screen a
+ * column of references to things you could not read. On a tile, with the
+ * note's own words or its transcript under the address, it is a record you
+ * would come back to.
  *
  * The mark is drawn found and never pending: this is a record of what is
  * already here, not the margin (§4.4).
@@ -244,14 +279,22 @@ private fun PersonNoteRow(
     note: Note,
     ink: Ink,
     mine: Boolean,
+    found: Boolean,
     onOpen: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // A voice note's transcript is the thing to show: transcripts are how the
+    // deaf read this app and how anyone finds a note again in six months
+    // (§11), and no duration is ever displayed (S04).
+    val words = if (found) (note.body ?: note.transcript)?.takeIf { it.isNotBlank() } else null
+
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .sizeIn(minHeight = MIN_TARGET)
-            .clickable(role = Role.Button, onClick = onOpen),
+            .sizeIn(minHeight = MIN_TARGET + 8.dp)
+            .paper(RibbonShape.rowShape)
+            .pressable(role = Role.Button, onClick = onOpen)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -262,11 +305,25 @@ private fun PersonNoteRow(
             mine = mine,
             pending = false,
         )
-        SmallCaps(
-            note.verse.formatted,
-            size = 12f,
-            color = Palette.text.copy(alpha = 0.8f),
-        )
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            SmallCaps(
+                note.verse.formatted,
+                size = 12f,
+                color = Palette.text.copy(alpha = 0.8f),
+            )
+            if (words != null) {
+                Text(
+                    text = words,
+                    style = RibbonType.ui(15f),
+                    color = Palette.text,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
     }
 }
 

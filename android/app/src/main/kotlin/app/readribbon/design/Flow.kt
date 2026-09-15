@@ -6,6 +6,10 @@ import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.BoundsTransform
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.VisibilityThreshold
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
@@ -72,11 +76,21 @@ object Flows {
     /** That ember's book name, which is the same name on both screens. */
     fun emberName(readingID: Uuid): String = "ember-name:$readingID"
 
-    /** A person's face, wherever it is drawn. */
+    /**
+     * Your own face: the room's top-right corner, and the top of You.
+     *
+     * Deliberately a different key from [seat]. A shared element pairs two
+     * halves — one leaving, one arriving — and a key with three live halves
+     * is not a transition, it is an ambiguity. Your face is drawn twice on
+     * the room already (the corner and your own seat), so the corner keeps
+     * this key for its own journey into the menu and the seat keeps its own
+     * below. Everything in this object is chosen so that no key is ever live
+     * in more than two places at once.
+     */
     fun portrait(personID: Uuid): String = "face:$personID"
 
-    /** A room's name: the room's header, and its row in the menu. */
-    fun roomName(roomID: Uuid): String = "room:$roomID"
+    /** A seat at the hearth, and that person's own screen. */
+    fun seat(personID: Uuid): String = "seat:$personID"
 
     /** That screen's heading, which was the row's own words a moment ago. */
     fun settingsTitle(route: String): String = "settings-title:$route"
@@ -131,6 +145,36 @@ fun Modifier.flows(key: Any, zIndex: Float = 0f): Modifier {
             animatedVisibilityScope = layer,
             boundsTransform = if (still) RibbonFlow.stillBounds else RibbonFlow.bounds,
             zIndexInOverlay = zIndex,
+        )
+    }
+}
+
+/**
+ * These two are the same words, set differently: a settings row's title and
+ * the heading of the screen it opens, a book's name on the shelf and on its
+ * own record.
+ *
+ * `sharedBounds` rather than [flows], and the difference is not academic.
+ * [flows] is for content that is genuinely identical in both places — a face,
+ * a fire, an ember — and it carries one drawing between two frames. Words set
+ * at 17 sp in the interface face and at 30 sp in the display face are not one
+ * drawing, and asking [flows] to carry them stretches the type on the way.
+ * This animates the *frame* and cross-fades what is inside it, which is the
+ * honest account of a small line becoming a large one.
+ */
+@Composable
+fun Modifier.flowsAsWords(key: Any): Modifier {
+    val root = LocalFlowRoot.current ?: return this
+    val layer = LocalFlowLayer.current ?: return this
+    val still = rememberReduceMotion()
+    return with(root) {
+        this@flowsAsWords.sharedBounds(
+            sharedContentState = rememberSharedContentState(key),
+            animatedVisibilityScope = layer,
+            enter = fadeIn(RibbonMotion.arrive(still)),
+            exit = fadeOut(RibbonMotion.arrive(still)),
+            boundsTransform = if (still) RibbonFlow.stillBounds else RibbonFlow.bounds,
+            resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds,
         )
     }
 }

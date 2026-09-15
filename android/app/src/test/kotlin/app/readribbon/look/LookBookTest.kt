@@ -32,7 +32,10 @@ import app.readribbon.design.Appearance
 import app.readribbon.design.RibbonTheme
 import app.readribbon.design.rememberBookSheet
 import app.readribbon.screens.AppearanceScreen
+import app.readribbon.screens.MenuEntry
+import app.readribbon.screens.MenuScreen
 import app.readribbon.screens.NotificationSettingsScreen
+import app.readribbon.screens.PersonScreen
 import app.readribbon.reading.ReadingScreen
 import app.readribbon.screens.RoomScreen
 import app.readribbon.screens.TextSettingsScreen
@@ -259,6 +262,64 @@ class LookBookTest {
                 onFinished = {},
                 onStartAnother = {},
             )
+        }
+    }
+
+    @Test fun aPerson() {
+        val open = reading("MRK", FireScale.medium)
+        val state = AppState(
+            me = me,
+            people = mapOf(me.id to me, ruth.id to ruth),
+            rooms = listOf(room),
+            memberships = listOf(membership(me, Ink.teal), membership(ruth, Ink.crimson)),
+            readings = listOf(open),
+            notes = listOf(
+                Note(
+                    readingID = open.id,
+                    authorID = ruth.id,
+                    verse = VerseAddress(bookID = "MRK", chapter = 4, verse = 9),
+                    kind = NoteKind.written,
+                    body = "Whoever has ears to hear, let him hear.",
+                    createdAt = now - 3.hours,
+                ),
+            ),
+            currentRoomID = room.id,
+        )
+        val m = model(state)
+        shoot("person") {
+            PersonScreen(
+                model = m,
+                personID = ruth.id,
+                room = m.state.rooms.first(),
+                onOpenVerse = { _, _ -> },
+                onDismiss = {},
+            )
+        }
+    }
+
+    @Test fun theMenu() {
+        val open = reading("MRK", FireScale.medium)
+        val second = Room(name = "Thursday", createdAt = now - 200.hours)
+        val state = AppState(
+            me = me,
+            people = mapOf(me.id to me, ruth.id to ruth),
+            rooms = listOf(room, second),
+            memberships = listOf(
+                membership(me, Ink.teal),
+                membership(ruth, Ink.crimson),
+                Membership(
+                    roomID = second.id,
+                    personID = me.id,
+                    ink = Ink.moss,
+                    joinedAt = now - 200.hours,
+                ),
+            ),
+            readings = listOf(open),
+            currentRoomID = room.id,
+        )
+        val m = model(state)
+        shoot("menu") {
+            MenuScreen(model = m, entry = MenuEntry.YOU, onDismiss = {}, onSwitch = {})
         }
     }
 

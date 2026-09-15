@@ -119,6 +119,7 @@ import app.readribbon.design.Setting
 import app.readribbon.design.SettingsGroup
 import app.readribbon.design.SmallCaps
 import app.readribbon.design.flows
+import app.readribbon.design.flowsAsWords
 import app.readribbon.design.grain
 import app.readribbon.design.paper
 import app.readribbon.design.pressable
@@ -644,38 +645,40 @@ private fun MenuRoot(
                             title = Copy.TEXT_AND_TRANSLATION,
                             subtitle = Copy.TEXT_SUB,
                             onClick = { onOpen(MenuRoute.TEXT) },
-                            modifier = Modifier.flows(Flows.settingsTitle("text")),
+                            modifier = Modifier.flowsAsWords(Flows.settingsTitle("text")),
                         )
                         Setting(
                             title = Copy.NOTIFICATIONS,
                             subtitle = Copy.NOTIFICATIONS_SUB,
                             onClick = { onOpen(MenuRoute.NOTIFICATIONS) },
-                            modifier = Modifier.flows(Flows.settingsTitle("notifications")),
+                            modifier = Modifier.flowsAsWords(Flows.settingsTitle("notifications")),
                         )
                         Setting(
                             title = Copy.APPEARANCE,
-                            subtitle = Copy.APPEARANCE_SUB,
-                            // The state, as the state rather than as on or
-                            // off — the row already says what it is about.
-                            value = if (LocalAppearance.current.wallpaperColour) {
+                            // The state *is* the subtitle here, rather than a
+                            // sentence about the screen with the state
+                            // squeezed in beside it: "From your wallpaper"
+                            // says both what the row is about and where it
+                            // currently stands, in four words.
+                            subtitle = if (LocalAppearance.current.wallpaperColour) {
                                 Copy.FROM_YOUR_WALLPAPER
                             } else {
                                 Copy.RIBBONS_OWN
                             },
                             onClick = { onOpen(MenuRoute.APPEARANCE) },
-                            modifier = Modifier.flows(Flows.settingsTitle("appearance")),
+                            modifier = Modifier.flowsAsWords(Flows.settingsTitle("appearance")),
                         )
                         Setting(
                             title = Copy.DOWNLOADS,
                             subtitle = Copy.DOWNLOADS_SUB,
                             onClick = { onOpen(MenuRoute.DOWNLOADS) },
-                            modifier = Modifier.flows(Flows.settingsTitle("downloads")),
+                            modifier = Modifier.flowsAsWords(Flows.settingsTitle("downloads")),
                         )
                         Setting(
                             title = Copy.PLAN,
                             subtitle = Copy.PLAN_SUB,
                             onClick = { onOpen(MenuRoute.PLAN) },
-                            modifier = Modifier.flows(Flows.settingsTitle("plan")),
+                            modifier = Modifier.flowsAsWords(Flows.settingsTitle("plan")),
                         )
                     }
                 }
@@ -873,9 +876,6 @@ private fun MenuRoomRow(
                 text = model.displayName(room),
                 style = RibbonType.ui(16f),
                 color = Palette.text,
-                // The room's own name, come down from the header it was
-                // tapped in.
-                modifier = Modifier.flows(Flows.roomName(room.id)),
             )
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
