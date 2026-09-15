@@ -536,7 +536,7 @@ private fun GroupScope.MinuteRow(
 // MARK: S26 — appearance
 
 /**
- * Appearance (S26 — new, deviation A20).
+ * Appearance (S26 — new, deviation A18).
  *
  * One switch, and the sentence that says what it does. §12.2 declined
  * Material You outright and the owner overruled it; this is the way back for

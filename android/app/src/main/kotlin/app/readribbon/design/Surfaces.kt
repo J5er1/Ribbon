@@ -125,11 +125,43 @@ fun Modifier.pressed(source: MutableInteractionSource): Modifier {
 }
 
 /**
- * A thing you can press, that gives when you press it.
+ * A sheet of paper you can press, that gives when you press it.
  *
- * One helper rather than `clickable` plus [pressed] plus an interaction
- * source at forty call sites — and it keeps the two halves of a press
- * together, which is how they stay in step.
+ * The one helper, and the order inside it is the whole reason it exists. A
+ * `graphicsLayer` transforms what comes *after* it in the chain, so a press
+ * scale applied after [paper] would shrink the row's words while leaving its
+ * paper, its grain and its edge exactly where they were — the contents
+ * visibly detaching from their own box. The squash goes first, so the tile
+ * moves as one thing.
+ */
+@Composable
+fun Modifier.pressablePaper(
+    shape: Shape,
+    role: Role = Role.Button,
+    enabled: Boolean = true,
+    onClickLabel: String? = null,
+    onClick: () -> Unit,
+): Modifier {
+    val source = remember { MutableInteractionSource() }
+    return this
+        .pressed(source)
+        .paper(shape)
+        .clickable(
+            interactionSource = source,
+            indication = LocalIndication.current,
+            enabled = enabled,
+            role = role,
+            onClickLabel = onClickLabel,
+            onClick = onClick,
+        )
+}
+
+/**
+ * The same, for something that is not a sheet of paper — a portrait in its
+ * circle, a word in the room's header.
+ *
+ * Nothing is drawn behind these, so there is nothing for the squash to
+ * detach from.
  */
 @Composable
 fun Modifier.pressable(
@@ -205,7 +237,6 @@ fun SettingsGroup(
     content: @Composable GroupScope.() -> Unit,
 ) {
     val scope = remember(count) { GroupScope(count) }
-    scope.rewind()
     Column(modifier = modifier.fillMaxWidth()) {
         if (title != null) SectionLabel(title, detail = detail)
         Column(
@@ -258,23 +289,29 @@ fun Modifier.paper(shape: Shape): Modifier {
 /**
  * Where a row is in its group, so it can take the right corners.
  *
- * A counter rather than an index parameter at every call site: the call sites
- * are the thing being made readable here, and four `Setting(...)` calls in
- * order is what a group should look like in source. [rewind] is called once
- * per composition of the group, because the content lambda runs again on
- * every recomposition and a counter that kept climbing would hand the third
- * row the shape of the eleventh.
+ * A counter rather than an index parameter at every call site, because four
+ * `Setting(...)` calls in order is what a group should look like in source.
+ *
+ * **Each row takes its slot exactly once**, with `remember(scope)`, and that
+ * is not a detail. The content lambda is its own restart scope: when a value
+ * inside it changes — the chosen translation, a switch — Compose recomposes
+ * the lambda *without* re-entering the group's body, so a counter reset by
+ * the group would never be reset and would climb past the end. Every row in
+ * the group would then take an interior shape and the group would lose its
+ * own corners the first time anybody touched it. Keying on the scope rather
+ * than on nothing is the other half: a group whose row *count* changes gets
+ * a new scope, which re-runs every row's slot in order.
  */
 @Stable
 class GroupScope internal constructor(private val count: Int) {
     private var placed = 0
 
-    internal fun rewind() {
-        placed = 0
-    }
-
     internal fun next(): Shape = RibbonShape.inGroup(placed++, count)
 }
+
+/** This row's own shape in its group, taken once and kept. */
+@Composable
+private fun GroupScope.slot(): Shape = remember(this) { next() }
 
 /**
  * One row of a group: what it is, what it does, and where it goes.
@@ -294,14 +331,13 @@ fun GroupScope.Setting(
     chevron: Boolean = true,
     tint: Color? = null,
 ) {
-    val shape = next()
+    val shape = slot()
     val words = tint ?: Palette.text
     Row(
         modifier = modifier
             .fillMaxWidth()
             .sizeIn(minHeight = if (subtitle == null) RowHeight else TallRowHeight)
-            .paper(shape)
-            .pressable(onClick = onClick)
+            .pressablePaper(shape, onClick = onClick)
             .padding(horizontal = TextInset, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -335,14 +371,16 @@ fun GroupScope.SettingSwitch(
     modifier: Modifier = Modifier,
     subtitle: String? = null,
 ) {
-    val shape = next()
+    val shape = slot()
     val source = remember { MutableInteractionSource() }
     Row(
         modifier = modifier
             .fillMaxWidth()
             .sizeIn(minHeight = if (subtitle == null) RowHeight else TallRowHeight)
-            .paper(shape)
+            // Squash first, then the paper it is squashing — see
+            // [pressablePaper] for why the order is load-bearing.
             .pressed(source)
+            .paper(shape)
             .toggleable(
                 value = value,
                 interactionSource = source,
@@ -373,7 +411,13 @@ fun GroupScope.SettingSwitch(
                 checkedTrackColor = Palette.accent,
                 checkedBorderColor = Palette.accent,
                 uncheckedThumbColor = Palette.muted,
-                uncheckedTrackColor = Palette.surface,
+                // The ground, not the surface: the row *is* the surface, so
+                // an unchecked track in that colour is no track at all —
+                // a thumb floating in the row with only the rule around it,
+                // and on Ribbon's own nearly-flat paint the rule is very
+                // nearly nothing. The ground is the same recess every other
+                // control inside a tile sits in.
+                uncheckedTrackColor = Palette.ground,
                 uncheckedBorderColor = Palette.rule,
             ),
         )
@@ -394,7 +438,7 @@ fun GroupScope.SettingValue(
     subtitle: String? = null,
     value: String? = null,
 ) {
-    val shape = next()
+    val shape = slot()
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -426,7 +470,7 @@ fun GroupScope.SettingNote(
     text: String,
     modifier: Modifier = Modifier,
 ) {
-    val shape = next()
+    val shape = slot()
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -448,7 +492,7 @@ fun GroupScope.SettingControl(
     detail: String? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val shape = next()
+    val shape = slot()
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -499,7 +543,7 @@ fun GroupScope.SettingChoice(
     modifier: Modifier = Modifier,
     subtitle: String? = null,
 ) {
-    val shape = next()
+    val shape = slot()
     val still = rememberReduceMotion()
     val accent = Palette.accent
     val dot by animateColorAsState(
@@ -511,8 +555,7 @@ fun GroupScope.SettingChoice(
         modifier = modifier
             .fillMaxWidth()
             .sizeIn(minHeight = if (subtitle == null) RowHeight else TallRowHeight)
-            .paper(shape)
-            .pressable(role = Role.RadioButton, onClick = onClick)
+            .pressablePaper(shape, role = Role.RadioButton, onClick = onClick)
             // The dot is a colour, and colour is never the only signal
             // (§11): the row also announces itself as the chosen one.
             .semantics { selected = chosen }
@@ -591,8 +634,7 @@ fun BackChevron(
     Box(
         modifier = modifier
             .size(MinTarget)
-            .paper(CircleShape)
-            .pressable(onClick = onBack)
+            .pressablePaper(CircleShape, onClick = onBack)
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) {

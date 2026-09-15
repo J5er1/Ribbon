@@ -259,6 +259,7 @@ class LookBookTest {
                 reading = open,
                 sheet = sheet,
                 onClose = {},
+                onDismissed = {},
                 onFinished = {},
                 onStartAnother = {},
             )

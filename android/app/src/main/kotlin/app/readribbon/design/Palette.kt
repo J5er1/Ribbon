@@ -15,7 +15,7 @@ import app.readribbon.core.Ink
 // only when the paper palette is resolved, open question §16.1).
 //
 // **The room now takes its colour from the wallpaper by default** (deviation
-// A20, owner's call). §12.2 declined dynamic colour outright; the owner's
+// A18, owner's call). §12.2 declined dynamic colour outright; the owner's
 // answer is that Material You was the point of building on Android at all,
 // and that a room which quietly matches the phone it lives on is friendlier
 // than one which insists on its own paint. So the six room roles below are

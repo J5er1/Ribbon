@@ -863,17 +863,25 @@ A22. **The app flows rather than cuts.** Every screen change was a
     because a shared element with a mistyped key is not an error — it is an
     element that silently stops flowing.
 
-    **Two rules came out of building it, and both are load-bearing.** A key
-    pairs exactly two halves, one leaving and one arriving; a key live in
-    three places at once is not a transition but an ambiguity, and your own
-    face is drawn three times the moment the menu opens (the room's corner,
-    your own seat, the menu's identity row). So the corner and the seat
-    carry different keys, and every key in `Flows` is chosen so that no two
-    surfaces that can be on screen together share one. And words set
-    differently on the two sides — a row's title at 17 sp and a screen's
-    heading at 30 sp in the display face — go through `flowsAsWords`
-    (`sharedBounds`) rather than `flows` (`sharedElement`), because one
-    drawing carried between two frames stretches type on the way.
+    **Three rules came out of building it, and the third cost the nicest
+    two effects in the pass.** A key pairs exactly two halves, one leaving
+    and one arriving. Words set differently on the two sides — a row's title
+    at 17 sp and a screen's heading at 30 sp in the display face — go
+    through `flowsAsWords` (`sharedBounds`) rather than `flows`
+    (`sharedElement`), because one drawing carried between two frames
+    stretches type on the way.
+
+    And **a flow needs one of its halves to be on its way out**, which rules
+    out every pairing between the room and the menu. The menu is a *layer
+    over* the room rather than a replacement for it (A17, so predictive back
+    can peel the room in behind it), so the room stays composed and visible
+    underneath for as long as the menu is open: a shared key across that
+    boundary has two permanently live halves and neither is leaving. The
+    room's fire was going to shrink into its row in the menu and your face
+    was going to travel up into You, and both were built before the
+    architecture said no. They are gone. What flows is every NavHost push —
+    a seat into that person's screen, an ember into its record, a settings
+    row into the screen it opens — where exactly one side is always going.
 
 A22a. **The person screen took the same pass.** It was the barren room's
     defect in its purest form — a portrait, a name, and then a column of

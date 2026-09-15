@@ -602,6 +602,7 @@ private fun RoomStack(model: AppModel, room: Room) {
                             reading = book,
                             sheet = sheet,
                             onClose = { closeBook() },
+                            onDismissed = { dropBook() },
                             onFinished = { dropBook() },
                             onStartAnother = {
                                 dropBook()

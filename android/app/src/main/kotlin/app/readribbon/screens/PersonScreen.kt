@@ -67,6 +67,7 @@ import app.readribbon.design.SectionLabel
 import app.readribbon.design.flows
 import app.readribbon.design.paper
 import app.readribbon.design.pressable
+import app.readribbon.design.pressablePaper
 import app.readribbon.design.RibbonMotion
 import app.readribbon.design.PortraitView
 import app.readribbon.design.QuietControl
@@ -292,8 +293,7 @@ private fun PersonNoteRow(
         modifier = modifier
             .fillMaxWidth()
             .sizeIn(minHeight = MIN_TARGET + 8.dp)
-            .paper(RibbonShape.rowShape)
-            .pressable(role = Role.Button, onClick = onOpen)
+            .pressablePaper(RibbonShape.rowShape, role = Role.Button, onClick = onOpen)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,

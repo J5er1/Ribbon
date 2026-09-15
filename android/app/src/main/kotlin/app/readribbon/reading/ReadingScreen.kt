@@ -217,6 +217,13 @@ fun ReadingScreen(
      */
     sheet: BookSheet,
     onClose: () -> Unit,
+    /**
+     * The page has already been put down by the finger that was holding it.
+     * Distinct from [onClose], which *asks* for it to be put down — this one
+     * arrives when the movement has already finished, and re-animating it
+     * would be a second close over the first.
+     */
+    onDismissed: () -> Unit,
     onFinished: () -> Unit,
     onStartAnother: () -> Unit,
     modifier: Modifier = Modifier,
@@ -363,14 +370,37 @@ fun ReadingScreen(
         )
     }
 
-    fun close() {
-        if (closing) return
-        closing = true
+    /**
+     * The book has been put down: the last things that belong to having been
+     * in it. Separate from [close] because a page can also leave under a
+     * finger, which is not a close *request* but a close that has happened.
+     */
+    fun laidDown() {
         if (!model.state.hasSeenMarginHint) {
             model.markMarginHintSeen()
         }
         recordFuel()
+    }
+
+    fun close() {
+        if (closing) return
+        closing = true
+        laidDown()
         onClose()
+    }
+
+    /**
+     * A close that was caught on its way down and did not finish.
+     *
+     * `close` latches so that a second press during the exit cannot fire it
+     * twice — but the exit it hands off to is an animation, and an animation
+     * a finger interrupts never reaches its own end. Without this, catching
+     * the page mid-close left the latch on with the book still open: the
+     * Wave's tap returned early, the back gesture was disabled, and there
+     * was no way out of the book at all.
+     */
+    LaunchedEffect(sheet.committed) {
+        if (sheet.committed) closing = false
     }
 
     fun clearLift() {
@@ -717,6 +747,10 @@ fun ReadingScreen(
             // The way out, or the composer.
             BottomChrome(
                 sheet = sheet,
+                onDragClosed = {
+                    laidDown()
+                    onDismissed()
+                },
                 model = model,
                 room = room,
                 reading = reading,
@@ -1059,6 +1093,7 @@ private fun BottomChrome(
     room: Room,
     reading: Reading,
     sheet: BookSheet,
+    onDragClosed: () -> Unit,
     composer: ComposerState?,
     lifted: VerseRange?,
     liftedChapter: Int?,
@@ -1181,7 +1216,10 @@ private fun BottomChrome(
                     Box(
                         modifier = Modifier
                             .sizeIn(minWidth = 88.dp, minHeight = 52.dp)
-                            .closesTheBook(sheet = sheet, onClosed = onClose)
+                            // The drag's own end, not the tap's: by the time
+                            // this runs the page is already down, so it
+                            // reports rather than asks.
+                            .closesTheBook(sheet = sheet, onClosed = onDragClosed)
                             .clickable(onClick = onClose)
                             .semantics {
                                 contentDescription = Copy.CLOSE_THE_BOOK

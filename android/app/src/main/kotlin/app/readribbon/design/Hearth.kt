@@ -12,6 +12,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
@@ -56,7 +57,16 @@ import kotlinx.coroutines.launch
 @Stable
 class BookSheet internal constructor(
     private val scope: CoroutineScope,
-    private val still: Boolean,
+    /**
+     * Read at each settle rather than held.
+     *
+     * Reduce motion is live — the app watches `ANIMATOR_DURATION_SCALE` — so
+     * it can change while the book is open. Keying this whole holder on it
+     * would build a fresh one with a fresh `Animatable(0f)` at that moment,
+     * leaving the page composed and parked below the bottom of the screen
+     * with nothing left able to bring it back.
+     */
+    private val still: () -> Boolean,
 ) {
 
     /** 0 closed, 1 open. Never outside that. */
@@ -163,7 +173,7 @@ class BookSheet internal constructor(
             // movement that actually finished.
             pull.animateTo(
                 targetValue = if (open) 1f else 0f,
-                animationSpec = RibbonMotion.cover(still),
+                animationSpec = RibbonMotion.cover(still()),
                 initialVelocity = initialVelocity,
             )
             if (open) {
@@ -180,8 +190,9 @@ class BookSheet internal constructor(
 @Composable
 fun rememberBookSheet(): BookSheet {
     val scope = rememberCoroutineScope()
-    val still = rememberReduceMotion()
-    return remember(scope, still) { BookSheet(scope, still) }
+    val still = rememberUpdatedState(rememberReduceMotion())
+    // Keyed on the scope alone. See the constructor's note on `still`.
+    return remember(scope) { BookSheet(scope) { still.value } }
 }
 
 /**

@@ -8,7 +8,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.core.content.edit
 
-// Whether the room takes its colour from the wallpaper (deviation A20).
+// Whether the room takes its colour from the wallpaper (deviation A18).
 //
 // This is the one preference that cannot live in `AppSettings` with the
 // others, and the reason is timing rather than taste: `AppState` is a JSON
@@ -41,7 +41,7 @@ class Appearance(context: Context) {
      * Take the room's colour from the wallpaper.
      *
      * Defaults to on. Material You is why this app is built on Android at
-     * all (owner's call, deviation A20), so declining it is the choice that
+     * all (owner's call, deviation A18), so declining it is the choice that
      * has to be made rather than the one that has to be found.
      *
      * Reading it is snapshot state, so the theme recomposes on the frame it

@@ -493,7 +493,12 @@ object Copy {
      */
     const val TEXT_SUB = "Translation, size, spacing, red letter"
     const val NOTIFICATIONS_SUB = "Per room, and your quiet hours"
-    const val DOWNLOADS_SUB = "What Scripture is held on this device"
+    /**
+     * A function, not a constant, for the reason deviation A8 exists: the
+     * concrete noun follows the hardware. The screen this row opens says
+     * "phone" three times, and the row a tap above it said "device".
+     */
+    fun downloadsSub(context: Context) = "What Scripture is held on this ${deviceNoun(context)}"
     /**
      * Not "what it costs". S22 puts the ask in exactly two places — the
      * shelf after the first ember, and the Plan screen — and a menu row is a
@@ -501,7 +506,7 @@ object Copy {
      */
     const val PLAN_SUB = "What your room has"
 
-    // S26 — Appearance. New screen (deviation A20).
+    // S26 — Appearance. New screen (deviation A18).
     const val APPEARANCE = "Appearance"
     const val WALLPAPER_COLOUR = "Colour from your wallpaper"
 
@@ -527,8 +532,15 @@ object Copy {
      * The one thing the wallpaper never repaints, said where somebody might
      * otherwise wonder whether it was an oversight.
      */
+    /**
+     * "Chrome" is a designer's word. It is used correctly all over this
+     * repository's comments and means nothing at all to somebody reading the
+     * app, which makes it the one string in this pass that broke §12's rule
+     * about saying the true small thing plainly.
+     */
     const val THE_FIRE_STAYS_WARM =
-        "The fire keeps its own warmth either way. It is the one thing in here that is not chrome."
+        "The fire keeps its own warmth either way. " +
+            "It is the one thing here the wallpaper never repaints."
 
     /**
      * The one line under each settings screen's title.
@@ -543,7 +555,13 @@ object Copy {
     const val TEXT_LEDE = "How Scripture sets on the page. Yours, not the room's."
     const val NOTIFICATIONS_LEDE = "Every room asks for something different. These are per room."
     const val APPEARANCE_LEDE = "Ribbon's colours, or your phone's."
-    const val PLAN_LEDE = "What the room has, and what it costs."
+    /**
+     * Not "and what it costs". The screen cannot say what it costs — §6.11
+     * and S22 are explicit that a non-paying member never sees a price — so
+     * a lede promising one is the app volunteering the single fact that
+     * member is meant never to learn, and then failing to deliver it.
+     */
+    const val PLAN_LEDE = "What your room has, and when Ribbon asks."
     fun downloadsLede(context: Context) = "What is on this ${deviceNoun(context)}, and what isn't."
 
     /** The two groups on the text screen. */

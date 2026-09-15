@@ -30,10 +30,21 @@ import kotlin.uuid.Uuid
 // reads as two things rather than as one thing that went somewhere.
 //
 // So the pieces that exist on both sides of a change are now the same piece.
-// Your face in the room's corner *is* the face at the top of the menu, and it
-// travels there. The fire in the room *is* the small fire on that room's row.
-// The ember on the shelf *is* the ember on its own record. The book's name on
-// a settings row *is* the heading of the screen it opens.
+// A face at the hearth *is* that person's own screen. The ember on the shelf
+// *is* the ember on its own record. A settings row's words *are* the heading
+// of the screen it opens.
+//
+// **What is deliberately not here, and why.** A shared element pairs exactly
+// two halves, one leaving and one arriving, and it needs one of them to be on
+// its way out. The menu is a *layer over* the room rather than a replacement
+// for it (deviation A17, so that predictive back can peel the room in behind
+// it), which means the room stays composed and visible underneath for as long
+// as the menu is open. A key shared between the two would therefore have two
+// permanently live halves with neither leaving — an ambiguity rather than a
+// transition. So the room's fire does not travel to its row in the menu and
+// your face does not travel to the top of You, however much both would have
+// been worth having. Everything that does flow here is a NavHost push, where
+// exactly one side is always on its way out.
 //
 // Mechanically that is one `SharedTransitionLayout` at the root of the whole
 // stack and an `AnimatedVisibilityScope` per layer, wired through two
@@ -67,27 +78,11 @@ val LocalFlowLayer = staticCompositionLocalOf<AnimatedVisibilityScope?> { null }
  */
 object Flows {
 
-    /** A reading's fire: the room's hearth, and its glyph on that room's row. */
-    fun fire(readingID: Uuid): String = "fire:$readingID"
-
     /** A finished reading's ember: on the shelf, and on its own record. */
     fun ember(readingID: Uuid): String = "ember:$readingID"
 
     /** That ember's book name, which is the same name on both screens. */
     fun emberName(readingID: Uuid): String = "ember-name:$readingID"
-
-    /**
-     * Your own face: the room's top-right corner, and the top of You.
-     *
-     * Deliberately a different key from [seat]. A shared element pairs two
-     * halves — one leaving, one arriving — and a key with three live halves
-     * is not a transition, it is an ambiguity. Your face is drawn twice on
-     * the room already (the corner and your own seat), so the corner keeps
-     * this key for its own journey into the menu and the seat keeps its own
-     * below. Everything in this object is chosen so that no key is ever live
-     * in more than two places at once.
-     */
-    fun portrait(personID: Uuid): String = "face:$personID"
 
     /** A seat at the hearth, and that person's own screen. */
     fun seat(personID: Uuid): String = "seat:$personID"

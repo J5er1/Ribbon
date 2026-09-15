@@ -89,6 +89,7 @@ import app.readribbon.design.flows
 import app.readribbon.design.opensTheBook
 import app.readribbon.design.paper
 import app.readribbon.design.pressable
+import app.readribbon.design.pressablePaper
 import app.readribbon.design.readableColumn
 import app.readribbon.design.rememberReduceMotion
 import app.readribbon.design.grain
@@ -105,7 +106,7 @@ import kotlin.uuid.Uuid
 
 // S01 — the room. Where the app opens, and the only permanent destination.
 //
-// What changed, and why (owner's call, September 2026 — deviation A21). The
+// What changed, and why (owner's call, September 2026 — deviation A19). The
 // room was six things stacked in the dark with a great deal of air between
 // them: a name, a line of faces, a fire, a capsule, some rows, a control. It
 // held everything S01 asks for and it read, in the owner's words, as barren —
@@ -393,12 +394,7 @@ private fun RoomHeader(
                 ink = null,
                 size = HEADER_PORTRAIT,
                 image = model.me?.let { model.portrait(it.id) },
-                // Your face is the same face at the top of You: it travels
-                // up the screen and grows rather than one being swapped for
-                // the other.
-                modifier = Modifier
-                    .flows(model.me?.let { Flows.portrait(it.id) } ?: "you")
-                    .clearAndSetSemantics {},
+                modifier = Modifier.clearAndSetSemantics {},
             )
         }
     }
@@ -666,7 +662,7 @@ private fun Hearth(
  * the book.
  *
  * S01 said "tap fire → nothing (deliberately inert; it is an object, not a
- * button)", and that is now an owner's-call deviation (A22): the fire is the
+ * button)", and that is now an owner's-call deviation (A18): the fire is the
  * way in. The reasoning against it was that a fire is an object rather than a
  * control; the reasoning for it is that a hearth is an object you can reach
  * into, and a drag is not a button. The tap equivalent §11 requires is on the
@@ -720,9 +716,6 @@ private fun TheFire(
                 state = state,
                 scale = reading.handiwork.scale,
                 coalDepth = reading.handiwork.coalDepth,
-                // The same fire as the small one on this room's row in the
-                // menu: it travels there rather than being redrawn.
-                modifier = Modifier.flows(Flows.fire(reading.id), zIndex = 1f),
             )
         }
 
@@ -805,7 +798,7 @@ private fun UnlitHearth() {
  *
  * S01 asks for "portraits of whoever is in the book right now"; this draws
  * everyone who is *in the room*, with presence as a ring around the seat.
- * Deviation A21, and the reason is the barren case: a room of one with nobody
+ * Deviation A19, and the reason is the barren case: a room of one with nobody
  * reading drew nothing at all here, so the app's front door was blank exactly
  * when it belonged to somebody who had just arrived.
  *
@@ -1105,8 +1098,7 @@ private fun StarterShelf(
                     Column(
                         modifier = Modifier
                             .size(width = 108.dp, height = 96.dp)
-                            .paper(RibbonShape.cardShape)
-                            .pressable { onChoose(book.id) }
+                            .pressablePaper(RibbonShape.cardShape) { onChoose(book.id) }
                             // The drawn fire and the name are one label, not
                             // two things read in a row.
                             .clearAndSetSemantics {
@@ -1279,8 +1271,7 @@ private fun WaitingRow(
         modifier = Modifier
             .fillMaxWidth()
             .sizeIn(minHeight = TOUCH + 8.dp)
-            .paper(RibbonShape.rowShape)
-            .pressable(onClick = onClick)
+            .pressablePaper(RibbonShape.rowShape, onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,

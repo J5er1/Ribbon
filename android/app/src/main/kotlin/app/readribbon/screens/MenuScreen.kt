@@ -123,6 +123,7 @@ import app.readribbon.design.flowsAsWords
 import app.readribbon.design.grain
 import app.readribbon.design.paper
 import app.readribbon.design.pressable
+import app.readribbon.design.pressablePaper
 import app.readribbon.design.peeled
 import app.readribbon.design.readableColumn
 import app.readribbon.design.rememberBackPeel
@@ -670,7 +671,7 @@ private fun MenuRoot(
                         )
                         Setting(
                             title = Copy.DOWNLOADS,
-                            subtitle = Copy.DOWNLOADS_SUB,
+                            subtitle = Copy.downloadsSub(LocalContext.current),
                             onClick = { onOpen(MenuRoute.DOWNLOADS) },
                             modifier = Modifier.flowsAsWords(Flows.settingsTitle("downloads")),
                         )
@@ -808,8 +809,7 @@ private fun MenuRow(
         modifier = Modifier
             .fillMaxWidth()
             .sizeIn(minHeight = 58.dp)
-            .paper(RibbonShape.rowShape)
-            .pressable(onClick = onClick)
+            .pressablePaper(RibbonShape.rowShape, onClick = onClick)
             .padding(horizontal = 18.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -848,8 +848,7 @@ private fun MenuRoomRow(
         modifier = Modifier
             .fillMaxWidth()
             .sizeIn(minHeight = 64.dp)
-            .paper(RibbonShape.rowShape)
-            .pressable(role = Role.Button, onClick = onClick)
+            .pressablePaper(RibbonShape.rowShape, role = Role.Button, onClick = onClick)
             // The chartreuse mark is the only drawn sign of which room you
             // are in, and colour is never the only signal (§11), so the same
             // fact is carried in the row's state for a screen reader — which
@@ -913,14 +912,10 @@ private fun MenuRoomRow(
             Box(Modifier.semantics { contentDescription = Copy.fireIs(state.displayName) }) {
                 // A paused room's fire is drawn in whatever state it actually
                 // holds — never banked by a lapse (S14).
-                // The same fire as the big one in the middle of that
-                // room: it shrinks into this row rather than the two of them
-                // fading past each other.
                 CampfireGlyph(
                     state = state,
                     scale = open.handiwork.scale,
                     height = 22.dp,
-                    modifier = Modifier.flows(Flows.fire(open.id)),
                 )
             }
         }
@@ -1001,12 +996,7 @@ private fun YouIdentityRow(model: AppModel) {
                 ink = null,
                 size = YouPortrait,
                 image = model.me?.let { model.portrait(it.id) },
-                // The same face that sits in the room's top corner: it
-                // travels up the screen and grows into this one rather than
-                // one being swapped for the other (design/Flow.kt).
-                modifier = Modifier
-                    .flows(model.me?.let { Flows.portrait(it.id) } ?: "you")
-                    .clearAndSetSemantics {},
+                modifier = Modifier.clearAndSetSemantics {},
             )
         }
         // Your name becomes the field it is edited in, in the same place, at
