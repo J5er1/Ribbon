@@ -137,6 +137,22 @@ private object RibbonIndication : androidx.compose.foundation.IndicationNodeFact
          */
         private var crest = 0f
 
+        /**
+         * The wash the last interaction *asked* for, as opposed to the one the
+         * `Animatable` has actually started on.
+         *
+         * These are not the same thing, and the difference is a stuck wash. A
+         * press and its release are emitted back to back into the interaction
+         * flow and are both handled before the press's own animation has been
+         * dispatched — so at the release `wash.targetValue` is still 0 and the
+         * animation is not yet running. Guarding on it, the release reads as
+         * "already going to 0, nothing to do" and returns; the press's
+         * animation then runs anyway, and the row is left washed for good.
+         * A fast tap on a settings row would leave a band across it until the
+         * row was touched again. What was asked for is the honest guard.
+         */
+        private var wanted = 0f
+
         override fun onAttach() {
             coroutineScope.launch {
                 interactionSource.interactions.collect { interaction ->
@@ -168,7 +184,8 @@ private object RibbonIndication : androidx.compose.foundation.IndicationNodeFact
                 else -> 0f
             }
             if (target > crest) crest = target
-            if (target == wash.targetValue && !wash.isRunning) return
+            if (target == wanted) return
+            wanted = target
             fade?.cancel()
             fade = coroutineScope.launch {
                 if (target < crest && wash.value < crest) {
