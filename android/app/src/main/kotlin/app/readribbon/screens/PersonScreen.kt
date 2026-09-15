@@ -2,6 +2,7 @@
 
 package app.readribbon.screens
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -57,12 +58,15 @@ import app.readribbon.design.HairlineRule
 import app.readribbon.design.InkDot
 import app.readribbon.design.NoteMark
 import app.readribbon.design.Palette
+import app.readribbon.design.RibbonMotion
 import app.readribbon.design.PortraitView
 import app.readribbon.design.QuietControl
 import app.readribbon.design.RibbonType
 import app.readribbon.design.SmallCaps
 import app.readribbon.design.color
 import app.readribbon.design.readableColumn
+import app.readribbon.design.rememberReduceMotion
+import app.readribbon.design.rememberSheetExit
 import app.readribbon.design.room
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
@@ -406,7 +410,12 @@ fun InkPickerSheet(
     modifier: Modifier = Modifier,
     sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
 ) {
+    // Picking an ink closes the sheet; it should slide away with the choice
+    // made rather than blink out from under the finger that made it.
+    val leave = rememberSheetExit(sheetState)
+
     ModalBottomSheet(
+        // Already animated away by the sheet itself: the person dismissed it.
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         modifier = modifier,
@@ -452,7 +461,7 @@ fun InkPickerSheet(
                         ) {
                             if (!isTaken) {
                                 model.pickInk(ink, room)
-                                onDismiss()
+                                leave(onDismiss)
                             }
                         }
                     }
@@ -475,6 +484,16 @@ private fun InkPickerSwatch(
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
+    // The ring is the answer to the tap, and the sheet slides away a moment
+    // later — so the ring has to be *seen* arriving, not merely be there in the
+    // frame before the slide. Eased in on the arrive token, which is long
+    // enough to read and short enough to finish before the sheet goes.
+    val ringed by animateFloatAsState(
+        targetValue = if (isMine) 1f else 0f,
+        animationSpec = RibbonMotion.arrive(rememberReduceMotion()),
+        label = "your-ink",
+    )
+
     Box(
         modifier = modifier
             .size(SWATCH_TARGET)
@@ -496,14 +515,18 @@ private fun InkPickerSwatch(
                 radius = SWATCH_DIAMETER.toPx() / 2f,
                 center = centre,
             )
-            if (isMine) {
+            if (ringed > 0f) {
                 // Swift's `.padding(-4)` on a stroked border: the ring sits
                 // 4 pt outside the swatch, and `strokeBorder` draws inside
                 // that edge rather than centred on it.
                 val stroke = 1.6.dp.toPx()
                 drawCircle(
-                    color = Palette.text.copy(alpha = 0.8f),
-                    radius = SWATCH_DIAMETER.toPx() / 2f + 4.dp.toPx() - stroke / 2f,
+                    color = Palette.text.copy(alpha = 0.8f * ringed),
+                    // Closing on the swatch as it fades in, so the ring reads
+                    // as something settling around the ink rather than as a
+                    // second circle switched on beside it.
+                    radius = SWATCH_DIAMETER.toPx() / 2f +
+                        (4.dp.toPx() + (1f - ringed) * 5.dp.toPx()) - stroke / 2f,
                     center = centre,
                     style = Stroke(width = stroke),
                 )

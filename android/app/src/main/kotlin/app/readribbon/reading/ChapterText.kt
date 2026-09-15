@@ -1,7 +1,6 @@
 package app.readribbon.reading
 
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.snap
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -185,7 +184,7 @@ fun ChapterText(
     val slotTarget = if (openNote != null) openNote.height + 12.dp else 0.dp
     val slotHeight by animateDpAsState(
         targetValue = slotTarget,
-        animationSpec = if (reduceMotion) snap() else RibbonMotion.settle(),
+        animationSpec = RibbonMotion.settle(reduceMotion),
         finishedListener = { if (it <= 0.dp) slotVerse = null },
         label = "note-slot",
     )

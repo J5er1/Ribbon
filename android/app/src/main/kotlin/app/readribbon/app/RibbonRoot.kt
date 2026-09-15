@@ -10,8 +10,6 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.FiniteAnimationSpec
-import androidx.compose.animation.core.snap
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -56,6 +54,7 @@ import app.readribbon.core.VerseAddress
 import app.readribbon.design.Palette
 import app.readribbon.design.RibbonMotion
 import app.readribbon.design.rememberReduceMotion
+import app.readribbon.design.rememberSheetExit
 import app.readribbon.design.room
 import app.readribbon.reading.ReadingScreen
 import app.readribbon.screens.EmberRecordScreen
@@ -255,8 +254,7 @@ private fun RootContent(model: AppModel) {
     var onboarding by remember { mutableStateOf(false) }
 
     val reduceMotion = rememberReduceMotion()
-    val settle: FiniteAnimationSpec<Float> =
-        if (reduceMotion) snap() else tween(RibbonMotion.SETTLE_MS, easing = RibbonMotion.EaseOut)
+    val settle: FiniteAnimationSpec<Float> = RibbonMotion.settle(reduceMotion)
 
     // Swift's `.animation(RibbonMotion.settle, value: onboarding)` over a
     // `Group` of two branches is a cross-fade on the settle token. Under
@@ -327,12 +325,10 @@ private fun RoomStack(model: AppModel, room: Room) {
     val navController = rememberNavController()
     val reduceMotion = rememberReduceMotion()
 
-    val arrive: FiniteAnimationSpec<Float> =
-        if (reduceMotion) snap() else tween(RibbonMotion.ARRIVE_MS, easing = RibbonMotion.EaseOut)
-    val settle: FiniteAnimationSpec<Float> =
-        if (reduceMotion) snap() else tween(RibbonMotion.SETTLE_MS, easing = RibbonMotion.EaseOut)
-    val slide: FiniteAnimationSpec<IntOffset> =
-        if (reduceMotion) snap() else tween(RibbonMotion.SETTLE_MS, easing = RibbonMotion.EaseOut)
+    // One branch for reduce motion, taken inside the token (§11).
+    val arrive: FiniteAnimationSpec<Float> = RibbonMotion.arrive(reduceMotion)
+    val settle: FiniteAnimationSpec<Float> = RibbonMotion.settle(reduceMotion)
+    val slide: FiniteAnimationSpec<IntOffset> = RibbonMotion.settle(reduceMotion)
 
     fun openBook(reading: Reading, target: VerseAddress?) {
         openTarget = target
@@ -384,19 +380,31 @@ private fun RoomStack(model: AppModel, room: Room) {
                 ) {
                     // Swift switches rooms inside `withAnimation(RibbonMotion.arrive)`,
                     // and the arrive token's own note calls this out: "cross-fades
-                    // between rooms". Keyed on the id so a rename crosses nothing.
+                    // between rooms". So the id is the state, and the room is
+                    // looked up from it.
+                    //
+                    // The room used to be the state, with `contentKey = { it.id }`
+                    // to stop a rename crossing anything — and it does stop the
+                    // cross-fade, but not the transition. `AnimatedContent` keys
+                    // its content by the state *value*, so a renamed or paused
+                    // room is a new target under an unchanged key: no outgoing
+                    // content to fade out, but the incoming content still runs
+                    // its enter, and the whole room fades in over itself. An id
+                    // is equal to itself, so nothing happens at all.
                     AnimatedContent(
-                        targetState = room,
-                        contentKey = { it.id },
+                        targetState = room.id,
                         transitionSpec = {
                             (fadeIn(arrive) togetherWith fadeOut(arrive))
                                 .using(SizeTransform(clip = false))
                         },
                         label = "the-room",
-                    ) { current ->
+                    ) { roomID ->
                         RoomScreen(
                             model = model,
-                            room = current,
+                            // The room this half of the cross-fade is about. The
+                            // outgoing one is still in state — a switch does not
+                            // remove it — so both halves draw a real room.
+                            room = model.state.rooms.firstOrNull { it.id == roomID } ?: room,
                             chooserRequested = chooserRequested,
                             onChooserHandled = { chooserRequested = false },
                             onOpenReading = { reading, target -> openBook(reading, target) },
@@ -562,9 +570,15 @@ private fun RoomStack(model: AppModel, room: Room) {
             // underneath it, the way it wins over onboarding's step.
             LaunchedEffect(pending.token) { menu = null }
             key(pending.token) {
+                val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+                // Joined, or done with it: the sheet slides back down over the
+                // room rather than blinking out of it.
+                val leave = rememberSheetExit(sheetState)
                 ModalBottomSheet(
+                    // Already animated away by the sheet itself: the person
+                    // dismissed it.
                     onDismissRequest = { model.pendingInvite = null },
-                    sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+                    sheetState = sheetState,
                     // `.presentationBackground(Palette.ground)`. The join
                     // flow lays its own grain over it, as a room does.
                     containerColor = Palette.ground,
@@ -577,8 +591,8 @@ private fun RoomStack(model: AppModel, room: Room) {
                     JoinFlow(
                         token = pending.token,
                         model = model,
-                        onDone = { model.pendingInvite = null },
-                        onDismiss = { model.pendingInvite = null },
+                        onDone = { leave { model.pendingInvite = null } },
+                        onDismiss = { leave { model.pendingInvite = null } },
                     )
                 }
             }

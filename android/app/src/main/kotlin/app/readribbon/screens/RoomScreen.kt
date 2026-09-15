@@ -2,14 +2,18 @@
 
 package app.readribbon.screens
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.FiniteAnimationSpec
-import androidx.compose.animation.core.snap
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,6 +37,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -67,6 +73,7 @@ import app.readribbon.design.rememberReduceMotion
 import app.readribbon.design.room
 import app.readribbon.fire.CampfireView
 import app.readribbon.services.PresentPerson
+import kotlinx.coroutines.delay
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
@@ -364,7 +371,39 @@ private fun PresenceLine(
 ) {
     val present: List<PresentPerson> =
         if (room.isPaused) emptyList() else model.presentPeople
-    val lastReader = if (present.isEmpty()) model.lastReader(room) else null
+    val reduceMotion = rememberReduceMotion()
+    val arrive: FiniteAnimationSpec<Float> = RibbonMotion.arrive(reduceMotion)
+
+    // "Presence appearing" is the first thing §9.1 names the arrive token for,
+    // and it was the one thing here not using it: a face simply existed on the
+    // next frame, and stopped existing on the one after. Somebody arriving to
+    // read with you is the single warmest event in the product, and it was the
+    // only one that happened between two frames.
+    //
+    // So the row draws everyone who is here *and* anyone who has just gone,
+    // and each portrait fades itself in or out. Holding the departed for the
+    // length of the fade also settles the order: the row is in the order
+    // people arrived rather than in whatever order the presence channel last
+    // reported them, so nobody's face slides sideways because somebody else's
+    // heartbeat landed first.
+    val here = present.map { it.id }
+    // Seeded with whoever is already known, so returning to the room — from the
+    // book, from a rotation — does not replay everybody's arrival. Presence
+    // usually lands a moment *after* the room draws, and that genuinely is an
+    // arrival, so it animates.
+    val shown = remember(room.id) { mutableStateListOf<Uuid>().apply { addAll(here) } }
+    LaunchedEffect(here, reduceMotion) {
+        here.forEach { if (it !in shown) shown.add(it) }
+        if (shown.any { it !in here }) {
+            if (!reduceMotion) delay(RibbonMotion.ARRIVE_MS.toLong())
+            shown.retainAll { it in here }
+        }
+    }
+
+    // The last reader waits for the faces to have actually gone rather than
+    // for the moment they were reported gone, so the line arrives into an
+    // empty row instead of over a portrait still fading out of it.
+    val lastReader = if (shown.isEmpty()) model.lastReader(room) else null
 
     Row(
         modifier = modifier
@@ -373,41 +412,73 @@ private fun PresenceLine(
             // are showing. The last-reader line has no square around it and
             // keeps the plain gutter.
             .padding(
-                start = if (present.isEmpty()) GUTTER else GUTTER - PRESENCE_EDGE_PULLBACK,
+                start = if (shown.isEmpty()) GUTTER else GUTTER - PRESENCE_EDGE_PULLBACK,
                 end = GUTTER,
             )
             .heightIn(min = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(PRESENCE_ROW_SPACING),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (present.isNotEmpty()) {
-            // Tap a portrait → S12. Rows of faces, never "4 people here".
-            present.take(6).forEach { person ->
-                Box(
-                    modifier = Modifier
-                        .size(PRESENCE_TOUCH)
-                        .clickable(role = Role.Button) { onOpenPerson(person.id, room.id) },
-                    contentAlignment = Alignment.Center,
+        // Tap a portrait → S12. Rows of faces, never "4 people here".
+        //
+        // Six is the room's size, so `here` never exceeds it — but `shown` can,
+        // for the length of one fade, when somebody leaves as somebody else
+        // arrives. The face on its way out is the one that gives up its place.
+        val drawn = if (shown.size <= 6) shown.toList() else shown.filter { it in here }.take(6)
+        drawn.forEach { personID ->
+            key(personID) {
+                // `MutableTransitionState` rather than a plain `visible`,
+                // because a face that is already there when the row first
+                // draws is the one that must *not* animate: the app opening on
+                // the room says nothing (§05), and six portraits swelling in
+                // at launch would be an entrance.
+                val face = remember { MutableTransitionState(false) }
+                face.targetState = personID in here
+                AnimatedVisibility(
+                    visibleState = face,
+                    enter = fadeIn(arrive) + scaleIn(arrive, initialScale = 0.82f),
+                    exit = fadeOut(arrive) + scaleOut(arrive, targetScale = 0.82f),
+                    label = "a-face",
                 ) {
-                    // The portrait keeps its own label: in a gutter or a
-                    // presence line a person's identity is carried by the
-                    // accessibility label, never by colour alone (§11).
-                    PortraitView(
-                        person = model.person(person.id),
-                        ink = model.membership(personID = person.id, roomID = room.id)?.ink,
-                        size = PRESENCE_PORTRAIT,
-                        image = model.portrait(person.id),
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(PRESENCE_TOUCH)
+                            .clickable(role = Role.Button) { onOpenPerson(personID, room.id) },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        // The portrait keeps its own label: in a gutter or a
+                        // presence line a person's identity is carried by the
+                        // accessibility label, never by colour alone (§11).
+                        PortraitView(
+                            person = model.person(personID),
+                            ink = model.membership(personID = personID, roomID = room.id)?.ink,
+                            size = PRESENCE_PORTRAIT,
+                            image = model.portrait(personID),
+                        )
+                    }
                 }
             }
-        } else if (lastReader != null) {
-            Box(
-                modifier = Modifier
-                    .sizeIn(minHeight = TOUCH)
-                    .clickable(role = Role.Button) { onOpenPerson(lastReader.personID, room.id) },
-                contentAlignment = Alignment.CenterStart,
-            ) {
-                SmallCaps(lastReader.line, size = 12f)
+        }
+        // Already showing when the room drew: simply there, no entrance.
+        AnimatedVisibility(
+            visible = lastReader != null,
+            enter = fadeIn(arrive),
+            exit = fadeOut(arrive),
+            label = "the-last-reader",
+        ) {
+            // Held across the leaving fade: the line's own text is gone by the
+            // time the exit runs, the way the banked-fire line below is.
+            var lastLine by remember { mutableStateOf(lastReader) }
+            LaunchedEffect(lastReader) { if (lastReader != null) lastLine = lastReader }
+            lastLine?.let { reader ->
+                Box(
+                    modifier = Modifier
+                        .sizeIn(minHeight = TOUCH)
+                        .clickable(role = Role.Button) { onOpenPerson(reader.personID, room.id) },
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    SmallCaps(reader.line, size = 12f)
+                }
             }
         }
         // Alone: silence. Never a line about being alone (§08).
@@ -422,44 +493,88 @@ private fun FireSection(
     reading: Reading?,
     modifier: Modifier = Modifier,
 ) {
-    val book = reading?.let { Bible.book(it.bookID) }
-    if (reading != null && book != null) {
-        val state = model.fireState(reading)
-        Column(
-            modifier = modifier,
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            // Deliberately inert: it is an object, not a button. Nothing
-            // here makes it clickable, and it speaks for itself — the
-            // campfire carries its own "The fire is steady." (§11).
-            CampfireView(
-                state = state,
-                scale = reading.handiwork.scale,
-                coalDepth = reading.handiwork.coalDepth,
+    val reduceMotion = rememberReduceMotion()
+
+    // Choosing a book puts a fire where the invitation to choose one was, and
+    // finishing it takes the fire away again. Both used to happen between two
+    // frames, in the middle of the screen, on the one thing the room is about.
+    // §9.1 gives the arrive token to cross-fades between rooms; this is the
+    // same substitution inside one room, so it gets the same token — and the
+    // height eases on the settle token rather than jumping, because the two
+    // states are not the same height and the way in sits directly underneath.
+    //
+    // The id is the state, not the reading. `AnimatedContent` keys its content
+    // by the state *value*, so handing it the reading itself would make a fire
+    // that grew from kindling to steady into a new target — and a new target
+    // under an unchanged key still runs its enter, fading the fire in over
+    // itself every time it was fed. An id is equal to itself.
+    AnimatedContent(
+        targetState = reading?.id,
+        modifier = modifier,
+        transitionSpec = {
+            (
+                fadeIn(RibbonMotion.arrive(reduceMotion)) togetherWith
+                    fadeOut(RibbonMotion.arrive(reduceMotion))
+                ).using(
+                SizeTransform(clip = false) { _, _ -> RibbonMotion.settle(reduceMotion) },
             )
-            Text(
-                text = book.name,
-                style = RibbonType.display(26f),
-                color = Palette.text,
-            )
-            SmallCaps(state.displayName, size = 13f)
-        }
-    } else {
-        // First run: the fire's place holds nothing; in its place, the
-        // chooser. The shelf is absent, not empty-stated.
-        Column(
-            modifier = modifier.padding(horizontal = 40.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(18.dp),
-        ) {
-            Spacer(Modifier.height(40.dp))
-            Text(
-                text = Copy.PICK_A_BOOK,
-                style = RibbonType.display(22f),
-                color = Palette.text,
-                textAlign = TextAlign.Center,
-            )
+        },
+        label = "the-fire",
+    ) { readingID ->
+        // Looked up rather than captured, so the fire goes on growing under its
+        // own cross-fade. A finished book is still in state, so the half on its
+        // way out has a real reading to draw too.
+        val current = readingID?.let { id -> model.state.readings.firstOrNull { it.id == id } }
+        val book = current?.let { Bible.book(it.bookID) }
+        if (current != null && book != null) {
+            val state = model.fireState(current)
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                // Deliberately inert: it is an object, not a button. Nothing
+                // here makes it clickable, and it speaks for itself — the
+                // campfire carries its own "The fire is steady." (§11).
+                CampfireView(
+                    state = state,
+                    scale = current.handiwork.scale,
+                    coalDepth = current.handiwork.coalDepth,
+                )
+                Text(
+                    text = book.name,
+                    style = RibbonType.display(26f),
+                    color = Palette.text,
+                )
+                // The fire's own name changes under it as the fire changes —
+                // kindling to steady to banked. A word swapped on one frame
+                // under a fire that took its time getting there reads as a
+                // correction rather than as the same fact said twice.
+                AnimatedContent(
+                    targetState = state.displayName,
+                    transitionSpec = {
+                        fadeIn(RibbonMotion.settle(reduceMotion)) togetherWith
+                            fadeOut(RibbonMotion.settle(reduceMotion))
+                    },
+                    label = "the-fire-is",
+                ) { name -> SmallCaps(name, size = 13f) }
+            }
+        } else {
+            // First run: the fire's place holds nothing; in its place, the
+            // chooser. The shelf is absent, not empty-stated.
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 40.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(18.dp),
+            ) {
+                Spacer(Modifier.height(40.dp))
+                Text(
+                    text = Copy.PICK_A_BOOK,
+                    style = RibbonType.display(22f),
+                    color = Palette.text,
+                    textAlign = TextAlign.Center,
+                )
+            }
         }
     }
 }
@@ -548,6 +663,17 @@ private fun WaitingRows(
     // still a room of one, and it never reaches the interface (Law 2).
     val memberCount = model.members(room).size
 
+    val reduceMotion = rememberReduceMotion()
+    val settle: FiniteAnimationSpec<Float> = RibbonMotion.settle(reduceMotion)
+    val settleSize: FiniteAnimationSpec<IntSize> = RibbonMotion.settle(reduceMotion)
+
+    // Rows that were already waiting when the room drew are simply there: the
+    // app opening on the room says nothing (§05), and four notes unfurling at
+    // launch would be an entrance. A note that lands while you are *looking*
+    // at the room is a different event entirely — somebody left you something
+    // a moment ago — and §9.1 gives notes unfurling the settle token.
+    val standing = remember(room.id) { waiting.map { it.id }.toSet() }
+
     Column(
         modifier = modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.Start,
@@ -556,36 +682,58 @@ private fun WaitingRows(
         waiting.take(4).forEach { note ->
             val author = model.person(note.authorID)
             if (author != null) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        // The drawn row is shorter than a finger; the target
-                        // is not (deviation 12).
-                        .sizeIn(minHeight = TOUCH)
-                        .clickable(role = Role.Button) {
-                            // Jumps to that note (§6.3): the reading opens at
-                            // its verse, the mark breathing.
-                            if (reading != null) onOpenReading(reading, note.verse)
-                        },
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    InkDot(
-                        ink = model.membership(personID = note.authorID, roomID = room.id)?.ink
-                            ?: Ink.clay,
-                    )
-                    Text(
-                        text = Copy.leftYouANote(firstName(author.name), note.verse.formatted),
-                        style = RibbonType.ui(15f),
-                        color = Palette.text,
-                        modifier = Modifier.weight(1f),
-                    )
+                key(note.id) {
+                    val landed = remember { MutableTransitionState(note.id in standing) }
+                    landed.targetState = true
+                    AnimatedVisibility(
+                        visibleState = landed,
+                        enter = fadeIn(settle) + expandVertically(settleSize),
+                        exit = fadeOut(settle) + shrinkVertically(settleSize),
+                        label = "a-note-waiting",
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                // The drawn row is shorter than a finger; the
+                                // target is not (deviation 12).
+                                .sizeIn(minHeight = TOUCH)
+                                .clickable(role = Role.Button) {
+                                    // Jumps to that note (§6.3): the reading
+                                    // opens at its verse, the mark breathing.
+                                    if (reading != null) onOpenReading(reading, note.verse)
+                                },
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            InkDot(
+                                ink = model
+                                    .membership(personID = note.authorID, roomID = room.id)?.ink
+                                    ?: Ink.clay,
+                            )
+                            Text(
+                                text = Copy.leftYouANote(
+                                    firstName(author.name),
+                                    note.verse.formatted,
+                                ),
+                                style = RibbonType.ui(15f),
+                                color = Palette.text,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
                 }
             }
         }
 
-        // Room of one, invite still out — the state, not the person.
-        if (memberCount == 1 && !room.isPaused) {
+        // Room of one, invite still out — the state, not the person. Already
+        // showing when the room drew, so there is no entrance; the exit is the
+        // one that matters, because it plays the moment somebody accepts.
+        AnimatedVisibility(
+            visible = memberCount == 1 && !room.isPaused,
+            enter = fadeIn(settle) + expandVertically(settleSize),
+            exit = fadeOut(settle) + shrinkVertically(settleSize),
+            label = "the-invite-still-out",
+        ) {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -611,10 +759,8 @@ private fun QuietDayFoot(
     modifier: Modifier = Modifier,
 ) {
     val reduceMotion = rememberReduceMotion()
-    val settle: FiniteAnimationSpec<Float> =
-        if (reduceMotion) snap() else tween(RibbonMotion.SETTLE_MS, easing = RibbonMotion.EaseOut)
-    val settleSize: FiniteAnimationSpec<IntSize> =
-        if (reduceMotion) snap() else tween(RibbonMotion.SETTLE_MS, easing = RibbonMotion.EaseOut)
+    val settle: FiniteAnimationSpec<Float> = RibbonMotion.settle(reduceMotion)
+    val settleSize: FiniteAnimationSpec<IntSize> = RibbonMotion.settle(reduceMotion)
 
     val bankedBy = model.activeQuietDay(room)?.let { model.person(it.personID)?.name }
     // Held across the leaving animation: `AnimatedVisibility` recomposes its

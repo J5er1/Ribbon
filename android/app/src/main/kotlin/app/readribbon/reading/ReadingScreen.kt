@@ -2,12 +2,8 @@
 
 package app.readribbon.reading
 
-import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.snap
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
@@ -56,7 +52,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -111,6 +106,8 @@ import app.readribbon.design.WaveMark
 import app.readribbon.design.WayInButton
 import app.readribbon.design.grain
 import app.readribbon.design.readableColumn
+import app.readribbon.design.peeled
+import app.readribbon.design.rememberBackPeel
 import app.readribbon.design.rememberReduceMotion
 import app.readribbon.design.room
 import app.readribbon.fire.FireBecomesEmber
@@ -120,7 +117,6 @@ import app.readribbon.services.ensureRemoteChapter
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
-import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.abs
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
@@ -181,15 +177,9 @@ private val BOTTOM_CHROME_ROOM = 64.dp
 // SwiftUI wraps the state change in `withAnimation(RibbonMotion.arrive)` and
 // every affected view animates. Compose animates values, not assignments, so
 // the token becomes a spec handed to the animation that needs it — and under
-// reduce motion it is a snap, which is a state change with no movement
-// (§11). RibbonMotion's own helpers return `AnimationSpec`; a transition
-// wants the finite kind, so the tokens are spelled out here as PresenceForm
-// spells them out there.
-private fun arriveSpec(reduceMotion: Boolean): FiniteAnimationSpec<Float> =
-    if (reduceMotion) snap() else tween(RibbonMotion.ARRIVE_MS, easing = RibbonMotion.EaseOut)
-
-private fun settleSpec(reduceMotion: Boolean): FiniteAnimationSpec<Float> =
-    if (reduceMotion) snap() else tween(RibbonMotion.SETTLE_MS, easing = RibbonMotion.EaseOut)
+// reduce motion it is a snap, which is a state change with no movement (§11).
+// Both halves of that live in the token now, so this file asks for
+// `RibbonMotion.arrive(reduceMotion)` rather than writing the branch out.
 
 /**
  * Which composer is up, and for which verse.
@@ -541,20 +531,11 @@ fun ReadingScreen(
         }
     }
 
-    // Predictive back: the room peels in behind the closing book. The pull
-    // is a progress, not a commitment — releasing mid-gesture puts the book
-    // back down where it was.
-    var backPull by remember { mutableFloatStateOf(0f) }
-    PredictiveBackHandler(enabled = !closing) { progress ->
-        try {
-            progress.collect { event -> backPull = event.progress }
-            close()
-            backPull = 0f
-        } catch (cancelled: CancellationException) {
-            backPull = 0f
-            throw cancelled
-        }
-    }
+    // Predictive back: the room peels in behind the closing book. The pull is
+    // a progress, not a commitment — releasing mid-gesture eases the book back
+    // down where it was, and committing hands the pull on to the slide that
+    // takes it away, so the close is one movement rather than two.
+    val peel = rememberBackPeel(enabled = !closing, onBack = { close() })
 
     // Opening: at your own place, or at the place you were sent to.
     LaunchedEffect(Unit) {
@@ -594,14 +575,7 @@ fun ReadingScreen(
                 // moves the book without recomposing a word of Scripture.
                 // Under reduce motion the book does not move at all; the
                 // gesture still closes it (§11).
-                .graphicsLayer {
-                    val peel = if (reduceMotion) 0f else backPull
-                    val shrink = 1f - 0.06f * peel
-                    scaleX = shrink
-                    scaleY = shrink
-                    translationY = peel * 24.dp.toPx()
-                    alpha = 1f - 0.28f * peel
-                }
+                .peeled { peel.progress }
                 .background(Palette.ground)
                 .grain(),
         ) {
@@ -820,7 +794,7 @@ private fun ChapterSection(
     // born at 1 on the frame the words arrive and there would be no fade.
     val arrival by animateFloatAsState(
         targetValue = if (chapter != null) 1f else 0f,
-        animationSpec = arriveSpec(reduceMotion),
+        animationSpec = RibbonMotion.arrive<Float>(reduceMotion),
         label = "chapter-arrival",
     )
 
@@ -892,8 +866,8 @@ private fun ChapterSection(
             }
             AnimatedVisibility(
                 visible = shown,
-                enter = fadeIn(settleSpec(reduceMotion)),
-                exit = fadeOut(settleSpec(reduceMotion)),
+                enter = fadeIn(RibbonMotion.settle<Float>(reduceMotion)),
+                exit = fadeOut(RibbonMotion.settle<Float>(reduceMotion)),
             ) {
                 val open = held.value
                 if (open != null) {
@@ -1212,8 +1186,8 @@ private fun HighlightLabelOverlay(
 
     AnimatedVisibility(
         visible = highlight != null,
-        enter = fadeIn(arriveSpec(reduceMotion)),
-        exit = fadeOut(arriveSpec(reduceMotion)),
+        enter = fadeIn(RibbonMotion.arrive<Float>(reduceMotion)),
+        exit = fadeOut(RibbonMotion.arrive<Float>(reduceMotion)),
         modifier = modifier,
     ) {
         val label = shown.value ?: return@AnimatedVisibility

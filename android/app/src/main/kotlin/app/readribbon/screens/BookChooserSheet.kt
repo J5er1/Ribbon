@@ -59,6 +59,7 @@ import app.readribbon.data.ScriptureStore
 import app.readribbon.design.Palette
 import app.readribbon.design.RibbonType
 import app.readribbon.design.SmallCaps
+import app.readribbon.design.rememberSheetExit
 import app.readribbon.design.room
 import app.readribbon.fire.CampfireGlyph
 import app.readribbon.fire.EmberView
@@ -116,7 +117,12 @@ fun BookChooserSheet(
     modifier: Modifier = Modifier,
     sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
 ) {
+    // Choosing a book closes the chooser, and it should close the way a swipe
+    // closes it rather than simply ceasing to be drawn.
+    val leave = rememberSheetExit(sheetState)
+
     ModalBottomSheet(
+        // Already animated away by the sheet itself: the person dismissed it.
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         modifier = modifier,
@@ -133,7 +139,11 @@ fun BookChooserSheet(
         // underneath the last book rather than above the scroll.
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
     ) {
-        BookChooserContent(room = room, model = model, onChoose = onChoose)
+        BookChooserContent(
+            room = room,
+            model = model,
+            onChoose = { book -> leave { onChoose(book) } },
+        )
     }
 }
 

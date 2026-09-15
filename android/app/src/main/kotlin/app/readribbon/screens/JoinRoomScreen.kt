@@ -10,7 +10,6 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.snap
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -159,12 +158,6 @@ private fun deadLine(error: Throwable): String {
     }
     return Copy.SERVER_UNREACHABLE
 }
-
-private fun <T> settleSpec(reduceMotion: Boolean): FiniteAnimationSpec<T> =
-    if (reduceMotion) snap() else tween(RibbonMotion.SETTLE_MS, easing = RibbonMotion.EaseOut)
-
-private fun <T> arriveSpec(reduceMotion: Boolean): FiniteAnimationSpec<T> =
-    if (reduceMotion) snap() else tween(RibbonMotion.ARRIVE_MS, easing = RibbonMotion.EaseOut)
 
 /**
  * Accepting an invite (S16).
@@ -354,11 +347,15 @@ fun JoinFlow(
                     val spec: FiniteAnimationSpec<Float> = when {
                         targetState is JoinPhase.Dead -> snap()
                         initialState == JoinPhase.Loading && targetState == JoinPhase.Preview ->
-                            arriveSpec(reduceMotion)
-                        else -> settleSpec(reduceMotion)
+                            RibbonMotion.arrive(reduceMotion)
+                        else -> RibbonMotion.settle(reduceMotion)
                     }
                     (fadeIn(spec) togetherWith fadeOut(spec))
-                        .using(SizeTransform(clip = false) { _, _ -> settleSpec(reduceMotion) })
+                        .using(
+                            SizeTransform(clip = false) { _, _ ->
+                                RibbonMotion.settle(reduceMotion)
+                            },
+                        )
                 },
                 label = "join-phase",
             ) { current ->

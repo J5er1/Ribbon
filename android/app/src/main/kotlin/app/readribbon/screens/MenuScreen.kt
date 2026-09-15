@@ -3,19 +3,23 @@
 package app.readribbon.screens
 
 import androidx.activity.compose.LocalActivity
-import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.FiniteAnimationSpec
-import androidx.compose.animation.core.snap
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -51,7 +55,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -65,7 +68,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -86,6 +88,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
@@ -105,13 +108,14 @@ import app.readribbon.design.QuietControl
 import app.readribbon.design.RibbonMotion
 import app.readribbon.design.RibbonType
 import app.readribbon.design.SmallCaps
+import app.readribbon.design.peeled
 import app.readribbon.design.readableColumn
+import app.readribbon.design.rememberBackPeel
 import app.readribbon.design.rememberReduceMotion
 import app.readribbon.design.room
 import app.readribbon.fire.CampfireGlyph
 import app.readribbon.services.Passkeys
 import app.readribbon.services.UpdateState
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -200,6 +204,10 @@ private val MinTarget: Dp = 44.dp
  */
 private val QuietControlInset = (-8).dp
 
+/** The update card's corner and the height of its progress bar. */
+private val UpdateCardRadius = 8.dp
+private val UpdateBarHeight = 4.dp
+
 /** The chartreuse hairline that marks the current room (S14). */
 private val MarkWidth = 2.dp
 private val MarkHeight = 34.dp
@@ -243,17 +251,10 @@ fun MenuScreen(
 ) {
     val reduceMotion = rememberReduceMotion()
 
-    // Predictive back (§12.2): the room peels in behind the closing menu, the
-    // same gesture and the same physics the book uses. Registered *before*
-    // the NavHost below, because back callbacks are taken in reverse order of
-    // registration — so a pushed settings screen pops first, and only an
-    // unpushed menu closes.
-    var backPull by remember { mutableFloatStateOf(0f) }
-    // Registered last, so it wins while the menu is up — and disabled the
-    // moment the menu is going, because `AnimatedContent` keeps the outgoing
-    // content composed for the whole 400 ms exit and a back press in that
-    // window would otherwise be eaten by a handler whose `onDismiss` is
-    // already a no-op. The book's own handler stands down the same way.
+    // Disabled the moment the menu is going, because `AnimatedContent` keeps
+    // the outgoing content composed for the whole 400 ms exit and a back press
+    // in that window would otherwise be eaten by a handler whose `onDismiss`
+    // is already a no-op. The book's own handler stands down the same way.
     var closing by remember { mutableStateOf(false) }
 
     // Every way out goes through one door, so the guard above covers all of
@@ -264,29 +265,25 @@ fun MenuScreen(
         onDismiss()
     }
 
-    PredictiveBackHandler(enabled = !closing) { progress ->
-        try {
-            progress.collect { event -> backPull = event.progress }
-            close()
-            backPull = 0f
-        } catch (cancelled: CancellationException) {
-            backPull = 0f
-            throw cancelled
-        }
-    }
+    // Predictive back (§12.2): the room peels in behind the closing menu, the
+    // same gesture and the same physics the book uses — `rememberBackPeel` is
+    // where both of them now live, so letting go eases the menu back down and
+    // committing hands the pull straight to the exit below. Registered
+    // *before* the NavHost, because back callbacks are taken in reverse order
+    // of registration — so a pushed settings screen pops first, and only an
+    // unpushed menu closes.
+    val peel = rememberBackPeel(enabled = !closing, onBack = { close() })
 
-    // §11: under reduce motion a push is a cut, exactly as it is in every
-    // other NavHost here. This one was written without the branch.
     // Above the NavHost, because the menu root is one of its destinations and
     // is disposed while a settings screen is showing — iOS keeps these on the
     // screen itself for the same reason, one level above its NavigationStack.
     var showNewRoom by remember { mutableStateOf(false) }
     var inviting by remember { mutableStateOf<InviteTarget?>(null) }
 
-    val push: FiniteAnimationSpec<Float> =
-        if (reduceMotion) snap() else tween(RibbonMotion.SETTLE_MS, easing = RibbonMotion.EaseOut)
-    val slide: FiniteAnimationSpec<IntOffset> =
-        if (reduceMotion) snap() else tween(RibbonMotion.SETTLE_MS, easing = RibbonMotion.EaseOut)
+    // A push, and under reduce motion a cut (§11) — the token takes that
+    // branch itself, here as in every other NavHost in the app.
+    val push: FiniteAnimationSpec<Float> = RibbonMotion.settle(reduceMotion)
+    val slide: FiniteAnimationSpec<IntOffset> = RibbonMotion.settle(reduceMotion)
 
     // A key event reaches only the focused node and its ancestors, and
     // nothing in the menu is focused when it opens — so without this the
@@ -311,16 +308,9 @@ fun MenuScreen(
                     false
                 }
             }
-            .graphicsLayer {
-                // Under reduce motion the menu does not move at all; the
-                // gesture still closes it (§11).
-                val peel = if (reduceMotion) 0f else backPull
-                val shrink = 1f - 0.06f * peel
-                scaleX = shrink
-                scaleY = shrink
-                translationY = peel * 24.dp.toPx()
-                alpha = 1f - 0.28f * peel
-            },
+            // Under reduce motion the menu does not move at all; the gesture
+            // still closes it (§11), which the peel decides for itself.
+            .peeled { peel.progress },
     ) {
         // The ground and its grain, painted behind everything the menu draws:
         // `.room()` hides its node from accessibility (the paper is texture,
@@ -468,6 +458,7 @@ private fun MenuRoot(
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
 
     val context = LocalContext.current
+    val reduceMotion = rememberReduceMotion()
     val scroll = rememberScrollState()
 
     // Opened from the portrait: land on your own section rather than making
@@ -616,14 +607,36 @@ private fun MenuRoot(
 
                 UpdateSection(model = model)
 
-                SmallCaps(
-                    if (model.updateState is UpdateState.Checking) Copy.CHECKING_FOR_UPDATES else Copy.versionLine(version),
-                    size = 11f,
-                    color = Palette.muted.copy(alpha = 0.7f),
+                // Tapping the version checks for one, and the line says so
+                // while it looks. The words cross-fade rather than swap: the
+                // check is usually over in well under a second, and a line
+                // that flicked to "checking" and back would read as a glitch
+                // rather than as an answer. The control is the box around
+                // them, so the target does not move as they change.
+                Box(
                     modifier = Modifier.clickable(role = Role.Button) {
                         model.checkForUpdates()
                     },
-                )
+                ) {
+                    AnimatedContent(
+                        targetState = if (model.updateState is UpdateState.Checking) {
+                            Copy.CHECKING_FOR_UPDATES
+                        } else {
+                            Copy.versionLine(version)
+                        },
+                        transitionSpec = {
+                            fadeIn(RibbonMotion.arrive(reduceMotion)) togetherWith
+                                fadeOut(RibbonMotion.arrive(reduceMotion))
+                        },
+                        label = "the-version",
+                    ) { line ->
+                        SmallCaps(
+                            line,
+                            size = 11f,
+                            color = Palette.muted.copy(alpha = 0.7f),
+                        )
+                    }
+                }
             }
         }
     }
@@ -823,6 +836,7 @@ private fun YouIdentityRow(model: AppModel) {
     var name by rememberSaveable { mutableStateOf("") }
 
     val context = LocalContext.current
+    val reduceMotion = rememberReduceMotion()
 
     // Swift's `PhotosPicker` plus its `.onChange` — the picked image is read
     // and downsampled off the main thread, then handed to the store. Setting
@@ -879,52 +893,67 @@ private fun YouIdentityRow(model: AppModel) {
                 modifier = Modifier.clearAndSetSemantics {},
             )
         }
-        if (editingName) {
-            val focus = remember { FocusRequester() }
-            LaunchedEffect(focus) { runCatching { focus.requestFocus() } }
-            BasicTextField(
-                value = name,
-                onValueChange = { name = it },
-                singleLine = true,
-                textStyle = RibbonType.ui(18f).copy(color = Palette.text),
-                cursorBrush = SolidColor(Palette.chartreuse),
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.Words,
-                    imeAction = ImeAction.Done,
-                ),
-                keyboardActions = KeyboardActions(
-                    onDone = {
-                        val trimmed = name.trim()
-                        if (trimmed.isNotEmpty()) model.updateMe(name = trimmed)
-                        editingName = false
-                    },
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = MinTarget)
-                    .focusRequester(focus),
-            )
-        } else {
-            Box(
-                // A short name draws a short word, and the word is the whole
-                // control: the target keeps its 44 dp in both directions so
-                // "Jo" is no harder to tap than "Jonathan" (§11, deviation 12).
-                modifier = Modifier
-                    .sizeIn(minWidth = MinTarget, minHeight = MinTarget)
-                    .clickable(
-                        role = Role.Button,
-                        onClickLabel = Copy.EDITS_YOUR_NAME,
-                    ) {
-                        name = model.me?.name ?: ""
-                        editingName = true
-                    },
-                contentAlignment = Alignment.CenterStart,
-            ) {
-                Text(
-                    text = model.me?.name ?: "",
-                    style = RibbonType.ui(18f),
-                    color = Palette.text,
+        // Your name becomes the field it is edited in, in the same place, at
+        // the same size. Two identical lines of type trading places on one
+        // frame reads as a flinch; a cross-fade reads as the one becoming the
+        // other, which is what it is.
+        AnimatedContent(
+            targetState = editingName,
+            modifier = Modifier.weight(1f),
+            transitionSpec = {
+                fadeIn(RibbonMotion.arrive(reduceMotion)) togetherWith
+                    fadeOut(RibbonMotion.arrive(reduceMotion))
+            },
+            label = "your-name",
+        ) { editing ->
+            if (editing) {
+                val focus = remember { FocusRequester() }
+                LaunchedEffect(focus) { runCatching { focus.requestFocus() } }
+                BasicTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    singleLine = true,
+                    textStyle = RibbonType.ui(18f).copy(color = Palette.text),
+                    cursorBrush = SolidColor(Palette.chartreuse),
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Words,
+                        imeAction = ImeAction.Done,
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            val trimmed = name.trim()
+                            if (trimmed.isNotEmpty()) model.updateMe(name = trimmed)
+                            editingName = false
+                        },
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = MinTarget)
+                        .focusRequester(focus),
                 )
+            } else {
+                Box(
+                    // A short name draws a short word, and the word is the
+                    // whole control: the target keeps its 44 dp in both
+                    // directions so "Jo" is no harder to tap than "Jonathan"
+                    // (§11, deviation 12).
+                    modifier = Modifier
+                        .sizeIn(minWidth = MinTarget, minHeight = MinTarget)
+                        .clickable(
+                            role = Role.Button,
+                            onClickLabel = Copy.EDITS_YOUR_NAME,
+                        ) {
+                            name = model.me?.name ?: ""
+                            editingName = true
+                        },
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    Text(
+                        text = model.me?.name ?: "",
+                        style = RibbonType.ui(18f),
+                        color = Palette.text,
+                    )
+                }
             }
         }
     }
@@ -951,46 +980,59 @@ private fun RoomControls(
     var showInkPicker by remember { mutableStateOf(false) }
     var confirmLeave by remember { mutableStateOf(false) }
 
+    val reduceMotion = rememberReduceMotion()
+
     Column {
-        if (editingRoomName) {
-            val focus = remember { FocusRequester() }
-            LaunchedEffect(focus) { runCatching { focus.requestFocus() } }
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = MinTarget),
-                contentAlignment = Alignment.CenterStart,
-            ) {
-                if (roomName.isEmpty()) {
-                    Text(
-                        text = Copy.ROOM_NAME,
-                        style = RibbonType.ui(17f),
-                        color = Palette.muted,
+        // The row becomes the field, in place — the same cross-fade your own
+        // name gets one section up, for the same reason.
+        AnimatedContent(
+            targetState = editingRoomName,
+            transitionSpec = {
+                fadeIn(RibbonMotion.arrive(reduceMotion)) togetherWith
+                    fadeOut(RibbonMotion.arrive(reduceMotion))
+            },
+            label = "the-room-name",
+        ) { editing ->
+            if (editing) {
+                val focus = remember { FocusRequester() }
+                LaunchedEffect(focus) { runCatching { focus.requestFocus() } }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = MinTarget),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    if (roomName.isEmpty()) {
+                        Text(
+                            text = Copy.ROOM_NAME,
+                            style = RibbonType.ui(17f),
+                            color = Palette.muted,
+                        )
+                    }
+                    BasicTextField(
+                        value = roomName,
+                        onValueChange = { roomName = it },
+                        singleLine = true,
+                        textStyle = RibbonType.ui(17f).copy(color = Palette.text),
+                        cursorBrush = SolidColor(Palette.chartreuse),
+                        keyboardOptions = KeyboardOptions(
+                            capitalization = KeyboardCapitalization.Words,
+                            imeAction = ImeAction.Done,
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onDone = {
+                                model.renameRoom(room, name = roomName)
+                                editingRoomName = false
+                            },
+                        ),
+                        modifier = Modifier.fillMaxWidth().focusRequester(focus),
                     )
                 }
-                BasicTextField(
-                    value = roomName,
-                    onValueChange = { roomName = it },
-                    singleLine = true,
-                    textStyle = RibbonType.ui(17f).copy(color = Palette.text),
-                    cursorBrush = SolidColor(Palette.chartreuse),
-                    keyboardOptions = KeyboardOptions(
-                        capitalization = KeyboardCapitalization.Words,
-                        imeAction = ImeAction.Done,
-                    ),
-                    keyboardActions = KeyboardActions(
-                        onDone = {
-                            model.renameRoom(room, name = roomName)
-                            editingRoomName = false
-                        },
-                    ),
-                    modifier = Modifier.fillMaxWidth().focusRequester(focus),
-                )
-            }
-        } else {
-            MenuRow(Copy.NAME_THIS_ROOM) {
-                roomName = room.name ?: ""
-                editingRoomName = true
+            } else {
+                MenuRow(Copy.NAME_THIS_ROOM) {
+                    roomName = room.name ?: ""
+                    editingRoomName = true
+                }
             }
         }
 
@@ -1109,28 +1151,151 @@ private fun AccountControls(model: AppModel) {
     }
 }
 
+/**
+ * The update card (§A-OTA): one card, four things it can say.
+ *
+ * It used to be four cards, written out four times, each appearing and
+ * vanishing on the frame its state changed — so *found*, then *downloading*,
+ * then *ready* read as three separate panels flickering in the same place
+ * rather than one panel getting further along. It is one card now: it grows in
+ * when there is something to say and shrinks away when there isn't, and what it
+ * says cross-fades in place while the card itself stays put.
+ *
+ * Nothing is drawn at all when there is no update and while one is being looked
+ * for: an update is not news until there is one (§6.1).
+ */
 @Composable
 private fun UpdateSection(model: AppModel) {
     val context = LocalContext.current
-    when (val state = model.updateState) {
-        is UpdateState.Idle, is UpdateState.Checking -> {
-            // Quiet: nothing shown when up to date or checking
-        }
+    val reduceMotion = rememberReduceMotion()
+    val settle: FiniteAnimationSpec<Float> = RibbonMotion.settle(reduceMotion)
+    val settleSize: FiniteAnimationSpec<IntSize> = RibbonMotion.settle(reduceMotion)
+
+    val state = model.updateState
+    val hasNews = state !is UpdateState.Idle && state !is UpdateState.Checking
+
+    AnimatedVisibility(
+        visible = hasNews,
+        enter = fadeIn(settle) + expandVertically(settleSize),
+        exit = fadeOut(settle) + shrinkVertically(settleSize),
+        label = "the-update",
+    ) {
+        // Held across the leaving animation: `AnimatedVisibility` recomposes its
+        // content while it goes, and by then the update has been dismissed and
+        // there is nothing left to draw. The same hold the banked-fire line on
+        // the room uses, for the same reason.
+        var shown by remember { mutableStateOf(state) }
+        LaunchedEffect(state) { if (hasNews) shown = state }
+
+        UpdateCard(
+            state = shown,
+            reduceMotion = reduceMotion,
+            onSkip = {
+                if (shown is UpdateState.Error) {
+                    model.dismissUpdateError()
+                } else {
+                    model.dismissUpdate()
+                }
+            },
+            onUpdate = {
+                if (shown is UpdateState.Error) {
+                    model.dismissUpdateError()
+                    model.checkForUpdates()
+                } else {
+                    model.triggerUpdate(context)
+                }
+            },
+        )
+    }
+}
+
+/**
+ * The card itself: a line, and under it either the two controls or the bar.
+ *
+ * A download has nothing to decide, so it is given no controls — "Update now"
+ * over a bar already doing it would be a control that does nothing.
+ */
+@Composable
+private fun UpdateCard(
+    state: UpdateState,
+    reduceMotion: Boolean,
+    onSkip: () -> Unit,
+    onUpdate: () -> Unit,
+) {
+    val downloading = state as? UpdateState.Downloading
+
+    val line: String
+    val lineColor: Color
+    val lineSize: Float
+    when (state) {
         is UpdateState.Available -> {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Palette.surface)
-                    .border(1.dp, Palette.rule, RoundedCornerShape(8.dp))
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                SmallCaps(
-                    Copy.updateAvailable(state.info.versionName),
-                    color = Palette.text,
-                    size = 13f,
+            line = Copy.updateAvailable(state.info.versionName)
+            lineColor = Palette.text
+            lineSize = 13f
+        }
+        is UpdateState.Downloading -> {
+            line = Copy.updateDownloading((state.progress * 100).toInt())
+            lineColor = Palette.muted
+            lineSize = 12f
+        }
+        is UpdateState.ReadyToInstall -> {
+            line = Copy.UPDATE_READY_TO_INSTALL
+            lineColor = Palette.chartreuse
+            lineSize = 13f
+        }
+        is UpdateState.Error -> {
+            line = Copy.UPDATE_FAILED
+            lineColor = Palette.muted
+            lineSize = 12f
+        }
+        // Never drawn: the card is not composed without news. Said rather than
+        // defaulted, so adding a state to `UpdateState` fails here loudly.
+        is UpdateState.Idle, is UpdateState.Checking -> {
+            line = ""
+            lineColor = Palette.muted
+            lineSize = 12f
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(UpdateCardRadius))
+            .background(Palette.surface)
+            .border(1.dp, Palette.rule, RoundedCornerShape(UpdateCardRadius))
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        // The line is cross-faded on the words rather than on the state, so a
+        // download reporting itself a hundred times on the way down is a
+        // hundred separate one-percent cross-fades of one number and never a
+        // new card. Found → downloading → ready is the same card, changing what
+        // it says.
+        AnimatedContent(
+            targetState = line,
+            transitionSpec = {
+                fadeIn(RibbonMotion.arrive(reduceMotion)) togetherWith
+                    fadeOut(RibbonMotion.arrive(reduceMotion))
+            },
+            label = "the-update-line",
+        ) { words -> SmallCaps(words, color = lineColor, size = lineSize) }
+
+        AnimatedContent(
+            targetState = downloading != null,
+            transitionSpec = {
+                val arrive = RibbonMotion.arrive<Float>(reduceMotion)
+                (fadeIn(arrive) togetherWith fadeOut(arrive)).using(
+                    SizeTransform(clip = false) { _, _ -> RibbonMotion.settle(reduceMotion) },
                 )
+            },
+            label = "the-update-controls",
+        ) { bar ->
+            if (bar) {
+                UpdateBar(
+                    progress = downloading?.progress ?: 0f,
+                    reduceMotion = reduceMotion,
+                )
+            } else {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End,
@@ -1139,125 +1304,47 @@ private fun UpdateSection(model: AppModel) {
                     QuietControl(
                         title = Copy.SKIP_PORTRAIT,
                         color = Palette.muted,
-                    ) {
-                        model.dismissUpdate()
-                    }
+                        onClick = onSkip,
+                    )
                     Spacer(Modifier.width(12.dp))
                     QuietControl(
                         title = Copy.UPDATE_NOW,
                         color = Palette.chartreuse,
-                    ) {
-                        model.triggerUpdate(context)
-                    }
-                }
-            }
-        }
-        is UpdateState.Downloading -> {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Palette.surface)
-                    .border(1.dp, Palette.rule, RoundedCornerShape(8.dp))
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                val pct = (state.progress * 100).toInt()
-                SmallCaps(
-                    Copy.updateDownloading(pct),
-                    color = Palette.muted,
-                    size = 12f,
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(4.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(Palette.rule),
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth(state.progress.coerceIn(0.02f, 1f))
-                            .height(4.dp)
-                            .clip(RoundedCornerShape(2.dp))
-                            .background(Palette.chartreuse),
+                        onClick = onUpdate,
                     )
                 }
             }
         }
-        is UpdateState.ReadyToInstall -> {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Palette.surface)
-                    .border(1.dp, Palette.rule, RoundedCornerShape(8.dp))
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                SmallCaps(
-                    Copy.UPDATE_READY_TO_INSTALL,
-                    color = Palette.chartreuse,
-                    size = 13f,
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    QuietControl(
-                        title = Copy.SKIP_PORTRAIT,
-                        color = Palette.muted,
-                    ) {
-                        model.dismissUpdate()
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    QuietControl(
-                        title = Copy.UPDATE_NOW,
-                        color = Palette.chartreuse,
-                    ) {
-                        model.triggerUpdate(context)
-                    }
-                }
-            }
-        }
-        is UpdateState.Error -> {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Palette.surface)
-                    .border(1.dp, Palette.rule, RoundedCornerShape(8.dp))
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                SmallCaps(
-                    Copy.UPDATE_FAILED,
-                    color = Palette.muted,
-                    size = 12f,
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    QuietControl(
-                        title = Copy.SKIP_PORTRAIT,
-                        color = Palette.muted,
-                    ) {
-                        model.dismissUpdateError()
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    QuietControl(
-                        title = Copy.UPDATE_NOW,
-                        color = Palette.chartreuse,
-                    ) {
-                        model.dismissUpdateError()
-                        model.checkForUpdates()
-                    }
-                }
-            }
-        }
+    }
+}
+
+/** How far along a download is. */
+@Composable
+private fun UpdateBar(progress: Float, reduceMotion: Boolean) {
+    // Eased to, not stepped to: a downloader reports itself in lumps, and a bar
+    // that lurches from lump to lump reads as a bar that has stopped in between
+    // them.
+    val shown by animateFloatAsState(
+        targetValue = progress.coerceIn(0f, 1f),
+        animationSpec = RibbonMotion.arrive(reduceMotion),
+        label = "update-progress",
+    )
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(UpdateBarHeight)
+            .clip(RoundedCornerShape(UpdateBarHeight / 2))
+            .background(Palette.rule),
+    ) {
+        Box(
+            modifier = Modifier
+                // A bar at nothing at all says the download has not begun; it
+                // has.
+                .fillMaxWidth(shown.coerceAtLeast(0.02f))
+                .height(UpdateBarHeight)
+                .clip(RoundedCornerShape(UpdateBarHeight / 2))
+                .background(Palette.chartreuse),
+        )
     }
 }
 

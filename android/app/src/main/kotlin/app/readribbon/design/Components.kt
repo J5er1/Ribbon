@@ -1,11 +1,20 @@
 package app.readribbon.design
 
+import android.content.ContentResolver
+import android.database.ContentObserver
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -18,9 +27,17 @@ import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.SheetState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -41,13 +58,32 @@ import androidx.compose.ui.unit.dp
 import app.readribbon.core.Ink
 import app.readribbon.core.NoteKind
 import app.readribbon.core.Person
+import kotlinx.coroutines.launch
 
 // Small shared pieces: portraits, note marks, ink dots, the wide way-in
 // control. Each one is specified somewhere in the build book; the section is
 // cited where it matters.
 
 /**
- * Whether the system has been asked to still its animations.
+ * Whether the system has been asked to still its animations, as [RibbonTheme]
+ * answered it for the whole app.
+ *
+ * Every note mark in a chapter and every swatch in the ink picker asks this
+ * question, so it is answered once and handed down rather than worked out
+ * again at each of them: watching the setting means an IPC registration, and
+ * one per note in Genesis 1 is not a thing to do to a phone.
+ *
+ * `false` outside the theme — a preview, a test — which is the honest default:
+ * nothing has said to hold still.
+ */
+@Composable
+fun rememberReduceMotion(): Boolean = LocalReduceMotion.current
+
+/** Where [RibbonTheme] puts the answer. */
+internal val LocalReduceMotion = staticCompositionLocalOf { false }
+
+/**
+ * The answer itself, worked out once, at the theme.
  *
  * Android has no single "reduce motion" switch the way iOS does; turning
  * animations off in Developer options or via an accessibility service sets
@@ -55,18 +91,99 @@ import app.readribbon.core.Person
  * well-behaved app reads. §11 then applies: the fire holds a state instead
  * of flickering, morphs become cross-fades, and the thinking-of-you fill
  * becomes an instant state change with the haptic intact.
+ *
+ * Read once and then *watched*, because it is a setting somebody turns on —
+ * usually because the app in front of them is already making them unwell.
+ * Read once and remembered, the app would go on moving until it was force
+ * quit and launched again, which is the one moment the answer matters least.
+ * A `ContentObserver` costs nothing and makes the switch take effect on the
+ * screen the person is looking at.
  */
 @Composable
-fun rememberReduceMotion(): Boolean {
-    val context = LocalContext.current
-    return remember(context) {
+internal fun observeReduceMotion(): Boolean {
+    val resolver = LocalContext.current.contentResolver
+    var still by remember(resolver) { mutableStateOf(animatorsAreOff(resolver)) }
+
+    DisposableEffect(resolver) {
+        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) {
+                still = animatorsAreOff(resolver)
+            }
+        }
+        // A device that refuses the registration is a device whose answer
+        // cannot change under us either; the value read above stands.
         runCatching {
-            Settings.Global.getFloat(
-                context.contentResolver,
-                Settings.Global.ANIMATOR_DURATION_SCALE,
-                1f,
-            ) == 0f
-        }.getOrDefault(false)
+            resolver.registerContentObserver(
+                Settings.Global.getUriFor(Settings.Global.ANIMATOR_DURATION_SCALE),
+                false,
+                observer,
+            )
+        }
+        onDispose { runCatching { resolver.unregisterContentObserver(observer) } }
+    }
+
+    return still
+}
+
+/** The animator duration scale, as a yes or a no. */
+private fun animatorsAreOff(resolver: ContentResolver): Boolean = runCatching {
+    Settings.Global.getFloat(resolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
+}.getOrDefault(false)
+
+/**
+ * A sheet's way out, so that it leaves the way it came.
+ *
+ * A `ModalBottomSheet` animates itself away when the *person* dismisses it —
+ * a swipe down, a tap on the scrim, the back gesture. A sheet dismissed by
+ * the *app*, because a book was chosen or a room was named or an ink was
+ * picked, is a different thing entirely: the flag it hangs on goes false, the
+ * composable is gone on the next frame, and the sheet does not leave so much
+ * as stop existing. Nothing in this product should stop existing (§9.1), and
+ * the moment it happened was always the moment something good had just been
+ * decided.
+ *
+ * So the sheet slides down first, and only then is the caller told — which is
+ * what flips the flag.
+ *
+ * ```
+ * val leave = rememberSheetExit(sheetState)
+ * // …
+ * onChoose = { book -> leave { chose(book) } }
+ * ```
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun rememberSheetExit(sheetState: SheetState): (then: () -> Unit) -> Unit {
+    val scope = rememberCoroutineScope()
+    return remember(sheetState, scope) {
+        // The sheet goes down once, however many things are waiting on the far
+        // side of it, and they are run in the order they were asked for: the
+        // naming form closes itself *and* hands over its new room's invite
+        // (S15), and two slides racing each other would cut the first one
+        // short and drop the sheet mid-flight.
+        val waiting = mutableListOf<() -> Unit>()
+        var leaving = false
+
+        fun exit(then: () -> Unit) {
+            waiting += then
+            if (leaving) return
+            leaving = true
+            scope.launch {
+                // `finally`: a hide cut short by something else still hands
+                // over, because a sheet left standing over a room it no longer
+                // belongs to is worse than a sheet that cut away.
+                try {
+                    sheetState.hide()
+                } finally {
+                    val queued = waiting.toList()
+                    waiting.clear()
+                    leaving = false
+                    queued.forEach { it() }
+                }
+            }
+        }
+
+        ::exit
     }
 }
 
@@ -196,18 +313,43 @@ fun WayInButton(
     // form binds the click handler rather than `enabled`.
     onClick: () -> Unit,
 ) {
-    Text(
-        text = title,
-        style = RibbonType.ui(18f, FontWeight.Medium),
-        color = Palette.ground,
-        textAlign = TextAlign.Center,
+    val reduceMotion = rememberReduceMotion()
+    Box(
         modifier = modifier
             .fillMaxWidth()
             .clip(androidx.compose.foundation.shape.RoundedCornerShape(percent = 50))
             .background(if (enabled) Palette.chartreuse else Palette.chartreuse.copy(alpha = 0.4f))
             .clickable(enabled = enabled, onClick = onClick)
             .padding(vertical = 15.dp),
-    )
+        contentAlignment = Alignment.Center,
+    ) {
+        // A control says exactly what happens, and in the room what happens
+        // changes: the way in is "Begin Genesis", then "Continue in Genesis"
+        // once you have been in it, then "Pick a book" again when it is
+        // finished. The fire above it cross-fades on the arrive token, so the
+        // words do too — a control that snapped while the fire dissolved would
+        // make one change look like two. Everywhere else the title is a
+        // constant and this never transitions at all.
+        AnimatedContent(
+            targetState = title,
+            transitionSpec = {
+                (
+                    fadeIn(RibbonMotion.arrive(reduceMotion)) togetherWith
+                        fadeOut(RibbonMotion.arrive(reduceMotion))
+                    ).using(
+                    SizeTransform(clip = false) { _, _ -> RibbonMotion.arrive(reduceMotion) },
+                )
+            },
+            label = "way-in-title",
+        ) { label ->
+            Text(
+                text = label,
+                style = RibbonType.ui(18f, FontWeight.Medium),
+                color = Palette.ground,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
 }
 
 /**

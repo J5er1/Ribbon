@@ -1,5 +1,7 @@
 package app.readribbon.design
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.interaction.FocusInteraction
 import androidx.compose.foundation.interaction.HoverInteraction
@@ -19,6 +21,7 @@ import androidx.compose.ui.node.invalidateDraw
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Modifier.Node
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 // 12.2 — Material 3 Expressive, taken for its shape system and its motion
@@ -87,6 +90,14 @@ private val RibbonTypography: Typography
  * fades in and out with the interaction and never expands from the touch
  * point. It is deliberately not configured ripple; a ripple with its radius
  * turned down is still a ripple, and it still animates outward.
+ *
+ * The fade is the half that was missing. The wash used to be switched on and
+ * off at full strength on the frame the touch landed and the frame it left,
+ * which is a flash — and a flash across a verse is the thing this whole
+ * indication exists to avoid. It is also the most-seen animation in the app:
+ * every row of the menu, every settings line, every quiet control goes
+ * through here, so a snap here is a snap everywhere at once. Now it comes up
+ * in [RibbonMotion.PRESS_IN_MS] and goes down in [RibbonMotion.PRESS_OUT_MS].
  */
 private object RibbonIndication : androidx.compose.foundation.IndicationNodeFactory {
 
@@ -109,6 +120,23 @@ private object RibbonIndication : androidx.compose.foundation.IndicationNodeFact
         private var hovered = false
         private var focused = false
 
+        /** Where the wash is now, as opposed to where the interaction wants it. */
+        private val wash = Animatable(0f)
+
+        /** The fade in flight, so a new interaction replaces it rather than races it. */
+        private var fade: Job? = null
+
+        /**
+         * The strongest wash this touch asked for, held until the wash is back
+         * at rest.
+         *
+         * A tap can be over in less time than the wash takes to come up, and a
+         * press whose feedback never became visible reads as a press that was
+         * never received. So the wash finishes arriving before it leaves, which
+         * is the same thing Material's ripple calls a minimum duration.
+         */
+        private var crest = 0f
+
         override fun onAttach() {
             coroutineScope.launch {
                 interactionSource.interactions.collect { interaction ->
@@ -120,19 +148,48 @@ private object RibbonIndication : androidx.compose.foundation.IndicationNodeFact
                         is FocusInteraction.Focus -> focused = true
                         is FocusInteraction.Unfocus -> focused = false
                     }
-                    invalidateDraw()
+                    fadeToward()
                 }
             }
         }
 
-        override fun ContentDrawScope.draw() {
-            drawContent()
-            val alpha = when {
+        /**
+         * Animate the wash to whatever the interactions now add up to.
+         *
+         * The draw is invalidated from the animation itself rather than by
+         * observing the value: a state layer is a draw and nothing else, so
+         * nothing above it needs to recompose or re-measure for it.
+         */
+        private fun fadeToward() {
+            val target = when {
                 pressed -> PRESSED
                 focused -> FOCUSED
                 hovered -> HOVERED
                 else -> 0f
             }
+            if (target > crest) crest = target
+            if (target == wash.targetValue && !wash.isRunning) return
+            fade?.cancel()
+            fade = coroutineScope.launch {
+                if (target < crest && wash.value < crest) {
+                    wash.animateTo(crest, fadeSpec(RibbonMotion.PRESS_IN_MS)) { invalidateDraw() }
+                }
+                val out = target <= wash.value
+                wash.animateTo(
+                    targetValue = target,
+                    animationSpec = fadeSpec(
+                        if (out) RibbonMotion.PRESS_OUT_MS else RibbonMotion.PRESS_IN_MS,
+                    ),
+                ) { invalidateDraw() }
+                if (target == 0f) crest = 0f
+            }
+        }
+
+        private fun fadeSpec(millis: Int) = tween<Float>(millis, easing = RibbonMotion.EaseOut)
+
+        override fun ContentDrawScope.draw() {
+            drawContent()
+            val alpha = wash.value
             if (alpha > 0f) {
                 drawRect(color = Palette.text.copy(alpha = alpha))
             }
@@ -152,6 +209,9 @@ fun RibbonTheme(
         LocalIndication provides RibbonIndication,
         LocalContentColor provides Palette.text,
         LocalHaptics provides haptics,
+        // Asked of the system once, here, and read by every screen through
+        // `rememberReduceMotion()` — see Components.kt.
+        LocalReduceMotion provides observeReduceMotion(),
     ) {
         MaterialTheme(
             colorScheme = RibbonColors,
