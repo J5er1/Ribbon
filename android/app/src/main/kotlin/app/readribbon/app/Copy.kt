@@ -293,6 +293,22 @@ object Copy {
     const val EDIT = "edit"
     const val REMOVE = "remove"
     const val NEW_NOTES_NEED_THE_ROOM = "New notes need the room started again."
+    /**
+     * S01's third waiting row — "notes left for you, cards open, **an ink to
+     * pick**" — which the room had never drawn.
+     *
+     * §6.7 is exactly this sentence: when a room becomes three, "the two
+     * originals get an invitation on the room screen to pick an ink. Not a
+     * blocking dialog; it waits." And the newcomer "picks from what's left",
+     * which is the same invitation seen from the other side — their
+     * membership arrives with no ink at all, so without this their marks fell
+     * back to a colour that might already be somebody else's.
+     *
+     * An invitation, not an instruction, and it says why it is here: the room
+     * is bigger than it was, and colour means a person now (§4.5).
+     */
+    const val PICK_AN_INK = "Colour is a person now. Pick your ink."
+
     const val INKS_FROM_WHEN_THE_ROOM_WAS_TWO =
         "These keep their colors. They're from when the room was two."
 
@@ -521,6 +537,18 @@ object Copy {
     fun wantsToReadWithYou(name: String) = "$name wants to read with you."
     const val JOIN = "Join"
     const val SOMEONE_WANTS_TO_READ_WITH_YOU = "Someone wants to read with you."
+
+    /**
+     * Who this phone is about to join as (S16's last state: "signed in as
+     * someone else — offers to switch, does not silently join").
+     *
+     * Said only when there is somebody to name. A tap on Join used to seat
+     * whoever the phone happened to be signed in as without ever saying so,
+     * and the only route to another account was the sign-out control two taps
+     * deep in the menu.
+     */
+    fun joiningAs(name: String) = "You'll join as $name."
+    const val JOIN_AS_SOMEONE_ELSE = "Join as someone else"
 
     /**
      * The held beat while the invite is fetched (S16) — the wordmark, in the

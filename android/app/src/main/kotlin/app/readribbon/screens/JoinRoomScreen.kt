@@ -61,7 +61,9 @@ import kotlinx.coroutines.delay
 import app.readribbon.app.AppModel
 import app.readribbon.app.Copy
 import app.readribbon.app.firstName
+import app.readribbon.core.Person
 import app.readribbon.design.Palette
+import app.readribbon.design.PortraitView
 import app.readribbon.design.well
 import app.readribbon.design.QuietControl
 import app.readribbon.design.RibbonMotion
@@ -139,6 +141,25 @@ private sealed interface JoinPhase {
 
 /** Which field is asking for the keyboard. Swift's `JoinFlow.Field`. */
 private enum class Field { Name }
+
+/**
+ * Whether what went wrong is simply that this phone has no usable account.
+ *
+ * `withAuthRetry` signs a person out when the refresh token is gone
+ * (RemoteSync), and `joinRoom` throws `NotSignedIn` outright when there is
+ * no account at all — and both of those used to land in the same place as an
+ * expired invite: a dead end whose only control is Close, shown to somebody
+ * who had just been signed out by the very screen refusing them. The sign-in
+ * step is already in this file and is the one thread this build has (§6.10),
+ * so the honest next screen for a missing account is the one that asks for
+ * it.
+ */
+private fun needsAnAccount(error: Throwable): Boolean =
+    error is SupabaseError.NotSignedIn ||
+        (
+            error is SupabaseError.Http &&
+                (error.status == 401 || error.body.contains("not_signed_in"))
+            )
 
 /**
  * The database names what happened; the screen says it plainly.
@@ -252,7 +273,14 @@ fun JoinFlow(
                 model.switchRoom(roomID)
                 onDone()
             } catch (error: Throwable) {
-                phase = JoinPhase.Dead(deadLine(error))
+                // An account that has gone stale is a step, not a wall. The
+                // sign-in phase below retries the join itself on success, so
+                // this is the whole of the recovery.
+                phase = if (needsAnAccount(error)) {
+                    JoinPhase.SignIn
+                } else {
+                    JoinPhase.Dead(deadLine(error))
+                }
             }
         }
     }
@@ -363,8 +391,22 @@ fun JoinFlow(
 
                     JoinPhase.Preview -> PreviewStep(
                         inviteLine = inviteLine(preview),
+                        inviterName = preview?.inviterName,
                         roomName = preview?.roomName,
+                        joiningAs = model.me?.name
+                            ?.takeIf { model.isSignedIn }
+                            ?.let(::firstName),
                         onJoin = { advanceFromPreview() },
+                        onJoinAsSomeoneElse = if (model.isSignedIn) {
+                            {
+                                model.viewModelScope.launch {
+                                    model.signOutRemote()
+                                    phase = JoinPhase.SignIn
+                                }
+                            }
+                        } else {
+                            null
+                        },
                         onStartInstead = onStartInstead,
                     )
 
@@ -418,14 +460,33 @@ private fun inviteLine(preview: InvitePreview?): String {
 @Composable
 private fun PreviewStep(
     inviteLine: String,
+    inviterName: String?,
     roomName: String?,
+    joiningAs: String?,
     onJoin: () -> Unit,
+    onJoinAsSomeoneElse: (() -> Unit)?,
     onStartInstead: (() -> Unit)?,
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(StepGap),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        // S16's anatomy is "who invited you, **their portrait**, the room's
+        // name, and one control", and this screen had never drawn a face at
+        // all — on the one screen the build book says "shows a person, not a
+        // product", and which it calls the most important conversion surface
+        // in the product.
+        //
+        // A monogram rather than the real photograph, and the reason is the
+        // backend rather than the design: the portraits bucket is readable
+        // only by co-members, and a person holding an invite is not one yet.
+        // Reaching the real face needs an edge function that takes the token,
+        // validates it and streams the portrait — worth doing, not an
+        // Android-only change, and recorded in docs/deviations.md A36. A
+        // monogram in the right recess is a person; nothing at all is a form.
+        if (!inviterName.isNullOrBlank()) {
+            PortraitView(person = Person(name = inviterName), size = PortraitSize)
+        }
         Text(
             text = inviteLine,
             style = RibbonType.display(24f),
@@ -441,6 +502,23 @@ private fun PreviewStep(
             modifier = Modifier.padding(horizontal = ButtonMargin).padding(top = 8.dp),
             onClick = onJoin,
         )
+        // S16's last state: "signed in as someone else (offers to switch,
+        // does not silently join)". It did not exist — a tap on Join seated
+        // whoever this phone happened to be signed in as, without ever saying
+        // who that was, and the only route to another account was the sign-out
+        // control two taps deep in the menu. Said only when there is somebody
+        // to name; signed out, there is nobody.
+        if (joiningAs != null) {
+            Text(
+                text = Copy.joiningAs(joiningAs),
+                style = RibbonType.ui(13f),
+                color = Palette.muted,
+                textAlign = TextAlign.Center,
+            )
+            onJoinAsSomeoneElse?.let { switch ->
+                QuietControl(title = Copy.JOIN_AS_SOMEONE_ELSE, onClick = switch)
+            }
+        }
         onStartInstead?.let { start ->
             QuietControl(title = Copy.START_A_ROOM_INSTEAD, onClick = start)
         }

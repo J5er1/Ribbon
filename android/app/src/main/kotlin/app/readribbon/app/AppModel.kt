@@ -563,24 +563,78 @@ class AppModel(
         // The link only works once the backend knows it — push it (and the
         // room, in case this room predates sign-in) whenever it's handed
         // out.
+        //
+        // Written down before it is attempted, and cleared only when it
+        // lands. The failure used to be logged and forgotten: the invite sat
+        // in local state until the next successful pull, at which point the
+        // prune deleted it *because* the backend did not have it, and the
+        // link already sitting in somebody's message thread was dead for
+        // good.
         val remote = this.remote
         if (remote != null && remote.isSignedIn) {
-            viewModelScope.launch {
-                runCatching {
-                    pushInvite(invite, room)
-                }.onFailure {
-                    Log.e("AppModel", "pushInvite failed for room ${room.id}", it)
-                }
-            }
+            state = state.copy(invitesNotYetPushed = state.invitesNotYetPushed + invite.id)
+            persist()
+            viewModelScope.launch { pushInviteIfNeeded(invite, room) }
         }
         return invite
+    }
+
+    /**
+     * Register a link with the backend, and remember whether it landed.
+     *
+     * Not `pushInvite` itself, which is also called by `pushLocalGraph` at
+     * sign-in with a whole graph's worth of invites behind it.
+     */
+    private suspend fun pushInviteIfNeeded(invite: Invite, room: Room) {
+        val landed = runCatching { pushInvite(invite, room) }
+        if (landed.isSuccess) {
+            state = state.copy(invitesNotYetPushed = state.invitesNotYetPushed - invite.id)
+            persist()
+        } else {
+            Log.e("AppModel", "pushInvite failed for room ${room.id}", landed.exceptionOrNull())
+        }
+    }
+
+    /**
+     * The link left this phone (S15).
+     *
+     * Called where the share intent is fired, and not where the invite is
+     * minted. A chooser the person then backs out of still counts: Android
+     * only reports the chosen component through an `EXTRA_CHOSEN_COMPONENT`
+     * PendingIntent, and that machinery buys less honesty than it costs —
+     * somebody who opened the share sheet and changed their mind is far
+     * closer to "the invite is out" than somebody who has never seen it.
+     */
+    fun inviteWasHandedOut(invite: Invite) {
+        if (invite.id in state.invitesHandedOut) return
+        state = state.copy(invitesHandedOut = state.invitesHandedOut + invite.id)
+        persist()
     }
 
     fun isFull(room: Room): Boolean = members(room).size >= Room.capacity
 
     /** Is a link to this room live — actually handed out, and not expired? */
-    fun hasLiveInvite(room: Room, now: Instant = Clock.System.now()): Boolean =
-        state.invites.any { it.roomID == room.id && it.expiresAt > now }
+    /**
+     * Is there a live link out for this room?
+     *
+     * "Out", not "minted". Both the onboarding step and the invite sheet mint
+     * one the moment they appear, so this used to answer true for anybody who
+     * had merely *seen* either — and the room then told a person who had
+     * asked nobody that "The invite is still out", with a control to send it
+     * again, on the first morning of their room.
+     *
+     * Somebody else's invite counts without asking: their `invitesHandedOut`
+     * is not ours to see, and an invite that reached this phone through a
+     * pull is the room's live link by definition.
+     */
+    fun hasLiveInvite(room: Room, now: Instant = Clock.System.now()): Boolean {
+        val me = state.me?.id
+        return state.invites.any { invite ->
+            invite.roomID == room.id &&
+                invite.expiresAt > now &&
+                (invite.createdBy != me || invite.id in state.invitesHandedOut)
+        }
+    }
 
     /**
      * Is somebody still expected in this room?
@@ -1885,6 +1939,21 @@ class AppModel(
                 pendingHighlightDeletes.remove(highlightID)
             }
         }
+        // A link that was handed out before the backend could be told about
+        // it starts working by itself the moment this phone has a network.
+        // No banner and no line on the sheet: §6.10 is explicit that the app
+        // working is not news, and self-healing is the honest answer.
+        for (inviteID in state.invitesNotYetPushed.toList()) {
+            val invite = state.invites.firstOrNull { it.id == inviteID }
+            val room = invite?.let { i -> state.rooms.firstOrNull { it.id == i.roomID } }
+            if (invite == null || room == null) {
+                // The room or the invite has gone; there is nothing to register.
+                state = state.copy(invitesNotYetPushed = state.invitesNotYetPushed - inviteID)
+                persist()
+                continue
+            }
+            pushInviteIfNeeded(invite, room)
+        }
         val graph = runCatching { remote.pullRooms() }.getOrNull() ?: return Arrivals.none
         val landed = merge(graph)
         announce(landed)
@@ -2232,7 +2301,12 @@ class AppModel(
         invites.removeAll {
             it.roomID in pulledRooms &&
                 it.id !in pulledInvites &&
-                it.id !in pendingInvitePushes
+                it.id !in pendingInvitePushes &&
+                // A link this phone minted and has not managed to register
+                // yet. The backend cannot see it, and that is exactly why it
+                // must not be taken away — it is already in somebody's
+                // message thread.
+                it.id !in next.invitesNotYetPushed
         }
         next = next.copy(invites = invites)
 

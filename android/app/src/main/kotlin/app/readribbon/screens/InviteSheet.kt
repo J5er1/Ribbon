@@ -170,12 +170,13 @@ fun InviteContent(
     // added under the content rather than clipped off it.
     val bottomBar = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
+    // `createInvite` registers the link with the backend itself. A second
+    // push here did the whole of it again — including reading the sender's
+    // portrait off disk and uploading the JPEG a second time — on every
+    // appearance of the sheet, and swallowed its own failure more quietly
+    // than the first one did.
     LaunchedEffect(room.id, full) {
-        if (!full) {
-            val live = model.createInvite(room)
-            invite = live
-            runCatching { model.pushInvite(live, room) }
-        }
+        if (!full) invite = model.createInvite(room)
     }
 
     Box(modifier = modifier.fillMaxWidth()) {
@@ -232,7 +233,12 @@ fun InviteContent(
                     modifier = Modifier.padding(horizontal = LineMargin),
                 )
 
-                invite?.let { live -> SendTheInvite(invite = live) }
+                invite?.let { live ->
+                    SendTheInvite(
+                        invite = live,
+                        onHandedOut = { model.inviteWasHandedOut(live) },
+                    )
+                }
             }
         }
     }
@@ -247,7 +253,7 @@ fun InviteContent(
  * there — no subject, no preview title, nothing about the room.
  */
 @Composable
-private fun SendTheInvite(invite: Invite) {
+private fun SendTheInvite(invite: Invite, onHandedOut: () -> Unit) {
     val context = LocalContext.current
     Text(
         text = Copy.SEND_THE_INVITE,
@@ -263,6 +269,10 @@ private fun SendTheInvite(invite: Invite) {
                     putExtra(Intent.EXTRA_TEXT, invite.url())
                 }
                 context.startActivity(Intent.createChooser(send, null))
+                // The link is out now — which is a different thing from
+                // having been minted, and the only thing S15's pending state
+                // on the room is about.
+                onHandedOut()
             }
             .sizeIn(minWidth = TouchTarget, minHeight = TouchTarget)
             .padding(horizontal = CapsuleH, vertical = CapsuleV),

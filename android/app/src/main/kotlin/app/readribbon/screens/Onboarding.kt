@@ -866,12 +866,10 @@ private fun InviteStep(
     onDone: () -> Unit,
 ) {
     // `.onAppear`
+    // `createInvite` registers the link itself; a second push here repeated
+    // the whole of it, including re-uploading the sender's portrait.
     LaunchedEffect(model.currentRoom?.id) {
-        model.currentRoom?.let { room ->
-            val live = model.createInvite(room)
-            onInvite(live)
-            runCatching { model.pushInvite(live, room) }
-        }
+        model.currentRoom?.let { room -> onInvite(model.createInvite(room)) }
     }
 
     StepColumn(spacing = 24.dp) {
@@ -902,7 +900,7 @@ private fun InviteStep(
                 },
             )
         } else if (invite != null) {
-            SendTheInviteCapsule(invite)
+            SendTheInviteCapsule(invite, onHandedOut = { model.inviteWasHandedOut(invite) })
         }
 
         // You can read alone immediately while the invite is out — the
@@ -926,7 +924,7 @@ private fun InviteStep(
  * neither file owns the other, and this one is the onboarding step's.
  */
 @Composable
-private fun SendTheInviteCapsule(invite: Invite) {
+private fun SendTheInviteCapsule(invite: Invite, onHandedOut: () -> Unit) {
     val context = LocalContext.current
     Text(
         text = Copy.SEND_THE_INVITE,
@@ -942,6 +940,9 @@ private fun SendTheInviteCapsule(invite: Invite) {
                     putExtra(Intent.EXTRA_TEXT, invite.url())
                 }
                 context.startActivity(Intent.createChooser(send, null))
+                // Out, as opposed to merely minted — which is the whole of
+                // what S15's pending line on the room is about.
+                onHandedOut()
             }
             .heightIn(min = TouchTarget)
             .padding(horizontal = 28.dp, vertical = 13.dp),

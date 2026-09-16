@@ -183,6 +183,36 @@ data class AppState(
      * phone and not about the person.
      */
     val hasAskedAboutNotifications: Boolean = false,
+    /**
+     * Invites minted on this phone that the backend has not acknowledged.
+     *
+     * Persisted, and that is the whole point. `pendingInvitePushes` is an
+     * in-memory set, so a push that failed — offline, a dropped request —
+     * was forgotten at the next launch, and `merge`'s invite prune then
+     * deleted the local invite *because* the backend did not have it. The
+     * link the sender had already pasted into a message thread resolved to
+     * nothing, permanently, and nothing anywhere said so.
+     *
+     * A link is the whole mechanism (S15), so it has to outlive a pull that
+     * cannot see it yet.
+     */
+    val invitesNotYetPushed: Set<Uuid> = emptySet(),
+    /**
+     * Invites that actually left this phone — the share sheet was opened on
+     * them.
+     *
+     * Minting is not sending. The invite step of onboarding mints a link on
+     * appearance and so does the invite sheet, so every person who has ever
+     * *seen* either had a live invite by the room's reckoning, and the room
+     * told them "The invite is still out." with a control to send it again —
+     * on the first morning of a room they had told nobody about. S15's
+     * pending state is about a link that was handed out.
+     *
+     * Local, and deliberately not a column: whether *this* device pressed
+     * share is not the room's business, and an invite pulled from another
+     * member's phone is the room's live link either way.
+     */
+    val invitesHandedOut: Set<Uuid> = emptySet(),
 )
 
 /**

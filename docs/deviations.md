@@ -1444,6 +1444,84 @@ A35. **Taking something back now takes it back.** The app has had "take
     anybody, including the person who wrote them. A recording is re-made the
     way it was made.
 
+A36. **The invite path, end to end.** S15 says "the link is the whole
+    mechanism", and five things were wrong with the whole mechanism.
+
+    **A link minted while the network was down died.** `createInvite` fired
+    the backend registration into a coroutine, logged a failure, and forgot
+    it; nothing anywhere retried, and `pendingInvitePushes` is in memory, so
+    the next launch had no record of it at all. `merge`'s invite prune then
+    deleted the local invite *because* the backend did not have it — and the
+    link the sender had already pasted into a message thread resolved to
+    nothing, permanently, with nothing anywhere saying so. Two device-local
+    sets in `AppState` now, persisted: one for links this phone has not
+    managed to register, which the prune refuses to touch and which
+    `refreshFromRemote` re-pushes on every resume, and one for links that
+    actually left. No banner and no error line on the sheet — §6.10 is
+    explicit that the app working is not news, and self-healing is the honest
+    answer.
+
+    **"The invite is still out" was shown to people who had invited nobody.**
+    Both the onboarding step and the invite sheet mint a link the moment they
+    appear, and `hasLiveInvite` asked only whether one existed — so anyone who
+    had merely *seen* either screen was told, on the first morning of their
+    room, that an invite was outstanding, with a control to send it again.
+    Minting is not sending. `hasLiveInvite` requires that the link left this
+    phone, or that it came from somebody else's (whose sending is not ours to
+    see, and whose invite is the room's live link by definition). A chooser
+    the person then backs out of still counts: Android only reports the chosen
+    component through an `EXTRA_CHOSEN_COMPONENT` PendingIntent, and that
+    machinery buys less honesty than it costs.
+
+    **Opening the sheet pushed everything twice, including the portrait.**
+    `createInvite` registers the link itself; both call sites then called
+    `pushInvite` again on the next line, which re-read the sender's portrait
+    off disk and re-uploaded the JPEG, on every appearance, swallowing its own
+    failure more quietly than the first attempt did.
+
+    **A joiner whose session had gone stale hit a wall.** `withAuthRetry`
+    signs a person out when the refresh token is dead, and `joinRoom` throws
+    `NotSignedIn` outright when there is no account — and both landed in the
+    same dead end as an expired invite, whose only control is Close, shown to
+    somebody who had just been signed out by the screen refusing them. The
+    sign-in step is already in that file and already retries the join on
+    success; a missing account goes there now.
+
+    **The screen the book calls "the most important conversion surface in the
+    product" showed no face.** S16's anatomy is "who invited you, their
+    portrait, the room's name, and one control", and the file's own header
+    says "the screen shows a person, not a product" — and it drew a sentence,
+    a room name and a button. It draws the inviter's monogram now. **Not the
+    real photograph, and that is a backend limit rather than a design
+    choice**: the portraits bucket is readable only by co-members and a person
+    holding an invite is not one yet. Reaching the real face needs an edge
+    function that takes the token, validates it, and streams the portrait —
+    worth doing, and not an Android-only change. A monogram in the right
+    recess is a person; nothing at all is a form.
+
+    S16's last state also did not exist: "signed in as someone else (offers to
+    switch, does not silently join)". A tap on Join seated whoever the phone
+    happened to be signed in as, without ever saying who, and the only route
+    to another account was the sign-out control two taps deep in the menu. The
+    preview says who it will be and offers the other door.
+
+A36a. **The room has S01's third waiting row.** S01's anatomy has always read
+    "notes left for you, cards open, **an ink to pick**", and the third one
+    had never been drawn. §6.7 asks for it in so many words — when a room
+    becomes three, "the two originals get an invitation on the room screen to
+    pick an ink. Not a blocking dialog; it waits."
+
+    It is the newcomer's side of the same beat that made it urgent. A
+    first-time joiner's membership arrives with no ink at all — `restoreInk`
+    only restores one the backend already remembers — so in a room where ink
+    is identity (§4.5) every mark they made fell back to `?: Ink.clay`, which
+    may already be somebody else's colour, and the reading screen handed them
+    the whole free palette that only a room of two is supposed to have.
+
+    The row waits exactly as the book says: no dialog, no badge, nothing
+    blocking, and it goes the moment an ink is picked. Its mark is the one on
+    that screen that is about a colour and cannot use one.
+
 ## Licensed translations (decided: API.Bible)
 
 Open question §16.8 is now part-decided: **NKJV plus two undecided
