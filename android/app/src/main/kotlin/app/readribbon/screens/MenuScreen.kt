@@ -238,7 +238,14 @@ private val MarkHeight = 34.dp
 /** The members' portraits on a room row, overlapped, and the face on You. */
 private val RowPortrait = 18.dp
 private val RowPortraitOverlap = (-5).dp
-private val YouPortrait = 56.dp
+/**
+ * Your own face on your own screen.
+ *
+ * Larger than a seat at the hearth, because here it is the subject rather
+ * than one of six. Still nowhere near a hero image — 88 dp is a face you can
+ * see, not a face being celebrated.
+ */
+private val YouPortrait = 88.dp
 
 /** A room whose invite is being handed out, and whether it was just made. */
 private data class InviteTarget(
@@ -653,19 +660,28 @@ private fun YouMenu(
 
     RibbonScreen(
         title = Copy.YOU,
-        lede = Copy.YOU_LEDE,
+        // No lede. It used to list the three things below it — your name and
+        // face, how Scripture sets, what this phone keeps — and then the
+        // sections said the same three things again twenty pixels lower. A
+        // lede that is a table of contents for the headings under it is a
+        // sentence the reader has to get past twice. Your own face is the
+        // better opening, and the line under it says the only thing a lede
+        // was really carrying.
         modifier = modifier,
         actions = { CloseControl(onDismiss) },
     ) {
-        YouIdentityRow(model = model)
+        YouIdentity(model = model)
         Air(SectionGap)
 
-        // Three doors in one group, each saying what is behind it. A row that
-        // reads only "Downloads" makes you open it to find out what it is; a
-        // row that says what is actually on the phone has answered already.
-        SectionLabel(Copy.READING_SECTION)
+        // Grouped by what each thing is *about*, rather than by which screen
+        // it happens to open. Translation and text size are how Scripture
+        // sets for you; the wallpaper's colours are how the room is painted;
+        // the downloads are megabytes on a device. The first two belong
+        // together and the third does not, and putting all three in one list
+        // called "Reading" was filing by convenience.
+        SectionLabel(Copy.HOW_YOU_READ)
         Air(10.dp)
-        SettingsGroup(count = 3) {
+        SettingsGroup(count = 2) {
             Setting(
                 title = Copy.TEXT_AND_TRANSLATION,
                 subtitle = Copy.TEXT_SUB,
@@ -686,6 +702,12 @@ private fun YouMenu(
                 onClick = { onOpen(MenuRoute.APPEARANCE) },
                 modifier = Modifier.flowsAsWords(Flows.settingsTitle(Flows.APPEARANCE)),
             )
+        }
+
+        Air(SectionGap)
+        SectionLabel(Copy.THIS_PHONE)
+        Air(10.dp)
+        SettingsGroup(count = 1) {
             Setting(
                 title = Copy.DOWNLOADS,
                 subtitle = Copy.downloadsSub(context),
@@ -697,7 +719,7 @@ private fun YouMenu(
         Air(SectionGap)
 
         // The account (§6.10).
-        SectionLabel(Copy.ACCOUNT)
+        SectionLabel(Copy.YOUR_ACCOUNT)
         Air(10.dp)
         AccountControls(model = model)
         QuietControl(
@@ -944,11 +966,29 @@ private fun MenuRoomRow(
 // MARK: You
 
 /**
- * Portrait and name, editable in place (S18) — presence is faces, so the face
- * can be added or changed here, not only at onboarding.
+ * You: your face, and your name under it.
+ *
+ * It was a wide tile with a circle at one end and a word beside it, and most
+ * of it was empty. Two things were wrong and only one of them was the space.
+ *
+ * The first: nothing said either half was a control. A portrait you can
+ * change and a name you can edit looked exactly like a portrait and a name,
+ * so the only way to find out was to press them and see. The line underneath
+ * now says what they are for, and the small caps under the face says it is a
+ * control — which is the app's own idiom for a quiet one everywhere else.
+ *
+ * The second, and the reason it is centred: this is the one screen in the
+ * app that is *about you*, and a row is how you list a setting, not how you
+ * show somebody themselves. Presence is faces (§4.2) and the portrait is
+ * "close to required" (§03) — so on your own screen your face is the subject
+ * rather than an accessory to a text field.
+ *
+ * What keeps it from being a profile page, which §13 would not have: nothing
+ * is counted. No rooms joined, no books finished, no member-since, no badge.
+ * A face, a name, and one sentence about where they are seen.
  */
 @Composable
-private fun YouIdentityRow(model: AppModel) {
+private fun YouIdentity(model: AppModel) {
     // Saveable, not remembered: on Android the menu root *is* a NavHost
     // destination, so pushing one of the settings screens disposes it and
     // popping back would otherwise throw away a half-typed name. iOS keeps
@@ -958,6 +998,7 @@ private fun YouIdentityRow(model: AppModel) {
 
     val context = LocalContext.current
     val reduceMotion = rememberReduceMotion()
+    val hasFace = model.me?.let { model.portrait(it.id) } != null
 
     // Swift's `PhotosPicker` plus its `.onChange` — the picked image is read
     // and downsampled off the main thread, then handed to the store. Setting
@@ -977,13 +1018,10 @@ private fun YouIdentityRow(model: AppModel) {
         }
     }
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .paper(RibbonShape.groupShape)
-            .padding(horizontal = 18.dp, vertical = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Box(
             modifier = Modifier
@@ -997,15 +1035,14 @@ private fun YouIdentityRow(model: AppModel) {
                 // Swift's `.accessibilityLabel(Copy.addAPortrait)`, which
                 // replaces the label rather than adding to it: the control is
                 // the way to a portrait, so the portrait's own name is
-                // cleared beneath it.
-                // What the control does depends on whether there is a
-                // face behind it, and it should not go on saying "add" to
+                // cleared beneath it. What it says depends on whether there
+                // is a face behind it — it should not go on saying "add" to
                 // somebody who has one.
                 .semantics {
-                    contentDescription = if (model.me?.let { model.portrait(it.id) } == null) {
-                        Copy.ADD_A_PORTRAIT
-                    } else {
+                    contentDescription = if (hasFace) {
                         Copy.CHANGE_YOUR_PORTRAIT
+                    } else {
+                        Copy.ADD_A_PORTRAIT
                     }
                 },
             contentAlignment = Alignment.Center,
@@ -1018,13 +1055,28 @@ private fun YouIdentityRow(model: AppModel) {
                 modifier = Modifier.clearAndSetSemantics {},
             )
         }
+
+        // The face's own label. Small caps because that is what a quiet
+        // control looks like in this app, and cleared from the screen reader
+        // because the portrait above it already carries the action — two
+        // stops saying the same thing is the accessibility defect §11 keeps
+        // catching.
+        SmallCaps(
+            text = if (hasFace) Copy.TAP_TO_CHANGE else Copy.ADD_A_PORTRAIT,
+            size = 11f,
+            color = Palette.muted,
+            modifier = Modifier.clearAndSetSemantics {},
+        )
+
+        Air(2.dp)
+
         // Your name becomes the field it is edited in, in the same place, at
         // the same size. Two identical lines of type trading places on one
         // frame reads as a flinch; a cross-fade reads as the one becoming the
         // other, which is what it is.
         AnimatedContent(
             targetState = editingName,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.fillMaxWidth(),
             transitionSpec = {
                 fadeIn(RibbonMotion.arrive(reduceMotion)) togetherWith
                     fadeOut(RibbonMotion.arrive(reduceMotion))
@@ -1038,8 +1090,11 @@ private fun YouIdentityRow(model: AppModel) {
                     value = name,
                     onValueChange = { name = it },
                     singleLine = true,
-                    textStyle = RibbonType.ui(18f).copy(color = Palette.text),
-                    cursorBrush = SolidColor(Palette.chartreuse),
+                    textStyle = RibbonType.display(26f).copy(
+                        color = Palette.text,
+                        textAlign = TextAlign.Center,
+                    ),
+                    cursorBrush = SolidColor(Palette.accent),
                     keyboardOptions = KeyboardOptions(
                         capitalization = KeyboardCapitalization.Words,
                         imeAction = ImeAction.Done,
@@ -1063,7 +1118,8 @@ private fun YouIdentityRow(model: AppModel) {
                     // directions so "Jo" is no harder to tap than "Jonathan"
                     // (§11, deviation 12).
                     modifier = Modifier
-                        .sizeIn(minWidth = MinTarget, minHeight = MinTarget)
+                        .fillMaxWidth()
+                        .sizeIn(minHeight = MinTarget)
                         .clickable(
                             role = Role.Button,
                             onClickLabel = Copy.EDITS_YOUR_NAME,
@@ -1071,16 +1127,28 @@ private fun YouIdentityRow(model: AppModel) {
                             name = model.me?.name ?: ""
                             editingName = true
                         },
-                    contentAlignment = Alignment.CenterStart,
+                    contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         text = model.me?.name ?: "",
-                        style = RibbonType.ui(18f),
+                        style = RibbonType.display(26f),
                         color = Palette.text,
+                        textAlign = TextAlign.Center,
                     )
                 }
             }
         }
+
+        // Why any of it is asked for, said once. The room is the only place
+        // either is ever seen, and saying so is what makes a portrait feel
+        // like a courtesy rather than a profile field.
+        Text(
+            text = Copy.YOUR_FACE_REASON,
+            style = RibbonType.ui(14f),
+            color = Palette.muted,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 

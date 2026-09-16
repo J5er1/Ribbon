@@ -457,9 +457,19 @@ object Copy {
         "$heading, where you are and where the ribbon is"
 
     const val ROOM_LEDE = "Who is in it, what it tells you, and the rooms you are in."
-    const val YOU_LEDE = "Your name and face, how Scripture sets, and what this phone keeps."
     const val YOUR_ROOMS = "Your rooms"
-    const val READING_SECTION = "Reading"
+
+    // The You screen's own sections (deviation A29a). Each one answers "what
+    // is this about" rather than naming a category: how you read, this phone,
+    // your account. A heading that says "General" is a heading that gave up.
+    const val HOW_YOU_READ = "How you read"
+    const val THIS_PHONE = "This phone"
+    const val YOUR_ACCOUNT = "Your account"
+
+    /** Under the face, saying where it is seen. Never "profile photo". */
+    const val YOUR_FACE_REASON = "Your name and face are what the room sees."
+
+    const val TAP_TO_CHANGE = "Tap to change"
 
     /**
      * Inviting someone to the room you are already in (S15). The room
