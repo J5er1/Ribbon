@@ -243,7 +243,10 @@ fun ReadingScreen(
 
     val book = remember(reading.bookID) { Bible.book(reading.bookID) }
     val chapterCount = book?.chapterCount ?: 1
-    val translation = model.me?.translation ?: TranslationID.bsb
+    // The book's own words, which are the room's (A42). Not yours: a room
+    // reads one version, so a note's quote and a mark on a phrase mean the
+    // same thing in both hands.
+    val translation = model.words(model.room(reading), reading)
     val bookText = remember(reading.bookID, translation) {
         model.scripture.book(reading.bookID, translation)
     }
@@ -541,7 +544,10 @@ fun ReadingScreen(
         val stamped = if (moved.isWholeVerses) {
             moved.copy(charTranslation = null)
         } else {
-            moved.copy(charTranslation = model.me?.translation)
+            // The words this mark was made in are the book's, not the
+            // marker's: that is what makes the offsets mean the same thing
+            // in the other person's hands (A42).
+            moved.copy(charTranslation = reading.translation)
         }
         if (stamped != current) {
 
@@ -1328,12 +1334,12 @@ private fun ChapterSection(
  * something here, which is the honest half of what it knows (A41g).
  */
 private fun verseMarks(model: AppModel, reading: Reading, chapter: Int): List<VerseMark> {
-    val mine = model.me?.translation
+    val readingIn = reading.translation
     val result = mutableListOf<VerseMark>()
     for (highlight in model.highlights(reading, chapter)) {
         val range = highlight.range
         val readable = range.isWholeVerses ||
-            (range.charTranslation != null && range.charTranslation == mine)
+            (range.charTranslation != null && range.charTranslation == readingIn)
         for (verse in range.verses) {
             result += VerseMark(
                 verse = verse,

@@ -890,7 +890,27 @@ object Copy {
      * answer (S19). A setting you understand is friendlier than a setting
      * that is merely well spaced.
      */
-    const val TEXT_LEDE = "How Scripture sets on the page. Yours, not the room's."
+    const val TEXT_LEDE = "How Scripture sets on the page."
+
+    /**
+     * Said under the version, because a setting that quietly changes what
+     * somebody else sees has to say so before they touch it (A42).
+     *
+     * Not "everyone must agree" and not a warning: it is a room reading one
+     * book together, which is the product, and the sentence is a statement of
+     * that rather than a caution about it. It names no one, per §10.1 — a
+     * line saying *Ruth is reading the Berean* would make a shared choice
+     * feel like somebody else's property.
+     */
+    const val TRANSLATION_IS_THE_ROOMS = "Everyone in this room reads this one."
+
+    /**
+     * Said under the page settings, which stayed personal. The contrast with
+     * the line above is the whole point: one of these screens' two halves is
+     * shared and the other is not, and a reader should not have to find that
+     * out by changing something.
+     */
+    const val THE_PAGE_IS_YOURS = "Yours alone. Nobody else's page moves."
     const val NOTIFICATIONS_LEDE = "Every room asks for something different. These are per room."
 
     /**

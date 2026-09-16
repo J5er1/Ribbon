@@ -555,7 +555,14 @@ class AppModel(
 
     fun createRoom(name: String?): Room {
         val me = state.me ?: error("room before person")
-        val room = Room(name = name, createdAt = Clock.System.now())
+        // Seeded from whatever you picked before there was a room to pick
+        // for — onboarding's Text screen, most likely. Without this, choosing
+        // a version and *then* starting a room would quietly drop the choice
+        // and open the first book in the launch translation.
+        val room = Room(
+            name = name,
+            createdAt = Clock.System.now(),
+            translation = me.translation)
         state = state.copy(
             rooms = state.rooms + room,
             memberships = state.memberships +
@@ -564,6 +571,61 @@ class AppModel(
         persist()
         return room
     }
+
+    /**
+     * The room picks its words, and everybody in it reads them (A42).
+     *
+     * Any member may do this — a room is not owned (§6.7) — and it takes
+     * effect at once, including in a book that is already open, because a
+     * setting that appears to do nothing until some future book is a setting
+     * people press twice.
+     *
+     * A *finished* book keeps the words it was read in. S11 calls an ember
+     * immutable and the source of the printed keepsake, and re-wording a book
+     * somebody has already read, under notes left about those exact words,
+     * would be the opposite of that.
+     *
+     * A mark on a phrase (A41g) carries the translation it was made in, so
+     * one made in the old words widens to its whole verse rather than
+     * pointing at the wrong ones. With a room on one version that should now
+     * be a rare thing rather than the everyday case it was built for.
+     */
+    fun setRoomTranslation(room: Room, translation: TranslationID) {
+        if (room.translation == translation) return
+        val rooms = state.rooms.map {
+            if (it.id == room.id) it.copy(translation = translation) else it
+        }
+        val readings = state.readings.map {
+            if (it.roomID == room.id && !it.isFinished) {
+                it.copy(translation = translation)
+            } else {
+                it
+            }
+        }
+        state = state.copy(rooms = rooms, readings = readings)
+        persist()
+
+        val remote = this.remote
+        if (remote != null && remote.isSignedIn) {
+            // Marked before the push, so a pull that arrives in between does
+            // not hand the old version back. Read fresh at push time rather
+            // than captured here: a rename in the same breath travels in this
+            // same row, and a captured copy would push the name as it was.
+            pendingRoomPushes.add(room.id)
+            pushing {
+                val current = state.rooms.firstOrNull { it.id == room.id }
+                if (current != null && runCatching { remote.push(room = current) }.isSuccess) {
+                    pendingRoomPushes.remove(room.id)
+                }
+            }
+        }
+        readings.filter { it.roomID == room.id && !it.isFinished }
+            .forEach { pushReadingRemote(it) }
+    }
+
+    /** The words to set a page in: the book's own, or the room's. */
+    fun words(room: Room?, reading: Reading?): TranslationID =
+        reading?.translation ?: room?.translation ?: TranslationID.bsb
 
     fun switchRoom(roomID: Uuid) {
         state = state.copy(currentRoomID = roomID)
@@ -606,7 +668,7 @@ class AppModel(
     /**
      * Invites minted here whose push hasn't landed — merge() must not let a
      * pull that raced them delete a link that is already in somebody's
-     * message thread. The same shape as `pendingRenamePushes`, for the same
+     * message thread. The same shape as `pendingRoomPushes`, for the same
      * reason.
      */
     private val pendingInvitePushes: MutableSet<Uuid> = mutableSetOf()
@@ -722,18 +784,25 @@ class AppModel(
     }
 
     /**
-     * Rooms whose rename hasn't landed remotely — merge() must not let a
-     * stale pull revert an edit that was never pushed. In-memory only: a
-     * relaunch before the push lands re-exposes the edge, accepted for a
-     * rename.
+     * Rooms whose row hasn't landed remotely — merge() must not let a stale
+     * pull revert an edit that was never pushed. In-memory only: a relaunch
+     * before the push lands re-exposes the edge, accepted for an edit this
+     * small.
+     *
+     * It was `pendingRoomPushes` and guarded the name alone, because the
+     * name was the only thing about a room a person could change. A42 added
+     * the version the room reads, which travels in the same row and wants the
+     * same protection — and the drain already pushes the *current* room
+     * rather than a captured copy, so one marker covers both and neither can
+     * push a stale copy of the other.
      */
-    private val pendingRenamePushes: MutableSet<Uuid> = mutableSetOf()
+    private val pendingRoomPushes: MutableSet<Uuid> = mutableSetOf()
 
     /**
      * Notes taken back whose delete hasn't landed, and notes edited whose
      * push hasn't.
      *
-     * The same shape as [pendingRenamePushes], and they exist for a defect
+     * The same shape as [pendingRoomPushes], and they exist for a defect
      * that was worse than the rename's. `takeBack` and `editWrittenNote` both
      * wrapped their remote call in `runCatching` and forgot the outcome, and
      * nothing anywhere retried either — the one thing `refreshFromRemote`
@@ -829,10 +898,10 @@ class AppModel(
         val remote = this.remote
         if (remote != null && remote.isSignedIn) {
             val updated = state.rooms[i]
-            pendingRenamePushes.add(updated.id)
+            pendingRoomPushes.add(updated.id)
             pushing {
                 if (runCatching { remote.push(room = updated) }.isSuccess) {
-                    pendingRenamePushes.remove(updated.id)
+                    pendingRoomPushes.remove(updated.id)
                 }
             }
         }
@@ -984,7 +1053,9 @@ class AppModel(
         val scale = Bible.book(bookID)?.scale ?: FireScale.medium
         val reading = Reading(
             roomID = room.id, bookID = bookID, startedAt = Clock.System.now(),
-            handiwork = Handiwork(scale = scale))
+            handiwork = Handiwork(scale = scale),
+            // Pinned from the room, and tracked while the book is open.
+            translation = room.translation)
         state = state.copy(readings = state.readings + reading)
         persist()
         pushReadingRemote(reading)
@@ -1606,10 +1677,20 @@ class AppModel(
     val availableTranslations: List<Translation>
         get() = TranslationRegistry.bundled + TranslationRegistry.licensed.filter { it.isConfigured }
 
+    /**
+     * Pick the words. The room's, now, not yours (A42).
+     *
+     * `Person.translation` is still written, and deliberately: iOS reads it
+     * and §2.6 is still true over there until somebody takes that pass. It is
+     * no longer what Android *sets a page from* — [words] answers that — so
+     * the two can disagree on one account without either being wrong about
+     * its own platform.
+     */
     fun setTranslation(translation: TranslationID) {
         state = state.copy(me = state.me?.copy(translation = translation))
         persist()
         pushProfileRemote()
+        currentRoom?.let { setRoomTranslation(it, translation) }
     }
 
     fun updateMe(name: String) {
@@ -2024,10 +2105,10 @@ class AppModel(
         // otherwise contradict it. A rename, a take-back, an edit, a removed
         // highlight — the rename was the only one of the four that was ever
         // replayed, and the other three were the ones that lost data.
-        for (roomID in pendingRenamePushes.toList()) {
+        for (roomID in pendingRoomPushes.toList()) {
             val room = state.rooms.firstOrNull { it.id == roomID }
             if (room != null && runCatching { remote.push(room = room) }.isSuccess) {
-                pendingRenamePushes.remove(roomID)
+                pendingRoomPushes.remove(roomID)
             }
         }
         for (noteID in pendingNoteDeletes.toList()) {
@@ -2334,16 +2415,26 @@ class AppModel(
             if (i >= 0) {
                 // Remote wins on the multi-author name — except over a
                 // local rename that hasn't landed there yet.
+                // Remote wins on the two things any member can change —
+                // the name and, since A42, the version the room reads —
+                // except over a local edit that has not landed there yet.
+                // A row from a client that predates the column, or from iOS,
+                // says nothing about version and changes nothing.
                 var room = rooms[i]
-                if (!pendingRenamePushes.contains(row.id)) {
-                    room = room.copy(name = row.name)
+                if (!pendingRoomPushes.contains(row.id)) {
+                    room = room.copy(
+                        name = row.name,
+                        translation = row.translation
+                            ?.let { TranslationID(rawValue = it) } ?: room.translation)
                 }
                 rooms[i] = room.copy(isPaused = row.isPaused)
             } else {
                 rooms.add(
                     Room(
                         id = row.id, name = row.name, createdAt = row.createdAt,
-                        isPaused = row.isPaused))
+                        isPaused = row.isPaused,
+                        translation = row.translation
+                            ?.let { TranslationID(rawValue = it) } ?: TranslationID.bsb))
             }
         }
         next = next.copy(rooms = rooms)
@@ -2474,7 +2565,15 @@ class AppModel(
                 }
                 readings[i] = reading.copy(
                     handiwork = mergedHandiwork(
-                        local = reading.handiwork, remote = fires[row.id], events = events))
+                        local = reading.handiwork, remote = fires[row.id], events = events),
+                    // An open book follows the room; a finished one keeps the
+                    // words it was read in, whatever the room reads now (S11).
+                    translation = if (reading.isFinished) {
+                        reading.translation
+                    } else {
+                        row.translation?.let { TranslationID(rawValue = it) }
+                            ?: reading.translation
+                    })
             } else {
                 val scale = FireScale.entries.firstOrNull { it.name == row.scale }
                     ?: FireScale.medium
@@ -2492,7 +2591,11 @@ class AppModel(
                     Reading(
                         id = row.id, roomID = row.roomId, bookID = row.bookId,
                         startedAt = row.startedAt, finishedAt = row.finishedAt,
-                        handiwork = handiwork))
+                        handiwork = handiwork,
+                        // A book read before the column existed keeps the
+                        // launch translation, which is what it was read in.
+                        translation = row.translation
+                            ?.let { TranslationID(rawValue = it) } ?: TranslationID.bsb))
             }
         }
         next = next.copy(readings = readings)

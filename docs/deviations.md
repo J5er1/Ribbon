@@ -2238,6 +2238,87 @@ A41g. **A mark on a phrase.** A41e built S06's two handles and stopped at its
     database to make a highlight prettier (§16.8). The whole verse is the
     right answer until that is not true.
 
+A42. **A room reads one version.** Owner's call, and the first entry in this
+    ledger that reverses a *named principle* rather than filling a gap in one.
+
+    §2.6 is titled "Translation is a personal setting, not a room setting",
+    and S20 repeats it as a rule. Its reasoning is one sentence: *"You read
+    the Berean, Ruth reads the WEB, and her note still lands on verse 9
+    because notes pin to verse addresses, not to text offsets."*
+
+    That reasoning was sound for as long as it was true. A41g put a mark on a
+    **phrase** into the product — a text offset — at the same owner's request,
+    and an offset into the Berean means nothing in the WEB. A41g handled it
+    the only way §2.6 allows: a mark on part of a verse, shown to somebody
+    reading other words, widens to the whole verse. Which is honest, and is
+    also the two of you looking at the same page and seeing different marks on
+    it. One version per room is what makes a phrase mean the same words in
+    both hands, and it is the simpler product besides.
+
+    **What it costs, stated plainly.** §2.6 carries an authored detail: "when
+    Ruth's note quotes the verse, it renders in Ruth's translation, in small
+    type, so you see the words she was looking at", which S04's note anatomy
+    repeats. That is gone, because the words she was looking at are now the
+    words an inch above her note. The quote is not merely redundant now, it
+    had become *wrong*: `Person.translation` is still written per person, and
+    nothing updates a bystander's copy when somebody else changes the room's
+    version, so the test "does the author's differ from mine" would have
+    started firing on two people reading identical words and quoted a verse
+    in a translation neither had open. It is removed rather than left to rot.
+
+    §2.6 also looks forward: differently-versified translations become "a real
+    engineering constraint" the day one is added. That constraint gets
+    *smaller* here, not larger — a room on one version never has to map
+    versification between two people mid-sentence.
+
+    **Where it lives, and why two columns.** `rooms.translation` is what
+    everyone in the room reads. `readings.translation` is what a given book
+    was read in, and it exists because S11 calls a finished reading immutable
+    and "the source of the printed keepsake". An open book follows the room; a
+    finished one keeps its words. A room that changes version next year must
+    not silently re-word a book it has already read, under notes left about
+    those exact words.
+
+    Changing it takes effect at once, including in a book already open, rather
+    than waiting for the next one: a setting that appears to do nothing is a
+    setting people press twice. Any member may change it — a room is not owned
+    (§6.7).
+
+    **What stayed personal.** Text size, line spacing and red letter. Those
+    are about eyes, not about words, and a shared text size would be hostile
+    to the person who needs a larger one (§11). The Text screen now says which
+    half is which, under each group, because a setting that quietly changes
+    what somebody else sees has to say so before it is touched.
+
+    **`profiles.translation` is deliberately left in place.** iOS reads it and
+    §2.6 is still true over there until somebody takes that pass. This is an
+    Android-only change to a shared backend, and the honest shape of that is
+    an added column rather than a moved one: both platforms keep working on
+    one account, each right about itself. Android still writes the personal
+    field so iOS sees something sane; it simply no longer sets a page from it.
+    When iOS follows, the profile column can go — dropping it now would break
+    a shipped client to tidy a schema.
+
+    **A41g's `charTranslation` stays**, and is now what it should always have
+    been: a rare guard rather than the everyday case. A phrase marked before
+    the room changed version still widens to its whole verse instead of
+    pointing at the wrong words.
+
+    **Two defects in the first cut of this, found by re-reading the diff.**
+    Both were about the same row reaching the server. The push captured the
+    room *as it was at the moment of the change*, so a rename in the same
+    breath would have been overwritten by the queued push putting the old name
+    back — it reads the current room at push time now, which is what the
+    rename path already did. And `merge()` let a pulled row set the version
+    unconditionally, so a pull arriving before the push landed handed the old
+    version back and the setting appeared to undo itself.
+
+    `pendingRenamePushes` already existed for exactly that second defect, on
+    the name, and had the right shape; it guards the whole room row now and is
+    called `pendingRoomPushes`. One marker rather than two, because name and
+    version travel in one row and a second marker would have been two half
+    locks on one door.
+
 ## Licensed translations (decided: API.Bible)
 
 Open question §16.8 is now part-decided: **NKJV plus two undecided

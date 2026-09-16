@@ -72,7 +72,22 @@ data class Room(
      * Subscription lapsed → the room is paused: presence off, new notes
      * off. Reading and everything already left stays, forever (§2.5).
      */
-    val isPaused: Boolean = false
+    val isPaused: Boolean = false,
+    /**
+     * The words this room reads, shared by everyone in it.
+     *
+     * This reverses §2.6 — "Translation is a personal setting, not a room
+     * setting" — on the owner's instruction, and deviation A42 carries the
+     * argument. The short of it: §2.6's own reasoning is that "notes pin to
+     * verse addresses, not to text offsets", and A41g put a mark on a
+     * *phrase* into the product, which is a text offset. One version per room
+     * is what makes that mark mean the same thing in both hands.
+     *
+     * Any member may change it; a room is not owned (§6.7). Text size, line
+     * spacing and red letter stay personal, because those are about eyes
+     * rather than about words.
+     */
+    val translation: TranslationID = TranslationID.bsb
 ) {
 
     companion object {
@@ -112,7 +127,17 @@ data class Reading(
      * The campfire. `handiwork` is the general mechanic (§2.8) — the code
      * says handiwork everywhere and fire only in the campfire's own module.
      */
-    val handiwork: Handiwork
+    val handiwork: Handiwork,
+    /**
+     * The words this book was read in, pinned when it was opened.
+     *
+     * It tracks the room's choice while the book is open and stops when the
+     * book is finished, because S11 says an ember is immutable and "the
+     * source of the printed keepsake": a room that changes version next year
+     * must not silently re-word a book it has already read, under notes that
+     * were left about those exact words.
+     */
+    val translation: TranslationID = TranslationID.bsb
 ) {
 
     val isFinished: Boolean get() = finishedAt != null
