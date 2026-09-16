@@ -937,18 +937,20 @@ private fun Seats(
     val shown = remember(room.id) {
         mutableStateListOf<Uuid>().apply { addAll(members.map { it.personID }) }
     }
-    val seated = remember(room.id) { members.map { it.personID }.toSet() }
     val here = members.map { it.personID }
 
-    // Who was already seated when this room first drew. The seats seed their
-    // entrance from *this* rather than from `here`, and the difference is the
-    // whole of whether a new seat ever animates: on the composition where a
-    // newcomer's seat first exists they are already in `here`, so a transition
-    // state seeded from it starts and ends true and the entrance written
-    // twelve lines below could never run. The waiting rows got this right
-    // (`standing`, further down) by seeding from a snapshot; the seats did
-    // not. Everyone present at launch is still seeded true and still does not
-    // swell in (§05); anybody who arrives afterwards now does (§6.7).
+    // Whether the row is past its own first frame.
+    //
+    // The seeding above is what keeps launch quiet, but it cannot by itself
+    // tell a seat that was *there* from a seat that just appeared — by the time
+    // a new seat composes, its person is already in `here`, so a transition
+    // state seeded from `here` reads true and the entrance never plays at all.
+    // Somebody joining the room is rare and worth seeing; this is the line
+    // between the two. Returning to the room — from a person's screen, from the
+    // book, from a rotation — composes the row again, and everyone drawn in
+    // that first composition is simply there.
+    var seeded by remember(room.id) { mutableStateOf(false) }
+    LaunchedEffect(room.id) { seeded = true }
     LaunchedEffect(here, reduceMotion) {
         here.forEach { if (it !in shown) shown.add(it) }
         if (shown.any { it !in here }) {
@@ -996,7 +998,14 @@ private fun Seats(
     ) {
         shown.take(Room.capacity).forEach { personID ->
             key(personID) {
-                val seat = remember { MutableTransitionState(personID in seated) }
+                // Seeded on whether the row has drawn yet, not on whether this
+                // person is here. They are always here by the time their seat
+                // first composes — `shown` only ever gains ids from `here` —
+                // so seeding from `here` makes the enter transition below
+                // unreachable, and a seat taken by somebody who has just joined
+                // appears without any arrival at all. Seeding from `!seeded`
+                // keeps launch silent and lets a genuine join be seen.
+                val seat = remember { MutableTransitionState(!seeded) }
                 seat.targetState = personID in here
                 AnimatedVisibility(
                     visibleState = seat,

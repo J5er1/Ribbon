@@ -58,6 +58,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -1513,37 +1514,32 @@ private fun UpdateCard(
 ) {
     val downloading = state as? UpdateState.Downloading
 
-    val line: String
-    val lineColor: Color
-    val lineSize: Float
-    when (state) {
-        is UpdateState.Available -> {
-            line = Copy.updateAvailable(state.info.versionName)
-            lineColor = Palette.text
-            lineSize = 13f
-        }
-        is UpdateState.Downloading -> {
-            line = Copy.updateDownloading((state.progress * 100).toInt())
-            lineColor = Palette.muted
-            lineSize = 12f
-        }
-        is UpdateState.ReadyToInstall -> {
-            line = Copy.UPDATE_READY_TO_INSTALL
-            lineColor = Palette.chartreuse
-            lineSize = 13f
-        }
-        is UpdateState.Error -> {
-            line = Copy.UPDATE_FAILED
-            lineColor = Palette.muted
-            lineSize = 12f
-        }
+    // Held across the leaving fade, the way every other departing thing in this
+    // app holds its last value. The bar's own half of the cross-fade is
+    // recomposed as it goes, and by then the download is over and `downloading`
+    // is null — so a bar reading the live value would be handed nothing and ease
+    // itself back down to the stub. The download *completing* would look like
+    // the download being undone.
+    var lastProgress by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(downloading) { downloading?.let { lastProgress = it.progress } }
+
+    val line: UpdateLine = when (state) {
+        is UpdateState.Available ->
+            UpdateLine(Copy.updateAvailable(state.info.versionName), Palette.text, 13f)
+
+        is UpdateState.Downloading ->
+            UpdateLine(Copy.updateDownloading((state.progress * 100).toInt()), Palette.muted, 12f)
+
+        is UpdateState.ReadyToInstall ->
+            UpdateLine(Copy.UPDATE_READY_TO_INSTALL, Palette.chartreuse, 13f)
+
+        is UpdateState.Error ->
+            UpdateLine(Copy.UPDATE_FAILED, Palette.muted, 12f)
+
         // Never drawn: the card is not composed without news. Said rather than
         // defaulted, so adding a state to `UpdateState` fails here loudly.
-        is UpdateState.Idle, is UpdateState.Checking -> {
-            line = ""
-            lineColor = Palette.muted
-            lineSize = 12f
-        }
+        is UpdateState.Idle, is UpdateState.Checking ->
+            UpdateLine("", Palette.muted, 12f)
     }
 
     Column(
@@ -1567,7 +1563,13 @@ private fun UpdateCard(
                     fadeOut(RibbonMotion.arrive(reduceMotion))
             },
             label = "the-update-line",
-        ) { words -> SmallCaps(words, color = lineColor, size = lineSize) }
+        ) { said ->
+            // The colour and the size travel *with* the words rather than being
+            // read from the live state, so the half on its way out keeps the
+            // voice it was written in — chartreuse "Ready to install" fading out
+            // as muted grey would be the wrong sentence in the wrong colour.
+            SmallCaps(said.words, color = said.color, size = said.size)
+        }
 
         AnimatedContent(
             targetState = downloading != null,
@@ -1580,10 +1582,7 @@ private fun UpdateCard(
             label = "the-update-controls",
         ) { bar ->
             if (bar) {
-                UpdateBar(
-                    progress = downloading?.progress ?: 0f,
-                    reduceMotion = reduceMotion,
-                )
+                UpdateBar(progress = lastProgress, reduceMotion = reduceMotion)
             } else {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1606,6 +1605,9 @@ private fun UpdateCard(
         }
     }
 }
+
+/** What the update card says, and the voice it says it in. */
+private data class UpdateLine(val words: String, val color: Color, val size: Float)
 
 /** How far along a download is. */
 @Composable
