@@ -11,4 +11,29 @@
         <item name="android:enforceNavigationBarContrast">false</item>
         <item name="android:enforceStatusBarContrast">false</item>
     </style>
+
+    <!-- The launch window.
+
+         §05 says there is no splash screen, and that rule is kept in the
+         sense that matters: nothing is *inserted*. Android 12 and later show
+         a system splash on every cold start whether an app asks for one or
+         not — it cannot be declined, only styled — so the choice was never
+         "splash or no splash", it was "our mark or the launcher icon on a
+         grey plate". Owner's call (deviation A28): it is the Wave, on the
+         unlit ground, unfurling.
+
+         What is deliberately absent: no wordmark, no tagline, no version, no
+         "welcome back". The mark and the ground, and then the room. -->
+    <style name="Theme.Ribbon.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/unlit</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_wave_animated</item>
+        <!-- The system caps this at one second and treats it as a hint. The
+             real length of the splash is how long the store takes to come off
+             disk; this only tells the platform how long the drawable wants. -->
+        <item name="windowSplashScreenAnimationDuration">600</item>
+        <!-- No icon background: the mark is a shape on a ground, and a
+             circular plate behind it would be an app icon rather than a mark.
+             Without one the icon is not masked. -->
+        <item name="postSplashScreenTheme">@style/Theme.Ribbon</item>
+    </style>
 </resources>

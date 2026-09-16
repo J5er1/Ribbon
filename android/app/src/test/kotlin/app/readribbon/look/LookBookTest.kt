@@ -13,6 +13,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
+import app.readribbon.R
 import app.readribbon.app.AppModel
 import app.readribbon.core.Bible
 import app.readribbon.core.FireScale
@@ -424,6 +425,39 @@ class LookBookTest {
         )
         val m = model(state)
         shoot("settings-notifications") { NotificationSettingsScreen(model = m, onBack = {}) }
+    }
+
+    /**
+     * The launch mark, drawn from the drawable the window actually uses.
+     *
+     * The splash is a system window, not a composition, so nothing else in
+     * this book can see it — and a vector whose clip-path is wrong shows up
+     * as a blank launch on a real phone and as nothing at all in a compile.
+     * This inflates the real `splash_wave` and draws it with the unfurl fully
+     * open, which is the frame the animation ends on.
+     */
+    @Test fun theLaunchMark() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val drawable = checkNotNull(context.getDrawable(R.drawable.splash_wave)) {
+            "splash_wave did not inflate"
+        }
+        val side = 432
+        val bitmap = Bitmap.createBitmap(side, side, Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bitmap)
+        canvas.drawColor(android.graphics.Color.parseColor("#0B0B0A"))
+        drawable.setBounds(0, 0, side, side)
+        // The drawable rests with the unfurl open, which is both the frame
+        // the animation lands on and what shows if it never runs.
+        drawable.draw(canvas)
+        File(out, "launch-mark.png").outputStream().use {
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
+        }
+        // The mark has to actually be there: a clip-path that does not match
+        // the animator's rectangle draws nothing and compiles perfectly.
+        val pixels = IntArray(side * side)
+        bitmap.getPixels(pixels, 0, side, 0, 0, side, side)
+        val ground = android.graphics.Color.parseColor("#0B0B0A")
+        check(pixels.any { it != ground }) { "the launch mark drew nothing but ground" }
     }
 
     @Test fun appearanceSettings() {

@@ -190,17 +190,29 @@ object RibbonMotion {
      * Deliberately short. The gesture's job is to *start* the opening, not
      * to perform all of it — asking for the whole screen's height would make
      * a two-hand gesture out of the app's front door.
+     *
+     * It was a third, and a third was too far: against [OPEN_TRAVEL] on a
+     * tall phone that is about 160 dp of pull, from an object that already
+     * sits halfway down the screen. A thumb runs out of room before the book
+     * runs out of threshold, which is exactly how a gesture comes to feel
+     * finicky — it works, but only if you commit to it twice. At a fifth it
+     * is a comfortable single pull with the screen to spare.
      */
-    const val OPEN_COMMIT = 0.33f
+    const val OPEN_COMMIT = 0.19f
 
     /**
      * The flick that opens the book however far it got: px/s, upward.
      *
      * Below this, distance decides. Above it, intent does — a fast short
      * flick is somebody who knows the gesture, and making them drag the
-     * whole third anyway is the app not believing them.
+     * whole distance anyway is the app not believing them.
+     *
+     * Lowered with [OPEN_COMMIT] and for the same reason. 900 px/s is a
+     * deliberate throw; a person opening a book they open every morning
+     * makes a much softer movement than that, and having it not take is the
+     * gesture asking to be performed rather than used.
      */
-    const val OPEN_FLING = 900f
+    const val OPEN_FLING = 480f
 
     /**
      * How much of the room's height one full pull is worth.

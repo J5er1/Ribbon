@@ -639,13 +639,17 @@ private fun Hearth(
             // for fixes that, and it is the better picture anyway: a warm
             // object in a dark recess, in a room the wallpaper may have
             // painted any colour at all.
+            // The well's own padding belongs to what stands in it rather
+            // than to the recess, so that on a lit hearth every pixel of the
+            // recess is part of the handle. An 18 dp band of dead ground
+            // around the one thing you are meant to take hold of is 18 dp of
+            // the gesture not working.
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RibbonShape.cardShape)
                     .background(Palette.ground)
-                    .grain()
-                    .padding(vertical = 18.dp),
+                    .grain(),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 if (current != null && currentBook != null) {
@@ -658,7 +662,10 @@ private fun Hearth(
                         onOpened = { onOpenReading(current, null) },
                     )
                 } else {
-                    UnlitHearth(paused = room.isPaused)
+                    UnlitHearth(
+                        paused = room.isPaused,
+                        modifier = Modifier.padding(vertical = 18.dp),
+                    )
                 }
             }
         }
@@ -703,33 +710,41 @@ private fun TheFire(
     val book = Bible.book(reading.bookID) ?: return
 
     Column(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            // The handle is the whole hearth, not the flame.
+            //
+            // It used to be the fire's own canvas alone, which on a short
+            // book is a 120 dp band in the middle of the recess with dead
+            // ground above and below it and the book's name — the most
+            // obviously grabbable thing here — outside the target entirely.
+            // The fire, the hearthline, the name and the state are one
+            // object (§4.1); you take hold of the object.
+            .opensTheBook(
+                sheet = sheet,
+                label = Copy.continueIn(book.name),
+                onEngaged = {
+                    // Taking hold of the fire *is* discovering the gesture,
+                    // whether or not the pull goes on to commit. The hint has
+                    // done its job and does not come back (§6.1).
+                    model.markFirePulled()
+                    onBeginOpening(reading)
+                },
+                onOpened = onOpened,
+                onAbandoned = onAbandonOpening,
+            )
+            .padding(vertical = 18.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                // Grabbing the fire and pulling puts the book up. The fire
-                // keeps its own "The fire is steady." label; this adds the
-                // action rather than replacing the sentence.
-                .opensTheBook(
-                    sheet = sheet,
-                    label = Copy.continueIn(book.name),
-                    onEngaged = {
-                        // Taking hold of the fire *is* discovering the
-                        // gesture, whether or not the pull goes on to commit.
-                        // The hint has done its job and does not come back
-                        // (§6.1).
-                        model.markFirePulled()
-                        onBeginOpening(reading)
-                    },
-                    onOpened = onOpened,
-                    onAbandoned = onAbandonOpening,
-                )
                 // Grows very slightly as it is pulled, which is the whole of
                 // the feedback the fire itself gives: an object being lifted
-                // toward you.
+                // toward you. Only the flame swells — the name under it
+                // holding still is what makes the fire read as rising rather
+                // than the card zooming.
                 .graphicsLayer {
                     val pull = sheet.progress
                     if (pull > 0f) {
@@ -804,9 +819,9 @@ private fun TheFire(
  *   invitation with no door does not.
  */
 @Composable
-private fun UnlitHearth(paused: Boolean) {
+private fun UnlitHearth(paused: Boolean, modifier: Modifier = Modifier) {
     Column(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+        modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
