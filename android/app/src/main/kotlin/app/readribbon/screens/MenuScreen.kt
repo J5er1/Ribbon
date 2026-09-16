@@ -1318,6 +1318,7 @@ private fun AccountControls(model: AppModel) {
     var signingIn by rememberSaveable { mutableStateOf(false) }
     var passkeyLine by rememberSaveable { mutableStateOf<String?>(null) }
 
+    val reduceMotion = rememberReduceMotion()
     val scope = rememberCoroutineScope()
     val activity = LocalActivity.current
 
@@ -1337,9 +1338,37 @@ private fun AccountControls(model: AppModel) {
         }
     }
 
+    // Four states in one place, and until now they traded places on a single
+    // frame: tapping Sign in replaced a control and a sentence with the whole
+    // inline form, and signing out replaced the form with them again — the
+    // section changing height under your thumb with nothing moving. The
+    // update card directly below this one is the same shape and already says
+    // why it was rebuilt ("four cards ... each appearing and vanishing on the
+    // frame its state changed"); this is the last place on You still doing
+    // it. What it says cross-fades, and the section grows or shrinks to fit
+    // rather than jumping.
+    val phase = when {
+        model.isSignedIn -> AccountPhase.signedIn
+        model.remote == null -> AccountPhase.noAccounts
+        signingIn -> AccountPhase.signingIn
+        else -> AccountPhase.signedOut
+    }
+
+    AnimatedContent(
+        targetState = phase,
+        transitionSpec = {
+            (
+                fadeIn(RibbonMotion.settle(reduceMotion)) togetherWith
+                    fadeOut(RibbonMotion.settle(reduceMotion))
+                ).using(
+                SizeTransform(clip = false) { _, _ -> RibbonMotion.settle(reduceMotion) },
+            )
+        },
+        label = "your-account",
+    ) { shown ->
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        when {
-            model.isSignedIn -> {
+        when (shown) {
+            AccountPhase.signedIn -> {
                 model.accountEmail?.let { address -> SmallCaps(address, size = 12f) }
                 // §6.10 wants a passkey where there is one. Offered here, on
                 // the account, because that is what it belongs to — and only
@@ -1366,15 +1395,15 @@ private fun AccountControls(model: AppModel) {
             }
 
             // Remote is not configured in this build; no dead control.
-            model.remote == null -> Unit
+            AccountPhase.noAccounts -> Unit
 
-            signingIn -> SignInInline(
+            AccountPhase.signingIn -> SignInInline(
                 model = model,
                 onSignedIn = { signingIn = false },
                 onCancel = { signingIn = false },
             )
 
-            else -> {
+            AccountPhase.signedOut -> {
                 QuietControl(
                     title = Copy.SIGN_IN,
                     modifier = Modifier.offset(x = QuietControlInset),
@@ -1387,7 +1416,11 @@ private fun AccountControls(model: AppModel) {
             }
         }
     }
+    }
 }
+
+/** What the account section is showing. One of four, and it eases between them. */
+private enum class AccountPhase { signedIn, signingIn, signedOut, noAccounts }
 
 /**
  * The update card (§A-OTA): one card, four things it can say.

@@ -8,7 +8,9 @@ import android.provider.Settings
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -229,6 +231,24 @@ fun PortraitView(
  * that it never reads as an alert. Your own marks never breathe. Pending
  * marks render hairline until they land (§4.4: no spinner, no toast, no
  * retry button).
+ *
+ * **Both of the changes this mark exists to report used to be cuts**, which
+ * is the one thing §9.1 asks nothing in the app to be.
+ *
+ * *Found.* You open somebody's note; the mark stops breathing and drops to
+ * its found opacity on the next frame — and because the breath is a moving
+ * value, where it dropped *from* depended on where in the four seconds you
+ * happened to tap. The breath eases out now and the opacity eases down, so
+ * the mark settles rather than being switched off.
+ *
+ * *Landed.* A note pushed while the network was down draws hairline and then
+ * becomes solid the instant it reaches the server — the only sign the app
+ * gives that what you wrote is now somewhere other than this phone, and it
+ * was a single frame in the corner of the gutter. The ring thickens inward
+ * into the filled dot instead, over a settle: the same fact, told as it
+ * happens. That it is the same geometry throughout — one circle, one stroke
+ * width — is why it can be animated at all, rather than cross-faded between
+ * two pictures.
  */
 @Composable
 fun NoteMark(
@@ -242,55 +262,77 @@ fun NoteMark(
     val reduceMotion = rememberReduceMotion()
     val breathes = !mine && !found && !pending && !reduceMotion
 
-    val breath = if (breathes) {
-        val transition = rememberInfiniteTransition(label = "note-mark-breath")
-        transition.animateFloat(
-            initialValue = 0.65f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(4000, easing = RibbonMotion.EaseInOut),
-                repeatMode = RepeatMode.Reverse,
-            ),
-            label = "note-mark-opacity",
-        ).value
-    } else {
-        when {
+    // The breath runs whenever this mark could be breathing. It is faded in
+    // and out by [breathing] below rather than started and stopped, because a
+    // repeating animation that is switched off leaves its value wherever it
+    // stood — which is exactly the jump this is here to remove.
+    val transition = rememberInfiniteTransition(label = "note-mark-breath")
+    val breath = transition.animateFloat(
+        initialValue = 0.65f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(4000, easing = RibbonMotion.EaseInOut),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "note-mark-opacity",
+    ).value
+
+    val settle = RibbonMotion.settle<Float>(reduceMotion)
+    val settleDp = RibbonMotion.settle<Dp>(reduceMotion)
+
+    /** Where this mark rests when it is not breathing. */
+    val rest by animateFloatAsState(
+        targetValue = when {
+            pending -> 0.9f
             mine -> 0.8f
             found -> 0.55f
             else -> 0.65f
-        }
-    }
+        },
+        animationSpec = settle,
+        label = "note-mark-rest",
+    )
+
+    /** How much of the breath is being heard: all of it, or none. */
+    val breathing by animateFloatAsState(
+        targetValue = if (breathes) 1f else 0f,
+        animationSpec = settle,
+        label = "note-mark-breathing",
+    )
+
+    // Hairline while it is still on this phone; the full stroke once it has
+    // landed. A voice note's filled dot is the same circle with the stroke
+    // opened all the way to the middle, so landing is one number moving.
+    val strokeWidth by animateDpAsState(
+        targetValue = when {
+            pending -> 0.7.dp
+            kind == NoteKind.voice -> MARK_SIZE / 2f
+            else -> 1.4.dp
+        },
+        animationSpec = settleDp,
+        label = "note-mark-stroke",
+    )
 
     val color = ink.color
     androidx.compose.foundation.Canvas(
         modifier = modifier
-            .size(6.dp)
-            .alpha(if (pending) 0.9f else breath),
+            .size(MARK_SIZE)
+            .alpha(rest + (breath - rest) * breathing),
     ) {
         val radius = size.minDimension / 2f
-        when (kind) {
-            NoteKind.voice ->
-                if (pending) {
-                    drawCircle(
-                        color = color,
-                        radius = radius - 0.35.dp.toPx(),
-                        style = Stroke(width = 0.7.dp.toPx()),
-                    )
-                } else {
-                    drawCircle(color = color, radius = radius)
-                }
-
-            NoteKind.written -> {
-                val stroke = if (pending) 0.7.dp.toPx() else 1.4.dp.toPx()
-                drawCircle(
-                    color = color,
-                    radius = radius - stroke / 2f,
-                    style = Stroke(width = stroke),
-                )
-            }
-        }
+        val stroke = strokeWidth.toPx()
+        // A stroke of width `radius` laid on a circle of radius `radius / 2`
+        // covers 0..radius: a filled dot, drawn as a ring, so the two states
+        // are ends of the same number rather than two different pictures.
+        drawCircle(
+            color = color,
+            radius = radius - stroke / 2f,
+            style = Stroke(width = stroke),
+        )
     }
 }
+
+/** The mark itself. Its touch target is the gutter's, and much larger (§11). */
+private val MARK_SIZE = 6.dp
 
 /** A 6 dp ink dot — the quiet marker on the room's waiting rows (S01). */
 @Composable

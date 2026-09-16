@@ -1,5 +1,6 @@
 package app.readribbon.reading
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -17,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -26,6 +28,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.input.pointer.pointerInput
@@ -277,6 +280,11 @@ fun ChapterText(
         }
     }
 
+    // The washes, already eased to whatever they are part-way through
+    // becoming. Computed here rather than in the draw because none of it
+    // needs the layout: only the rectangles do.
+    val washes = rememberArrivingWashes(verseInks, reduceMotion)
+
     Box(
         modifier = modifier.padding(
             // iOS: textContainerInset = (0, gutterWidth + 8, 0, trailingMargin).
@@ -290,7 +298,7 @@ fun ChapterText(
                 .fillMaxWidth()
                 .drawBehind {
                     val result = layout ?: return@drawBehind
-                    drawWashes(result, page, verseInks, density)
+                    drawWashes(result, page, washes, density)
                 }
                 // The long-press threshold is the platform's own
                 // (`ViewConfiguration.longPressTimeout`, 500 ms) rather than
@@ -392,25 +400,107 @@ private class GestureState {
 // MARK: - The washes
 
 /**
+ * One verse's wash, as it is drawn this frame: the colour the inks on it
+ * make, and how far up it is.
+ */
+@Immutable
+private data class Wash(val color: Color, val alpha: Float)
+
+/**
+ * The wash a set of inks settles at.
+ *
+ * 24% for one ink; overlapping inks deepen, capped so a verse never becomes a
+ * block of colour. The multiply is arithmetic on the ink values, filled once,
+ * exactly as iOS does it — deliberately not a `BlendMode.Multiply` pass per
+ * ink. A blend mode multiplies against whatever is already on the canvas, and
+ * what is already there is the unlit ground (0x0B0B0A); the overlap would come
+ * out darker than a single wash and still carrying the first ink's hue, which
+ * is the opposite of the third colour §4.5 asks for.
+ */
+private fun washFor(inks: List<Ink>): Wash {
+    var multiplied = inks[0].color
+    for (other in inks.drop(1)) multiplied = multiply(multiplied, other.color)
+    return Wash(multiplied, min(0.45f, Palette.HIGHLIGHT_WASH + 0.14f * (inks.size - 1)))
+}
+
+/**
+ * Somebody else's highlight, arriving.
+ *
+ * This is the moment the product is for — the other person marks a verse and
+ * it turns up under your eyes on the page you are already reading — and until
+ * now it was the one change in the app that happened on a single frame. A 24%
+ * wash simply *was there*, in the periphery, with nothing to say it had just
+ * come; §9.1 opens "everything breathes rather than blinks" and this was the
+ * blink. Taking one back was the same in reverse, and a second person marking
+ * a verse you had already marked stepped the colour to its deeper multiply
+ * with a cut.
+ *
+ * All three are the same animation: the page holds what it last settled on,
+ * and every wash eases from there to where it is now. A new wash comes up
+ * from nothing, one taken back goes down to nothing, and a deepening one
+ * crosses from the old colour to the new. Nothing is keyed to a clock, so a
+ * chapter you have just opened draws its highlights already there rather than
+ * fading a page of them in at you.
+ *
+ * `arrive`, not `settle` — §9.1 files presence appearing under the first, and
+ * a highlight is somebody being present at a verse.
+ */
+@Composable
+private fun rememberArrivingWashes(
+    verseInks: Map<Int, List<Ink>>,
+    still: Boolean,
+): Map<Int, Wash> {
+    val settled = remember(verseInks) {
+        verseInks.mapNotNull { (verse, inks) ->
+            if (inks.isEmpty()) null else verse to washFor(inks)
+        }.toMap()
+    }
+
+    // What the page is coming *from*. Seeded with the first set it is given,
+    // so opening a chapter is not an arrival: those highlights were already
+    // there before you turned to the page.
+    var from by remember { mutableStateOf(settled) }
+    val travel = remember { Animatable(1f) }
+
+    LaunchedEffect(settled) {
+        if (from == settled) return@LaunchedEffect
+        travel.snapTo(0f)
+        travel.animateTo(1f, RibbonMotion.arrive(still))
+        from = settled
+    }
+
+    val t = travel.value
+    if (t >= 1f) return settled
+
+    val drawn = LinkedHashMap<Int, Wash>(settled.size + from.size)
+    for ((verse, now) in settled) {
+        val was = from[verse]
+        drawn[verse] = if (was == null) {
+            now.copy(alpha = now.alpha * t)
+        } else {
+            Wash(lerp(was.color, now.color, t), was.alpha + (now.alpha - was.alpha) * t)
+        }
+    }
+    // Taken back: down to nothing rather than gone between two frames.
+    for ((verse, was) in from) {
+        if (verse !in settled) drawn[verse] = was.copy(alpha = was.alpha * (1f - t))
+    }
+    return drawn
+}
+
+/**
  * Highlight washes, drawn behind the glyphs: rounded, bleeding ~2 dp past
  * the glyph box, with slightly irregular edges so it reads as ink soaking
  * into paper rather than a filled rectangle.
  *
- * Overlaps arrive precomputed as multiplied colours, so two people marking
- * the same verse produces a third colour. The colours are never averaged —
- * the overlap is the point (§4.5).
- *
- * The multiply is arithmetic on the ink values, filled once, exactly as iOS
- * does it — deliberately not a `BlendMode.Multiply` pass per ink. A blend
- * mode multiplies against whatever is already on the canvas, and what is
- * already there is the unlit ground (0x0B0B0A); the overlap would come out
- * darker than a single wash and still carrying the first ink's hue, which is
- * the opposite of the third colour §4.5 asks for.
+ * The colours arrive already made — see [rememberArrivingWashes]. What is
+ * left here is the one part that needs the layout: which rectangles a verse
+ * encloses.
  */
 private fun DrawScope.drawWashes(
     layout: TextLayoutResult,
     page: ChapterPage,
-    verseInks: Map<Int, List<Ink>>,
+    washes: Map<Int, Wash>,
     density: Density,
 ) {
     val bleedX = with(density) { WASH_BLEED_X.toPx() }
@@ -418,23 +508,18 @@ private fun DrawScope.drawWashes(
     val jitterUnit = with(density) { 0.2.dp.toPx() }
     val radiusUnit = with(density) { 1.dp.toPx() }
 
-    val washes = verseInks.entries
-        .mapNotNull { (verse, inks) ->
-            if (inks.isEmpty()) return@mapNotNull null
+    val ordered = washes.entries
+        .mapNotNull { (verse, wash) ->
+            if (wash.alpha <= 0f) return@mapNotNull null
             val range = page.verseRanges[verse] ?: return@mapNotNull null
-            range to inks
+            range to wash
         }
         .sortedBy { it.first.first }
 
-    for ((range, inks) in washes) {
-        // 24% for one ink; overlapping inks deepen, capped so a verse never
-        // becomes a block of colour.
-        val alpha = min(0.45f, Palette.HIGHLIGHT_WASH + 0.14f * (inks.size - 1))
+    for ((range, wash) in ordered) {
         val rects = enclosingRects(layout, range)
         if (rects.isEmpty()) continue
-        var multiplied = inks[0].color
-        for (other in inks.drop(1)) multiplied = multiply(multiplied, other.color)
-        val color: Color = multiplied.copy(alpha = alpha)
+        val color: Color = wash.color.copy(alpha = wash.alpha)
         for (rect in rects) {
             // Bleed past the glyph box; jitter by a stable hash so the
             // edge is irregular but doesn't shimmer on redraw.

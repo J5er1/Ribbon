@@ -1810,6 +1810,79 @@ A40a. **Two repairs that were themselves defects, and the queue that was
     in the app — never said `Role.Button`, so it announced as a line of text
     while `QuietControl` and `BackChevron` both said it.
 
+A41. **The four cuts that were left, and the first of them is the product.**
+    A38 swept the app's animation primitives and fixed ten places still
+    changing on one frame. It found these four as well and did not fix them,
+    because the pass it belonged to had five named subjects and these were
+    not among them. They are the four, in the order they matter.
+
+    **Somebody else's highlight arrived on a single frame.** This is the
+    moment the whole product is for — the other person marks a verse and it
+    turns up under your eyes, on the page you are already reading — and it
+    happened the way a rendering glitch happens: a 24% wash simply *was*
+    there, in the periphery, with nothing to say it had just come. §9.1 opens
+    "everything breathes rather than blinks" and this was the blink, on the
+    one surface §13 will not allow a spinner, a toast or a badge on, so the
+    wash coming up *is* the whole notification.
+
+    Taking one back was the same in reverse, and a second person marking a
+    verse you had already marked stepped the colour straight to its deeper
+    multiply. All three are now one animation: the page holds the washes it
+    last settled on, and every wash eases from there to where it is now — up
+    from nothing, down to nothing, or across from the old colour to the new.
+    Deliberately not keyed to a clock, so a chapter you have just opened
+    draws its highlights already there rather than fading a page of them in
+    at you; an arrival is a thing that happens *while you are looking*, and
+    everything else is just the page. `arrive`, not `settle`, because §9.1
+    files presence appearing under the first and a highlight is somebody
+    being present at a verse.
+
+    The colour and alpha moved out of the draw and into composition to do it,
+    which is where they always belonged: nothing about "what colour is this
+    verse" needs the text layout. Only the rectangles do.
+
+    **A note mark reported both of its own state changes as cuts.** The mark
+    in the gutter exists to say two things, and said both on one frame.
+    *Found*: you open somebody's note, the breath stops and the opacity drops
+    — and because a breath is a moving value, where it dropped from depended
+    on where in the four seconds you happened to tap, so the same act looked
+    different every time. The breath is faded out now rather than switched
+    off. *Landed*: a note written offline draws hairline and becomes solid the
+    instant it reaches the server, which is the only sign this app gives that
+    what you wrote is now somewhere other than this phone (§4.4 forbids the
+    spinner, the toast and the retry button, and is right to). The ring
+    thickens inward into the filled dot over a settle instead.
+
+    The second one needed the mark redrawn as one shape: a filled dot is a
+    ring whose stroke has opened all the way to the middle, so both kinds and
+    both states are now ends of a single number rather than four pictures in a
+    `when`. That is the difference between something that can be animated and
+    something that can only be cross-faded.
+
+    **The presence panel's rows popped.** Somebody arriving while the panel is
+    open is the panel's entire subject, and it was the one thing on it that
+    happened between two frames: a row appeared, everything under it jumped by
+    its height, the panel changed size around them. Leaving was worse — a face
+    you were looking at was simply not there.
+
+    Each row opens and closes in its own space now. That needed a roster
+    rather than the list: a list you iterate cannot animate a departure,
+    because by the time you would animate it the departing person is already
+    not in it. `rememberRoster` keeps a leaver for exactly as long as the exit
+    lasts, in the place they were standing rather than at the end of the
+    queue, and forgets them after. Somebody back before their exit finishes is
+    simply here again.
+
+    **The account section swapped three layouts with no transition.** Tapping
+    "Sign in" replaced a control and a sentence with the whole inline form,
+    and signing out replaced the form with them again — the section changing
+    height under your thumb with nothing moving. What makes this one worth
+    writing down is that the update card *directly below it* is the same shape
+    and already carries the argument, in A-OTA's own words: "four cards ...
+    each appearing and vanishing on the frame its state changed". The fix had
+    been written, one section away, and not carried across. It is four named
+    phases and an `AnimatedContent` now, on the same tokens.
+
 ## Licensed translations (decided: API.Bible)
 
 Open question §16.8 is now part-decided: **NKJV plus two undecided

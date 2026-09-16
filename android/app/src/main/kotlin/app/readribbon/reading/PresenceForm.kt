@@ -8,8 +8,10 @@ import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
@@ -44,7 +46,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -540,6 +544,55 @@ private fun CollapsedForm(
     }
 }
 
+/**
+ * The roster the panel draws: everybody here, plus anybody who has just left
+ * and is still on their way out, each paired with whether they are still here.
+ *
+ * `people` alone cannot express a departure — the moment somebody goes they
+ * are not in it, so there is nothing left to animate away. This keeps them
+ * for as long as the exit lasts and then forgets them. Order is kept: a
+ * leaver stays where they were standing rather than jumping to the end of the
+ * queue on their way out.
+ */
+@Composable
+private fun rememberRoster(people: List<PresentPerson>): List<Pair<PresentPerson, Boolean>> {
+    val leaving = remember { mutableStateMapOf<Uuid, PresentPerson>() }
+    val here = people.map { it.id }.toSet()
+
+    LaunchedEffect(here) {
+        // Anybody back before their exit finished is simply here again.
+        leaving.keys.retainAll { it !in here }
+    }
+    val lastSeen = remember { mutableStateListOf<PresentPerson>() }
+    LaunchedEffect(people) {
+        val gone = lastSeen.filter { it.id !in here }
+        gone.forEach { leaving[it.id] = it }
+        lastSeen.clear()
+        lastSeen.addAll(people)
+        if (gone.isNotEmpty()) {
+            delay(RibbonMotion.ARRIVE_MS.toLong())
+            gone.forEach { if (it.id !in here) leaving.remove(it.id) }
+        }
+    }
+
+    val roster = ArrayList<Pair<PresentPerson, Boolean>>(people.size + leaving.size)
+    // The order the panel last had, so a leaver keeps their place.
+    val order = if (lastSeen.isEmpty()) people else lastSeen
+    val placed = HashSet<Uuid>()
+    for (person in order) {
+        val current = people.firstOrNull { it.id == person.id }
+        when {
+            current != null -> roster.add(current to true)
+            leaving[person.id] != null -> roster.add(leaving.getValue(person.id) to false)
+            else -> continue
+        }
+        placed.add(person.id)
+    }
+    // Arrivals since that order was taken.
+    for (person in people) if (person.id !in placed) roster.add(person to true)
+    return roster
+}
+
 /** Who's here, and the one gesture. */
 @Composable
 private fun PresencePanel(
@@ -558,15 +611,38 @@ private fun PresencePanel(
         verticalArrangement = Arrangement.spacedBy(14.dp),
         horizontalAlignment = Alignment.Start,
     ) {
-        people.forEach { person ->
-            PersonRow(
-                model = model,
-                room = room,
-                people = people,
-                person = person,
-                reduceMotion = reduceMotion,
-                onFollow = onFollow,
-            )
+        // Somebody arriving while the panel is open is the panel's whole
+        // subject, and it used to be the one thing on it that happened
+        // between two frames: a row appeared, every row under it jumped down
+        // by its height, and the panel changed size around them. Leaving was
+        // the same in reverse and worse — a face you were looking at was
+        // simply not there.
+        //
+        // Each row opens and closes in its own space now, so the ones below
+        // slide rather than jump, and a row on its way out stays until it has
+        // finished going (see [rememberRoster] — a list you iterate cannot
+        // animate a departure, because the departing item is already gone
+        // from it).
+        rememberRoster(people).forEach { (person, here) ->
+            key(person.id) {
+                AnimatedVisibility(
+                    visible = here,
+                    enter = fadeIn(RibbonMotion.arrive(reduceMotion)) +
+                        expandVertically(RibbonMotion.arrive(reduceMotion)),
+                    exit = fadeOut(RibbonMotion.arrive(reduceMotion)) +
+                        shrinkVertically(RibbonMotion.arrive(reduceMotion)),
+                    label = "someone-here",
+                ) {
+                    PersonRow(
+                        model = model,
+                        room = room,
+                        people = people,
+                        person = person,
+                        reduceMotion = reduceMotion,
+                        onFollow = onFollow,
+                    )
+                }
+            }
         }
         if (model.readingQuietly) {
             Row(
