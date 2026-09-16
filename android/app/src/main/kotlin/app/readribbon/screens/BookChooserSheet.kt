@@ -42,8 +42,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -57,12 +59,12 @@ import app.readribbon.core.Room
 import app.readribbon.core.TranslationID
 import app.readribbon.data.ScriptureStore
 import app.readribbon.design.Palette
-import app.readribbon.design.pressablePaper
-import app.readribbon.design.well
 import app.readribbon.design.RibbonType
 import app.readribbon.design.SmallCaps
+import app.readribbon.design.pressablePaper
 import app.readribbon.design.rememberSheetExit
 import app.readribbon.design.room
+import app.readribbon.design.well
 import app.readribbon.fire.CampfireGlyph
 import app.readribbon.fire.EmberView
 import kotlinx.coroutines.Dispatchers
@@ -246,6 +248,9 @@ private fun SearchField(
                 text = Copy.SEARCH,
                 style = RibbonType.ui(16f),
                 color = Palette.muted,
+                // The prompt is the field's decoration, not a second stop on
+                // the way to it (§11).
+                modifier = Modifier.clearAndSetSemantics {},
             )
         }
         BasicTextField(
@@ -257,7 +262,9 @@ private fun SearchField(
             // `.autocorrectionDisabled()`: autocorrect turns "Habakkuk" into
             // something else on the third letter.
             keyboardOptions = KeyboardOptions(autoCorrectEnabled = false),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .semantics { contentDescription = Copy.SEARCH },
         )
     }
 }
@@ -533,7 +540,10 @@ private fun AddressHit(
             // A reference on its own is a line of 12-point small caps. The
             // target is 44 (§12.2).
             .heightIn(min = TouchTarget)
-            .clickable(onClick = onChoose),
+            // A row of search results that does not say it is a row of
+            // controls: the address and the verse announced as two lines of
+            // text, with no way to know the list was tappable (§11).
+            .clickable(role = Role.Button, onClick = onChoose),
         verticalArrangement = Arrangement.spacedBy(3.dp, Alignment.CenterVertically),
     ) {
         SmallCaps(address, size = 12f, color = Palette.text.copy(alpha = 0.8f))

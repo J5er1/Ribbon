@@ -5,8 +5,8 @@ package app.readribbon.reading
 import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
@@ -40,15 +40,15 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -78,14 +78,15 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import app.readribbon.app.AppModel
 import app.readribbon.app.Copy
@@ -104,6 +105,7 @@ import app.readribbon.core.TranslationID
 import app.readribbon.core.TranslationRegistry
 import app.readribbon.core.VerseAddress
 import app.readribbon.core.VerseRange
+import app.readribbon.design.BookSheet
 import app.readribbon.design.HairlineRule
 import app.readribbon.design.InkDot
 import app.readribbon.design.Measure
@@ -113,24 +115,21 @@ import app.readribbon.design.QuietControl
 import app.readribbon.design.RibbonMotion
 import app.readribbon.design.RibbonType
 import app.readribbon.design.SmallCaps
-import app.readribbon.design.BookSheet
 import app.readribbon.design.WaveMark
-import app.readribbon.design.closesTheBook
 import app.readribbon.design.WayInButton
+import app.readribbon.design.closesTheBook
 import app.readribbon.design.grain
-import app.readribbon.design.readableColumn
 import app.readribbon.design.peeled
+import app.readribbon.design.readableColumn
 import app.readribbon.design.rememberBackPeel
 import app.readribbon.design.rememberReduceMotion
 import app.readribbon.design.room
 import app.readribbon.fire.FireBecomesEmber
-import app.readribbon.services.PresentPerson
 import app.readribbon.screens.ConfirmChoice
 import app.readribbon.screens.RibbonConfirmDialog
+import app.readribbon.services.PresentPerson
 import app.readribbon.services.VoiceRecorder
 import app.readribbon.services.ensureRemoteChapter
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import java.io.File
 import kotlin.math.abs
 import kotlin.time.Clock
@@ -139,6 +138,8 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 // S02 — the surface everything else exists to protect. No top bar, no back
 // button, no toolbar until you ask for one. Two ways out, both at the
@@ -1637,7 +1638,14 @@ private fun HighlightLabelOverlay(
             verticalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier
                 .ribbonGlass(RoundedCornerShape(16.dp))
-                .clickable(onClick = onDismiss)
+                // It goes on its own after a moment, and a tap sends it early
+                // — but the tap was unannounced, so the one way to dismiss it
+                // deliberately was invisible to a screen reader (§11).
+                .clickable(
+                    role = Role.Button,
+                    onClickLabel = Copy.DISMISS,
+                    onClick = onDismiss,
+                )
                 .padding(16.dp),
         ) {
             Row(
@@ -1697,6 +1705,7 @@ private fun FinishingSection(
             text = bookName,
             style = RibbonType.display(30f),
             color = Palette.text,
+            modifier = Modifier.semantics { heading() },
         )
         SmallCaps(
             text = RibbonClock.emberRange(
@@ -1781,10 +1790,14 @@ fun PassageEnd(
             }
         }
 
+        // The app's forward motion — the one control that carries you out of
+        // a finished chapter and into the next — announced as a line of
+        // type, because it had a target and a tap and never said what it
+        // was. A39a's own finding, on the other end of the same page.
         Box(
             modifier = Modifier
                 .sizeIn(minWidth = 44.dp, minHeight = 44.dp)
-                .clickable(onClick = onContinue),
+                .clickable(role = Role.Button, onClick = onContinue),
             contentAlignment = Alignment.Center,
         ) {
             Text(

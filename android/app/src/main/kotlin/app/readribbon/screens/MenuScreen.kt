@@ -81,10 +81,12 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
@@ -1245,6 +1247,10 @@ private fun RoomControls(
                             text = Copy.ROOM_NAME,
                             style = RibbonType.ui(17f),
                             color = Palette.muted,
+                            // The prompt belongs to the field, which says its
+                            // own name below — the same shape the name field
+                            // one section up already keeps.
+                            modifier = Modifier.clearAndSetSemantics {},
                         )
                     }
                     BasicTextField(
@@ -1263,7 +1269,10 @@ private fun RoomControls(
                                 editingRoomName = false
                             },
                         ),
-                        modifier = Modifier.fillMaxWidth().focusRequester(focus),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(focus)
+                            .semantics { contentDescription = Copy.ROOM_NAME },
                     )
                 }
             } else {
@@ -1378,10 +1387,19 @@ private fun AccountControls(model: AppModel) {
                         title = Copy.ADD_A_PASSKEY,
                         modifier = Modifier.offset(x = QuietControlInset),
                     ) { addPasskey() }
+                    // The one line on this screen that changes because of
+                    // something the person just did, with nothing taking
+                    // focus and nothing else moving — so a screen reader was
+                    // told neither that the passkey was added nor that it had
+                    // failed. §11's rule that colour is never alone has a
+                    // twin: a result is never silent.
                     Text(
                         text = passkeyLine ?: Copy.PASSKEY_REASON,
                         style = RibbonType.ui(13f),
                         color = Palette.muted,
+                        modifier = Modifier.semantics {
+                            if (passkeyLine != null) liveRegion = LiveRegionMode.Polite
+                        },
                     )
                 }
                 QuietControl(

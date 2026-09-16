@@ -23,21 +23,24 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import app.readribbon.app.AppModel
-import app.readribbon.services.SupabaseError
 import app.readribbon.app.Copy
 import app.readribbon.design.Palette
 import app.readribbon.design.QuietControl
-import app.readribbon.services.Passkeys
 import app.readribbon.design.RibbonMotion
 import app.readribbon.design.RibbonType
 import app.readribbon.design.WayInButton
 import app.readribbon.design.rememberReduceMotion
+import app.readribbon.services.Passkeys
+import app.readribbon.services.SupabaseError
 import kotlinx.coroutines.launch
 
 // The sign-in thread, inline (§6.10): an email, then the emailed code, no
@@ -218,7 +221,7 @@ fun SignInInline(
 
                         if (model.auth0Available && activity != null) {
                             WayInButton(
-                                title = Copy.SIGN_IN_WITH_AUTH0,
+                                title = Copy.SIGN_IN_IN_A_BROWSER,
                                 onClick = { signInWithAuth0() },
                                 modifier = Modifier.padding(horizontal = 30.dp),
                             )
@@ -296,12 +299,19 @@ fun SignInInline(
         // (S25) — it never replaces the thread, so the field keeps whatever
         // was typed.
         errorLine?.let { line ->
+            // Sign-in's only answer when it goes wrong. Nothing takes focus
+            // and nothing else on the screen moves, so a screen reader was
+            // left on the control it had just pressed with no idea the
+            // attempt had failed — and the app has no other way of saying so
+            // (§13: no toast, no alert).
             Text(
                 text = line,
                 style = RibbonType.ui(14f),
                 color = Palette.muted,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics { liveRegion = LiveRegionMode.Polite },
             )
         }
 

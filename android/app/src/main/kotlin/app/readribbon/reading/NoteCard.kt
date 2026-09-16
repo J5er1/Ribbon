@@ -284,7 +284,19 @@ private fun VoiceBody(
                     Box(
                         modifier = Modifier
                             .heightIn(min = 44.dp)
-                            .clickable(onClick = onToggleTranscript)
+                            // A fold that opens and closes, announced as the
+                            // word "transcript" and nothing else: no role, no
+                            // act, and no way to know it was a control or
+                            // which way it was pointing (§11).
+                            .clickable(
+                                role = Role.Button,
+                                onClickLabel = if (transcriptShown) {
+                                    Copy.HIDES_THE_TRANSCRIPT
+                                } else {
+                                    Copy.SHOWS_THE_TRANSCRIPT
+                                },
+                                onClick = onToggleTranscript,
+                            )
                             // The fold opens on a settle; reduce motion
                             // takes the same two states with no travel
                             // between them (§11).

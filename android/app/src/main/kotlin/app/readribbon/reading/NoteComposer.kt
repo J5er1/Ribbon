@@ -69,6 +69,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.selected
@@ -240,16 +241,26 @@ fun LeaveToolbar(
                 }
             } else {
                 // The eight sit in touchable columns that include the gap
-                // between them, so the drawn 20 dp swatch keeps its
-                // spacing while the finger gets a column the full height
-                // of the bar to hit (§11 — a control only a stylus can hit
-                // is broken).
+                // between them, so the drawn 20 dp swatch keeps its spacing
+                // while the finger gets a column the full height of the bar
+                // to hit (§11 — a control only a stylus can hit is broken).
+                //
+                // That column was 34 dp across, which is ten under the floor
+                // §11 and deviation 12 set and the app keeps everywhere else
+                // — and it was on the eight-across case, where the columns
+                // are already touching, so a miss lands on the ink next door
+                // rather than on nothing. Marking a verse in the wrong
+                // person's colour is a worse failure than not marking it.
+                //
+                // They are 44 now. The row is wider than a phone at eight
+                // either way, which is exactly why it already scrolls: the
+                // trade was never width against reach, it was width against
+                // a scroll that was there regardless.
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Ink.entries.forEach { ink ->
                         InkSwatch(
                             ink = ink,
                             isSelected = !roomPaused && ink == model.lastUsedInk,
-                            targetWidth = SWATCH_DIAMETER + 14.dp,
                             modifier = Modifier.alpha(if (roomPaused) 0.35f else 1f),
                         ) {
                             if (!roomPaused) onHighlight(ink)
@@ -285,24 +296,29 @@ fun LeaveToolbar(
 }
 
 /**
- * One ink, 20 dp, ringed when it is the one that will be used.
+ * One ink, 20 dp drawn, ringed when it is the one that will be used, in a
+ * 44 dp target (§11, deviation 12). The drawn swatch and the target it sits
+ * in are deliberately different sizes: a 44 dp dot would be a button, and
+ * these are meant to read as ink.
  *
- * @param targetWidth the width of the touch target the drawn swatch sits in
- *   the middle of; the swatch itself is always [SWATCH_DIAMETER].
+ * The target used to be an argument, so that eight of them could be squeezed
+ * to 34; there is no caller left that wants anything but the floor.
  */
 @Composable
 fun InkSwatch(
     ink: Ink,
     isSelected: Boolean,
     modifier: Modifier = Modifier,
-    targetWidth: Dp = 44.dp,
     onClick: () -> Unit,
 ) {
     val color = ink.color
     Box(
         modifier = modifier
-            .sizeIn(minWidth = targetWidth, minHeight = TOOLBAR_HEIGHT)
-            .clickable(onClick = onClick)
+            .sizeIn(minWidth = SWATCH_TARGET, minHeight = TOOLBAR_HEIGHT)
+            // `selected` without a role leaves a screen reader saying an ink's
+            // name and nothing about it being a choice among eight, one of
+            // which is taken. RadioButton is what a one-of-many is.
+            .clickable(role = Role.RadioButton, onClick = onClick)
             .semantics {
                 contentDescription = Copy.inkNamed(ink.displayName)
                 selected = isSelected
@@ -391,6 +407,11 @@ fun WriteComposer(
             modifier = Modifier
                 .fillMaxWidth()
                 .focusRequester(focusRequester)
+                // S05 draws neither a label nor a prompt over this field, so
+                // there is nothing on screen to take a name from and it is
+                // said here. The app's central writing surface announced as
+                // an unlabelled edit box (§11).
+                .semantics { contentDescription = Copy.WHAT_YOU_WANT_TO_SAY }
                 // ⌘↩ leaves the note — the convention a hardware-keyboard
                 // iPad reader expects; ⌃↩ is the same convention on a
                 // keyboard attached to an Android tablet, and both are
@@ -413,7 +434,7 @@ fun WriteComposer(
             Box(
                 modifier = Modifier
                     .sizeIn(minWidth = 44.dp, minHeight = 44.dp)
-                    .clickable(onClick = onCancel),
+                    .clickable(role = Role.Button, onClick = onCancel),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
@@ -636,6 +657,9 @@ private val TOOLBAR_HEIGHT = 52.dp
 
 /** The drawn swatch. The touch target around it is larger (§11). */
 private val SWATCH_DIAMETER = 20.dp
+
+/** That target: the floor every control in the app keeps (deviation 12). */
+private val SWATCH_TARGET = 44.dp
 
 /** How many live peaks the waveform shows — the tail of the recording. */
 private const val LIVE_BARS = 80

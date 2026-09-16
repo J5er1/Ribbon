@@ -1883,6 +1883,77 @@ A41. **The four cuts that were left, and the first of them is the product.**
     been written, one section away, and not carried across. It is four named
     phases and an `AnimatedContent` now, on the same tokens.
 
+A41a. **The rest of what the audit found: what the app does not say, and the
+    two things it says that it should not.** A39a fixed §11's "every gesture
+    has a tap equivalent" on the app's central act. Going back over the same
+    ground with the other half of §11 — *say what a thing is* — turned up
+    fifteen more, none of them hard, all of them invisible to anybody who can
+    see the screen.
+
+    **Five fields had no name.** A25 gave onboarding's three fields one shape,
+    one target and one prompt-beside-the-caret, and A35a did the same on You;
+    neither gave a field a *name*. Compose takes an accessible name from a
+    label, and all five of these draw their prompt as a sibling `Text` in the
+    decoration — so what a screen reader met was the word "Optional", or
+    "Search", or nothing at all, and then an unlabelled edit box it had to
+    guess the purpose of. The five: the note composer (S05 draws neither a
+    label nor a prompt over it, so there was nothing on screen to borrow
+    from — the app's central writing surface), the room name on the start
+    sheet, the book search, the room name on You, and onboarding's shared
+    `CentredTextField`, which is three fields including the one thing S17 will
+    not let anybody skip. Every prompt is now cleared from the tree and the
+    name is on the field, which is also one stop instead of two.
+
+    **Six controls had no role.** The next chapter — the control that carries
+    you out of a finished chapter and into the next one, the app's whole
+    forward motion — was a `Text` in a tappable `Box`, announced as a line of
+    type. So were the transcript disclosure (announced as the word
+    "transcript": the thing, never the act, and no way to know which way it
+    was pointing), the rows of a book search, "take back" in the composer, and
+    the tap that sends the highlight label away early — which meant the only
+    deliberate way to dismiss it did not exist unless you could see it. The
+    eight ink swatches said `selected` with no role at all, so a screen reader
+    named an ink and said nothing about it being one of eight with one taken;
+    they are `RadioButton`s, which is what a one-of-many is.
+
+    **Nothing in the app was a live region.** Two lines change because of
+    something the person just did, with nothing taking focus and nothing else
+    moving: the passkey result on You, and sign-in's only answer when it goes
+    wrong. §13 forbids the toast and the alert, correctly, which makes these
+    two lines the whole of what the app has to say — and it was saying them to
+    nobody. §11's "colour is never alone" has a twin: a result is never
+    silent. Both are `LiveRegionMode.Polite` now, and the passkey line only
+    while it is a result rather than the standing explanation.
+
+    **Two screens drew their own title and so had no heading.** Every pushed
+    screen gets one from `RibbonScreen`'s top bar (A35's finding on S12). The
+    chapter list and the finished chapter draw theirs by hand, so a screen
+    reader navigating by heading found nothing on either.
+
+    **The eight ink swatches were 34 dp across** — ten under the floor §11 and
+    deviation 12 set and the app keeps everywhere else, and specifically on
+    the eight-across case, where the columns touch, so a miss lands on the ink
+    *next door* rather than on nothing. Marking a verse in the wrong person's
+    colour is a worse failure than not marking it. They are 44 now. The
+    argument for 34 had been that eight at 44 are wider than a phone — which
+    is true, and is exactly why that row has scrolled since it was written:
+    the trade was never width against reach, it was width against a scroll
+    that was already there. `InkSwatch` lost the parameter with the last
+    caller that wanted anything but the floor.
+
+    **And two things that should not have been on screen at all.** The primary
+    sign-in control read *Continue with Auth0*: the one place in the product
+    where somebody about to read Scripture with their partner was shown the
+    name of a vendor. The identity provider is a decision this app made, not
+    something the reader has an account with or has heard of; §12's voice has
+    no room for an infrastructure brand on the control that opens the app. It
+    says what actually happens — a browser opens — and nothing else.
+    `INKS_FROM_WHEN_THE_ROOM_WAS_TWO` was the second string in `Copy.kt`
+    written and never read, which is the defect A39 is about; it is gone, and
+    so is `ScreenTitle`, a design-system component written for pushed screens,
+    superseded by `RibbonScreen`, and used by nothing. A design system with
+    dead parts in it is a design system people stop trusting to be the answer.
+
 ## Licensed translations (decided: API.Bible)
 
 Open question §16.8 is now part-decided: **NKJV plus two undecided

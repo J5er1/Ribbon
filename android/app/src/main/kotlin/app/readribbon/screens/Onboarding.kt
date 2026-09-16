@@ -15,6 +15,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -32,21 +33,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import app.readribbon.core.Ink
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -60,12 +56,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -74,8 +75,10 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.core.graphics.scale
 import app.readribbon.app.AppModel
 import app.readribbon.app.Copy
+import app.readribbon.core.Ink
 import app.readribbon.core.Invite
 import app.readribbon.design.Palette
 import app.readribbon.design.QuietControl
@@ -83,26 +86,25 @@ import app.readribbon.design.RibbonMotion
 import app.readribbon.design.RibbonShape
 import app.readribbon.design.RibbonType
 import app.readribbon.design.Seam
-import app.readribbon.design.pressablePaper
 import app.readribbon.design.SmallCaps
 import app.readribbon.design.WaveMark
 import app.readribbon.design.WayInButton
+import app.readribbon.design.color
+import app.readribbon.design.pressablePaper
 import app.readribbon.design.readableColumn
 import app.readribbon.design.rememberReduceMotion
 import app.readribbon.design.room
 import app.readribbon.design.well
-import app.readribbon.design.color
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
-import androidx.core.graphics.scale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 // S17 — onboarding: a thread, not a screen. Four questions, no tour, no
 // carousel, no permission prompts at launch, no account wall. The Wave and
@@ -1018,6 +1020,12 @@ internal fun CentredTextField(
         keyboardActions = keyboardActions,
         modifier = modifier
             .fillMaxWidth()
+            // A25 gave these three fields one shape and one target; it did not
+            // give them a name. The prompt beside the caret is drawn in the
+            // decoration, so a screen reader met the prompt and then an
+            // unlabelled edit box — on the first three things the app ever
+            // asks anybody to type.
+            .semantics { contentDescription = placeholder }
             .then(
                 if (focusRequester != null) {
                     Modifier.focusRequester(focusRequester)
@@ -1059,6 +1067,7 @@ internal fun CentredTextField(
                             text = placeholder,
                             style = RibbonType.ui(size),
                             color = Palette.muted,
+                            modifier = Modifier.clearAndSetSemantics {},
                         )
                     }
                 } else {

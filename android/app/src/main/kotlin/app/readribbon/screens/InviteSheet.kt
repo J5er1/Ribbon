@@ -37,6 +37,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -45,12 +48,12 @@ import app.readribbon.app.Copy
 import app.readribbon.core.Invite
 import app.readribbon.core.Room
 import app.readribbon.design.Palette
-import app.readribbon.design.well
 import app.readribbon.design.RibbonType
 import app.readribbon.design.SmallCaps
 import app.readribbon.design.WayInButton
 import app.readribbon.design.rememberSheetExit
 import app.readribbon.design.room
+import app.readribbon.design.well
 import kotlin.uuid.ExperimentalUuidApi
 
 // S15 — making a room, and inviting. The link is the whole mechanism: no
@@ -392,12 +395,15 @@ private fun RoomNameField(
         contentAlignment = Alignment.CenterStart,
     ) {
         // SwiftUI's `prompt:`, which is drawn behind the text rather than
-        // being a label above it.
+        // being a label above it. Decoration: the field carries the name and
+        // the word "Optional" is not one — a screen reader was being handed
+        // "Optional", then an unlabelled edit box, and had to join them.
         if (name.isEmpty()) {
             Text(
                 text = Copy.OPTIONAL,
                 style = RibbonType.ui(18f),
                 color = Palette.muted,
+                modifier = Modifier.clearAndSetSemantics {},
             )
         }
         BasicTextField(
@@ -406,7 +412,9 @@ private fun RoomNameField(
             singleLine = true,
             textStyle = RibbonType.ui(18f).copy(color = Palette.text),
             cursorBrush = SolidColor(Palette.chartreuse),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .semantics { contentDescription = Copy.ROOM_NAME },
         )
     }
 }

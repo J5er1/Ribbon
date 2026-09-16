@@ -748,29 +748,6 @@ fun BackChevron(
     }
 }
 
-/** A screen's own big heading: the one line that says what you are looking at. */
-@Composable
-fun ScreenTitle(
-    title: String,
-    modifier: Modifier = Modifier,
-    subtitle: String? = null,
-) {
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text(
-            text = title,
-            style = RibbonType.display(30f),
-            color = Palette.text,
-            modifier = Modifier.semantics { heading() },
-        )
-        if (subtitle != null) {
-            Text(text = subtitle, style = RibbonType.ui(15f), color = Palette.muted)
-        }
-    }
-}
-
 /** Vertical air, named, so a screen's rhythm is legible in its source. */
 @Composable
 fun Air(height: Dp) {

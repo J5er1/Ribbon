@@ -27,8 +27,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -128,6 +129,11 @@ fun ChaptersContent(
             text = book?.name ?: reading.bookID,
             style = RibbonType.display(28f),
             color = Palette.text,
+            // The one line that says what this sheet is about. Every pushed
+            // screen gets this from `RibbonScreen`'s top bar; the two screens
+            // that draw their own title had to be told (§11 — a screen reader
+            // navigates by heading, and a screen with none is a flat list).
+            modifier = Modifier.semantics { heading() },
         )
 
         // The ribbon, at the top, because it is the one line here that is

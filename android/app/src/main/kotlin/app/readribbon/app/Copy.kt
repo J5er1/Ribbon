@@ -326,12 +326,21 @@ object Copy {
     /** Tap a portrait to follow — the action, spoken. */
     const val FOLLOW = "Follow"
 
+    /** Sending away something that would have gone on its own (§11: a
+     *  gesture the eye can see is a gesture a screen reader can hear). */
+    const val DISMISS = "dismiss"
+
     const val TRANSCRIPT_COMING = "Transcript coming"
     const val NO_TRANSCRIPT = "No transcript for this one."
     const val TRY_AGAIN = "Try again"
 
     /** The disclosure under a voice note: the transcript is there, folded. */
     const val TRANSCRIPT = "transcript"
+
+    /** What the disclosure does, as a click label. The word "transcript" on
+     *  its own names the thing and not the act (§11). */
+    const val SHOWS_THE_TRANSCRIPT = "show the transcript"
+    const val HIDES_THE_TRANSCRIPT = "hide the transcript"
 
     /** The waveform's screen-reader label (§11) — what happens, never how
      *  long it is. A duration is a count (S04). */
@@ -346,6 +355,18 @@ object Copy {
     const val WRITE = "write"
     const val SPEAK = "speak"
     const val TAKE_BACK = "take back"
+
+    /**
+     * The composer's field, for a screen reader (§11).
+     *
+     * S05 draws no label and no prompt over it — the verse's own reference
+     * sits above the field and the field is the rest of the card — so there
+     * is nothing on screen to borrow a name from and it is said here. It was
+     * the app's central writing surface and an unlabelled edit box, which is
+     * the defect A25 fixed across onboarding's three fields and A35a fixed on
+     * You without either of them reaching this one.
+     */
+    const val WHAT_YOU_WANT_TO_SAY = "What you want to say"
 
     /** The one control that leaves a written note (S05). Save is a single
      *  control; there is no draft state to name. */
@@ -377,8 +398,6 @@ object Copy {
      */
     const val PICK_AN_INK = "Colour is a person now. Pick your ink."
 
-    const val INKS_FROM_WHEN_THE_ROOM_WAS_TWO =
-        "These keep their colors. They're from when the room was two."
 
     // The cards (S08/S09, §4.6)
     //
@@ -770,7 +789,18 @@ object Copy {
      * thing that still works in front of them.
      */
     const val PASSKEY_DIDNT_WORK = "That passkey didn't work. The emailed code still does."
-    const val SIGN_IN_WITH_AUTH0 = "Continue with Auth0"
+    /**
+     * The hosted sign-in, named for what it does rather than for who runs it.
+     *
+     * "Continue with Auth0" was the one place in the product where a person
+     * reading Scripture with their partner was shown the name of a vendor.
+     * §12's voice is "an unbothered interface" and §10.1 has no room for an
+     * infrastructure brand on the control that opens the app; the identity
+     * provider is a decision this app made, not a thing the reader has an
+     * account with or has heard of. It is a browser opening, so the copy says
+     * that and nothing else.
+     */
+    const val SIGN_IN_IN_A_BROWSER = "Continue in a browser"
     const val AUTH0_DIDNT_WORK = "Signing in didn't finish. The emailed code still does."
     const val SEND_A_NEW_CODE = "Send a new code"
 
