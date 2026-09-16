@@ -1663,6 +1663,59 @@ A38a. **The gestures had no tap equivalents, on the app's central act.** §11
     *only* place its author is named, and the gutter mark, whose own doc
     comment quotes §11's "Note from Ruth, verse 9, not yet found".
 
+A39. **The seams.** The states a polish pass is judged by, and the easiest
+    to leave half-made.
+
+    **A voice note left offline never reached anybody.** The written path was
+    queued and replayed on every foreground (A35); the voice path was left out
+    of both halves, so a note recorded on a train drew its pending hairline
+    (§4.4) and waited for a push that was never attempted again. Worse, the
+    replay loop pushed the row without the file — `RemoteSync.push` only
+    uploads audio when it is handed one — so even a queued voice note would
+    have arrived as a waveform on somebody else's phone with nothing behind
+    it. S25's "note failed to send" and §6.10's "notes queue with hairline
+    marks" both describe a queue; half of one existed.
+
+    **The background worker leaked a whole app every fifteen minutes.**
+    `AppModel` is a `ViewModel`, and one built outside a `ViewModelStore`
+    never has `onCleared` called — so A33's worker left an orphaned
+    `ConnectivityManager` callback (A26 says it "has to be unregistered"), a
+    live Realtime websocket with its own heartbeat and reconnect loop, and an
+    uncancelled scope behind it on every run, forever. It also ran a GitHub
+    update check each time. There is a `shutDown()` now, and
+    `load(forBackgroundPull = true)` skips the three launch-time side effects
+    a pull that exists to post a notification has no use for. A33's own note
+    says this route must stay cheap; it was not.
+
+    **A licensed translation offline was a blank page.** Every chapter of a
+    non-bundled edition draws its running head and then fetches — and
+    `ensureRemoteChapter` swallows every failure into a null, which the call
+    site dropped with `?.let`. The effect's keys never changed, so it could
+    never retry while the book was open, and nothing watched the network. All
+    three licensed editions are configured and selectable in S20 today, so
+    offline on NKJV was a heading over 320 dp of nothing with no line and no
+    way forward. It names what happened, offers the one action that helps
+    (§08), and re-keys on the connection so coming back online retries
+    without a tap. Waiting stays wordless, because §08 forbids the indicator
+    and a skeleton reads as fake text.
+
+    **Sign-in blamed the person for a network failure.** `verify()` caught
+    `Throwable` and said "That code didn't work" — to somebody whose phone had
+    simply lost its connection. `sendCode` twenty lines above already told the
+    two apart, and `SupabaseClient` reports an IOException as status 0, so
+    both the distinction and the string existed. It defaults to the
+    unreachable line now: an unknown failure is never a reason to accuse the
+    person (§12).
+
+    **A gradient glow behind the Wave, for the third time.** The first tour
+    card drew the mark on a 160 dp radial gradient — a gradient hero and a
+    glow behind the mark, two separate entries on §13's never-ship list and
+    the exact thing §7 says about the icon. A19 cut a light-wash under the
+    room's fire for this reason and A25 rebuilt the fourth tour card off a
+    gradient circle; this card was missed by both. The mark sits in a `well`
+    now, which is the honest way to make it read as held: a recess in the
+    page, rather than light coming from nowhere.
+
 ## Licensed translations (decided: API.Bible)
 
 Open question §16.8 is now part-decided: **NKJV plus two undecided

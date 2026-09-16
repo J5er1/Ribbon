@@ -115,22 +115,28 @@ fun OnboardingTourCard(
     }
 }
 
+/**
+ * The mark, on the ground, held in the same recess the fire card uses.
+ *
+ * It used to sit on a 160 dp circle filled with a radial gradient — a
+ * gradient hero and a glow behind the mark, which is two separate entries on
+ * §13's never-ship list and the thing §7 says about the icon in so many
+ * words ("No glow behind it"). It is the third time this has had to be cut:
+ * A19 removed a light-wash under the room's fire for exactly this reason
+ * ("two alpha falloffs under the hero object is a gradient by construction")
+ * and A25 rebuilt the fourth tour card off a gradient circle. This card was
+ * missed by both.
+ *
+ * The well is the honest way to make the mark read as held rather than
+ * floating: a recess in the page, which is a thing the app already has,
+ * rather than light coming from nowhere.
+ */
 @Composable
 private fun VisionGraphic() {
     Box(
-        modifier = Modifier.size(160.dp),
+        modifier = Modifier.size(160.dp).well(CircleShape),
         contentAlignment = Alignment.Center,
     ) {
-        Box(
-            modifier = Modifier
-                .size(160.dp)
-                .background(
-                    brush = Brush.radialGradient(
-                        colors = listOf(Palette.chartreuse.copy(alpha = 0.14f), Color.Transparent),
-                    ),
-                    shape = CircleShape,
-                )
-        )
         WaveMark(
             size = 80.dp,
             tint = Palette.text,

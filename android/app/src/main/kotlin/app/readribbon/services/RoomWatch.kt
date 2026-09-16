@@ -78,7 +78,20 @@ class RoomWatch(context: Context, params: WorkerParameters) :
             // `refreshFromRemote` posts what it finds itself: it is the one
             // place that can tell an arrival from a row that was already
             // there, so it is the one place that announces.
-            AppModel.load(applicationContext).refreshFromRemote()
+            //
+            // Built for the pull and shut down after it. A model is a
+            // `ViewModel`, and one built outside a `ViewModelStore` never has
+            // `onCleared` called — so an early version of this worker left a
+            // network callback, a live websocket with a heartbeat and an
+            // uncancelled scope behind it every fifteen minutes, forever.
+            // `forBackgroundPull` also skips the update check and the socket,
+            // which a pull that exists to post a notification has no use for.
+            val model = AppModel.load(applicationContext, forBackgroundPull = true)
+            try {
+                model.refreshFromRemote()
+            } finally {
+                model.shutDown()
+            }
             Result.success()
         }.getOrElse {
             // A failed pull is a quiet nothing. Retrying inside a job that

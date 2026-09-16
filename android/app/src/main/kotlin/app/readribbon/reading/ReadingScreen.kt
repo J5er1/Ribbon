@@ -1145,17 +1145,55 @@ private fun ChapterSection(
         // running head appears and the body fades in — no skeleton lines,
         // which read as fake text. (§12.2 forbids a loading indicator, and
         // this is what stands in its place: nothing, and then the words.)
+        // The fetch's outcome is held rather than dropped. It used to be
+        // `ensureRemoteChapter(...)?.let(onRemoteChapter)` — and that function
+        // swallows every failure into a null — so offline, or on a 503, the
+        // `?.let` did nothing, the effect's keys never changed so it could
+        // never retry, and nothing watched the network. The page was a
+        // running head over 320 dp of nothing, with no line and no way
+        // forward (S25's "book won't download").
+        var missed by remember(n, licensed) { mutableStateOf(false) }
+        var attempt by remember(n, licensed) { mutableIntStateOf(0) }
         Column(
             modifier = Modifier
                 .readingMeasure(measureInset)
                 .padding(start = 36.dp),
         ) {
             SmallCaps(runningHead, size = 14f, color = Palette.text.copy(alpha = 0.4f))
-            Spacer(Modifier.height(320.dp))
+            if (missed) {
+                // §08's shape: name it, name what is intact, offer the one
+                // action that helps. The same two parts a failed transcript
+                // already uses.
+                Text(
+                    text = Copy.chapterWouldntCome(
+                        Bible.book(reading.bookID)?.name ?: reading.bookID,
+                    ),
+                    style = RibbonType.ui(15f),
+                    color = Palette.muted,
+                    modifier = Modifier.padding(top = 18.dp),
+                )
+                QuietControl(
+                    title = Copy.TRY_AGAIN,
+                    modifier = Modifier.offset(x = (-8).dp),
+                ) { attempt++ }
+                Spacer(Modifier.height(180.dp))
+            } else {
+                // Waiting is wordless: §08 forbids a loading indicator, and a
+                // skeleton reads as fake text.
+                Spacer(Modifier.height(320.dp))
+            }
         }
-        LaunchedEffect(n, licensed) {
+        // Keyed on the network as well, so a connection coming back retries
+        // without anybody having to tap anything.
+        LaunchedEffect(n, licensed, attempt, model.isOnline) {
             val address = VerseAddress(bookID = reading.bookID, chapter = n, verse = 1)
-            model.scripture.ensureRemoteChapter(context, address, licensed)?.let(onRemoteChapter)
+            val chapter = model.scripture.ensureRemoteChapter(context, address, licensed)
+            if (chapter != null) {
+                missed = false
+                onRemoteChapter(chapter)
+            } else {
+                missed = true
+            }
         }
         return
     }

@@ -78,6 +78,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.TimeZone
@@ -347,6 +348,23 @@ class AppModel(
      */
     override fun onCleared() {
         connectivity.stop()
+    }
+
+    /**
+     * Let go of everything this model holds open.
+     *
+     * `onCleared` is called by a `ViewModelStore`, and the background worker
+     * builds a model outside one — so without this, every fifteen minutes the
+     * process gained one more orphaned `ConnectivityManager` callback (A26
+     * says in so many words that it "has to be unregistered"), one more live
+     * Realtime websocket with its own 25-second heartbeat and reconnect loop,
+     * and one more never-cancelled scope. A pull that exists to post a
+     * notification must not cost more than the notification.
+     */
+    suspend fun shutDown() {
+        connectivity.stop()
+        closeRoomChannel()
+        viewModelScope.cancel()
     }
 
     // MARK: - The room's live line (§4.2)
@@ -1234,9 +1252,18 @@ class AppModel(
         }
         val remote = this.remote
         if (remote != null && remote.isSignedIn) {
+            // The written path was queued and this one was not, so a voice
+            // note left on a train drew its pending hairline (§4.4) and then
+            // waited for a push that was never attempted again. S25's "note
+            // failed to send" row and §6.10's "notes queue with hairline
+            // marks" both describe a queue; only half of one existed.
+            pendingNotePushes.add(note.id)
             pushing {
                 runCatching { remote.push(note = note, audioFile = audioFile) }
-                    .onSuccess { markNoteSent(note.id) }
+                    .onSuccess {
+                        pendingNotePushes.remove(note.id)
+                        markNoteSent(note.id)
+                    }
             }
         }
         return note
@@ -1981,7 +2008,14 @@ class AppModel(
                 pendingNotePushes.remove(noteID)
                 return@run null
             }
-            if (note != null && runCatching { remote.push(note = note) }.isSuccess) {
+            // With its recording. `RemoteSync.push` only uploads audio when
+            // it is handed a file, so a replay without one would have sent a
+            // voice note's row and never its voice — a waveform on the other
+            // person's phone with nothing behind it.
+            val audio = note?.audioPath?.let(store::audioFile)
+            val sent = note != null &&
+                runCatching { remote.push(note = note, audioFile = audio) }.isSuccess
+            if (sent) {
                 pendingNotePushes.remove(noteID)
                 markNoteSent(noteID)
             }
@@ -2845,7 +2879,13 @@ class AppModel(
          */
         private val PORTRAIT_RECHECK = 15.minutes
 
-        suspend fun load(context: Context): AppModel {
+        /**
+         * @param forBackgroundPull skips everything a launch does that a
+         *   fifteen-minute pull has no use for: the update check, the room's
+         *   websocket, and starting the watcher that is already running. The
+         *   caller must `shutDown()` the model it gets back.
+         */
+        suspend fun load(context: Context, forBackgroundPull: Boolean = false): AppModel {
             val app = context.applicationContext
             val store = LocalStore(app)
             val state = store.load()
@@ -2860,6 +2900,7 @@ class AppModel(
             }
             val model = AppModel(app, state, store, presence)
             model.remote = remote
+            if (forBackgroundPull) return model
             model.loadPortraits()
             model.checkForUpdates()
             model.openRoomChannel()

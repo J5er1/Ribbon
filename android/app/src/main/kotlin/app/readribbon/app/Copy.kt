@@ -1026,6 +1026,21 @@ object Copy {
     const val SIGN_IN_CODE_WRONG = "That code didn't work. Try again, or send a new one."
     const val CARD_DECLINED = "The card was declined. Nothing changed in your room."
     fun bookNotDownloaded(book: String) = "$book isn't downloaded yet. It'll finish on Wi-Fi."
+    /**
+     * A licensed translation whose chapter could not be fetched (S25's "book
+     * won't download", §08's "name it, name what's intact, one action").
+     *
+     * The page used to draw the running head and 320 dp of nothing, with the
+     * fetch's failure swallowed by a `runCatching` and the effect keyed so it
+     * could never retry while the book was open. Offline, on NKJV, that is a
+     * blank page under a heading with no line and no way forward.
+     *
+     * The waiting state stays wordless on purpose — §08 forbids a loading
+     * indicator and a skeleton reads as fake text — so this appears only once
+     * the fetch has actually missed.
+     */
+    fun chapterWouldntCome(book: String) = "$book isn't on this phone yet."
+
     const val SERVER_UNREACHABLE = "Can't reach Ribbon right now."
     const val MIC_NEEDED = "Ribbon needs the microphone to record a note."
 

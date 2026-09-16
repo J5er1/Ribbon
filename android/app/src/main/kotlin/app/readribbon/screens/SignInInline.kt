@@ -29,6 +29,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import app.readribbon.app.AppModel
+import app.readribbon.services.SupabaseError
 import app.readribbon.app.Copy
 import app.readribbon.design.Palette
 import app.readribbon.design.QuietControl
@@ -156,8 +157,23 @@ fun SignInInline(
             try {
                 model.verifySignInCode(email = email.trim(), code = entered)
                 onSignedIn()
+            } catch (failure: SupabaseError.Http) {
+                // A network failure is not a wrong code, and this was the one
+                // place the two were conflated — `sendCode` twenty lines above
+                // already tells them apart. `SupabaseClient` reports an
+                // IOException as status 0, so 0 and 5xx are the server being
+                // unreachable and 4xx is a real rejection (S25's two rows).
+                errorLine = if (failure.status == 0 || failure.status >= 500) {
+                    Copy.SERVER_UNREACHABLE
+                } else {
+                    Copy.SIGN_IN_CODE_WRONG
+                }
             } catch (_: Throwable) {
-                errorLine = Copy.SIGN_IN_CODE_WRONG
+                // Anything unrecognised blames the connection rather than the
+                // person. §12: the interface is unbothered, and an unknown
+                // failure is never a reason to tell somebody they typed it
+                // wrong.
+                errorLine = Copy.SERVER_UNREACHABLE
             } finally {
                 busy = false
             }
