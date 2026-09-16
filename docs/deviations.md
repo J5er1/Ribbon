@@ -1987,10 +1987,25 @@ A41b. **Highlighting, which nobody had ever looked at.** The reading surface
     them at 5.3:1, against 8.7:1 for the two-person case the product is
     actually about.
 
-    **This diverges from iOS and is meant to.** iOS multiplies. The owner's
-    call is that each platform takes its own pass and the other follows; this
-    entry is the argument for iOS to follow, and the numbers above are the
-    whole of it.
+    **It also departs from a line in the build book, which is why the numbers
+    are here.** §4.5 says in terms: "Overlapping highlights blend — multiply,
+    not stack". S06 says, of the same thing: "This is desirable and must
+    survive both themes — **check every one of the 28 pairs against the ground
+    before ship**." Those two instructions are in conflict on a dark ground,
+    and the second is the one that settles it, because it is a measurement
+    rather than a preference. Run for the first time, **all 28 pairs failed**:
+    every overlap came out no brighter than one ink alone, crimson over teal
+    at half the luminance of teal by itself. Under screen, none of the 28
+    fail. A check that has to be done by hand before every ship is a check
+    that gets done once, so it is `HighlightWashTest` now and runs on every
+    build — all 28 pairs, Scripture's contrast at every depth from one ink to
+    eight, and that an overlap is a third colour rather than one of its own
+    inks.
+
+    This is the one call in this pass worth overruling if the owner disagrees,
+    because it contradicts a sentence of the book rather than filling a gap in
+    it. iOS multiplies and is untouched; if this stands, it is the change iOS
+    takes next.
 
     **A highlight on a wrapping verse drew one line and then slivers.**
     `enclosingRects` asked `getHorizontalPosition` for both ends of every

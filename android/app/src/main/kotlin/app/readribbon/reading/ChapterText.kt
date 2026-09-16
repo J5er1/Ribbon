@@ -435,7 +435,7 @@ private class GestureState {
  * far along the words the stroke has got.
  */
 @Immutable
-private data class Wash(val color: Color, val alpha: Float, val drawn: Float = 1f)
+internal data class Wash(val color: Color, val alpha: Float, val drawn: Float = 1f)
 
 /**
  * The wash a set of inks settles at: 24% for one, deepening for each ink on
@@ -472,8 +472,13 @@ private data class Wash(val color: Color, val alpha: Float, val drawn: Float = 1
  * 8.7:1 for the two-person case this product is actually about.
  *
  * This diverges from iOS, deliberately and knowingly: see deviations A41b.
+ *
+ * `internal` rather than private because S06 ends "check every one of the 28
+ * pairs against the ground before ship", and a check that has to be performed
+ * by hand before every ship is a check that gets performed once. It is
+ * `HighlightWashTest` now.
  */
-private fun washFor(inks: List<Ink>): Wash {
+internal fun washFor(inks: List<Ink>): Wash {
     var mixed = inks[0].color
     for (other in inks.drop(1)) mixed = screen(mixed, other.color)
     return Wash(mixed, min(WASH_CAP, Palette.HIGHLIGHT_WASH + WASH_STEP * (inks.size - 1)))
@@ -546,15 +551,15 @@ private fun rememberArrivingWashes(
 
     val t = travel.value
     val pen = stroke.value
-    val striking = justMarked != null && pen < 1f
-    if (t >= 1f && !striking) return settled
+    val striking = if (pen < 1f) justMarked else null
+    if (t >= 1f && striking == null) return settled
 
     val drawn = LinkedHashMap<Int, Wash>(settled.size + from.size)
     for ((verse, now) in settled) {
         // A verse you are marking right now is at full colour from the first
         // frame and is revealed along its length instead: the ink is not
         // getting darker, the pen is moving.
-        if (striking && verse in justMarked!!) {
+        if (striking != null && verse in striking) {
             drawn[verse] = now.copy(drawn = pen)
             continue
         }
