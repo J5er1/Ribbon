@@ -1581,6 +1581,88 @@ A37. **The cuts that were left.** §9.1 opens "everything breathes rather
     written by hand in every file that animated anything, and one of them had
     forgotten to".
 
+A38. **The word "streak" was shipping, on screen.** It is the first entry
+    on §10.2's Never list and on the brief's §12, and `Copy.kt`'s own header
+    says "Never used anywhere: streak" — which made the header false about the
+    file it heads. It was in the fourth tour card: "No gamified streak
+    counters or cold badge scores." Naming the competitor's mechanic puts a
+    streak counter in the reader's head on the fourth screen of the product
+    that exists to refuse it.
+
+    The tour exists against S17's "four questions, no tour" by the owner's
+    call (A25), and its words were never held to §10 the way the rest of the
+    file is. Four rules were being broken on four cards: the Never-list word;
+    a duration ("0:42") on a mock voice note, which is a count attached to
+    reading on the one surface Law 2 guards hardest, twenty lines from a
+    comment in the same file saying exactly that; three of the four bodies
+    describing the product by *negation*, where §10.1 asks for the true small
+    thing and §12 says grace is the interface being unbothered rather than
+    reassuring; and the wrong nouns — a note is *left*, never pinned, because
+    being found later is the beat (§11); "reflections" is the cards, which are
+    a different object; and a burning fire is not "an ember", which is what
+    you keep when a book is finished. The section's own comment named
+    Duolingo as the model.
+
+    Also gone: the app's only first-person-plural. "We couldn't find this
+    invite" stood on the dead end of the join thread — the screen S16 says
+    must show "a person, not a product" — and "we" summons a support desk
+    onto it. Every other S25 line in the file names the thing that failed
+    rather than the company that failed it.
+
+    And §10.3's fourth notification now posts. "Ruth is reading Mark" had a
+    switch on S19, a channel in Android's settings and no call site anywhere.
+    It is the one of the six that cannot ride the background pull — presence
+    is ephemeral and socket-only, and a quarter-hour-old "so you can read at
+    the same time" is a lie — so it posts from the live roster, once per
+    arrival rather than per heartbeat, and only while Ribbon is running. That
+    limit is stated in `RoomWatch`'s header and in A33.
+
+A38a. **The gestures had no tap equivalents, on the app's central act.** §11
+    Motor is one sentence — "every gesture has a tap equivalent" — and four
+    places did not keep it.
+
+    **A verse.** The whole reading interaction is raw pointer input on the
+    text: a long-press-drag lifts a verse into the toolbar, a tap opens what
+    is at it. The text node is wiped and rebuilt as one accessibility node
+    per verse — and each carried a label and nothing else. So the semantics
+    tree exposed the verses as read-only strings and exposed no action at all
+    for either gesture, which closed leaving a highlight, leaving a written
+    note and leaving a voice note: everything §1 says the product is for.
+    It closed them to anybody who cannot hold a press for the platform
+    timeout and then drag, as well as to a screen reader. Both actions are on
+    the node now, the lift with its own haptic (§9.3). Extending a range
+    stays drag-only, which is honest — the toolbar acts on whatever is
+    lifted, and one verse is the common case.
+
+    **The presence lozenge** carried a sentence and no action, and the
+    sentence was on a merge root that takes the focus for itself, so the node
+    holding the gestures was never landed on — the exact mechanism
+    `Hearth.kt` documents for the fire and fixed there by merging. Following
+    the one person present, opening the panel, and "read quietly" — the only
+    route to reading quietly anywhere in the app — were all closed.
+
+    **The speak control's** two custom actions sat on an unmerged, unlabelled
+    node whose descendants carry text, so by the same rule they existed only
+    in source. It is a merge root now, and says what can happen rather than
+    repeating "Release to leave it", which is an instruction for a finger
+    that is not down.
+
+    **The ember record** had no drawn way out at all — a root destination
+    whose only exit was the system back gesture. It has a chevron now, drawn
+    rather than through `RibbonScreen`, because the ember and the book's name
+    both flow in from the shelf (A22) and a collapsing bar would take the
+    name out of that pair.
+
+    Two smaller ones: onboarding's back and sign-in controls were 36 dp —
+    eight under the floor deviation 12 sets — unlabelled, and had their
+    indication switched off, so they were undersized, silent and gave nothing
+    back under a finger. They are the app's own `BackChevron` and
+    `QuietControl` now, which is what they were hand-copies of. And three
+    screen-reader labels spoke a person's full name where every visible
+    surface says a first name — including the note card, whose label is the
+    *only* place its author is named, and the gutter mark, whose own doc
+    comment quotes §11's "Note from Ruth, verse 9, not yet found".
+
 ## Licensed translations (decided: API.Bible)
 
 Open question §16.8 is now part-decided: **NKJV plus two undecided

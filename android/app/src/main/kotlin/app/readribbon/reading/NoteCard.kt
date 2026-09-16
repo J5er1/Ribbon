@@ -45,6 +45,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.readribbon.app.AppModel
 import app.readribbon.app.Copy
+import app.readribbon.app.firstName
 import app.readribbon.core.Ink
 import app.readribbon.core.Note
 import app.readribbon.core.NoteKind
@@ -105,7 +106,11 @@ fun NoteCard(
     // good — ARC does that half on iOS without being asked.
     DisposableEffect(player) { onDispose { player.dispose() } }
 
-    val name = author?.name ?: ""
+    // First names only, everywhere a person is named in a line of copy (§10).
+    // The card draws a 22 dp portrait and no name at all, so this label is
+    // the only place the author is named — and it said "Note from Ruth
+    // Alderman" where every visible surface in the app says "Ruth".
+    val name = author?.name?.let(::firstName) ?: ""
     val accessibilityText = when (note.kind) {
         NoteKind.written -> Copy.noteFrom(name, note.body ?: "")
         NoteKind.voice -> Copy.voiceNoteFrom(name, note.transcript ?: "")

@@ -77,6 +77,8 @@ import androidx.graphics.shapes.Morph
 import androidx.graphics.shapes.RoundedPolygon
 import androidx.graphics.shapes.rectangle
 import androidx.graphics.shapes.toPath
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.Role
 import app.readribbon.app.AppModel
 import app.readribbon.app.Copy
 import app.readribbon.app.firstName
@@ -423,7 +425,28 @@ private fun PresenceSurface(
             // Every touch target is at least 44 dp even when the drawn
             // control is smaller — the quiet shape is 20 dp wide.
             .sizeIn(minWidth = TOUCH_TARGET, minHeight = TOUCH_TARGET)
-            .then(if (expanded) panelGestures else collapsedGestures),
+            .then(if (expanded) panelGestures else collapsedGestures)
+            // What the gestures do, said out loud (§11 Motor).
+            //
+            // This node carried none, and the node under it — `CollapsedForm`
+            // — is a merge root with a sentence on it, which takes the
+            // screen-reader focus for itself so the one above is never landed
+            // on. That is the exact mechanism `Hearth.kt` documents for the
+            // fire and was fixed there by merging; the form never was. So
+            // everything behind the lozenge was closed: following the one
+            // person present, opening the panel, and inside it "read
+            // quietly" — which is the only route to reading quietly anywhere
+            // in the app.
+            //
+            // Merged here so the label and the action are one stop rather
+            // than two nodes fighting over the focus.
+            .semantics(mergeDescendants = true) {
+                role = Role.Button
+                onClick(label = if (expanded) Copy.CLOSE else Copy.WHOS_HERE) {
+                    if (expanded) onCollapse() else onExpand()
+                    true
+                }
+            },
         contentAlignment = Alignment.CenterEnd,
     ) {
         AnimatedContent(
@@ -766,10 +789,15 @@ private fun presenceLabel(
     person: PresentPerson,
     othersCount: Int,
 ): String {
-    val name = model.person(person.id)?.name ?: person.name
+    // First names, like the visible line eighteen lines up this same file
+    // and like the room's identical labels. This was the one place the
+    // reading surface and the room disagreed about what a person is called,
+    // and the a11y label disagreed with the visible text inside the same
+    // composable.
+    val name = (model.person(person.id)?.name ?: person.name).let(::firstName)
     val base = if (person.isIdle) Copy.personIsHereButStill(name) else Copy.personIsReading(name)
     if (othersCount > 0) {
-        val others = people.drop(1).map { model.person(it.id)?.name ?: it.name }
+        val others = people.drop(1).map { (model.person(it.id)?.name ?: it.name).let(::firstName) }
         return Copy.alsoHere(base, others)
     }
     return base

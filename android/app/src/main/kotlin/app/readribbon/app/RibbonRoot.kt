@@ -626,6 +626,7 @@ private fun RoomStack(model: AppModel, room: Room) {
                         EmberRecordScreen(
                             model = model,
                             reading = reading,
+                            onBack = { navController.popBackStack() },
                             onOpenVerse = { verse ->
                                 // A quoted verse opens the reading at that verse
                                 // (S11) — the finished book's own pages, not a

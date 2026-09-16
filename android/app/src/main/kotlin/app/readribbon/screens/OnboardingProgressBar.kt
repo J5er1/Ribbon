@@ -28,7 +28,9 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import app.readribbon.app.Copy
+import app.readribbon.design.BackChevron
 import app.readribbon.design.Palette
+import app.readribbon.design.QuietControl
 import app.readribbon.design.rememberReduceMotion
 import app.readribbon.design.RibbonMotion
 import app.readribbon.design.RibbonType
@@ -38,6 +40,10 @@ import app.readribbon.design.SmallCaps
  * A segmented progress indicator for Ribbon's onboarding walkthrough,
  * styled in warm chartreuse over dark ground.
  */
+/** The two controls that flank the bar, and the space one keeps when it
+ *  is not there. The floor every target in the app keeps (deviation 12). */
+private val ControlSize = 44.dp
+
 @Composable
 fun OnboardingProgressBar(
     currentStep: Int,
@@ -54,42 +60,16 @@ fun OnboardingProgressBar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
+        // The app's own back chevron rather than a second hand-drawn one.
+        // This was a 36 dp box — eight under the floor §11 and deviation 12
+        // set — holding an unlabelled `Canvas`, with `indication = null`, so
+        // it was undersized, silent to a screen reader and gave nothing back
+        // under a finger. `BackChevron` is 44 dp, says what it is, and takes
+        // the app's soft state layer (§12.2).
         if (onBack != null) {
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        role = Role.Button,
-                        onClick = onBack,
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                val muted = Palette.muted
-                Canvas(modifier = Modifier.size(18.dp)) {
-                    val centre = Offset(size.width / 2f, size.height / 2f)
-                    val arm = 4.5.dp.toPx()
-                    val stroke = 1.6.dp.toPx()
-                    drawLine(
-                        color = muted,
-                        start = Offset(centre.x + arm * 0.5f, centre.y - arm),
-                        end = Offset(centre.x - arm * 0.5f, centre.y),
-                        strokeWidth = stroke,
-                        cap = StrokeCap.Round,
-                    )
-                    drawLine(
-                        color = muted,
-                        start = Offset(centre.x - arm * 0.5f, centre.y),
-                        end = Offset(centre.x + arm * 0.5f, centre.y + arm),
-                        strokeWidth = stroke,
-                        cap = StrokeCap.Round,
-                    )
-                }
-            }
+            BackChevron(onBack = onBack, label = Copy.BACK)
         } else {
-            Spacer(modifier = Modifier.size(36.dp))
+            Spacer(modifier = Modifier.size(ControlSize))
         }
 
         Row(
@@ -121,26 +101,13 @@ fun OnboardingProgressBar(
             }
         }
 
+        // `QuietControl` is this exact control — small caps, muted, a 44 dp
+        // target and a role the screen reader can hear — and this was a
+        // second copy of it eight dp short, with its indication switched off.
         if (onSignIn != null) {
-            Box(
-                modifier = Modifier
-                    .height(36.dp)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        role = Role.Button,
-                        onClick = onSignIn,
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                SmallCaps(
-                    text = Copy.SIGN_IN,
-                    size = 12f,
-                    color = Palette.muted,
-                )
-            }
+            QuietControl(title = Copy.SIGN_IN, size = 12f, onClick = onSignIn)
         } else {
-            Spacer(modifier = Modifier.size(36.dp))
+            Spacer(modifier = Modifier.size(ControlSize))
         }
     }
 }

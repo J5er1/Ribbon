@@ -47,6 +47,9 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.onClick
 import app.readribbon.app.Copy
 import app.readribbon.core.BlockStyle
 import app.readribbon.core.Ink
@@ -354,7 +357,27 @@ fun ChapterText(
                             width = with(density) { bounds.width.toDp() },
                             height = with(density) { bounds.height.toDp() },
                         )
-                        .clearAndSetSemantics { contentDescription = label },
+                        // The two gestures the text carries, said out loud
+                        // (§11 Motor). These nodes used to carry a label and
+                        // nothing else, so the app's central act — leaving a
+                        // note at a verse — had a long-press-and-drag as its
+                        // only door. The lift plays its haptic here too, at
+                        // the moment the verse lifts, exactly as the drag's
+                        // own start does (§9.3).
+                        .clearAndSetSemantics {
+                            contentDescription = label
+                            onClick(label = Copy.OPEN_WHATS_HERE) {
+                                currentTap(verse)
+                                true
+                            }
+                            customActions = listOf(
+                                CustomAccessibilityAction(Copy.LEAVE_SOMETHING_HERE) {
+                                    haptics?.verseLifts()
+                                    currentLongPress(verse)
+                                    true
+                                },
+                            )
+                        },
                 )
             }
         }

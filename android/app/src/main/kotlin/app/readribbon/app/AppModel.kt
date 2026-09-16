@@ -227,6 +227,7 @@ class AppModel(
             presence.events.collect { event ->
                 when (event) {
                     is PresenceEvent.Roster -> {
+                        someoneOpenedTheBook(event.people)
                         presentPeople = event.people
                     }
                     is PresenceEvent.ThinkingOfYou -> {
@@ -238,6 +239,57 @@ class AppModel(
                 }
             }
         }
+    }
+
+    /** Who was in the book last time the roster spoke. */
+    private var wasReading: Set<Uuid> = emptySet()
+
+    /**
+     * §10.3's fourth notification — "Ruth is reading Mark" — which had a
+     * switch on S19, a channel in Android's settings and no post anywhere.
+     *
+     * It is the one of the six that cannot ride the fifteen-minute pull:
+     * presence is ephemeral and lives only on the socket, and its own switch
+     * subtitle is "So you can read at the same time", which a quarter-hour-old
+     * version of would be a lie. So it posts from the live roster and only
+     * while Ribbon is running — which is the honest shape of the feature and
+     * is written down in `RoomWatch`'s header and in docs/deviations.md A33.
+     *
+     * Once per arrival rather than per heartbeat: the roster repeats, and a
+     * notification for every beat of somebody else's presence would be the
+     * app tapping a shoulder every thirty seconds. The stable id means a
+     * second arrival replaces rather than stacks, exactly as a note does.
+     *
+     * Never for me, and never when there is no reading to name.
+     */
+    private fun someoneOpenedTheBook(people: List<PresentPerson>) {
+        val now = people.map { it.id }.toSet()
+        val arrived = now - wasReading
+        wasReading = now
+        if (arrived.isEmpty()) return
+
+        val room = currentRoom ?: return
+        val reading = openReading(room) ?: return
+        val book = Bible.book(reading.bookID)?.name ?: return
+        val me = state.me?.id
+        val newcomer = arrived.firstOrNull { it != me } ?: return
+        val name = person(newcomer)?.name ?: return
+
+        val allowed = Notifications.shouldPost(
+            kind = NotificationKind.inTheBook,
+            roomID = room.id,
+            prefs = notificationPrefs(room),
+            settings = state.settings,
+            visibleRoomID = visibleRoomID,
+        )
+        if (!allowed) return
+        Notifications.post(
+            context = appContext,
+            id = Notifications.id(room.id, NotificationKind.inTheBook),
+            kind = NotificationKind.inTheBook,
+            line = Copy.notifReading(firstName(name), book),
+            to = Destination.Room(roomID = room.id),
+        )
     }
 
     /**

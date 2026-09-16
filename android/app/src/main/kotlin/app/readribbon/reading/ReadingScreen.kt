@@ -89,6 +89,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import app.readribbon.app.AppModel
 import app.readribbon.app.Copy
+import app.readribbon.app.firstName
 import app.readribbon.core.Bible
 import app.readribbon.core.BibleBook
 import app.readribbon.core.CardState
@@ -1201,7 +1202,10 @@ private fun GutterStack(
 
     // §11, exactly: "Note from Ruth, verse 9, not yet found." A stack
     // announces by author and never by count.
-    val names = notes.mapNotNull { model.person(it.authorID)?.name }
+    // §11 quotes the shape of this label exactly — "Note from Ruth, verse 9,
+    // not yet found" — and it was announcing "Note from Ruth Alderman". The
+    // dedupe below now dedupes on the spoken form, which is the right one.
+    val names = notes.mapNotNull { model.person(it.authorID)?.name?.let(::firstName) }
     val unfound = notes.any { !foundByMe(it) && it.authorID != mine }
     val label = Copy.marginNotes(
         authors = names.toSortedSet().toList(),

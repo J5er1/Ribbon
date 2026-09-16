@@ -510,7 +510,16 @@ fun SpeakControl(
             // Every gesture has a tap equivalent (§11). The press-and-hold
             // is two outcomes, so it announces as two actions rather than
             // as an instruction to hold a finger somewhere.
-            .semantics {
+            //
+            // Merged, and with a sentence of its own — which it did not have.
+            // An unmerged node whose descendants carry content is never
+            // landed on (the rule `Hearth.kt` states for the fire), and this
+            // one's descendants include the drawn "Release to leave it", so
+            // the two actions existed only in source. The spoken line names
+            // what can happen rather than repeating an instruction for a
+            // finger that is not down.
+            .semantics(mergeDescendants = true) {
+                contentDescription = Copy.RECORDING_A_VOICE_NOTE
                 customActions = listOf(
                     CustomAccessibilityAction(Copy.LEAVE_IT) { release(); true },
                     CustomAccessibilityAction(Copy.TAKE_BACK) { throwAway(); true },

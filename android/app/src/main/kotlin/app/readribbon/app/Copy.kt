@@ -89,17 +89,47 @@ object Copy {
     const val TELL_ME = "Tell me"
     const val DONT_TELL_ME = "Don't"
 
-    // Walkthrough Tour (Duolingo-style feature walkthrough)
+    // The tour (deviation A25 — S17 says "four questions, no tour", and the
+    // owner's call overruled it).
+    //
+    // The tour exists; its words are held to §10 like every other string in
+    // this file, and they were not. Four separate rules were being broken on
+    // four cards, on the fourth screen a person ever sees:
+    //
+    //   - **"streak" shipped, on screen.** It is the first entry on §10.2's
+    //     Never list and on the brief's §12, and this file's own header says
+    //     "Never used anywhere: streak" — which made the header false about
+    //     the file it heads. Naming the competitor's mechanic puts a streak
+    //     counter in the reader's head on the fourth screen of the product
+    //     that exists to refuse it.
+    //   - **A duration.** "0:42" on a mock voice note is a count attached to
+    //     reading (Law 2), on the one surface the law guards hardest, and
+    //     [PLAY_THE_VOICE_NOTE] twenty lines down says so in its own comment.
+    //     The real note draws a waveform and no timecode.
+    //   - **The product described by negation.** Three of the four bodies
+    //     said what Ribbon is not. §10.1 asks for the true small thing, and
+    //     §12 is explicit that grace is the interface being unbothered rather
+    //     than the interface reassuring you.
+    //   - **The wrong nouns.** A note is always *left*, never pinned, because
+    //     being found later is the beat (§11); "reflections" is the cards,
+    //     which are a different object; and a burning fire is not "an ember",
+    //     which is what you keep when a book is finished.
+    //
+    // Second person, one short sentence each, and the vocabulary §11 settled.
     const val WALKTHROUGH_VISION_TITLE = "Read Scripture together."
-    const val WALKTHROUGH_VISION_BODY = "Ribbon is made for reading with one person or a few — a partner on the same couch, or a friend four time zones away."
+    const val WALKTHROUGH_VISION_BODY =
+        "Read with one person, or a few. On the same couch, or four time zones away."
     const val WALKTHROUGH_PRESENCE_TITLE = "See each other on the page."
-    const val WALKTHROUGH_PRESENCE_BODY = "A soft presence appears when someone is reading at the same time. Quiet companionship without noisy notifications."
+    const val WALKTHROUGH_PRESENCE_BODY =
+        "When someone else is reading, you see them beside you on the page."
     const val WALKTHROUGH_PRESENCE_SAMPLE = "Ruth is reading right now"
     const val WALKTHROUGH_NOTES_TITLE = "Notes left behind."
-    const val WALKTHROUGH_NOTES_BODY = "Pin written reflections or voice memos to specific verses, waiting silently for the other person to discover later."
-    const val WALKTHROUGH_NOTE_SAMPLE = "0:42 · Left this for you"
-    const val WALKTHROUGH_FIRE_TITLE = "A fire kept alive together."
-    const val WALKTHROUGH_FIRE_BODY = "No gamified streak counters or cold badge scores. Just a single warm ember your room keeps burning together."
+    const val WALKTHROUGH_NOTES_BODY =
+        "Leave a note at a verse, written or spoken. They find it when they get there."
+    const val WALKTHROUGH_NOTE_SAMPLE = "Left this for you"
+    const val WALKTHROUGH_FIRE_TITLE = "A fire you keep together."
+    const val WALKTHROUGH_FIRE_BODY =
+        "One book is one fire. It catches, burns, goes steady, and is banked on a quiet day."
     const val WALKTHROUGH_INTENT_TITLE = "Who will you read with?"
     const val WALKTHROUGH_INTENT_SPOUSE = "My spouse or partner"
     const val WALKTHROUGH_INTENT_FRIEND = "A close friend"
@@ -234,6 +264,25 @@ object Copy {
         return "$noun from $who, verse $verse" + if (unfound) ", not yet found" else ""
     }
 
+    /**
+     * A verse's two actions, for somebody who cannot make the gestures they
+     * sit on (§11 Motor: "every gesture has a tap equivalent").
+     *
+     * The whole of the reading interaction was raw pointer input on the text
+     * — a long-press-drag to lift a verse, a tap to open what is at it — and
+     * the per-verse accessibility nodes carried a label and nothing else. So
+     * the semantics tree exposed the verses as read-only strings and exposed
+     * no action at all for either gesture: leaving a highlight, a written
+     * note or a voice note all begin at that long press, and every one of
+     * them was closed. It also closed them to anybody who cannot hold a press
+     * for the platform timeout and then drag.
+     *
+     * Extending a range stays drag-only, which is honest: the toolbar acts on
+     * whatever is lifted, and one verse is the common case.
+     */
+    const val OPEN_WHATS_HERE = "open what's here"
+    const val LEAVE_SOMETHING_HERE = "leave something here"
+
     const val CLOSE_THE_BOOK = "Close the book"
     fun isWithYou(name: String) = "$name is with you"
     const val BACK_TO_WHERE_YOU_WERE = "back to where you were"
@@ -244,6 +293,29 @@ object Copy {
     /** The small closed shape at the edge, read aloud (§11): the state, and
      *  what it means, in the two short sentences the form itself would say. */
     const val READING_QUIETLY_SPOKEN = "Reading quietly. Only you can see you."
+
+    /**
+     * What opening the presence form does, for somebody who cannot make the
+     * gesture that opens it (§11 Motor).
+     *
+     * The lozenge carried a sentence and no action, and the sentence was on a
+     * merge root that took the focus for itself — so the node with the
+     * gestures on it was never landed on, and everything behind the form was
+     * closed: following the one person present, the panel itself, and the
+     * only route in the whole app to reading quietly.
+     */
+    const val WHOS_HERE = "who's here"
+
+    /**
+     * The speak control, announced as one thing.
+     *
+     * Its two custom actions sat on a node with no label and no merge, so —
+     * by the same rule — a screen reader never landed on it and neither
+     * action could be reached. The drawn line under the waveform says
+     * "Release to leave it", which is an instruction for a finger that is not
+     * down; this names the two things that can happen instead.
+     */
+    const val RECORDING_A_VOICE_NOTE = "Recording. Leave it, or take it back."
 
     // Presence, read aloud (§11). Law 2 holds here as it does for the fire:
     // a state and a name, never a count. Several people announce by author.
@@ -533,7 +605,17 @@ object Copy {
      *  inviter's people, not theirs. */
     const val ROOM_FULL_FOR_JOINER = "This room is full. Ask them to start another."
     const val INVITE_EXPIRED = "This invite has expired. Ask for a new one."
-    const val INVITE_NOT_FOUND = "We couldn't find this invite. Ask for a new one."
+    /**
+     * The app's one first-person-plural, removed.
+     *
+     * "We couldn't find this invite" was the only user-visible string in the
+     * tree containing we, our or us — and it stood on the dead end of the
+     * join thread, which is the screen S16 says must show "a person, not a
+     * product". "We" summons a support desk onto it. Every other S25 line in
+     * this file names the thing that failed rather than the company that
+     * failed it, and this one now matches its own sibling above.
+     */
+    const val INVITE_NOT_FOUND = "That invite isn't there any more. Ask for a new one."
     fun wantsToReadWithYou(name: String) = "$name wants to read with you."
     const val JOIN = "Join"
     const val SOMEONE_WANTS_TO_READ_WITH_YOU = "Someone wants to read with you."

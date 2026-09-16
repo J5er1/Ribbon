@@ -57,6 +57,7 @@ import app.readribbon.core.Reading
 import app.readribbon.core.RibbonClock
 import app.readribbon.core.Room
 import app.readribbon.core.VerseAddress
+import app.readribbon.design.BackChevron
 import app.readribbon.design.NoteMark
 import app.readribbon.design.Flows
 import app.readribbon.design.Palette
@@ -257,6 +258,7 @@ fun EmberRecordScreen(
     onOpenVerse: (VerseAddress) -> Unit,
     onReadAgain: (String) -> Unit,
     onOpenPerson: (personID: Uuid, roomID: Uuid) -> Unit,
+    onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val book = Bible.book(reading.bookID)
@@ -290,6 +292,22 @@ fun EmberRecordScreen(
                 // `.scrollIndicators(.hidden)` asks for.
                 .verticalScroll(rememberScrollState()),
         ) {
+            // The way back, drawn. This screen is a root destination and had
+            // no way out at all except the system gesture — §11's motor rule
+            // asks for a tap equivalent for every gesture, and the person
+            // screen's own header names this exact defect class as the reason
+            // it was rewritten. It is drawn here rather than through
+            // `RibbonScreen` because the ember and the book's name both flow
+            // in from the shelf (A22), and a collapsing bar would take the
+            // name out of the pair.
+            BackChevron(
+                onBack = onBack,
+                label = Copy.BACK,
+                modifier = Modifier.padding(
+                    start = 8.dp,
+                    top = WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding() + 8.dp,
+                ),
+            )
             Column(
                 modifier = Modifier
                     .readableColumn()
