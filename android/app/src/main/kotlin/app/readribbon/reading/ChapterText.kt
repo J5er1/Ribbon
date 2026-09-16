@@ -28,11 +28,13 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -150,6 +152,9 @@ private val WASH_WOBBLE = 0.6.dp
 /** The wash's outer corners. Generous: a highlight is a gesture, not a box. */
 private val WASH_CORNER = 5.dp
 
+/** How far the wet end of a stroke runs out over, while it is travelling. */
+private val WASH_TIP = 10.dp
+
 /**
  * How far the wash reaches from the baseline, as a fraction of the body size:
  * over the capitals and under the tails, and no further. Everything above and
@@ -167,6 +172,12 @@ private const val WASH_BELOW_BASELINE = 0.28f
  *   result (§4.5).
  * @param liftedVerses verses currently lifted by a long-press (drawn raised,
  *   with a soft shadow).
+ * @param justMarked the verses you have this moment highlighted yourself, so
+ *   the wash is drawn travelling across them rather than appearing on them.
+ *   Null for everything else, including a highlight arriving from somebody
+ *   else's phone.
+ * @param onMarkDrawn the stroke has finished travelling and [justMarked] can
+ *   be let go of.
  * @param openNote an open note's carve-out: verse and the height to open
  *   beneath it.
  * @param onNoteSlot y offset (in this composable's coordinates) of the
@@ -179,6 +190,8 @@ fun ChapterText(
     theme: ReadingTheme,
     verseInks: Map<Int, List<Ink>>,
     liftedVerses: IntRange?,
+    justMarked: IntRange?,
+    onMarkDrawn: () -> Unit,
     openNote: OpenNote?,
     isFirstChapter: Boolean,
     showMarginHint: Boolean,
@@ -300,7 +313,7 @@ fun ChapterText(
     // The washes, already eased to whatever they are part-way through
     // becoming. Computed here rather than in the draw because none of it
     // needs the layout: only the rectangles do.
-    val washes = rememberArrivingWashes(verseInks, reduceMotion)
+    val washes = rememberArrivingWashes(verseInks, justMarked, onMarkDrawn, reduceMotion)
 
     Box(
         modifier = modifier.padding(
@@ -418,10 +431,11 @@ private class GestureState {
 
 /**
  * One verse's wash, as it is drawn this frame: the colour the inks on it
- * make, and how far up it is.
+ * make, how far up it is, and — when you are the one who just made it — how
+ * far along the words the stroke has got.
  */
 @Immutable
-private data class Wash(val color: Color, val alpha: Float)
+private data class Wash(val color: Color, val alpha: Float, val drawn: Float = 1f)
 
 /**
  * The wash a set of inks settles at: 24% for one, deepening for each ink on
@@ -494,6 +508,8 @@ private const val WASH_CAP = 0.36f
 @Composable
 private fun rememberArrivingWashes(
     verseInks: Map<Int, List<Ink>>,
+    justMarked: IntRange?,
+    onMarkDrawn: () -> Unit,
     still: Boolean,
 ): Map<Int, Wash> {
     val settled = remember(verseInks) {
@@ -515,11 +531,33 @@ private fun rememberArrivingWashes(
         from = settled
     }
 
+    // Your own stroke, travelling. It runs on its own clock because it is a
+    // different length from the arrival above — a mark being *made* takes the
+    // time a hand takes, and a mark that has turned up takes the time
+    // anything else takes to arrive.
+    val stroke = remember { Animatable(1f) }
+    val markDrawn by rememberUpdatedState(onMarkDrawn)
+    LaunchedEffect(justMarked) {
+        if (justMarked == null) return@LaunchedEffect
+        stroke.snapTo(0f)
+        stroke.animateTo(1f, RibbonMotion.settle(still))
+        markDrawn()
+    }
+
     val t = travel.value
-    if (t >= 1f) return settled
+    val pen = stroke.value
+    val striking = justMarked != null && pen < 1f
+    if (t >= 1f && !striking) return settled
 
     val drawn = LinkedHashMap<Int, Wash>(settled.size + from.size)
     for ((verse, now) in settled) {
+        // A verse you are marking right now is at full colour from the first
+        // frame and is revealed along its length instead: the ink is not
+        // getting darker, the pen is moving.
+        if (striking && verse in justMarked!!) {
+            drawn[verse] = now.copy(drawn = pen)
+            continue
+        }
         val was = from[verse]
         drawn[verse] = if (was == null) {
             now.copy(alpha = now.alpha * t)
@@ -589,6 +627,7 @@ private fun DrawScope.drawWashes(
     // The wash is hung off the baseline instead, at the height of the letters
     // plus room for their tails, so it sits on the words the way a stroke
     // does and the leading stays open between one line and the next.
+    val feather = with(density) { WASH_TIP.toPx() }
     val bodyPx = with(density) { bodySize.sp.toPx() }
     val aboveBaseline = bodyPx * WASH_ABOVE_BASELINE
     val belowBaseline = bodyPx * WASH_BELOW_BASELINE
@@ -605,6 +644,8 @@ private fun DrawScope.drawWashes(
         val rects = enclosingRects(layout, range)
         if (rects.isEmpty()) continue
 
+        // Each line's band, and the single shape they make together.
+        val bands = ArrayList<WashRect>(rects.size)
         var union: Path? = null
         rects.forEachIndexed { index, rect ->
             // The pen lifting: a stable hash, so it does not shimmer on
@@ -612,15 +653,21 @@ private fun DrawScope.drawWashes(
             val wobble = ((range.first * 31 + index * 7) % 3 - 1) * wobbleUnit
             // Never outside the line's own box: a tall capital or a long
             // descender must not let one line's wash touch the next.
-            val top = max(rect.top, rect.baseline - aboveBaseline) - bleedY
-            val bottom = min(rect.bottom, rect.baseline + belowBaseline) + bleedY
+            val band = WashRect(
+                left = rect.left - bleedX,
+                top = max(rect.top, rect.baseline - aboveBaseline) - bleedY,
+                right = rect.right + bleedX + wobble,
+                bottom = min(rect.bottom, rect.baseline + belowBaseline) + bleedY,
+                baseline = rect.baseline,
+            )
+            bands += band
             val piece = Path().apply {
                 addRoundRect(
                     RoundRect(
-                        left = rect.left - bleedX,
-                        top = top,
-                        right = rect.right + bleedX + wobble,
-                        bottom = bottom,
+                        left = band.left,
+                        top = band.top,
+                        right = band.right,
+                        bottom = band.bottom,
                         cornerRadius = CornerRadius(radius, radius),
                     ),
                 )
@@ -632,8 +679,62 @@ private fun DrawScope.drawWashes(
                 Path().apply { op(current, piece, PathOperation.Union) }
             }
         }
+        val shape = union ?: continue
+        val color = wash.color.copy(alpha = wash.alpha)
 
-        union?.let { drawPath(it, wash.color.copy(alpha = wash.alpha)) }
+        if (wash.drawn >= 1f) {
+            drawPath(shape, color)
+            continue
+        }
+
+        // **The pen travelling.** A highlight you are making yourself is
+        // revealed along the words in reading order — line by line, and left
+        // to right within a line — rather than fading up where it lies. It is
+        // the one act on this surface that is entirely yours, and the only
+        // one the app can honestly show as a movement of a hand: an arriving
+        // highlight gets the fade above, because nothing travelled across
+        // *your* page when somebody else marked their own.
+        //
+        // The clips are one per line and disjoint, so the shape is never
+        // filled over itself and a half-drawn stroke is exactly as dark as a
+        // finished one. Measured in ink laid down rather than in lines, so a
+        // verse of four words and a verse of four lines take the same time
+        // and travel at visibly different speeds, which is what a pen does.
+        var left = bands.sumOf { (it.right - it.left).toDouble() }.toFloat() * wash.drawn
+        for (band in bands) {
+            if (left <= 0f) break
+            val width = band.right - band.left
+            val reach = min(width, left)
+            left -= reach
+            clipRect(
+                left = band.left,
+                top = band.top,
+                right = band.left + reach,
+                bottom = band.bottom,
+            ) {
+                // Behind the tip, the ink is simply down.
+                if (left > 0f || reach >= width) {
+                    drawPath(shape, color)
+                } else {
+                    // The tip itself: the last few millimetres run out into
+                    // nothing, the way the wet end of a stroke does. A hard
+                    // vertical edge travelling across Scripture is a wipe
+                    // transition, and it is the one part of this the eye
+                    // reads as a screen doing something rather than as ink.
+                    val tip = min(feather, reach)
+                    val solid = (reach - tip) / reach
+                    drawPath(
+                        shape,
+                        Brush.horizontalGradient(
+                            solid to color,
+                            1f to color.copy(alpha = 0f),
+                            startX = band.left,
+                            endX = band.left + reach,
+                        ),
+                    )
+                }
+            }
+        }
     }
 }
 

@@ -2055,6 +2055,43 @@ A41c. **The toolbar put its two verbs off the screen, and I did it.** A41a
     never been in a picture, which is how it kept a monogram where S16's
     anatomy names a portrait until somebody read the source (A37).
 
+A41d. **A highlight you make yourself is drawn travelling.** A41b made the
+    wash arrive rather than blink, and that was right for a highlight turning
+    up from the other person's phone — it eases in where it lies, because
+    nothing travelled across *your* page when somebody else marked their own
+    copy, and drawing a stroke would be the app acting out something that did
+    not happen.
+
+    Your own is a different fact and deserved a different animation. It is
+    the one act on this surface that is entirely yours and the only one the
+    app can honestly show as the movement of a hand: you lifted a verse, you
+    chose an ink, and the mark is *made*. It ran as the same 320 ms fade as
+    everything else, so the most tactile moment in the product — §4.4 calls
+    marking a verse the app's central act — felt like a state change.
+
+    The wash is at full colour from the first frame and revealed along the
+    words instead, in reading order, line by line and left to right within a
+    line. Measured in ink laid down rather than in lines, so a verse of four
+    words and a verse of four lines take the same time and travel at visibly
+    different speeds, which is what a pen does. The clips are one per line and
+    disjoint, so the shape is never filled over itself and a half-drawn stroke
+    is exactly as dark as a finished one.
+
+    The last ten dp of it runs out into nothing rather than ending on a hard
+    vertical edge, because a hard edge travelling across Scripture is a *wipe
+    transition* — the one part of this the eye reads as a screen doing
+    something rather than as ink. `settle`, not `arrive`: a mark being made
+    takes the time a hand takes, and it is not the same clock as something
+    turning up.
+
+    Under reduce motion both of these are what §11 says they are — the wash
+    is simply there — because the tokens decide that in one place and neither
+    of these animations writes the branch out itself.
+
+    The look book holds the stroke half-way across, on a held clock. A still
+    frame is the only way to check that it reveals along the words rather
+    than wiping the block, and that is not a thing source can be read for.
+
 ## Licensed translations (decided: API.Bible)
 
 Open question §16.8 is now part-decided: **NKJV plus two undecided

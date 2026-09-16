@@ -20,6 +20,7 @@ import app.readribbon.R
 import app.readribbon.app.AppModel
 import app.readribbon.app.Copy
 import app.readribbon.core.Bible
+import app.readribbon.core.BlockStyle
 import app.readribbon.core.CardState
 import app.readribbon.core.FireScale
 import app.readribbon.core.FireState
@@ -36,17 +37,23 @@ import app.readribbon.core.ReadingPosition
 import app.readribbon.core.ReflectionCard
 import app.readribbon.core.Ribbon
 import app.readribbon.core.Room
+import app.readribbon.core.ScriptureBlock
+import app.readribbon.core.ScriptureChapter
+import app.readribbon.core.ScriptureSpan
 import app.readribbon.core.VerseAddress
 import app.readribbon.core.VerseRange
 import app.readribbon.data.AppState
 import app.readribbon.data.LocalStore
 import app.readribbon.design.Appearance
+import app.readribbon.design.RibbonMotion
 import app.readribbon.design.RibbonTheme
 import app.readribbon.design.rememberBookSheet
 import app.readribbon.design.room
+import app.readribbon.reading.ChapterText
 import app.readribbon.reading.ChaptersContent
 import app.readribbon.reading.LeaveToolbar
 import app.readribbon.reading.ReadingScreen
+import app.readribbon.reading.ReadingTheme
 import app.readribbon.reading.ReflectionCardView
 import app.readribbon.screens.AppearanceScreen
 import app.readribbon.screens.BookChooserContent
@@ -870,6 +877,74 @@ class LookBookTest {
                 onStartAnother = {},
             )
         }
+    }
+
+    /**
+     * Your own highlight, caught half-way across the words.
+     *
+     * The stroke is the one thing on this surface the app can honestly show
+     * as the movement of a hand, and a still frame is the only way to check
+     * that it reveals along the *words* rather than wiping the whole block.
+     * The clock is held and stepped to a little under half of a settle, so
+     * the second line is part-marked and the third has not been reached.
+     */
+    @Test fun theStrokeTravelling() {
+        val chapter = ScriptureChapter(
+            n = 1,
+            blocks = listOf(
+                ScriptureBlock(
+                    s = BlockStyle.p,
+                    x = listOf(
+                        ScriptureSpan(
+                            v = 1,
+                            t = "In the beginning was the Word, and the Word was with " +
+                                "God, and the Word was God. ",
+                        ),
+                        ScriptureSpan(v = 2, t = "He was with God in the beginning."),
+                    ),
+                ),
+            ),
+        )
+        val appearance = Appearance(ApplicationProvider.getApplicationContext())
+        appearance.wallpaperColour = false
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            RibbonTheme(appearance = appearance) {
+                Box(Modifier.fillMaxSize().room()) {
+                    ChapterText(
+                        chapter = chapter,
+                        runningHead = "John 1",
+                        theme = ReadingTheme(
+                            fontSize = 19f,
+                            lineHeightMultiple = 1.62f,
+                            redLetter = false,
+                        ),
+                        verseInks = mapOf(1 to listOf(Ink.teal)),
+                        liftedVerses = null,
+                        justMarked = 1..1,
+                        onMarkDrawn = {},
+                        openNote = null,
+                        isFirstChapter = true,
+                        showMarginHint = false,
+                        onLayout = {},
+                        onLongPressVerse = {},
+                        onDragToVerse = {},
+                        onDragEnded = {},
+                        onTapVerse = {},
+                        onNoteSlot = {},
+                        modifier = Modifier.padding(top = 60.dp),
+                    )
+                }
+            }
+        }
+        // Let the first frame land, then step to part-way through the settle.
+        compose.mainClock.advanceTimeByFrame()
+        compose.mainClock.advanceTimeBy(RibbonMotion.SETTLE_MS * 45L / 100L)
+        val image = compose.onRoot().captureToImage().asAndroidBitmap()
+        File(out, "stroke-travelling.png").outputStream().use {
+            image.compress(Bitmap.CompressFormat.PNG, 100, it)
+        }
+        compose.mainClock.autoAdvance = true
     }
 
     /**

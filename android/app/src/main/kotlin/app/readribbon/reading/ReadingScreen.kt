@@ -258,6 +258,18 @@ fun ReadingScreen(
     // Composition state
     var lifted by remember { mutableStateOf<VerseRange?>(null) }
     var liftedChapter by remember { mutableStateOf<Int?>(null) }
+
+    /**
+     * The verse you have this moment marked, so the page can draw the stroke
+     * travelling rather than the wash simply being there.
+     *
+     * Held for exactly as long as the stroke takes and then let go. It is
+     * deliberately about *your hand*, not about the highlight: one arriving
+     * from the other person eases in where it lies, because it did not happen
+     * here and pretending a stroke travelled across your page would be the
+     * app acting out something that did not occur.
+     */
+    var justMarked by remember { mutableStateOf<VerseRange?>(null) }
     var composer by remember { mutableStateOf<ComposerState?>(null) }
     val recorder = remember(context) { VoiceRecorder(context) }
     var editingNote by remember { mutableStateOf<Note?>(null) }
@@ -824,6 +836,10 @@ fun ReadingScreen(
                             noteSlotY = noteSlotY[n],
                             noteCardHeight = noteCardHeight,
                             liftedVerses = if (liftedChapter == n) lifted?.verses else null,
+                            justMarked = justMarked
+                                ?.takeIf { it.chapter == n && it.bookID == reading.bookID }
+                                ?.verses,
+                            onMarkDrawn = { justMarked = null },
                             measureInset = presenceInset,
                             onRemoteChapter = { remoteChapters[n] = it },
                             onLayout = { chapterLayouts[n] = it },
@@ -929,6 +945,7 @@ fun ReadingScreen(
                 followBackOffer = followBackOffer,
                 onHighlight = { range, ink ->
                     model.addHighlight(range, ink, reading)
+                    justMarked = range
                     clearLift()
                 },
                 // Said outright at both entry points as well, rather than
@@ -1061,6 +1078,8 @@ private fun ChapterSection(
     noteSlotY: Dp?,
     noteCardHeight: Dp,
     liftedVerses: IntRange?,
+    justMarked: IntRange?,
+    onMarkDrawn: () -> Unit,
     measureInset: Dp,
     onRemoteChapter: (ScriptureChapter) -> Unit,
     onLayout: (ChapterLayout) -> Unit,
@@ -1109,6 +1128,8 @@ private fun ChapterSection(
                 ),
                 verseInks = verseInks(model, reading, n),
                 liftedVerses = liftedVerses,
+                justMarked = justMarked,
+                onMarkDrawn = onMarkDrawn,
                 openNote = openNoteVerse
                     ?.takeIf { it.chapter == n }
                     ?.let { OpenNote(verse = it.verse, height = noteCardHeight) },
