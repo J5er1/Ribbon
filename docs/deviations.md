@@ -2304,6 +2304,21 @@ A42. **A room reads one version.** Owner's call, and the first entry in this
     the room changed version still widens to its whole verse instead of
     pointing at the wrong words.
 
+    **Two defects in the first cut of this, found by re-reading the diff.**
+    Both were about the same row reaching the server. The push captured the
+    room *as it was at the moment of the change*, so a rename in the same
+    breath would have been overwritten by the queued push putting the old name
+    back — it reads the current room at push time now, which is what the
+    rename path already did. And `merge()` let a pulled row set the version
+    unconditionally, so a pull arriving before the push landed handed the old
+    version back and the setting appeared to undo itself.
+
+    `pendingRenamePushes` already existed for exactly that second defect, on
+    the name, and had the right shape; it guards the whole room row now and is
+    called `pendingRoomPushes`. One marker rather than two, because name and
+    version travel in one row and a second marker would have been two half
+    locks on one door.
+
 ## Licensed translations (decided: API.Bible)
 
 Open question §16.8 is now part-decided: **NKJV plus two undecided
