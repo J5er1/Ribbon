@@ -15,10 +15,10 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -26,15 +26,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.ParagraphStyle
 import androidx.compose.ui.text.Placeholder
@@ -50,15 +56,12 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.semantics.CustomAccessibilityAction
-import androidx.compose.ui.semantics.customActions
-import androidx.compose.ui.semantics.onClick
 import app.readribbon.app.Copy
 import app.readribbon.core.BlockStyle
 import app.readribbon.core.Ink
 import app.readribbon.core.ScriptureChapter
-import app.readribbon.design.LocalRoomColours
 import app.readribbon.design.LocalHaptics
+import app.readribbon.design.LocalRoomColours
 import app.readribbon.design.Palette
 import app.readribbon.design.RibbonMotion
 import app.readribbon.design.RibbonType
@@ -140,6 +143,20 @@ private val WASH_BLEED_X = 2.dp
 
 /** Vertical bleed. Less than the horizontal: ink spreads along a line. */
 private val WASH_BLEED_Y = 1.2.dp
+
+/** How far the end of a line's wash overshoots, one way or the other. */
+private val WASH_WOBBLE = 0.6.dp
+
+/** The wash's outer corners. Generous: a highlight is a gesture, not a box. */
+private val WASH_CORNER = 5.dp
+
+/**
+ * How far the wash reaches from the baseline, as a fraction of the body size:
+ * over the capitals and under the tails, and no further. Everything above and
+ * below that is leading, which belongs to the page rather than to the mark.
+ */
+private const val WASH_ABOVE_BASELINE = 0.88f
+private const val WASH_BELOW_BASELINE = 0.28f
 
 /**
  * One chapter, set as a page.
@@ -298,7 +315,7 @@ fun ChapterText(
                 .fillMaxWidth()
                 .drawBehind {
                     val result = layout ?: return@drawBehind
-                    drawWashes(result, page, washes, density)
+                    drawWashes(result, page, washes, theme.fontSize, density)
                 }
                 // The long-press threshold is the platform's own
                 // (`ViewConfiguration.longPressTimeout`, 500 ms) rather than
@@ -407,21 +424,50 @@ private class GestureState {
 private data class Wash(val color: Color, val alpha: Float)
 
 /**
- * The wash a set of inks settles at.
+ * The wash a set of inks settles at: 24% for one, deepening for each ink on
+ * top of it, capped so a verse never becomes a block of colour (§4.5).
  *
- * 24% for one ink; overlapping inks deepen, capped so a verse never becomes a
- * block of colour. The multiply is arithmetic on the ink values, filled once,
- * exactly as iOS does it — deliberately not a `BlendMode.Multiply` pass per
- * ink. A blend mode multiplies against whatever is already on the canvas, and
- * what is already there is the unlit ground (0x0B0B0A); the overlap would come
- * out darker than a single wash and still carrying the first ink's hue, which
- * is the opposite of the third colour §4.5 asks for.
+ * **The inks are screened, not multiplied, and that is the correction.**
+ *
+ * Multiply is how two pigments combine *on white paper*: each one subtracts,
+ * so the overlap is darker than either. Ribbon's page is not paper — it is
+ * unlit ground at 0x0B0B0A, and a wash on it is a translucent *light* laid
+ * over darkness. Multiplying two inks there produces a near-black pigment, so
+ * the overlap came out **dimmer than either ink on its own**: crimson alone
+ * sits at 3.2× the ground's luminance, teal at 4.0×, and the two together at
+ * 2.7×. §4.5 says an overlap *deepens* and that "the overlap is the point";
+ * what it actually did was punch a hole in the page where two people had both
+ * marked a verse — the single most meaningful thing that can happen on this
+ * surface, drawn as an absence. Raising the alpha, which the old ramp did,
+ * made it worse, because it moved the result further toward that near-black.
+ *
+ * Screen is multiply's mirror for light, and it is symmetric, so the wash does
+ * not depend on which ink the loop met first — the fact "these two people both
+ * marked this verse" is not an ordered one. Crimson and teal make a warm
+ * bronze that is neither of them and brighter than both, which is the third
+ * colour §4.5 asks for. Nothing is averaged.
+ *
+ * Still one arithmetic fill rather than a `BlendMode` pass per ink, and for
+ * the original reason: a blend mode composites against whatever is already on
+ * the canvas, which here is the ground itself.
+ *
+ * The ramp: +5% per extra ink, capped at 36%. The cap is what keeps §4.5's
+ * "never a block of colour" true now that the colours climb toward white
+ * rather than falling toward black — eight inks screened together are very
+ * nearly white, and at 36% Scripture still reads over it at 5.3:1, against
+ * 8.7:1 for the two-person case this product is actually about.
+ *
+ * This diverges from iOS, deliberately and knowingly: see deviations A41b.
  */
 private fun washFor(inks: List<Ink>): Wash {
-    var multiplied = inks[0].color
-    for (other in inks.drop(1)) multiplied = multiply(multiplied, other.color)
-    return Wash(multiplied, min(0.45f, Palette.HIGHLIGHT_WASH + 0.14f * (inks.size - 1)))
+    var mixed = inks[0].color
+    for (other in inks.drop(1)) mixed = screen(mixed, other.color)
+    return Wash(mixed, min(WASH_CAP, Palette.HIGHLIGHT_WASH + WASH_STEP * (inks.size - 1)))
 }
+
+/** How much each ink past the first deepens the wash, and how far it can go. */
+private const val WASH_STEP = 0.05f
+private const val WASH_CAP = 0.36f
 
 /**
  * Somebody else's highlight, arriving.
@@ -489,9 +535,36 @@ private fun rememberArrivingWashes(
 }
 
 /**
- * Highlight washes, drawn behind the glyphs: rounded, bleeding ~2 dp past
- * the glyph box, with slightly irregular edges so it reads as ink soaking
- * into paper rather than a filled rectangle.
+ * Highlight washes, drawn behind the glyphs.
+ *
+ * **One mark, filled once.** Every wash used to be drawn a line at a time:
+ * one translucent rounded rectangle per line the verse touched. Three things
+ * came of that, and together they are why a highlight never looked like a
+ * highlight.
+ *
+ * *A dark band at every line break.* The rectangles bleed past the glyph box
+ * top and bottom, so consecutive lines overlapped by twice the bleed — and
+ * translucent over translucent is darker. A verse running over three lines
+ * drew two horizontal stripes through itself, at exactly the places the eye
+ * travels across.
+ *
+ * *Lines that did not line up.* Each rectangle was nudged up or down by a
+ * stable hash, to read as "ink soaking into paper". Moving the whole line
+ * box is not what soaking looks like; it is what a layout bug looks like.
+ * The rows staggered, and the dark bands moved with them.
+ *
+ * *A different shape per line.* The corner radius came from the same hash, so
+ * one line of a passage was rounder than the next.
+ *
+ * All three go away by unioning the line boxes into a single path and filling
+ * that once. The seams cannot darken because there is only one fill; the
+ * outer corners round and the interior ones vanish; and the shape that comes
+ * out is the shape of the words, stepping in and out at the ends of lines —
+ * which is the irregularity that was being simulated, and it is free.
+ *
+ * What is left of the hand-made quality is horizontal: the right-hand edge of
+ * each line wobbles by a fraction of a millimetre on a stable hash, the way
+ * the end of a pen stroke does. Nothing vertical moves, ever.
  *
  * The colours arrive already made — see [rememberArrivingWashes]. What is
  * left here is the one part that needs the layout: which rectangles a verse
@@ -501,12 +574,24 @@ private fun DrawScope.drawWashes(
     layout: TextLayoutResult,
     page: ChapterPage,
     washes: Map<Int, Wash>,
+    bodySize: Float,
     density: Density,
 ) {
     val bleedX = with(density) { WASH_BLEED_X.toPx() }
     val bleedY = with(density) { WASH_BLEED_Y.toPx() }
-    val jitterUnit = with(density) { 0.2.dp.toPx() }
-    val radiusUnit = with(density) { 1.dp.toPx() }
+    val wobbleUnit = with(density) { WASH_WOBBLE.toPx() }
+    val radius = with(density) { WASH_CORNER.toPx() }
+
+    // Scripture is set on generous leading, so a line's *box* is about half
+    // again as tall as the letters standing in it. Washing the whole box made
+    // a three-line highlight one unbroken slab of colour with the words
+    // floating in the middle of it — closer to a selection than to a mark.
+    // The wash is hung off the baseline instead, at the height of the letters
+    // plus room for their tails, so it sits on the words the way a stroke
+    // does and the leading stays open between one line and the next.
+    val bodyPx = with(density) { bodySize.sp.toPx() }
+    val aboveBaseline = bodyPx * WASH_ABOVE_BASELINE
+    val belowBaseline = bodyPx * WASH_BELOW_BASELINE
 
     val ordered = washes.entries
         .mapNotNull { (verse, wash) ->
@@ -519,34 +604,50 @@ private fun DrawScope.drawWashes(
     for ((range, wash) in ordered) {
         val rects = enclosingRects(layout, range)
         if (rects.isEmpty()) continue
-        val color: Color = wash.color.copy(alpha = wash.alpha)
-        for (rect in rects) {
-            // Bleed past the glyph box; jitter by a stable hash so the
-            // edge is irregular but doesn't shimmer on redraw.
-            val h = (range.first * 31 + rect.top.toInt()) % 5 - 2
-            val dy = h * jitterUnit
-            val left = rect.left - bleedX
-            val top = rect.top - bleedY + dy
-            val right = rect.right + bleedX
-            val bottom = rect.bottom + bleedY + dy
-            drawRoundRect(
-                color = color,
-                topLeft = Offset(left, top),
-                size = Size(right - left, bottom - top),
-                cornerRadius = CornerRadius(
-                    x = (3f + abs(h)) * radiusUnit,
-                    y = 4f * radiusUnit,
-                ),
-            )
+
+        var union: Path? = null
+        rects.forEachIndexed { index, rect ->
+            // The pen lifting: a stable hash, so it does not shimmer on
+            // redraw, and horizontal only.
+            val wobble = ((range.first * 31 + index * 7) % 3 - 1) * wobbleUnit
+            // Never outside the line's own box: a tall capital or a long
+            // descender must not let one line's wash touch the next.
+            val top = max(rect.top, rect.baseline - aboveBaseline) - bleedY
+            val bottom = min(rect.bottom, rect.baseline + belowBaseline) + bleedY
+            val piece = Path().apply {
+                addRoundRect(
+                    RoundRect(
+                        left = rect.left - bleedX,
+                        top = top,
+                        right = rect.right + bleedX + wobble,
+                        bottom = bottom,
+                        cornerRadius = CornerRadius(radius, radius),
+                    ),
+                )
+            }
+            val current = union
+            union = if (current == null) {
+                piece
+            } else {
+                Path().apply { op(current, piece, PathOperation.Union) }
+            }
         }
+
+        union?.let { drawPath(it, wash.color.copy(alpha = wash.alpha)) }
     }
 }
 
-/** Two inks, multiplied — the third colour an overlap makes (§4.5). */
-private fun multiply(a: Color, b: Color): Color = Color(
-    red = a.red * b.red,
-    green = a.green * b.green,
-    blue = a.blue * b.blue,
+/**
+ * Two inks screened — the third colour an overlap makes (§4.5).
+ *
+ * `1 - (1-a)(1-b)`: multiply's mirror. Where multiply asks how much light two
+ * pigments both let through, this asks how much two lights together add up
+ * to, which is what two translucent washes on an unlit page are.
+ */
+private fun screen(a: Color, b: Color): Color = Color(
+    red = 1f - (1f - a.red) * (1f - b.red),
+    green = 1f - (1f - a.green) * (1f - b.green),
+    blue = 1f - (1f - a.blue) * (1f - b.blue),
     alpha = 1f,
 )
 
@@ -568,16 +669,45 @@ private fun enclosingRects(
     val lastLine = layout.getLineForOffset(end - 1)
     val result = mutableListOf<WashRect>()
     for (line in firstLine..lastLine) {
-        val lineStart = max(start, layout.getLineStart(line))
-        val lineEnd = min(end, layout.getLineEnd(line, visibleEnd = true))
+        val visibleStart = layout.getLineStart(line)
+        val visibleEnd = layout.getLineEnd(line, visibleEnd = true)
+        val lineStart = max(start, visibleStart)
+        val lineEnd = min(end, visibleEnd)
         if (lineEnd <= lineStart) continue
-        val a = layout.getHorizontalPosition(lineStart, usePrimaryDirection = true)
-        val b = layout.getHorizontalPosition(lineEnd, usePrimaryDirection = true)
+
+        // The left edge is the first glyph the verse owns on this line, which
+        // is an offset question and always was. The right edge is not.
+        //
+        // `getHorizontalPosition` at a line's *own* end offset does not
+        // answer with that line's right edge: at a soft wrap the offset
+        // already belongs to the line below, so it comes back as the next
+        // line's left margin, and on a hard break it lands on the break. So
+        // every line a verse covered in full got a right edge somewhere out
+        // near the left margin, and `max(a, b)` then collapsed the whole
+        // rect to a hairline sitting in the indent.
+        //
+        // It went unseen because it only shows on a verse that *wraps*, and
+        // a wrapping verse has to be highlighted to show anything at all —
+        // which is a state the look book had no picture of until now. On
+        // poetry, where the lines are short and indented, a highlight across
+        // four lines drew one line and three slivers.
+        //
+        // When the verse runs past this line, the line's own right edge is
+        // the answer; only when the verse *stops* part-way along does an
+        // offset come into it.
+        val left = layout.getHorizontalPosition(lineStart, usePrimaryDirection = true)
+        val right = if (lineEnd >= visibleEnd) {
+            layout.getLineRight(line)
+        } else {
+            layout.getHorizontalPosition(lineEnd, usePrimaryDirection = true)
+        }
+        if (right <= left) continue
         result += WashRect(
-            left = min(a, b),
+            left = min(left, right),
             top = layout.getLineTop(line),
-            right = max(a, b),
+            right = max(left, right),
             bottom = layout.getLineBottom(line),
+            baseline = layout.getLineBaseline(line),
         )
     }
     return result
@@ -588,6 +718,7 @@ private data class WashRect(
     val top: Float,
     val right: Float,
     val bottom: Float,
+    val baseline: Float,
 ) {
     val width: Float get() = right - left
     val height: Float get() = bottom - top
@@ -627,6 +758,7 @@ private class ChapterPage(
             top = rects.minOf { it.top },
             right = rects.maxOf { it.right },
             bottom = rects.maxOf { it.bottom },
+            baseline = rects.first().baseline,
         )
     }
 

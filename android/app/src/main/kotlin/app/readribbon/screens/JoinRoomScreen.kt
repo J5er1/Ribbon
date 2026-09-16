@@ -457,8 +457,12 @@ private fun inviteLine(preview: InvitePreview?): String {
 
 // MARK: Steps
 
+// `internal` rather than private so the look book can draw it. This is the
+// screen the build book calls the most important conversion surface in the
+// product and it had never been in a picture — A24's argument, and the same
+// reason the reflection cards were added to it.
 @Composable
-private fun PreviewStep(
+internal fun PreviewStep(
     inviteLine: String,
     inviterName: String?,
     roomName: String?,

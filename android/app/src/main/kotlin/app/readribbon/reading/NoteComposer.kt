@@ -215,13 +215,6 @@ fun LeaveToolbar(
             modifier = Modifier
                 .height(TOOLBAR_HEIGHT)
                 .ribbonGlass(CircleShape)
-                // Eight swatches, a rule and two words are wider than a
-                // phone. SwiftUI compresses the row; here it scrolls, so
-                // the eighth ink stays reachable instead of being clipped
-                // off the end. Nothing else changes: at one swatch — the
-                // common case, a room of three or more — the row is
-                // narrower than the screen and never moves.
-                .horizontalScroll(rememberScrollState())
                 .padding(horizontal = 18.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -240,23 +233,43 @@ fun LeaveToolbar(
                     if (!roomPaused) onHighlight(mine)
                 }
             } else {
-                // The eight sit in touchable columns that include the gap
-                // between them, so the drawn 20 dp swatch keeps its spacing
-                // while the finger gets a column the full height of the bar
-                // to hit (§11 — a control only a stylus can hit is broken).
+                // **Only the inks scroll.**
                 //
-                // That column was 34 dp across, which is ten under the floor
-                // §11 and deviation 12 set and the app keeps everywhere else
-                // — and it was on the eight-across case, where the columns
-                // are already touching, so a miss lands on the ink next door
-                // rather than on nothing. Marking a verse in the wrong
-                // person's colour is a worse failure than not marking it.
+                // Eight swatches, a rule and two words are wider than a
+                // phone, and the whole bar used to scroll as one — so at
+                // eight inks the two verbs sat off the right-hand edge.
+                // `write` and `speak` are the reason the toolbar exists; the
+                // ink is the thing you can already do by holding, and the
+                // eight-across case is precisely a room of two, which is the
+                // shape of room this product is for. Putting them off-screen
+                // behind a scroll nobody is told about is the strongest
+                // version of §13's "the control that matters, hidden".
                 //
-                // They are 44 now. The row is wider than a phone at eight
-                // either way, which is exactly why it already scrolls: the
-                // trade was never width against reach, it was width against
-                // a scroll that was there regardless.
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                // The picture is what caught it: the swatches had just gone
+                // from 34 dp to 44 (below), which pushed the last of the
+                // width out, and the trade only looks like a trade in source.
+                // It is not one. The verbs are pinned and the inks take
+                // whatever is left, scrolling inside it — so at eight the
+                // eighth ink is a short slide away and both verbs are where
+                // they always are, and at one nothing moves at all.
+                Row(
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .horizontalScroll(rememberScrollState()),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    // The eight sit in touchable columns that include the gap
+                    // between them, so the drawn 20 dp swatch keeps its
+                    // spacing while the finger gets a column the full height
+                    // of the bar to hit (§11 — a control only a stylus can
+                    // hit is broken).
+                    //
+                    // That column was 34 dp across, ten under the floor §11
+                    // and deviation 12 set, and on the one case where the
+                    // columns touch — so a miss lands on the ink *next door*
+                    // rather than on nothing, and marking a verse in the
+                    // wrong person's colour is a worse failure than not
+                    // marking it.
                     Ink.entries.forEach { ink ->
                         InkSwatch(
                             ink = ink,

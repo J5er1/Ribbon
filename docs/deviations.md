@@ -1954,6 +1954,107 @@ A41a. **The rest of what the audit found: what the app does not say, and the
     superseded by `RibbonScreen`, and used by nothing. A design system with
     dead parts in it is a design system people stop trusting to be the answer.
 
+A41b. **Highlighting, which nobody had ever looked at.** The reading surface
+    had one picture in the look book and it was a clean page: no wash, no
+    overlap, one note mark far down it. So the thing the product is *for* —
+    two people marking the same chapter — had never been seen, and it was
+    carrying four separate defects, three of them years old and one of them
+    mine, from ten minutes earlier. Every one of them was obvious in the
+    first picture. A24, again, and more expensively than usual.
+
+    **An overlap came out dimmer than one ink.** §4.5 says two inks on one
+    verse make a third colour, that the colours are never averaged, and that
+    the overlap is the point. The code multiplied the ink values — and
+    multiply is how two *pigments* combine on white paper, where each one
+    subtracts. Ribbon's page is unlit ground at `0x0B0B0A` and a wash on it is
+    translucent *light*. Multiplying two inks there makes a near-black
+    pigment, so: crimson alone reads at 3.2× the ground's luminance, teal at
+    4.0×, and the two together at **2.7×**. Raising the alpha — which the old
+    ramp did, by 14% per extra ink, in the name of deepening — made it worse,
+    because it moved the result further toward that near-black. Two people
+    marking the same verse punched a hole in the page.
+
+    They are screened now: `1 − (1−a)(1−b)`, multiply's mirror for light. It
+    is symmetric, so the wash does not depend on which ink the loop happened
+    to meet first — "we both marked this" is not an ordered fact — and
+    crimson and teal make a warm bronze that is neither and brighter than
+    both. Still one arithmetic fill rather than a `BlendMode` pass per ink,
+    for the reason the original comment gives: a blend mode composites
+    against what is already on the canvas, which here is the ground. The ramp
+    is +5% per ink capped at 36%, which is what now keeps §4.5's "never a
+    block of colour" true in a direction that climbs toward white: eight inks
+    screened are very nearly white, and at 36% Scripture still reads over
+    them at 5.3:1, against 8.7:1 for the two-person case the product is
+    actually about.
+
+    **This diverges from iOS and is meant to.** iOS multiplies. The owner's
+    call is that each platform takes its own pass and the other follows; this
+    entry is the argument for iOS to follow, and the numbers above are the
+    whole of it.
+
+    **A highlight on a wrapping verse drew one line and then slivers.**
+    `enclosingRects` asked `getHorizontalPosition` for both ends of every
+    line. That is right for an end *inside* a line and wrong for a line's own
+    end: at a soft wrap the offset already belongs to the line below, so it
+    answers with the next line's left margin, and on a hard break it lands on
+    the break. Every line a verse covered in full therefore got a right edge
+    out near the left margin, and `max(a, b)` collapsed the rect to a
+    hairline in the indent. On poetry, where lines are short and indented, a
+    highlight across four lines of the Psalms drew one line and three
+    slivers. The line's own right edge is the answer when the verse runs past
+    it; only a verse that *stops* part-way needs an offset.
+
+    **Every wash was a stack of boxes, and the boxes fought each other.** One
+    translucent rounded rectangle per line, which gave three faults at once.
+    The rectangles bleed past the glyph box, so consecutive lines overlapped
+    by twice the bleed and translucent over translucent is darker — a verse
+    over three lines drew two dark stripes through itself, at exactly the
+    places the eye crosses. Each rectangle was then nudged up or down by a
+    stable hash "so it reads as ink soaking into paper", but moving a whole
+    line box is not what soaking looks like, it is what a layout bug looks
+    like; the rows staggered and the stripes moved with them. And the corner
+    radius came from the same hash, so one line of a passage was rounder than
+    the next.
+
+    All three go away by unioning the line boxes into one path and filling it
+    once: seams cannot darken when there is one fill, the interior corners
+    vanish, and the shape that comes out is the shape of the words, stepping
+    in and out at the ends of lines — which is the irregularity that was being
+    simulated, and it is free. What is left of the hand is horizontal: the
+    end of each line's wash overshoots by about half a millimetre on a stable
+    hash, the way the end of a pen stroke does. Nothing vertical moves.
+
+    **And it was a slab.** Scripture is set on generous leading, so a line's
+    box is half again as tall as the letters standing in it; washing the whole
+    box made a multi-line highlight one unbroken block with the words floating
+    in the middle of it, which is a *selection*, not a mark. The wash hangs
+    off the baseline now — over the capitals, under the tails, and no further
+    — so it sits on the words the way a stroke does and the leading stays open
+    between one line and the next. Clamped to the line box at both ends, so a
+    tall capital or a long descender can never let one line's wash touch
+    another's.
+
+A41c. **The toolbar put its two verbs off the screen, and I did it.** A41a
+    brought the eight ink swatches up from 34 dp to the 44 the rest of the app
+    keeps. The whole bar scrolled as one, so the extra width pushed `write`
+    and `speak` past the right-hand edge — and the eight-across case is
+    precisely a room of two, which is the shape of room this product exists
+    for. The ink is the thing you can already do by holding a verse; the two
+    verbs are the reason the toolbar is there at all, and they were behind a
+    scroll nobody is told about.
+
+    Only the inks scroll now; the rule and the two words are pinned. At eight
+    inks the eighth is a short slide away and both verbs are where they always
+    are, and at one — a room of three or more — nothing moves at all. The
+    floor was never the thing to trade: the row has scrolled since it was
+    written, and the trade only looked like a trade in source.
+
+    Four screens joined the look book to catch this and the entries above: the
+    page in use, the toolbar, the shelf, and S16 — the screen the build book
+    calls the most important conversion surface in the product, which had
+    never been in a picture, which is how it kept a monogram where S16's
+    anatomy names a portrait until somebody read the source (A37).
+
 ## Licensed translations (decided: API.Bible)
 
 Open question §16.8 is now part-decided: **NKJV plus two undecided
