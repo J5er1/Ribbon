@@ -399,17 +399,16 @@ private fun TourStep(
                 onClick = onContinue,
             )
 
-            if (index == 0) {
-                QuietControl(
-                    title = Copy.ALREADY_HAVE_ACCOUNT,
-                    onClick = onSignIn,
-                )
-            } else {
-                QuietControl(
-                    title = Copy.HAVE_AN_INVITE,
-                    onClick = onHaveInvite,
-                )
-            }
+            // One control, and the same one on every card. The first card
+            // used to carry "Already have an account? Sign in" *and* the
+            // progress bar's own Sign in, eight dp of screen apart — two ways
+            // to the same place, one of them a question in stock SaaS voice
+            // (§10.1: short sentences, second person). The bar's control is
+            // on every step and is the one that stays.
+            QuietControl(
+                title = Copy.HAVE_AN_INVITE,
+                onClick = onHaveInvite,
+            )
         }
     }
 }

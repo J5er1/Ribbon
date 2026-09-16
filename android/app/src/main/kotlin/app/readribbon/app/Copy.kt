@@ -116,7 +116,16 @@ object Copy {
     //     which is what you keep when a book is finished.
     //
     // Second person, one short sentence each, and the vocabulary §11 settled.
-    const val WALKTHROUGH_VISION_TITLE = "Read Scripture together."
+    /**
+     * Not the tagline, and deliberately not a near-miss of it.
+     *
+     * This read "Read Scripture together." — the settled tagline (§10.4) with
+     * a word added — one screen after the mark moment has just shown the
+     * tagline itself. Either the first card's heading is the tagline or it is
+     * something else; a version of it with an extra word in it is the one
+     * thing it cannot be.
+     */
+    const val WALKTHROUGH_VISION_TITLE = "Read with someone."
     const val WALKTHROUGH_VISION_BODY =
         "Read with one person, or a few. On the same couch, or four time zones away."
     const val WALKTHROUGH_PRESENCE_TITLE = "See each other on the page."
@@ -135,7 +144,6 @@ object Copy {
     const val WALKTHROUGH_INTENT_FRIEND = "A close friend"
     const val WALKTHROUGH_INTENT_GROUP = "A small study or family"
     const val WALKTHROUGH_INTENT_SOLO = "Starting on my own first"
-    const val ALREADY_HAVE_ACCOUNT = "Already have an account? Sign in"
     const val CONTINUE_TOUR = "Continue"
     const val SKIP_TOUR = "Skip"
     const val GET_STARTED = "Get Started"
