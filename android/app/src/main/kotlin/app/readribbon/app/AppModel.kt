@@ -797,9 +797,14 @@ class AppModel(
         persist()
         val remote = this.remote
         if (remote != null && remote.isSignedIn) {
-            viewModelScope.launch {
-                runCatching { remote.push(ribbon = ribbon) }
-            }
+            // Through `pushing`, not a bare launch. The ribbon is something
+            // the *room* renders — it is a line on the room screen — and the
+            // whole point of a shared ribbon is that the other person finds
+            // it there. Pushed without the nudge it would land in the table
+            // and sit unseen until their next foreground, which for the one
+            // object in the app that exists to be noticed is the same as not
+            // syncing at all.
+            pushing { runCatching { remote.push(ribbon = ribbon) } }
         }
     }
 
