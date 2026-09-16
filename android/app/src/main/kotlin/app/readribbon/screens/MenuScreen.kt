@@ -54,6 +54,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -68,6 +69,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
@@ -956,6 +958,32 @@ private fun YouIdentityRow(model: AppModel) {
     var editingName by rememberSaveable { mutableStateOf(false) }
     var name by rememberSaveable { mutableStateOf("") }
 
+    /**
+     * Keep what was typed, wherever the edit ended.
+     *
+     * The field used to commit in exactly one place — the keyboard's Done key
+     * — so tapping the face beside it, tapping anything that took focus,
+     * pressing back, closing the menu or pushing a settings screen all threw
+     * the edit away with nothing said. S18 calls the name "editable in place",
+     * and an in-place edit that only one specific soft-keyboard key can land
+     * is not one. It is also the most load-bearing field in the app: the name
+     * is the one thing S17 will not let a person skip, and it is what their
+     * partner sees on every seat and every note.
+     *
+     * An empty name reverts silently. A person cannot delete their own name,
+     * and §10.1's unbothered interface does not scold them for trying.
+     */
+    fun commitName() {
+        if (!editingName) return
+        val trimmed = name.trim()
+        if (trimmed.isNotEmpty()) model.updateMe(name = trimmed)
+        editingName = false
+    }
+
+    // An edit still in flight when this screen is disposed — the menu closed,
+    // a settings screen pushed over it — lands rather than evaporating.
+    DisposableEffect(Unit) { onDispose { commitName() } }
+
     val context = LocalContext.current
     val reduceMotion = rememberReduceMotion()
 
@@ -1022,18 +1050,29 @@ private fun YouIdentityRow(model: AppModel) {
         // the same size. Two identical lines of type trading places on one
         // frame reads as a flinch; a cross-fade reads as the one becoming the
         // other, which is what it is.
+        //
+        // The sentence under it is always drawn, editing or not, so the tile
+        // does not change height under the keyboard.
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
         AnimatedContent(
             targetState = editingName,
-            modifier = Modifier.weight(1f),
             transitionSpec = {
                 fadeIn(RibbonMotion.arrive(reduceMotion)) togetherWith
                     fadeOut(RibbonMotion.arrive(reduceMotion))
             },
             label = "your-name",
+            modifier = Modifier.fillMaxWidth(),
         ) { editing ->
             if (editing) {
                 val focus = remember { FocusRequester() }
                 LaunchedEffect(focus) { runCatching { focus.requestFocus() } }
+                // The prompt is drawn *behind* the caret rather than above the
+                // field, which is SwiftUI's `prompt:` and what the room's own
+                // name field one section down already does.
+                Box(contentAlignment = Alignment.CenterStart) {
                 BasicTextField(
                     value = name,
                     onValueChange = { name = it },
@@ -1044,18 +1083,31 @@ private fun YouIdentityRow(model: AppModel) {
                         capitalization = KeyboardCapitalization.Words,
                         imeAction = ImeAction.Done,
                     ),
-                    keyboardActions = KeyboardActions(
-                        onDone = {
-                            val trimmed = name.trim()
-                            if (trimmed.isNotEmpty()) model.updateMe(name = trimmed)
-                            editingName = false
-                        },
-                    ),
+                    keyboardActions = KeyboardActions(onDone = { commitName() }),
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = MinTarget)
-                        .focusRequester(focus),
+                        .focusRequester(focus)
+                        .onFocusChanged { if (!it.isFocused) commitName() }
+                        // With no prompt drawn when the field is empty there
+                        // is nothing on screen to take a label from, and this
+                        // was the one typing surface in the app with neither
+                        // (§11, and A25 found the same class of defect across
+                        // onboarding's three fields).
+                        .semantics { contentDescription = Copy.YOUR_NAME },
                 )
+                // Cleared of its text the field was a bare caret. The room's
+                // own name field one section down already draws its prompt
+                // this way; this is the same, at the same size, so the prompt
+                // sits exactly where the text will.
+                if (name.isEmpty()) {
+                    Text(
+                        text = Copy.YOUR_NAME,
+                        style = RibbonType.ui(18f),
+                        color = Palette.muted,
+                    )
+                }
+                }
             } else {
                 Box(
                     // A short name draws a short word, and the word is the
@@ -1080,6 +1132,19 @@ private fun YouIdentityRow(model: AppModel) {
                     )
                 }
             }
+        }
+        // The one tile on this screen that said nothing about itself, on the
+        // screen S18 calls the place your identity lives — while the three
+        // rows beneath it each carry a sentence, which A23 calls the half of
+        // that pass that mattered most. Neither of this tile's two targets
+        // was drawn as a control: the portrait's affordance existed only as a
+        // content description and the name's only as a click label, both
+        // invisible. So the tile says what it is for.
+        Text(
+            text = Copy.IDENTITY_REASON,
+            style = RibbonType.ui(13f),
+            color = Palette.muted,
+        )
         }
     }
 }

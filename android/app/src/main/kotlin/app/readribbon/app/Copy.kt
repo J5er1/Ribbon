@@ -33,6 +33,19 @@ object Copy {
      */
     const val THATS_ME = "That's me"
     const val PORTRAIT_REASON = "They'll see your face when you're reading."
+
+    /**
+     * The sentence under your face and your name on You (S18).
+     *
+     * The sibling of [PORTRAIT_REASON], which says the same thing at
+     * onboarding about the face alone. A23's argument was that almost every
+     * row gained a sentence and that this was the half of the pass that
+     * mattered most; the identity tile was the one tile left that said
+     * nothing about itself, on the screen S18 calls the place your identity
+     * lives — and both of its targets are controls whose only affordance was
+     * an invisible accessibility label.
+     */
+    const val IDENTITY_REASON = "They'll see your face and your name when you're reading."
     const val ADD_A_PORTRAIT = "Add a portrait"
 
     /** The same control, said to somebody who already has a face behind it. */
@@ -382,6 +395,56 @@ object Copy {
 
     fun aNoteAt(verse: String) = "Note at $verse"
     const val WHAT_YOU_LEFT = "What you left"
+
+    /**
+     * S12 with nothing in it.
+     *
+     * Impersonal on purpose. The head above the list reads "What Ruth left",
+     * and the moment that is shown over nothing it is a head naming the
+     * person who has not done the thing — which §10.1 forbids by name. So
+     * when there is nothing, there is no head and no tile either: a drawn
+     * container announcing an absence is §4.2's placeholder mistake. One
+     * line, on the bare ground, true of your own screen as well as theirs,
+     * which is why it needs no name.
+     *
+     * This is the first-run state of every person screen in the product
+     * (§6.1), and before this it was blank ground under a name.
+     */
+    const val NOTHING_LEFT_HERE_YET = "Nothing left in this room yet."
+
+    /**
+     * A note nobody has found yet, on S12 — the same clause §11 specifies for
+     * a gutter mark ("not yet found"), in the running-head voice.
+     *
+     * An unfound note shows its address and not its words, which is A22a's
+     * call and right: §6.3's whole beat is being found later, and a list that
+     * read every unfound note aloud would spend it before anybody opened the
+     * book. But an address alone is only "an invitation to go" if the row
+     * says it is one — without this, an unfound note and a voice note whose
+     * transcription failed render identically, and a screen reader hears a
+     * bare address either way.
+     */
+    const val NOT_YET_FOUND = "not yet found"
+
+    /**
+     * The ink line on S12, read aloud (§11).
+     *
+     * "Colour is never alone": a 6 dp dot cannot be the only signal of whose
+     * ink this is, and the name of a colour on its own — "Crimson", floating
+     * between a name and a list — says nothing at all. No possessive and no
+     * name in it, because the screen's own heading is already the person.
+     */
+    fun inkSpoken(yours: Boolean, ink: String) =
+        (if (yours) "Your ink" else "Their ink") + ", " + ink
+
+    /**
+     * Somebody the app has a membership for and no profile yet.
+     *
+     * A seat can be tapped before a profile has synced, and `person?.name ?:
+     * ""` rendered an empty heading over a head reading "What  left". A
+     * screen with no name on it reads as a failure rather than as a wait.
+     */
+    const val SOMEONE = "Someone"
 
     const val CHANGE_YOUR_INK = "Change your ink"
     const val LEAVE_THIS_ROOM = "Leave this room"

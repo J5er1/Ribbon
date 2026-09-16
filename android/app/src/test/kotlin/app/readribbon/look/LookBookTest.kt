@@ -435,6 +435,33 @@ class LookBookTest {
         }
     }
 
+    /**
+     * The same screen with nothing on it — the first-run state of every
+     * person screen in the product (§6.1), and the one this pass existed to
+     * fix. It used to be a face, a name and blank ground.
+     */
+    @Test fun aPersonWithNothing() {
+        val open = reading("MRK", FireScale.medium)
+        val state = AppState(
+            me = me,
+            people = mapOf(me.id to me, ruth.id to ruth),
+            rooms = listOf(room),
+            memberships = listOf(membership(me, Ink.teal), membership(ruth, Ink.crimson)),
+            readings = listOf(open),
+            currentRoomID = room.id,
+        )
+        val m = model(state)
+        shoot("person-empty") {
+            PersonScreen(
+                model = m,
+                personID = ruth.id,
+                room = m.state.rooms.first(),
+                onOpenVerse = { _, _ -> },
+                onDismiss = {},
+            )
+        }
+    }
+
     @Test fun theMenu() {
         val open = reading("MRK", FireScale.medium)
         val second = Room(name = "Thursday", createdAt = now - 200.hours)

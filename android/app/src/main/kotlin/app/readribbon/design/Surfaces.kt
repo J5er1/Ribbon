@@ -105,8 +105,16 @@ private val TallRowHeight = 76.dp
  */
 val Seam = 2.dp
 
-/** How far in a title sits from a tile's own edge. */
-private val TextInset = 20.dp
+/**
+ * How far in a title sits from a tile's own edge.
+ *
+ * Public for the same reason [Seam] is: the group DSL below is not the only
+ * place a group is built. S12's list of what somebody left is a group of
+ * tiles drawn at its call site — `GroupScope.slot()` is private here and a
+ * custom row cannot reach it — and a second opinion about this number there
+ * would put that screen's words 4 dp off every other screen's.
+ */
+val TextInset = 20.dp
 
 /** How far in a control sits: nearer the edge than words are. */
 private val WellInset = RibbonShape.nest
@@ -870,6 +878,16 @@ fun RibbonScreen(
                 Column(
                     modifier = Modifier
                         .readableColumn()
+                        // `readableColumn` ends in `wrapContentSize`, so
+                        // without this the page is only as wide as its widest
+                        // child — and a screen whose children all happen to
+                        // be narrow centres itself and everything on it. The
+                        // settings screens never showed it, because a group
+                        // of tiles fills the width; S12 with nothing left in
+                        // it does, and a portrait that sits on the margin
+                        // with one note and jumps to the middle with none is
+                        // the kind of thing only a picture catches (A24).
+                        .fillMaxWidth()
                         .padding(horizontal = ScreenMargin)
                         .padding(bottom = bottomBar + 44.dp),
                 ) {

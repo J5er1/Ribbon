@@ -1262,6 +1262,96 @@ A33. **Notifications exist.** S19 is the screen the build book calls "the
     has nothing to pull, and waking their phone four times an hour to find
     that out is a battery cost with no feature behind it.
 
+A34. **S12 joins the rest of the app, and says something when there is
+    nothing.** The person screen was the last one standing on its own page
+    furniture, and A22a is why: that pass gave it a head, tiles and a way
+    back *before* `RibbonScreen` existed, and nothing came back for it.
+
+    Two of the differences were defects rather than style. Its back chevron
+    lived **inside the scrolling content**, so a person with more than a
+    screenful of notes scrolled the only tap route back off the top of the
+    screen — §11's motor rule with the system gesture as the sole survivor.
+    And the name was a centred line rather than the screen's heading, so a
+    screen reader got **no heading node for the thing the screen is about**.
+    The rest followed: centre-aligned where every pushed screen is
+    start-aligned, a 24 dp measure against everyone else's `ScreenMargin`, a
+    hardcoded 60 dp spacer in place of the navigation-bar inset, and a list of
+    notes drawn as eight identically-rounded tiles rather than one group with
+    the group's own outer corners.
+
+    Nothing in S12 asked for any of it. Its anatomy is a portrait, a name, an
+    ink and a list, and a collapsing title holds all four.
+
+    **Two deliberate differences from the settings screens, kept.** S12
+    declines the lede: the one slot on the screen that invites a sentence
+    about a person is exactly where a join date or a "last seen" would arrive,
+    and S12's anatomy ends "nothing else". And its face sits on the bare
+    ground where S18's identity tile puts its face on paper — here the face is
+    the subject of the screen, there it is a control beside another control,
+    and a tile is what a row of controls is for.
+
+    **The empty screen now says something.** The notes block had no else
+    branch, so on the first day of a new room — the moment the product is
+    being judged — tapping the other person's face gave a portrait, a name,
+    and blank ground. It reads as a screen that failed to load. One
+    impersonal line stands there instead: *Nothing left in this room yet.* No
+    head, because the head reads "What Ruth left" and over nothing that is a
+    head naming the person who has not done the thing (§10.1); and no tile,
+    because a drawn container announcing an absence is §4.2's placeholder
+    mistake.
+
+    **An unfound note says it is waiting.** A22a's call — an unfound note
+    gives its address and not its words, because §6.3's beat is being found
+    later — is right, but an address alone is only "an invitation to go" if
+    the row says it is one. Without it an unfound note and a voice note whose
+    transcription failed rendered identically, and this was the one place in
+    the app a note's found state was spoken nowhere. It carries §11's own
+    clause now, in the running-head voice, and the spoken label ends with it.
+
+    Smaller things in the same pass: the ink line reads as *"Their ink,
+    Crimson"* rather than the bare word "Crimson" floating between a name and
+    a list (§11 — colour is never alone); "Change your ink" moved from the
+    foot of the page to directly under the ink it changes, because it used to
+    sit a screenful away and share a stack with "Leave this room", which made
+    changing a colour look like the same class of act as leaving; and a person
+    whose profile has not synced is "Someone" rather than an empty heading over
+    a head reading "What  left".
+
+    **`RibbonScreen` had a latent bug the empty screen found.**
+    `readableColumn` ends in `wrapContentSize`, so a page was only ever as
+    wide as its widest child — and a screen whose children all happen to be
+    narrow centred itself and everything on it. The settings screens never
+    showed it because a group of tiles fills the width; S12 with nothing left
+    in it did, and the tell was a portrait that sat on the margin with one
+    note and jumped to the middle with none. The content column fills its
+    measure now. A24 again: only a picture catches that.
+
+A34a. **The identity tile on You says what it is for, and the name it holds
+    is saved by every way out of it.** S18's name field committed in exactly
+    one place — the keyboard's Done key. Tapping the face beside it, tapping
+    anything that took focus, pressing back, closing the menu or pushing a
+    settings screen all threw the edit away with nothing said. S18 calls the
+    name "editable in place", and an in-place edit only one soft-keyboard key
+    can land is not one; it is also the most load-bearing field in the app,
+    since the name is the one thing S17 will not let a person skip and it is
+    what their partner sees on every seat and every note. It commits on the
+    IME action, on losing focus, and on disposal. An empty name reverts
+    silently — a person cannot delete their own name, and §10.1's unbothered
+    interface does not scold them for trying.
+
+    The field also had no label and no prompt, so cleared of its text it was
+    a bare caret and an unlabelled edit box to a screen reader — the one
+    typing surface in the app with neither, which is the class of defect A25
+    fixed across onboarding's three fields. It draws `Your name` behind the
+    caret, the way the room's own name field already did.
+
+    And the tile gained a sentence. It was the only tile on the screen that
+    said nothing about itself, while the three rows beneath it each carry one
+    — which A23 calls the half of that pass that mattered most. Neither of its
+    two targets was drawn as a control: the portrait's affordance existed only
+    as a content description and the name's only as a click label, both
+    invisible on the screen S18 calls the place your identity lives.
+
 ## Licensed translations (decided: API.Bible)
 
 Open question §16.8 is now part-decided: **NKJV plus two undecided

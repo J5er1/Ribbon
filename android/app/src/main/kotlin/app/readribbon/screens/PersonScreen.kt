@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -40,6 +41,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
@@ -57,12 +59,15 @@ import app.readribbon.core.NoteKind
 import app.readribbon.core.Room
 import app.readribbon.core.VerseAddress
 import app.readribbon.design.HairlineRule
+import app.readribbon.design.Air
 import app.readribbon.design.InkDot
 import app.readribbon.design.NoteMark
 import app.readribbon.design.BackChevron
 import app.readribbon.design.Flows
 import app.readribbon.design.Palette
 import app.readribbon.design.RibbonShape
+import app.readribbon.design.RibbonScreen
+import app.readribbon.design.Seam
 import app.readribbon.design.SectionLabel
 import app.readribbon.design.flows
 import app.readribbon.design.paper
@@ -73,6 +78,7 @@ import app.readribbon.design.PortraitView
 import app.readribbon.design.QuietControl
 import app.readribbon.design.RibbonType
 import app.readribbon.design.SmallCaps
+import app.readribbon.design.TextInset
 import app.readribbon.design.color
 import app.readribbon.design.readableColumn
 import app.readribbon.design.rememberReduceMotion
@@ -102,6 +108,16 @@ private val SWATCH_TARGET: Dp = 44.dp
 
 /** The smallest a row may be tapped at (§11, deviation 12). */
 private val MIN_TARGET: Dp = 44.dp
+
+/** The portrait, under the screen's own title rather than instead of it. */
+private val PortraitSize: Dp = 96.dp
+
+/**
+ * [QuietControl] pads itself by 8 dp so its 44 dp target clears the words it
+ * draws; pulling it back by the same 8 dp puts the words themselves on the
+ * page's margin. The menu's quiet controls make the same correction.
+ */
+private val QuietControlInset: Dp = (-8).dp
 
 /**
  * A person (S12): their face, their name, their ink, and what they have left
@@ -136,113 +152,139 @@ fun PersonScreen(
         .filter { readingIDs.contains(it.readingID) && it.authorID == personID }
         .sortedBy { it.verse }
 
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            // Edge to edge: the ground and its grain run under the system
-            // bars, and only the content clears them. `.room()` hides its own
-            // node from accessibility — the paper is texture, not information
-            // — so it is painted by this box rather than by the scroll.
-            .room(),
+    // RibbonScreen, like every other pushed screen (deviations A23, A29).
+    //
+    // This was the last screen in the app still standing on its own page
+    // furniture, and A22a is why: that pass gave it a head, tiles and a way
+    // back *before* RibbonScreen existed, and nothing came back for it. The
+    // difference was not cosmetic. Its back chevron lived inside the scrolling
+    // content, so a person with more than a screenful of notes scrolled the
+    // only tap route back off the top of the screen (§11's motor rule, with
+    // the gesture as the sole survivor); the name was a centred line rather
+    // than the screen's heading, so a screen reader got no heading node for
+    // the thing the screen is about; and the whole page was centre-aligned and
+    // 24 dp wide where every other pushed screen is start-aligned on
+    // `ScreenMargin`.
+    //
+    // Nothing in S12 asked for any of that. Its anatomy is a portrait, a name,
+    // an ink and a list, and a collapsing title holds all four better than a
+    // centred column does.
+    //
+    // Two deliberate differences from the settings screens, both recorded in
+    // A33a. **No lede**: the one slot on this screen that invites a sentence
+    // about a person is exactly where a join date or a "last seen" would
+    // arrive, and S12's anatomy ends "nothing else". **The face is on the bare
+    // ground**, where S18's identity tile puts its face on paper — here the
+    // face is the subject of the screen, there it is a control beside another
+    // control, and a tile is what a row of controls is for.
+    RibbonScreen(
+        // Never blank: a seat can be tapped before its profile has synced,
+        // and a screen with no name on it reads as a failure rather than a
+        // wait.
+        title = person?.name ?: Copy.SOMEONE,
+        onBack = onDismiss,
+        modifier = modifier,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                // No scroll indicators: Compose draws none, which is what
-                // `.scrollIndicators(.hidden)` asks for.
-                .verticalScroll(rememberScrollState()),
-        ) {
-            Column(
-                modifier = Modifier
-                    .readableColumn()
-                    // The extra bottom inset three-button navigation needs
-                    // comes from safeDrawing itself.
-                    .padding(WindowInsets.safeDrawing.asPaddingValues()),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(18.dp),
+        PortraitView(
+            person = person,
+            ink = membership?.ink,
+            // Smaller than the 108 dp it was: it no longer carries the top of
+            // the screen on its own, because the title does.
+            size = PortraitSize,
+            image = model.portrait(personID),
+            // The same face that was tapped in the room's seats, or on a room
+            // row in the menu: it travels here and grows.
+            modifier = Modifier.flows(Flows.seat(room.id, personID)),
+        )
+
+        val ink = membership?.ink
+        if (ink != null) {
+            Air(14.dp)
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                // A 6 dp dot has no semantics of its own, so without this
+                // TalkBack read the single word "Crimson" floating between a
+                // name and a list — and §11 is explicit that identity carried
+                // by an ink cannot rest on the colour.
+                modifier = Modifier.semantics(mergeDescendants = true) {
+                    contentDescription = Copy.inkSpoken(yours = isMe, ink = ink.displayName)
+                },
             ) {
-                // The way back, drawn. Android's own gesture is the way
-                // everyone will actually use, but a screen whose only way out
-                // is a gesture has no tap equivalent (§11) — the same reason
-                // every pushed settings screen draws one.
-                Box(Modifier.fillMaxWidth().padding(start = 12.dp, top = 8.dp)) {
-                    BackChevron(onBack = onDismiss, label = Copy.BACK)
-                }
-                PortraitView(
-                    person = person,
-                    ink = membership?.ink,
-                    size = 108.dp,
-                    image = model.portrait(personID),
-                    // The same face that was tapped in the room's seats, or on
-                    // a room row in the menu: it travels here and grows.
-                    modifier = Modifier
-                        .padding(top = 12.dp)
-                        .flows(Flows.seat(room.id, personID)),
-                )
-                Text(
-                    text = person?.name ?: "",
-                    style = RibbonType.display(26f),
-                    color = Palette.text,
-                )
-                val ink = membership?.ink
-                if (ink != null) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        InkDot(ink = ink)
-                        SmallCaps(ink.displayName, size = 12f)
-                    }
-                }
-
-                // What they've left in this room, in verse order.
-                if (theirNotes.isNotEmpty()) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 24.dp)
-                            .padding(top = 16.dp),
-                        horizontalAlignment = Alignment.Start,
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        SectionLabel(
-                            if (isMe) Copy.WHAT_YOU_LEFT else Copy.whatTheyLeft(
-                                firstName(person?.name ?: ""),
-                            ),
-                        )
-                        theirNotes.forEach { note ->
-                            PersonNoteRow(
-                                note = note,
-                                ink = membership?.ink ?: Ink.clay,
-                                mine = isMe,
-                                // A note's own words are shown here only once
-                                // it has been found in the margin, or if it is
-                                // yours. §6.3's whole beat is being found
-                                // later, and a list that reads every unfound
-                                // note aloud would spend it before anybody
-                                // opened the book. An unfound one gives its
-                                // address, which is an invitation to go.
-                                found = isMe || note.foundBy.contains(model.me?.id),
-                                onOpen = { onOpenVerse(note.verse, note.readingID) },
-                            )
-                        }
-                    }
-                }
-
-                if (isMe) {
-                    Column(
-                        modifier = Modifier.padding(top = 36.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(18.dp),
-                    ) {
-                        if (model.inkIsIdentity(room)) {
-                            QuietControl(title = Copy.CHANGE_YOUR_INK) { showInkPicker = true }
-                        }
-                        QuietControl(title = Copy.LEAVE_THIS_ROOM) { confirmLeave = true }
-                    }
-                }
-                Spacer(Modifier.height(60.dp))
+                InkDot(ink = ink)
+                SmallCaps(ink.displayName, size = 12f)
             }
+            // Directly under the ink it changes, rather than at the foot of
+            // the page. It used to share a stack with "Leave this room" below
+            // every note in the room, which put a screenful between a colour
+            // and the control for it and made changing a colour look like the
+            // same class of act as leaving.
+            if (isMe && model.inkIsIdentity(room)) {
+                QuietControl(
+                    title = Copy.CHANGE_YOUR_INK,
+                    modifier = Modifier.offset(x = QuietControlInset),
+                ) { showInkPicker = true }
+            }
+        }
+
+        Air(28.dp)
+
+        // What they've left in this room, in verse order.
+        if (theirNotes.isEmpty()) {
+            // No head and no tile. The head reads "What Ruth left", and over
+            // nothing that is a head naming the person who has not done the
+            // thing (§10.1); a drawn container announcing an absence is §4.2's
+            // placeholder mistake. One impersonal line instead, true of your
+            // own screen as well as theirs.
+            Text(
+                text = Copy.NOTHING_LEFT_HERE_YET,
+                style = RibbonType.ui(15f),
+                color = Palette.muted,
+            )
+        } else {
+            SectionLabel(
+                if (isMe) {
+                    Copy.WHAT_YOU_LEFT
+                } else {
+                    Copy.whatTheyLeft(firstName(person?.name ?: "").ifBlank { Copy.SOMEONE })
+                },
+            )
+            Air(10.dp)
+            // One group, not a stack of loose tiles. Every row took the same
+            // `rowShape` before, so eight notes were eight identically-rounded
+            // receipts rather than one record with the group's own outer
+            // corners. The shapes are computed here rather than through
+            // `GroupScope` because `slot()` is private to Surfaces.kt and a
+            // custom row cannot reach it — which is also why this is not
+            // simply a `SettingsGroup`.
+            Column(verticalArrangement = Arrangement.spacedBy(Seam)) {
+                theirNotes.forEachIndexed { index, note ->
+                    PersonNoteRow(
+                        note = note,
+                        ink = membership?.ink ?: Ink.clay,
+                        mine = isMe,
+                        // A note's own words are shown here only once it has
+                        // been found in the margin, or if it is yours. §6.3's
+                        // whole beat is being found later, and a list that
+                        // reads every unfound note aloud would spend it before
+                        // anybody opened the book. An unfound one gives its
+                        // address, which is an invitation to go.
+                        found = isMe || note.foundBy.contains(model.me?.id),
+                        shape = RibbonShape.inGroup(index, theirNotes.size),
+                        onOpen = { onOpenVerse(note.verse, note.readingID) },
+                    )
+                }
+            }
+        }
+
+        if (isMe) {
+            Air(36.dp)
+            // The one undoing control, alone on the bare ground, which is
+            // where every undoing control in the app stands (A23).
+            QuietControl(
+                title = Copy.LEAVE_THIS_ROOM,
+                modifier = Modifier.offset(x = QuietControlInset),
+            ) { confirmLeave = true }
         }
     }
 
@@ -281,6 +323,7 @@ private fun PersonNoteRow(
     ink: Ink,
     mine: Boolean,
     found: Boolean,
+    shape: Shape,
     onOpen: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -293,6 +336,14 @@ private fun PersonNoteRow(
     // is a bare canvas with no semantics, so a voice note's transcript and a
     // written note's body announced identically. The room's waiting rows were
     // given the same fix; this is the other place that had it wrong.
+    // An unfound note and a found one with nothing to show rendered
+    // identically — an address and no more — so neither the eye nor a screen
+    // reader could tell "go and find this" from "this one has no words".
+    // §11 specifies the clause for a gutter mark and `Copy.marginNotes`
+    // already carries it; this was the one place a note's found state was
+    // spoken nowhere.
+    val waiting = !found
+
     val spoken = buildString {
         append(
             if (note.kind == NoteKind.voice) {
@@ -302,15 +353,19 @@ private fun PersonNoteRow(
             },
         )
         if (words != null) append(". $words")
+        if (waiting) append(", ${Copy.NOT_YET_FOUND}")
     }
 
     Row(
         modifier = modifier
             .fillMaxWidth()
             .sizeIn(minHeight = MIN_TARGET + 8.dp)
-            .pressablePaper(RibbonShape.rowShape, role = Role.Button, onClick = onOpen)
+            .pressablePaper(shape, role = Role.Button, onClick = onOpen)
             .semantics(mergeDescendants = true) { contentDescription = spoken }
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            // The group's own inset, so these words share an optical edge
+            // with the head above them — which is the one thing that head is
+            // for, and which 16 dp against SectionLabel's 20 missed by four.
+            .padding(horizontal = TextInset, vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -338,6 +393,13 @@ private fun PersonNoteRow(
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                 )
+            } else if (waiting) {
+                // A state, in the running-head voice, rather than a sentence:
+                // the note is not saying this, the row is. A found note with
+                // no transcript keeps the address alone — the note's own view
+                // owns "No transcript" and "Try again", and this row is a
+                // record rather than a repair site.
+                SmallCaps(Copy.NOT_YET_FOUND, size = 12f)
             }
         }
     }
