@@ -555,7 +555,14 @@ class AppModel(
 
     fun createRoom(name: String?): Room {
         val me = state.me ?: error("room before person")
-        val room = Room(name = name, createdAt = Clock.System.now())
+        // Seeded from whatever you picked before there was a room to pick
+        // for — onboarding's Text screen, most likely. Without this, choosing
+        // a version and *then* starting a room would quietly drop the choice
+        // and open the first book in the launch translation.
+        val room = Room(
+            name = name,
+            createdAt = Clock.System.now(),
+            translation = me.translation)
         state = state.copy(
             rooms = state.rooms + room,
             memberships = state.memberships +
@@ -564,6 +571,48 @@ class AppModel(
         persist()
         return room
     }
+
+    /**
+     * The room picks its words, and everybody in it reads them (A42).
+     *
+     * Any member may do this — a room is not owned (§6.7) — and it takes
+     * effect at once, including in a book that is already open, because a
+     * setting that appears to do nothing until some future book is a setting
+     * people press twice.
+     *
+     * A *finished* book keeps the words it was read in. S11 calls an ember
+     * immutable and the source of the printed keepsake, and re-wording a book
+     * somebody has already read, under notes left about those exact words,
+     * would be the opposite of that.
+     *
+     * A mark on a phrase (A41g) carries the translation it was made in, so
+     * one made in the old words widens to its whole verse rather than
+     * pointing at the wrong ones. With a room on one version that should now
+     * be a rare thing rather than the everyday case it was built for.
+     */
+    fun setRoomTranslation(room: Room, translation: TranslationID) {
+        if (room.translation == translation) return
+        val rooms = state.rooms.map {
+            if (it.id == room.id) it.copy(translation = translation) else it
+        }
+        val readings = state.readings.map {
+            if (it.roomID == room.id && !it.isFinished) {
+                it.copy(translation = translation)
+            } else {
+                it
+            }
+        }
+        state = state.copy(rooms = rooms, readings = readings)
+        persist()
+        val changed = rooms.firstOrNull { it.id == room.id } ?: return
+        sayItAgainIfNeeded(changed.id) { it.push(room = changed) }
+        readings.filter { it.roomID == room.id && !it.isFinished }
+            .forEach { pushReadingRemote(it) }
+    }
+
+    /** The words to set a page in: the book's own, or the room's. */
+    fun words(room: Room?, reading: Reading?): TranslationID =
+        reading?.translation ?: room?.translation ?: TranslationID.bsb
 
     fun switchRoom(roomID: Uuid) {
         state = state.copy(currentRoomID = roomID)
@@ -984,7 +1033,9 @@ class AppModel(
         val scale = Bible.book(bookID)?.scale ?: FireScale.medium
         val reading = Reading(
             roomID = room.id, bookID = bookID, startedAt = Clock.System.now(),
-            handiwork = Handiwork(scale = scale))
+            handiwork = Handiwork(scale = scale),
+            // Pinned from the room, and tracked while the book is open.
+            translation = room.translation)
         state = state.copy(readings = state.readings + reading)
         persist()
         pushReadingRemote(reading)
@@ -1606,10 +1657,20 @@ class AppModel(
     val availableTranslations: List<Translation>
         get() = TranslationRegistry.bundled + TranslationRegistry.licensed.filter { it.isConfigured }
 
+    /**
+     * Pick the words. The room's, now, not yours (A42).
+     *
+     * `Person.translation` is still written, and deliberately: iOS reads it
+     * and §2.6 is still true over there until somebody takes that pass. It is
+     * no longer what Android *sets a page from* — [words] answers that — so
+     * the two can disagree on one account without either being wrong about
+     * its own platform.
+     */
     fun setTranslation(translation: TranslationID) {
         state = state.copy(me = state.me?.copy(translation = translation))
         persist()
         pushProfileRemote()
+        currentRoom?.let { setRoomTranslation(it, translation) }
     }
 
     fun updateMe(name: String) {
@@ -2338,12 +2399,20 @@ class AppModel(
                 if (!pendingRenamePushes.contains(row.id)) {
                     room = room.copy(name = row.name)
                 }
-                rooms[i] = room.copy(isPaused = row.isPaused)
+                // The room's words are the room's, so remote wins — that is
+                // the whole of A42. A row from a client that predates the
+                // column, or from iOS, says nothing and changes nothing.
+                rooms[i] = room.copy(
+                    isPaused = row.isPaused,
+                    translation = row.translation
+                        ?.let { TranslationID(rawValue = it) } ?: room.translation)
             } else {
                 rooms.add(
                     Room(
                         id = row.id, name = row.name, createdAt = row.createdAt,
-                        isPaused = row.isPaused))
+                        isPaused = row.isPaused,
+                        translation = row.translation
+                            ?.let { TranslationID(rawValue = it) } ?: TranslationID.bsb))
             }
         }
         next = next.copy(rooms = rooms)
@@ -2474,7 +2543,15 @@ class AppModel(
                 }
                 readings[i] = reading.copy(
                     handiwork = mergedHandiwork(
-                        local = reading.handiwork, remote = fires[row.id], events = events))
+                        local = reading.handiwork, remote = fires[row.id], events = events),
+                    // An open book follows the room; a finished one keeps the
+                    // words it was read in, whatever the room reads now (S11).
+                    translation = if (reading.isFinished) {
+                        reading.translation
+                    } else {
+                        row.translation?.let { TranslationID(rawValue = it) }
+                            ?: reading.translation
+                    })
             } else {
                 val scale = FireScale.entries.firstOrNull { it.name == row.scale }
                     ?: FireScale.medium
@@ -2492,7 +2569,11 @@ class AppModel(
                     Reading(
                         id = row.id, roomID = row.roomId, bookID = row.bookId,
                         startedAt = row.startedAt, finishedAt = row.finishedAt,
-                        handiwork = handiwork))
+                        handiwork = handiwork,
+                        // A book read before the column existed keeps the
+                        // launch translation, which is what it was read in.
+                        translation = row.translation
+                            ?.let { TranslationID(rawValue = it) } ?: TranslationID.bsb))
             }
         }
         next = next.copy(readings = readings)

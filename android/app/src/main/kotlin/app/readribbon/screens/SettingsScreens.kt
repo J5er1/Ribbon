@@ -199,7 +199,11 @@ fun TextSettingsScreen(
         // Bundled translations always; licensed ones (NKJV first) appear the
         // day their edition is configured on the proxy — never as a dead row.
         val translations = model.availableTranslations
-        SettingsGroup(count = translations.size, title = Copy.TRANSLATION) {
+        SettingsGroup(
+            count = translations.size,
+            title = Copy.TRANSLATION,
+            detail = Copy.TRANSLATION_IS_THE_ROOMS,
+        ) {
             translations.forEach { translation ->
                 SettingChoice(
                     title = translation.displayName,
@@ -208,7 +212,7 @@ fun TextSettingsScreen(
                     } else {
                         Copy.streamsSub(context)
                     },
-                    chosen = model.me?.translation == translation.id,
+                    chosen = model.currentRoom?.translation == translation.id,
                     onClick = { model.setTranslation(translation.id) },
                 )
             }
@@ -216,7 +220,7 @@ fun TextSettingsScreen(
 
         Air(GroupGap)
 
-        SettingsGroup(count = 3, title = Copy.THE_PAGE) {
+        SettingsGroup(count = 3, title = Copy.THE_PAGE, detail = Copy.THE_PAGE_IS_YOURS) {
             SettingControl(title = Copy.TEXT_SIZE, detail = Copy.TEXT_SIZE_SUB) {
                 ScriptureSizeWell(model)
                 ScripturePreview(model)
@@ -295,7 +299,8 @@ private fun ScripturePreview(model: AppModel) {
     val room = model.currentRoom ?: return
     val reading = model.openReading(room) ?: return
     val position = model.myPosition(reading)
-    val text = model.scripture.verseText(position, translation = me.translation) ?: return
+    val text = model.scripture
+        .verseText(position, translation = model.words(room, reading)) ?: return
 
     val size = model.settings.scriptureSize.toFloat()
     Column(

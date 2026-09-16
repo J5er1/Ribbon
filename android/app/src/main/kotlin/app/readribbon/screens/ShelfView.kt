@@ -56,19 +56,20 @@ import app.readribbon.core.Note
 import app.readribbon.core.Reading
 import app.readribbon.core.RibbonClock
 import app.readribbon.core.Room
+import app.readribbon.core.TranslationID
 import app.readribbon.core.VerseAddress
 import app.readribbon.design.BackChevron
-import app.readribbon.design.NoteMark
 import app.readribbon.design.Flows
+import app.readribbon.design.NoteMark
 import app.readribbon.design.Palette
-import app.readribbon.design.flows
-import app.readribbon.design.flowsAsWords
 import app.readribbon.design.PortraitView
 import app.readribbon.design.QuietControl
 import app.readribbon.design.RibbonMotion
 import app.readribbon.design.RibbonType
 import app.readribbon.design.SmallCaps
 import app.readribbon.design.color
+import app.readribbon.design.flows
+import app.readribbon.design.flowsAsWords
 import app.readribbon.design.readableColumn
 import app.readribbon.design.rememberReduceMotion
 import app.readribbon.design.room
@@ -416,6 +417,7 @@ fun EmberRecordScreen(
                     ) {
                         highlights.forEach { highlight ->
                             QuotedHighlight(
+                                translation = reading.translation,
                                 model = model,
                                 highlight = highlight,
                                 onOpenVerse = onOpenVerse,
@@ -535,11 +537,14 @@ private fun EmberNoteRow(
 private fun QuotedHighlight(
     model: AppModel,
     highlight: Highlight,
+    translation: TranslationID,
     onOpenVerse: (VerseAddress) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val me = model.me
-    val text = me?.let { model.scripture.verseText(highlight.range.start, it.translation) }
+    // The words the book was read in, not the words the room reads today.
+    // S11 calls an ember immutable, and a keepsake that re-words itself when
+    // somebody changes a setting next year is not one (A42).
+    val text = model.scripture.verseText(highlight.range.start, translation)
 
     Column(
         modifier = modifier

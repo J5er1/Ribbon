@@ -292,7 +292,10 @@ class RemoteSync(
             client.upsert(
                 table = "rooms",
                 rowsJson = SupabaseClient.json.encodeToString(listOf(
-                    RoomRow(id = room.id, name = room.name, isPaused = room.isPaused, createdAt = room.createdAt),
+                    RoomRow(
+                        id = room.id, name = room.name, isPaused = room.isPaused,
+                        createdAt = room.createdAt,
+                        translation = room.translation.rawValue),
                 )))
         }
     }
@@ -331,7 +334,8 @@ class RemoteSync(
                     ReadingRow(
                         id = reading.id, roomId = reading.roomID, bookId = reading.bookID,
                         scale = reading.handiwork.scale.name,
-                        startedAt = reading.startedAt, finishedAt = reading.finishedAt),
+                        startedAt = reading.startedAt, finishedAt = reading.finishedAt,
+                        translation = reading.translation.rawValue),
                 )))
         }
         withAuthRetry {
@@ -857,6 +861,9 @@ class RemoteSync(
         val name: String? = null,
         val isPaused: Boolean,
         val createdAt: Instant,
+        /** The words this room reads, shared by everyone in it (A42). Null
+         *  from a client that predates the column, and from iOS. */
+        val translation: String? = null,
     )
 
     @Serializable
@@ -885,6 +892,8 @@ class RemoteSync(
         val scale: String,
         val startedAt: Instant,
         val finishedAt: Instant? = null,
+        /** The words this book was read in. A finished one keeps them (S11). */
+        val translation: String? = null,
     )
 
     @Serializable

@@ -186,17 +186,19 @@ fun NoteCard(
                     )
             }
 
-            // When the note quotes the verse, the quote renders in the
-            // author's translation, small — you see the words they were
-            // looking at (§2.6).
-            val quote = authorTranslationQuote(model, note, author)
-            if (quote != null) {
-                Text(
-                    text = quote,
-                    style = RibbonType.scripture(13f),
-                    color = Palette.muted,
-                )
-            }
+            // §2.6's authored detail — "when Ruth's note quotes the verse,
+            // it renders in Ruth's translation, so you see the words she was
+            // looking at" — is gone with §2.6 itself (A42). A room reads one
+            // version now, so the words she was looking at are the words on
+            // this page, an inch above; quoting them under her note would be
+            // saying the verse twice.
+            //
+            // Worse than redundant, it had become wrong. `Person.translation`
+            // is still written per person for iOS, and nothing updates a
+            // *bystander's* copy when somebody changes the room's version —
+            // so the test "does the author's differ from mine" would have
+            // started firing on two people reading identical words, and
+            // quoted a verse in a translation neither of them had open.
         }
 
         DropdownMenu(expanded = menuShown, onDismissRequest = { menuShown = false }) {
@@ -337,12 +339,6 @@ private fun togglePlayback(player: VoicePlayer, audioFile: File?) {
     } else if (audioFile != null) {
         player.play(audioFile)
     }
-}
-
-private fun authorTranslationQuote(model: AppModel, note: Note, author: Person?): String? {
-    if (author == null || author.translation == model.me?.translation) return null
-    val text = model.scripture.verseText(note.verse, author.translation) ?: return null
-    return "“$text”"
 }
 
 /**
