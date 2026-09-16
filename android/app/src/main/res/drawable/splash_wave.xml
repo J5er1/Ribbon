@@ -14,7 +14,18 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <group android:name="wave" android:translateX="22" android:translateY="22">
+    <!-- The pivot is the mark's own centre, and it has to be stated. A
+         VectorDrawable group scales about its own origin, which after this
+         translate sits at the mark's top-left corner — so the settle below
+         was not a settle, it was the mark sliding diagonally as it shrank.
+         The mark occupies roughly 0..64 of the group's grid, so 32,32 is its
+         middle. -->
+    <group
+        android:name="wave"
+        android:translateX="22"
+        android:translateY="22"
+        android:pivotX="32"
+        android:pivotY="32">
         <!-- The unfurl. A ribbon does not fade in; it comes down. The
              animator opens this band from a zero-height line at the mark's
              top edge to the full 64-unit grid, uncovering the mark from the

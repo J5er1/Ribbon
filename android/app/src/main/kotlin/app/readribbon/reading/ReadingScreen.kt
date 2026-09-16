@@ -146,13 +146,6 @@ import kotlin.uuid.Uuid
 // parameter, exactly as it is in NoteCard and PresenceForm.
 
 /**
- * The closing drag: pulled this far past the top, the page settles closed.
- * Always duplicated by the Wave (§11) — no way out of the book is a gesture
- * only.
- */
-private val CLOSING_PULL = 90.dp
-
-/**
  * How long a scroll we asked for ourselves stays ours. Inside this window a
  * moving page is the app moving, not you, so it does not break a follow.
  */
@@ -577,7 +570,13 @@ fun ReadingScreen(
         }
     }
 
-    val closeNow by rememberUpdatedState(::close)
+    // Held rather than captured: the connection below is `remember`ed on the
+    // list and the sheet, so a lambda captured into it would go on calling
+    // the first composition's `laidDown`. Both of these are the same pair the
+    // Wave's own drag ends on — putting the book down, and telling the room's
+    // stack the page has gone.
+    val laidDownNow by rememberUpdatedState(::laidDown)
+    val dismissedNow by rememberUpdatedState(onDismissed)
 
     // The closing drag. Swift watches the scroll view's content offset go
     // past -90 while a finger is down; Compose has no negative offset to
@@ -587,38 +586,95 @@ fun ReadingScreen(
     // `NestedScrollSource.UserInput` is what makes this a finger and not a
     // bounce: a momentum overscroll arrives as `SideEffect` and is ignored,
     // exactly as `fingerDown` gates the Swift.
-    val pull = remember { mutableFloatStateOf(0f) }
-    val pullThreshold = with(density) { CLOSING_PULL.toPx() }
-    val closingDrag = remember(pullThreshold, listState) {
+    /**
+     * True while *this* drag is taking the book down.
+     *
+     * `sheet.engaged` cannot answer it: that is true for as long as the page
+     * exists, which is the whole time the book is open. This is the narrower
+     * question — has a downward drag from the top of the page taken hold of
+     * the book — and it is what lets the connection below claim upward
+     * movement too, so that catching the page on its way down puts it back
+     * instead of scrolling Scripture.
+     */
+    var closingByDrag by remember { mutableStateOf(false) }
+
+    /**
+     * Drag down from scroll-top and the book comes with you (S02).
+     *
+     * This used to count pixels and then *snap*: it accumulated a running
+     * total, and past 90 dp it called `close()` outright. Nothing moved
+     * under the finger — it deliberately consumed nothing, so the only
+     * feedback was the list's own overscroll glow — and then the book simply
+     * went. That is the whole of why the way out felt finicky: an invisible
+     * threshold you cannot see approaching, cannot feel, and cannot back out
+     * of, on the one gesture that is supposed to feel like closing a book.
+     *
+     * It predates the sheet. A20's argument is that the drag and the
+     * animation are the same number, and this path was written before there
+     * was one; the Wave next to it was converted and this was not. So it
+     * drives [BookSheet] now, exactly as the fire does in reverse: the page
+     * follows the finger from the first millimetre, release decides by
+     * distance and velocity under the same physics, and a close caught
+     * halfway eases back to where it was.
+     *
+     * The old 90 dp threshold is gone rather than retuned. `RibbonMotion`
+     * already owns what "far enough" means, and a second opinion about it
+     * living in this file is how the two halves of one gesture drift apart.
+     */
+    val closingDrag = remember(listState, sheet) {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                if (source != NestedScrollSource.UserInput) {
-                    pull.floatValue = 0f
+                if (source != NestedScrollSource.UserInput) return Offset.Zero
+                // Once the book is coming down it owns the gesture in both
+                // directions. Without this, pushing back up would scroll
+                // Scripture underneath a page that is halfway off the screen.
+                if (!closingByDrag) return Offset.Zero
+                // Changed your mind and pushed it back up: once the page is
+                // fully up the gesture is over, and the rest of the movement
+                // belongs to Scripture again. Holding it until the finger
+                // lifts would mean pulling down an inch, thinking better of
+                // it, and finding the page frozen.
+                if (available.y < 0f && sheet.progress >= 1f) {
+                    closingByDrag = false
                     return Offset.Zero
                 }
-                if (available.y < 0f || listState.canScrollBackward) {
-                    // Reading on, or reading back up: not a close.
-                    pull.floatValue = 0f
-                    return Offset.Zero
+                sheet.drag(-available.y)
+                return available
+            }
+
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource,
+            ): Offset {
+                if (source != NestedScrollSource.UserInput) return Offset.Zero
+                // A downward drag the list could not spend is a drag at the
+                // top of the page, which is the gesture S02 describes. A
+                // momentum overscroll arrives as a different source and is
+                // ignored, so a fling that lands at the top does not close
+                // the book out from under the reader.
+                if (available.y <= 0f) return Offset.Zero
+                if (!closingByDrag) {
+                    closingByDrag = true
+                    sheet.engage()
                 }
-                pull.floatValue += available.y
-                if (pull.floatValue > pullThreshold) {
-                    pull.floatValue = 0f
-                    closeNow()
-                }
-                // Nothing is consumed: the list still rubber-bands, which is
-                // the drag's own feedback.
-                return Offset.Zero
+                sheet.drag(-available.y)
+                return available
             }
 
             override suspend fun onPreFling(available: Velocity): Velocity {
-                // The finger is up, so the pull is over whether or not it
-                // closed anything. Swift reads an absolute content offset,
-                // which cannot carry from one drag to the next; a running
-                // tally can, and two unrelated half-pulls would close the
-                // book between them. Put it down when the finger lifts.
-                pull.floatValue = 0f
-                return Velocity.Zero
+                if (!closingByDrag) return Velocity.Zero
+                closingByDrag = false
+                // Down is positive here and opening is positive there.
+                sheet.release(
+                    velocity = -available.y,
+                    onOpened = {},
+                    onClosed = {
+                        laidDownNow()
+                        dismissedNow()
+                    },
+                )
+                return available
             }
         }
     }

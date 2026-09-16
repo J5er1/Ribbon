@@ -143,7 +143,7 @@ through to the join flow and settings. It builds and its tests pass; it has
 not yet been run on a physical device.
 
 Android has since taken a design pass of its own, and the two platforms are
-deliberately no longer identical (docs/deviations.md A18–A31):
+deliberately no longer identical (docs/deviations.md A18–A32):
 
 - **Material You, unharmonised.** The room takes its colour from the
   wallpaper. The fire and the eight inks never move — they are objects in

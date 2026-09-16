@@ -1079,6 +1079,52 @@ A31. **There is a chapter list, and the foot of the book is the way to it.**
     repeated — small caps, low contrast, saying where you are, which is what
     a running head does. It is a door only if you press it.
 
+A32. **Three things the owner found by using it, and what each turned out to
+    be.** Worth recording together, because none of them was a taste
+    disagreement — each was a defect with a cause.
+
+    - **The launch mark never animated.** The theme set androidx's *compat*
+      splash attributes, and on API 31 and later the platform draws the
+      splash from its own `android:windowSplashScreen*` slots. This app's
+      minSdk is 33, so every device on earth fell through to the system
+      default — the launcher icon on a plate — with the animated vector
+      sitting unused in the APK. The `android:` prefix is the fix, and the
+      look book now drives the real `AnimatedVectorDrawable` and asserts two
+      frames 600 ms apart are different pictures: an `animated-vector` whose
+      target names do not match its vector is not an error, it is a still
+      picture that says nothing. The settle also had no pivot, so it was not
+      a settle — the mark slid diagonally as it shrank.
+    - **The way out of Scripture was finicky, and it was not a tuning
+      problem.** S02 gives two ways out: the Wave, and a downward drag from
+      scroll-top. The drag existed and *counted pixels* — it accumulated a
+      running total, deliberately consumed nothing, and past 90 dp called
+      `close()` outright. Nothing moved under the finger; the only feedback
+      was the list's overscroll glow, and then the book simply went. An
+      invisible threshold you cannot see approaching, cannot feel and cannot
+      back out of, on the one gesture that should feel like closing a book.
+      It predates the sheet: A20's whole argument is that the drag and the
+      animation are one number, and this path was written before there was
+      one — the Wave beside it was converted and this was not. It drives
+      `BookSheet` now, so the page follows the finger from the first
+      millimetre and a close caught halfway eases back. The 90 dp threshold
+      is gone rather than retuned, because `RibbonMotion` already owns what
+      "far enough" means and a second opinion in another file is how two
+      halves of one gesture drift apart.
+    - **You was a wide tile with a circle at one end.** Nothing said either
+      half was a control — a portrait you can change and a name you can edit
+      looked exactly like a portrait and a name. It is centred now, at the
+      size of a face you can see rather than one being celebrated, with the
+      line that says where they are seen and the small caps that say the
+      face is a control. The sections below are named for what they are
+      about — how you read, this phone, your account — rather than by which
+      screen they open; "Reading" had Downloads in it, which is filing by
+      convenience. The lede went with them: it listed the same three things
+      the headings underneath already say.
+
+      What keeps it from being a profile page, which §13 would not have:
+      nothing is counted. No rooms joined, no books finished, no
+      member-since, no badge. A face, a name, and one sentence.
+
 ## Licensed translations (decided: API.Bible)
 
 Open question §16.8 is now part-decided: **NKJV plus two undecided
