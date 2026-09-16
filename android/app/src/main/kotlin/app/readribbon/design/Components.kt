@@ -319,7 +319,13 @@ fun WayInButton(
             .fillMaxWidth()
             .clip(androidx.compose.foundation.shape.RoundedCornerShape(percent = 50))
             .background(if (enabled) Palette.chartreuse else Palette.chartreuse.copy(alpha = 0.4f))
-            .clickable(enabled = enabled, onClick = onClick)
+            // The role, which the app's primary control never said. Its
+            // words are an `AnimatedContent` below, so the node a screen
+            // reader lands on is this box; without `Role.Button` on it, the
+            // one control that opens the book announced as a line of text.
+            // `QuietControl` and `BackChevron` both say it, and this — the
+            // loudest thing in the app — did not.
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
             .padding(vertical = 15.dp),
         contentAlignment = Alignment.Center,
     ) {

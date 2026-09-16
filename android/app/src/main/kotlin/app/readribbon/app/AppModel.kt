@@ -769,6 +769,54 @@ class AppModel(
     /** The same, for a highlight removed while the request could not land. */
     private val pendingHighlightDeletes: MutableSet<Uuid> = mutableSetOf()
 
+    /**
+     * Everything else this device has said and the backend has not heard.
+     *
+     * Renames, note pushes, note deletes, highlight deletes and unregistered
+     * invites each got a queue as the defect that needed one was found; three
+     * mutations never did, and they pushed once through a bare `runCatching`
+     * and were forgotten. `docs/deviations.md` has claimed since deviation 10
+     * that "offline mutations queue with hairline `isPending` state and
+     * automatically push upon reconnection", and it was true of written notes
+     * and nothing else.
+     *
+     * The card answer is the damaging one. `answerCard` decides whether a
+     * card opens from *local* state, so an answer given offline leaves the
+     * card sealed here and never reaches the backend — and the merge unions
+     * the local answer straight back in on every pull, so the device goes on
+     * believing it was recorded. Nobody else in the room ever sees it, and
+     * "This opens when everyone has answered" never comes true. The one
+     * object in the app explicitly blocked on everybody was the one whose
+     * answer had no queue.
+     *
+     * A highlight (S06) and a marked quiet day (§4.7 — an act of care
+     * performed in public) made offline were likewise invisible to the room
+     * for good.
+     *
+     * Kept as thunks rather than as ids: each of the three pushes a different
+     * shape, and one list of "say this again" is smaller than three sets and
+     * three drain loops.
+     */
+    private val unsaid: MutableList<Pair<Uuid, suspend (RemoteSync) -> Unit>> = mutableListOf()
+
+    /**
+     * Push it, and remember to push it again if it does not land.
+     *
+     * @param key what this is about, so a second mutation of the same thing
+     *   replaces the first rather than queueing both.
+     */
+    private fun sayItAgainIfNeeded(key: Uuid, push: suspend (RemoteSync) -> Unit) {
+        val remote = this.remote
+        if (remote == null || !remote.isSignedIn) return
+        unsaid.removeAll { it.first == key }
+        unsaid.add(key to push)
+        pushing {
+            if (runCatching { push(remote) }.isSuccess) {
+                unsaid.removeAll { it.first == key }
+            }
+        }
+    }
+
     /** Naming a room after the fact (S15's naming half, reachable later). */
     fun renameRoom(room: Room, name: String?) {
         val i = state.rooms.indexOfFirst { it.id == room.id }
@@ -1159,7 +1207,7 @@ class AppModel(
         persist()
         val remote = this.remote
         if (remote != null && remote.isSignedIn) {
-            pushing { runCatching { remote.push(quietDay = day) } }
+            sayItAgainIfNeeded(day.id) { it.push(quietDay = day) }
         }
     }
 
@@ -1420,9 +1468,7 @@ class AppModel(
         persist()
         val remote = this.remote
         if (remote != null && remote.isSignedIn) {
-            pushing {
-                runCatching { remote.push(highlight = highlight) }
-            }
+            sayItAgainIfNeeded(highlight.id) { it.push(highlight = highlight) }
         }
     }
 
@@ -1498,21 +1544,17 @@ class AppModel(
         state = state.copy(cards = cards)
         persist()
 
-        val remote = this.remote
-        if (remote != null && remote.isSignedIn) {
-            pushing {
-                runCatching {
-                    remote.push(
-                        RemoteSync.CardAnswerRow(
-                            cardId = updatedCard.id,
-                            personId = me.id,
-                            answer = answer,
-                            createdAt = Clock.System.now()
-                        )
-                    )
-                    remote.push(card = updatedCard)
-                }
-            }
+        val answeredAt = Clock.System.now()
+        sayItAgainIfNeeded(updatedCard.id) { remote ->
+            remote.push(
+                RemoteSync.CardAnswerRow(
+                    cardId = updatedCard.id,
+                    personId = me.id,
+                    answer = answer,
+                    createdAt = answeredAt,
+                ),
+            )
+            remote.push(card = updatedCard)
         }
     }
 
@@ -2023,6 +2065,11 @@ class AppModel(
         for (highlightID in pendingHighlightDeletes.toList()) {
             if (runCatching { remote.deleteHighlight(id = highlightID) }.isSuccess) {
                 pendingHighlightDeletes.remove(highlightID)
+            }
+        }
+        for ((key, push) in unsaid.toList()) {
+            if (runCatching { push(remote) }.isSuccess) {
+                unsaid.removeAll { it.first == key }
             }
         }
         // A link that was handed out before the backend could be told about

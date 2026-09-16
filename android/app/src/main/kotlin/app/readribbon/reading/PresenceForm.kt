@@ -439,14 +439,27 @@ private fun PresenceSurface(
             // in the app.
             //
             // Merged here so the label and the action are one stop rather
-            // than two nodes fighting over the focus.
-            .semantics(mergeDescendants = true) {
-                role = Role.Button
-                onClick(label = if (expanded) Copy.CLOSE else Copy.WHOS_HERE) {
-                    if (expanded) onCollapse() else onExpand()
-                    true
-                }
-            },
+            // than two nodes fighting over the focus — **and only while the
+            // form is collapsed**. Compose's merge swallows descendant merge
+            // roots, so merging this Box with the panel open would collapse
+            // every control inside it — each `PersonRow`'s follow and
+            // thinking-of-you actions, and "read quietly" — into one
+            // unactionable label, which is the same defect one level up.
+            // The open panel's own children speak for themselves and
+            // predictive back closes it, so it needs nothing here.
+            .then(
+                if (expanded) {
+                    Modifier
+                } else {
+                    Modifier.semantics(mergeDescendants = true) {
+                        role = Role.Button
+                        onClick(label = Copy.WHOS_HERE) {
+                            onExpand()
+                            true
+                        }
+                    }
+                },
+            ),
         contentAlignment = Alignment.CenterEnd,
     ) {
         AnimatedContent(

@@ -1716,6 +1716,46 @@ A39. **The seams.** The states a polish pass is judged by, and the easiest
     now, which is the honest way to make it read as held: a recess in the
     page, rather than light coming from nowhere.
 
+A39a. **Two repairs that were themselves defects, and the queue that was
+    still missing.** An adversarial pass over this work found three things.
+
+    **The presence form's new semantics closed the panel it opened.** A38a
+    gave the lozenge the action §11 asks for by merging the Box the gestures
+    sit on — and that Box wraps the *expanded panel* as well. Compose's merge
+    swallows descendant merge roots, which is the rule `NoteCard` states in
+    this codebase, so with the panel open every control inside it — each
+    row's follow and thinking-of-you actions, and "read quietly" — collapsed
+    into one unactionable label. The merge is attached only while the form is
+    collapsed now; the open panel's children speak for themselves and
+    predictive back closes it.
+
+    **The ember record's new way back scrolled away.** A38a put a chevron on
+    the screen that had none, inside the scrolling column — which is verbatim
+    the defect A34 had just removed from S12, named in that entry's own
+    words. It is outside the scroll now.
+
+    Both are the same lesson twice: a repair copied from a fix is not the
+    fix, and the second half of each of those entries was the half that
+    mattered.
+
+    **Three offline mutations still had no queue.** A35 gave one to note
+    pushes, note deletes and highlight deletes; A36 gave one to invites; A39
+    gave one to voice notes. `addHighlight`, `markQuietDay` and — worst —
+    `answerCard` pushed once through a bare `runCatching` and were forgotten.
+    The card answer is the damaging one: `answerCard` decides whether a card
+    opens from *local* state, so an answer given offline leaves the card
+    sealed here and never reaches the backend, while the merge unions the
+    local answer straight back in on every pull — so the device goes on
+    believing it was recorded, nobody else ever sees it, and "This opens when
+    everyone has answered" never comes true. The one object in the app
+    explicitly blocked on everybody was the one whose answer had no queue. A
+    highlight (S06) and a marked quiet day (§4.7, an act of care performed in
+    public) were likewise invisible to the room for good.
+
+    Also: `WayInButton` — the control that opens the book, the loudest thing
+    in the app — never said `Role.Button`, so it announced as a line of text
+    while `QuietControl` and `BackChevron` both said it.
+
 ## Licensed translations (decided: API.Bible)
 
 Open question §16.8 is now part-decided: **NKJV plus two undecided

@@ -285,21 +285,17 @@ fun EmberRecordScreen(
             .fillMaxSize()
             .room(),
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                // No scroll indicators: Compose draws none, which is what
-                // `.scrollIndicators(.hidden)` asks for.
-                .verticalScroll(rememberScrollState()),
-        ) {
-            // The way back, drawn. This screen is a root destination and had
-            // no way out at all except the system gesture — §11's motor rule
-            // asks for a tap equivalent for every gesture, and the person
-            // screen's own header names this exact defect class as the reason
-            // it was rewritten. It is drawn here rather than through
-            // `RibbonScreen` because the ember and the book's name both flow
-            // in from the shelf (A22), and a collapsing bar would take the
-            // name out of the pair.
+        Column(modifier = Modifier.fillMaxSize()) {
+            // The way back, drawn, and **outside the scroll**. This screen is
+            // a root destination and had no way out at all except the system
+            // gesture — §11's motor rule asks for a tap equivalent — and the
+            // person screen's own header names the other half of this defect:
+            // a chevron inside a scrolling column is a way back that scrolls
+            // off the top of the screen, which is barely better than none.
+            //
+            // Drawn here rather than through `RibbonScreen` because the ember
+            // and the book's name both flow in from the shelf (A22), and a
+            // collapsing bar would take the name out of that pair.
             BackChevron(
                 onBack = onBack,
                 label = Copy.BACK,
@@ -308,6 +304,14 @@ fun EmberRecordScreen(
                     top = WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding() + 8.dp,
                 ),
             )
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                // No scroll indicators: Compose draws none, which is what
+                // `.scrollIndicators(.hidden)` asks for.
+                .verticalScroll(rememberScrollState()),
+        ) {
             Column(
                 modifier = Modifier
                     .readableColumn()
@@ -435,6 +439,7 @@ fun EmberRecordScreen(
                     // (§15 horizon).
                 }
             }
+        }
         }
     }
 }
