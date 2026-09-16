@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -942,6 +943,94 @@ class LookBookTest {
         compose.mainClock.advanceTimeBy(RibbonMotion.SETTLE_MS * 45L / 100L)
         val image = compose.onRoot().captureToImage().asAndroidBitmap()
         File(out, "stroke-travelling.png").outputStream().use {
+            image.compress(Bitmap.CompressFormat.PNG, 100, it)
+        }
+        compose.mainClock.autoAdvance = true
+    }
+
+    /**
+     * The instant your pen touches down on somebody else's mark.
+     *
+     * This is the frame that was broken. Only one wash is drawn per verse, and
+     * it had already become the mixture of the two inks — so at the start of
+     * the stroke, with nothing yet revealed, **their highlight was not on the
+     * page at all**. It came back from the left as the mixture, which reads as
+     * their mark being wiped away and replaced rather than yours being added
+     * to theirs.
+     *
+     * Their ink now stays whole in front of the tip and the pen mixes it as it
+     * passes. The travelling part of that is `theStrokeTravelling`, which
+     * catches a pen mid-verse; this one holds the moment before it moves,
+     * which is the one that used to be empty.
+     */
+    @Test fun theInksMeeting() {
+        val chapter = ScriptureChapter(
+            n = 1,
+            blocks = listOf(
+                ScriptureBlock(
+                    s = BlockStyle.p,
+                    x = listOf(
+                        ScriptureSpan(
+                            v = 1,
+                            t = "In the beginning was the Word, and the Word was with " +
+                                "God, and the Word was God. ",
+                        ),
+                        ScriptureSpan(v = 2, t = "He was with God in the beginning."),
+                    ),
+                ),
+            ),
+        )
+        val appearance = Appearance(ApplicationProvider.getApplicationContext())
+        appearance.wallpaperColour = false
+        // Theirs is on the page first and has settled; yours goes on after.
+        // The sequence is the whole point — a page that *opens* with both
+        // inks has no "before" for the pen to mix out of.
+        val inks = mutableStateOf(mapOf(1 to listOf(Ink.crimson)))
+        val marking = mutableStateOf<IntRange?>(null)
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            RibbonTheme(appearance = appearance) {
+                Box(Modifier.fillMaxSize().room()) {
+                    ChapterText(
+                        chapter = chapter,
+                        runningHead = "John 1",
+                        theme = ReadingTheme(
+                            fontSize = 19f,
+                            lineHeightMultiple = 1.62f,
+                            redLetter = false,
+                        ),
+                        verseInks = inks.value,
+                        liftedVerses = null,
+                        justMarked = marking.value,
+                        onMarkDrawn = {},
+                        openNote = null,
+                        isFirstChapter = true,
+                        showMarginHint = false,
+                        onLayout = {},
+                        onLongPressVerse = {},
+                        onDragToVerse = {},
+                        onDragEnded = {},
+                        onTapVerse = {},
+                        onNoteSlot = {},
+                        modifier = Modifier.padding(top = 60.dp),
+                    )
+                }
+            }
+        }
+        // Their mark is simply what the page already shows; nothing has to
+        // animate for that, so one frame is enough.
+        compose.mainClock.advanceTimeByFrame()
+
+        inks.value = mapOf(1 to listOf(Ink.crimson, Ink.teal))
+        marking.value = 1..1
+        // Stepped a frame at a time rather than jumped: an animation started
+        // in the same batch as the state change takes its start time on the
+        // next frame, and a single long jump lands on that frame with nothing
+        // elapsed.
+        repeat(12) { compose.mainClock.advanceTimeByFrame() }
+
+        val image = compose.onRoot().captureToImage().asAndroidBitmap()
+        File(out, "inks-meeting.png").outputStream().use {
             image.compress(Bitmap.CompressFormat.PNG, 100, it)
         }
         compose.mainClock.autoAdvance = true

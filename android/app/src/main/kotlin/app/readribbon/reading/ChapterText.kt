@@ -575,7 +575,20 @@ private val HANDLE_TARGET = 44.dp
  * far along the words the stroke has got.
  */
 @Immutable
-internal data class Wash(val color: Color, val alpha: Float, val drawn: Float = 1f)
+internal data class Wash(
+    val color: Color,
+    val alpha: Float,
+    /** How far along the words the pen has got. 1 when nothing is moving. */
+    val drawn: Float = 1f,
+    /**
+     * What is already on this verse, in front of the pen.
+     *
+     * Only ever set while a stroke of yours is travelling across somebody
+     * else's mark: ahead of the tip the verse still shows their ink, behind
+     * it the two have mixed. Null when you are marking bare words.
+     */
+    val beneath: Wash? = null,
+)
 
 /**
  * The wash a set of inks settles at: 24% for one, deepening for each ink on
@@ -682,10 +695,23 @@ private fun rememberArrivingWashes(
     // anything else takes to arrive.
     val stroke = remember { Animatable(1f) }
     val markDrawn by rememberUpdatedState(onMarkDrawn)
+
+    // What the page showed before this mark went on, held for the length of
+    // the stroke.
+    //
+    // Deliberately captured here rather than read from `from` at draw time.
+    // `from` belongs to the arrival above and turns over the moment *that*
+    // animation ends — 320 ms against this one's 400 — so a pen crossing
+    // somebody else's mark would have lost their colour out from in front of
+    // it for the last fifth of the stroke, which is the one moment it is
+    // there to show.
+    var under by remember { mutableStateOf<Map<Int, Wash>>(emptyMap()) }
     LaunchedEffect(justMarked) {
         if (justMarked == null) return@LaunchedEffect
+        under = from
         stroke.snapTo(0f)
         stroke.animateTo(1f, RibbonMotion.settle(still))
+        under = emptyMap()
         markDrawn()
     }
 
@@ -700,7 +726,24 @@ private fun rememberArrivingWashes(
         // frame and is revealed along its length instead: the ink is not
         // getting darker, the pen is moving.
         if (striking != null && verse in striking) {
-            drawn[verse] = now.copy(drawn = pen)
+            // **Your ink meeting theirs.**
+            //
+            // Marking a verse somebody else has already marked is the one
+            // moment on this surface where the two of you are demonstrably
+            // in the same place, and it was drawn as their highlight
+            // *disappearing*: the stroke revealed the new combined colour
+            // from the left, and ahead of the tip there was nothing at all,
+            // because only one wash is drawn per verse and it had already
+            // become the mixture.
+            //
+            // Their ink stays where it is and the pen mixes it as it passes.
+            // Ahead of the tip, their colour; behind it, the third colour the
+            // two inks make; and at the tip the one crosses into the other
+            // over about ten dp, which is what happens when a wet stroke is
+            // laid over a dry one. Nothing flashes, nothing overshoots, and
+            // nothing is counted — it is just the colour arriving, and it is
+            // the whole point of two people reading the same chapter.
+            drawn[verse] = now.copy(drawn = pen, beneath = under[verse])
             continue
         }
         val was = from[verse]
@@ -845,12 +888,35 @@ private fun DrawScope.drawWashes(
         // finished one. Measured in ink laid down rather than in lines, so a
         // verse of four words and a verse of four lines take the same time
         // and travel at visibly different speeds, which is what a pen does.
+        // What the page already showed here: somebody else's mark, which the
+        // pen is about to mix rather than replace. Transparent when the words
+        // were bare.
+        val ahead = wash.beneath
+            ?.let { it.color.copy(alpha = it.alpha) }
+            ?: color.copy(alpha = 0f)
+
         var left = bands.sumOf { (it.right - it.left).toDouble() }.toFloat() * wash.drawn
         for (band in bands) {
-            if (left <= 0f) break
             val width = band.right - band.left
-            val reach = min(width, left)
+            val reach = (min(width, max(0f, left))).coerceAtLeast(0f)
             left -= reach
+
+            // In front of the tip: their ink, exactly as it was. Drawn first
+            // and clipped away from everything behind, so the two colours are
+            // never composited over one another and the mixture is the
+            // arithmetic one rather than one wash dimmed by another.
+            if (reach < width && ahead.alpha > 0f) {
+                clipRect(
+                    left = band.left + reach,
+                    top = band.top,
+                    right = band.right,
+                    bottom = band.bottom,
+                ) {
+                    drawPath(shape, ahead)
+                }
+            }
+            if (reach <= 0f) continue
+
             clipRect(
                 left = band.left,
                 top = band.top,
@@ -861,18 +927,19 @@ private fun DrawScope.drawWashes(
                 if (left > 0f || reach >= width) {
                     drawPath(shape, color)
                 } else {
-                    // The tip itself: the last few millimetres run out into
-                    // nothing, the way the wet end of a stroke does. A hard
-                    // vertical edge travelling across Scripture is a wipe
-                    // transition, and it is the one part of this the eye
-                    // reads as a screen doing something rather than as ink.
+                    // The tip itself: the last few millimetres cross from what
+                    // is already there into what the two inks make — or run
+                    // out into nothing, on bare words. A hard vertical edge
+                    // travelling across Scripture is a wipe transition, and it
+                    // is the one part of this the eye reads as a screen doing
+                    // something rather than as ink.
                     val tip = min(feather, reach)
                     val solid = (reach - tip) / reach
                     drawPath(
                         shape,
                         Brush.horizontalGradient(
                             solid to color,
-                            1f to color.copy(alpha = 0f),
+                            1f to ahead,
                             startX = band.left,
                             endX = band.left + reach,
                         ),

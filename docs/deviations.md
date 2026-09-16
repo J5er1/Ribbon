@@ -2144,6 +2144,39 @@ A41e. **A selection could not be adjusted, at all.** S06's *Extending* reads:
     model on both platforms and to the backend, not an Android drawing
     question. Written down rather than half-built.
 
+A41f. **Your ink meeting theirs, which was drawn as theirs being wiped away.**
+    A41d made your own highlight travel across the words. On bare Scripture
+    that was the whole story; on a verse somebody else had already marked it
+    was wrong in a way that inverted the meaning of the act.
+
+    Only one wash is drawn per verse, and by the time the stroke started that
+    wash had already become the mixture of the two inks. So at the head of the
+    stroke, with nothing yet revealed, **their highlight was not on the page**
+    — it came back from the left as the blend. Marking a verse alongside
+    somebody, which is the one moment on this surface where the two of you are
+    demonstrably in the same place, read as their mark being erased and
+    replaced by yours.
+
+    Their ink stays where it is now and the pen mixes it as it passes: ahead of
+    the tip, their colour, untouched; behind it, the third colour the two inks
+    make; and at the tip the one crosses into the other over about ten dp,
+    which is what a wet stroke laid over a dry one does. The two regions are
+    separate clips, so the colours are never composited over one another and
+    the mixture stays the arithmetic one rather than one wash dimmed by
+    another. Nothing flashes, nothing overshoots, nothing glows, and nothing is
+    counted — §13 forbids all four and none of them is needed. It is the colour
+    arriving, which is the whole point of two people reading the same chapter.
+
+    **A race went with it.** What is already on the page was being read from
+    the arrival animation's own "previous" state, which turns over the moment
+    *that* animation ends — 320 ms against the stroke's 400 — so their colour
+    would have dropped out from in front of the pen for the last fifth of the
+    stroke. It is captured once, when the stroke starts, and held for its
+    length.
+
+    The look book holds the instant the pen touches down, because that is the
+    frame that was empty. The travelling part is `theStrokeTravelling`.
+
 ## Licensed translations (decided: API.Bible)
 
 Open question §16.8 is now part-decided: **NKJV plus two undecided
