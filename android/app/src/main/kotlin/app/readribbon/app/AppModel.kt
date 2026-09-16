@@ -2614,11 +2614,22 @@ class AppModel(
         val highlights = next.highlights.toMutableList()
         for (row in graph.highlights) {
             if (highlights.none { it.id == row.id }) {
+                // The offsets come back only when the row carries the
+                // translation they were taken in; without it they are
+                // numbers into words nobody can name, so the mark is a mark
+                // on whole verses and says so (A41g).
+                // The registry stores a raw key and never enumerates, so a
+                // translation this build has never heard of still round-trips
+                // and still matches the reader who made the mark.
+                val markedIn = row.charTranslation?.let { TranslationID(rawValue = it) }
                 val range = VerseRange(
                     bookID = row.bookId,
                     chapter = row.chapter,
                     startVerse = row.startVerse,
-                    endVerse = row.endVerse
+                    endVerse = row.endVerse,
+                    startChar = row.startChar.takeIf { markedIn != null },
+                    endChar = row.endChar.takeIf { markedIn != null },
+                    charTranslation = markedIn,
                 )
                 val ink = Ink.entries.firstOrNull { it.name == row.ink } ?: Ink.ochre
                 highlights.add(

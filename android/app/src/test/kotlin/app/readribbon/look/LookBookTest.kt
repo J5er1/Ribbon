@@ -56,6 +56,7 @@ import app.readribbon.reading.LeaveToolbar
 import app.readribbon.reading.ReadingScreen
 import app.readribbon.reading.ReadingTheme
 import app.readribbon.reading.ReflectionCardView
+import app.readribbon.reading.VerseMark
 import app.readribbon.screens.AppearanceScreen
 import app.readribbon.screens.BookChooserContent
 import app.readribbon.screens.InviteContent
@@ -920,9 +921,9 @@ class LookBookTest {
                             lineHeightMultiple = 1.62f,
                             redLetter = false,
                         ),
-                        verseInks = mapOf(1 to listOf(Ink.teal)),
-                        liftedVerses = null,
-                        justMarked = 1..1,
+                        marks = listOf(VerseMark(1, null, null, Ink.teal)),
+                        lifted = null,
+                        justMarked = VerseRange("JHN", 1, 1, 1),
                         onMarkDrawn = {},
                         openNote = null,
                         isFirstChapter = true,
@@ -930,6 +931,7 @@ class LookBookTest {
                         onLayout = {},
                         onLongPressVerse = {},
                         onDragToVerse = {},
+                        onExtend = { _, _, _ -> },
                         onDragEnded = {},
                         onTapVerse = {},
                         onNoteSlot = {},
@@ -985,8 +987,8 @@ class LookBookTest {
         // Theirs is on the page first and has settled; yours goes on after.
         // The sequence is the whole point — a page that *opens* with both
         // inks has no "before" for the pen to mix out of.
-        val inks = mutableStateOf(mapOf(1 to listOf(Ink.crimson)))
-        val marking = mutableStateOf<IntRange?>(null)
+        val inks = mutableStateOf(listOf(VerseMark(1, null, null, Ink.crimson)))
+        val marking = mutableStateOf<VerseRange?>(null)
         compose.mainClock.autoAdvance = false
         compose.setContent {
             RibbonTheme(appearance = appearance) {
@@ -999,8 +1001,8 @@ class LookBookTest {
                             lineHeightMultiple = 1.62f,
                             redLetter = false,
                         ),
-                        verseInks = inks.value,
-                        liftedVerses = null,
+                        marks = inks.value,
+                        lifted = null,
                         justMarked = marking.value,
                         onMarkDrawn = {},
                         openNote = null,
@@ -1009,6 +1011,7 @@ class LookBookTest {
                         onLayout = {},
                         onLongPressVerse = {},
                         onDragToVerse = {},
+                        onExtend = { _, _, _ -> },
                         onDragEnded = {},
                         onTapVerse = {},
                         onNoteSlot = {},
@@ -1021,8 +1024,11 @@ class LookBookTest {
         // animate for that, so one frame is enough.
         compose.mainClock.advanceTimeByFrame()
 
-        inks.value = mapOf(1 to listOf(Ink.crimson, Ink.teal))
-        marking.value = 1..1
+        inks.value = listOf(
+            VerseMark(1, null, null, Ink.crimson),
+            VerseMark(1, null, null, Ink.teal),
+        )
+        marking.value = VerseRange("JHN", 1, 1, 1)
         // Stepped a frame at a time rather than jumped: an animation started
         // in the same batch as the state change takes its start time on the
         // next frame, and a single long jump lands on that frame with nothing
@@ -1034,6 +1040,67 @@ class LookBookTest {
             image.compress(Bitmap.CompressFormat.PNG, 100, it)
         }
         compose.mainClock.autoAdvance = true
+    }
+
+    /**
+     * A mark on part of a verse, and two people marking different parts of one.
+     *
+     * The second is why the wash is cut into stretches rather than painted per
+     * verse: with a wash per verse either mark would have coloured the whole
+     * of it, and §4.5's overlap would have been claimed across words only one
+     * person had touched. Here the middle is the third colour and the two ends
+     * are each their own ink — which is only checkable in a picture.
+     */
+    @Test fun aMarkOnAPhrase() {
+        val text = "In the beginning was the Word, and the Word was with God, " +
+            "and the Word was God."
+        val chapter = ScriptureChapter(
+            n = 1,
+            blocks = listOf(
+                ScriptureBlock(
+                    s = BlockStyle.p,
+                    x = listOf(
+                        ScriptureSpan(v = 1, t = "$text "),
+                        ScriptureSpan(v = 2, t = "He was with God in the beginning."),
+                    ),
+                ),
+            ),
+        )
+        // "the Word was with God" — hers; "was with God, and the Word" — his.
+        val hers = text.indexOf("the Word was with God")
+        val his = text.indexOf("was with God, and the Word")
+        shoot("a-phrase") {
+            OnTheGround {
+                ChapterText(
+                    chapter = chapter,
+                    runningHead = "John 1",
+                    theme = ReadingTheme(
+                        fontSize = 19f,
+                        lineHeightMultiple = 1.62f,
+                        redLetter = false,
+                    ),
+                    marks = listOf(
+                        VerseMark(1, hers, hers + "the Word was with God".length, Ink.crimson),
+                        VerseMark(1, his, his + "was with God, and the Word".length, Ink.teal),
+                        VerseMark(2, null, null, Ink.moss),
+                    ),
+                    lifted = null,
+                    justMarked = null,
+                    onMarkDrawn = {},
+                    openNote = null,
+                    isFirstChapter = true,
+                    showMarginHint = false,
+                    onLayout = {},
+                    onLongPressVerse = {},
+                    onDragToVerse = {},
+                    onExtend = { _, _, _ -> },
+                    onDragEnded = {},
+                    onTapVerse = {},
+                    onNoteSlot = {},
+                    modifier = Modifier.padding(top = 60.dp),
+                )
+            }
+        }
     }
 
     /**
@@ -1074,8 +1141,8 @@ class LookBookTest {
                         lineHeightMultiple = 1.62f,
                         redLetter = false,
                     ),
-                    verseInks = emptyMap(),
-                    liftedVerses = 1..2,
+                    marks = emptyList(),
+                    lifted = VerseRange("JHN", 1, 1, 2),
                     justMarked = null,
                     onMarkDrawn = {},
                     openNote = null,
@@ -1084,6 +1151,7 @@ class LookBookTest {
                     onLayout = {},
                     onLongPressVerse = {},
                     onDragToVerse = {},
+                    onExtend = { _, _, _ -> },
                     onDragEnded = {},
                     onTapVerse = {},
                     onNoteSlot = {},

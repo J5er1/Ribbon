@@ -530,6 +530,9 @@ class RemoteSync(
                         endVerse = highlight.range.endVerse,
                         ink = highlight.ink.name,
                         createdAt = highlight.createdAt,
+                        startChar = highlight.range.startChar,
+                        endChar = highlight.range.endChar,
+                        charTranslation = highlight.range.charTranslation?.rawValue,
                     )
                 )),
                 onConflict = "id"
@@ -950,6 +953,16 @@ class RemoteSync(
         val endVerse: Int,
         val ink: String,
         val createdAt: Instant,
+        /**
+         * A mark on part of a verse (S06), and the translation its two offsets
+         * were measured in. All three are null for a mark on whole verses,
+         * which is every mark made before A41g and every mark iOS makes — the
+         * columns are nullable and nothing that does not know about them has
+         * to change.
+         */
+        val startChar: Int? = null,
+        val endChar: Int? = null,
+        val charTranslation: String? = null,
     )
 
     @Serializable
