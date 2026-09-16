@@ -13,6 +13,7 @@ import app.readribbon.core.Person
 import app.readribbon.core.QuietDay
 import app.readribbon.core.Reading
 import app.readribbon.core.ReadingPosition
+import app.readribbon.core.Ribbon
 import app.readribbon.core.ReflectionCard
 import app.readribbon.core.Room
 import java.io.File
@@ -61,6 +62,7 @@ data class RoomGraph(
     val noteFounds: List<RemoteSync.NoteFoundRow> = emptyList(),
     val highlights: List<RemoteSync.HighlightRow> = emptyList(),
     val positions: List<RemoteSync.PositionRow> = emptyList(),
+    val ribbons: List<RemoteSync.RibbonRow> = emptyList(),
     val cards: List<RemoteSync.CardRow> = emptyList(),
     val cardAnswers: List<RemoteSync.CardAnswerRow> = emptyList(),
 )
@@ -497,6 +499,29 @@ class RemoteSync(
         }
     }
 
+    /**
+     * The room's ribbon. One row per reading, so the conflict target is the
+     * reading alone — anybody in the room may move it, and the last person to
+     * set the book down is where it is.
+     */
+    suspend fun push(ribbon: Ribbon) {
+        withAuthRetry {
+            client.upsert(
+                table = "ribbons",
+                rowsJson = SupabaseClient.json.encodeToString(listOf(
+                    RibbonRow(
+                        readingId = ribbon.readingID,
+                        personId = ribbon.personID,
+                        chapter = ribbon.chapter,
+                        verse = ribbon.verse,
+                        placedAt = ribbon.placedAt,
+                    )
+                )),
+                onConflict = "reading_id"
+            )
+        }
+    }
+
     suspend fun push(card: ReflectionCard) {
         withAuthRetry {
             client.upsert(
@@ -590,6 +615,7 @@ class RemoteSync(
         var noteFounds: List<NoteFoundRow> = emptyList()
         var highlights: List<HighlightRow> = emptyList()
         var positions: List<PositionRow> = emptyList()
+        var ribbons: List<RibbonRow> = emptyList()
         var cards: List<CardRow> = emptyList()
         var cardAnswers: List<CardAnswerRow> = emptyList()
 
@@ -619,6 +645,12 @@ class RemoteSync(
                 runCatching {
                     SupabaseClient.json.decodeFromString<List<PositionRow>>(
                         client.select(table = "positions", query = listOf("reading_id" to readingList)))
+                }.getOrDefault(emptyList())
+            }
+            ribbons = withAuthRetry {
+                runCatching {
+                    SupabaseClient.json.decodeFromString<List<RibbonRow>>(
+                        client.select(table = "ribbons", query = listOf("reading_id" to readingList)))
                 }.getOrDefault(emptyList())
             }
             cards = withAuthRetry {
@@ -658,7 +690,7 @@ class RemoteSync(
             readings = readings, fires = fires, fuelEvents = fuelEvents,
             quietDays = quietDays, invites = invites, notes = notes,
             noteFounds = noteFounds, highlights = highlights,
-            positions = positions, cards = cards, cardAnswers = cardAnswers)
+            positions = positions, ribbons = ribbons, cards = cards, cardAnswers = cardAnswers)
     }
 
     /**
@@ -852,6 +884,15 @@ class RemoteSync(
         val chapter: Int,
         val verse: Int,
         val updatedAt: Instant,
+    )
+
+    @Serializable
+    data class RibbonRow(
+        val readingId: Uuid,
+        val personId: Uuid,
+        val chapter: Int,
+        val verse: Int,
+        val placedAt: Instant,
     )
 
     @Serializable

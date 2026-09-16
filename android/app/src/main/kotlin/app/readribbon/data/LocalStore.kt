@@ -12,6 +12,7 @@ import app.readribbon.core.Person
 import app.readribbon.core.QuietDay
 import app.readribbon.core.Reading
 import app.readribbon.core.ReadingPosition
+import app.readribbon.core.Ribbon
 import app.readribbon.core.ReflectionCard
 import app.readribbon.core.Room
 import kotlinx.coroutines.Dispatchers
@@ -73,6 +74,11 @@ data class AppState(
     val highlights: List<Highlight> = emptyList(),
     val quietDays: List<QuietDay> = emptyList(),
     val positions: List<ReadingPosition> = emptyList(),
+    /**
+     * The room's own place in each open book (deviation A30). One per
+     * reading, not one per person — see [Ribbon].
+     */
+    val ribbons: List<Ribbon> = emptyList(),
     val cards: List<ReflectionCard> = emptyList(),
     val invites: List<Invite> = emptyList(),
     val currentRoomID: Uuid? = null,

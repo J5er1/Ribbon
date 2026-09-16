@@ -432,6 +432,30 @@ object Copy {
     // thing you are looking at, and "Settings" is not a thing anybody is
     // looking at. The ledes say what is behind each, in one sentence, in the
     // app's own voice.
+    // The ribbon (deviation A30) and the chapter list (A31).
+    //
+    // Every line here names a *place*. Nothing subtracts the ribbon from
+    // where you are, nothing calls anybody ahead or behind, and nothing is
+    // counted — an address is not a measure, which is the whole reason a
+    // shared ribbon is allowed to exist beside §03 at all.
+    const val CHAPTERS = "Chapters"
+    const val GO_THERE = "Go there"
+    const val THE_RIBBON = "The ribbon"
+
+    /** "Ruth left the ribbon at Mark 4:9", or the same without a name. */
+    fun ribbonIsAt(who: String?, reference: String): String =
+        if (who == null) "The ribbon is at $reference." else "$who left the ribbon at $reference."
+
+    /** What you left, said back to you — never "you are at". */
+    fun youLeftTheRibbonAt(reference: String): String = "You left the ribbon at $reference."
+
+    fun chapterYouAreHere(heading: String): String = "$heading, where you are"
+
+    fun chapterHasRibbon(heading: String): String = "$heading, where the ribbon is"
+
+    fun chapterYouAreHereWithRibbon(heading: String): String =
+        "$heading, where you are and where the ribbon is"
+
     const val ROOM_LEDE = "Who is in it, what it tells you, and the rooms you are in."
     const val YOU_LEDE = "Your name and face, how Scripture sets, and what this phone keeps."
     const val YOUR_ROOMS = "Your rooms"

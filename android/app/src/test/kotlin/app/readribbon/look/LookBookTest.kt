@@ -27,6 +27,7 @@ import app.readribbon.core.NoteKind
 import app.readribbon.core.Person
 import app.readribbon.core.Reading
 import app.readribbon.core.ReadingPosition
+import app.readribbon.core.Ribbon
 import app.readribbon.core.Room
 import app.readribbon.core.VerseAddress
 import app.readribbon.data.AppState
@@ -43,6 +44,7 @@ import app.readribbon.screens.MenuEntry
 import app.readribbon.screens.MenuScreen
 import app.readribbon.screens.NotificationSettingsScreen
 import app.readribbon.screens.PersonScreen
+import app.readribbon.reading.ChaptersContent
 import app.readribbon.reading.ReadingScreen
 import app.readribbon.screens.RoomScreen
 import app.readribbon.screens.TextSettingsScreen
@@ -337,6 +339,62 @@ class LookBookTest {
                 onStartAnother = {},
             )
         }
+    }
+
+    /** Everywhere else in the book, and the ribbon at the top of it (A31). */
+    @Test fun theChapters() {
+        val open = reading("MRK", FireScale.medium)
+        val state = AppState(
+            me = me,
+            people = mapOf(me.id to me, ruth.id to ruth),
+            rooms = listOf(room),
+            memberships = listOf(membership(me, Ink.teal), membership(ruth, Ink.crimson)),
+            readings = listOf(open),
+            positions = listOf(
+                ReadingPosition(
+                    readingID = open.id, personID = me.id,
+                    chapter = 2, verse = 1, updatedAt = now - 6.hours,
+                ),
+            ),
+            ribbons = listOf(
+                Ribbon(
+                    readingID = open.id, personID = ruth.id,
+                    chapter = 4, verse = 9, placedAt = now - 2.hours,
+                ),
+            ),
+            currentRoomID = room.id,
+        )
+        val m = model(state)
+        shoot("chapters") {
+            ChaptersContent(model = m, reading = open, onGo = {})
+        }
+    }
+
+    /** A room whose ribbon is somewhere you are not: the offer (A30). */
+    @Test fun roomWithARibbon() {
+        val open = reading("MRK", FireScale.medium)
+        val state = AppState(
+            me = me,
+            people = mapOf(me.id to me, ruth.id to ruth),
+            rooms = listOf(room),
+            memberships = listOf(membership(me, Ink.teal), membership(ruth, Ink.crimson)),
+            readings = listOf(open),
+            positions = listOf(
+                ReadingPosition(
+                    readingID = open.id, personID = me.id,
+                    chapter = 2, verse = 1, updatedAt = now - 6.hours,
+                ),
+            ),
+            ribbons = listOf(
+                Ribbon(
+                    readingID = open.id, personID = ruth.id,
+                    chapter = 4, verse = 9, placedAt = now - 2.hours,
+                ),
+            ),
+            currentRoomID = room.id,
+        )
+        val m = model(state)
+        shoot("room-with-a-ribbon") { Room(m, m.state.rooms.first()) }
     }
 
     @Test fun aPerson() {

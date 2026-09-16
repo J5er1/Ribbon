@@ -71,6 +71,7 @@ import app.readribbon.core.Ink
 import app.readribbon.core.Note
 import app.readribbon.core.NoteKind
 import app.readribbon.core.Reading
+import app.readribbon.core.Ribbon
 import app.readribbon.core.Room
 import app.readribbon.core.VerseAddress
 import app.readribbon.design.Air
@@ -1157,6 +1158,29 @@ private fun WayIn(
                 // to ask for it.
                 onOpenReading(reading, null)
             }
+            // The ribbon (A30) — offered, never applied.
+            //
+            // This is the whole of the "suggestion" the owner asked for, and
+            // its restraint is the design. It says where the ribbon is and
+            // who left it; it never says where *you* are, never puts the two
+            // in a sentence together, and never subtracts one from the other.
+            // Tapping it is the only thing that moves you, and it is a tap
+            // you have to decide to make.
+            //
+            // Absent when there is no ribbon, when it is exactly where you
+            // already are, and when the book is finished (`ribbonWorthOffering`
+            // decides all three) — a room that told you where you were
+            // standing would be furniture, not a hand on your shoulder.
+            val ribbon = model.ribbonWorthOffering(reading)
+            if (ribbon != null) {
+                RibbonOffer(
+                    model = model,
+                    reading = reading,
+                    ribbon = ribbon,
+                    book = book,
+                    onGo = { address -> onOpenReading(reading, address) },
+                )
+            }
             // The gesture, said once. It goes for good the first time the
             // book is opened by any route — the same contract the margin
             // hint keeps (§6.1). A hint that comes back is worse than none.
@@ -1185,6 +1209,67 @@ private fun WayIn(
                 modifier = Modifier.padding(top = 4.dp),
             )
         }
+    }
+}
+
+/**
+ * The room's ribbon, said once and quietly.
+ *
+ * A [QuietControl] rather than a capsule, and that choice is the argument:
+ * the way in above it is the room's one loud control, and a second bright
+ * thing beside it would make the ribbon a competing instruction rather than
+ * an offer. A quiet line is what an offer looks like.
+ *
+ * Law 2 is kept by saying an address and stopping. "Ruth left the ribbon at
+ * Mark 4:9" is where a thing is; "Ruth is 3 chapters ahead" is a score, and
+ * there is deliberately no arithmetic anywhere near this that could produce
+ * one.
+ */
+@Composable
+private fun RibbonOffer(
+    model: AppModel,
+    reading: Reading,
+    ribbon: Ribbon,
+    book: app.readribbon.core.BibleBook,
+    onGo: (VerseAddress) -> Unit,
+) {
+    val mine = model.me?.id == ribbon.personID
+    val reference = "${book.chapterHeading(ribbon.chapter)}:${ribbon.verse}"
+    val line = if (mine) {
+        Copy.youLeftTheRibbonAt(reference)
+    } else {
+        Copy.ribbonIsAt(
+            who = model.person(ribbon.personID)?.name?.let { firstName(it) },
+            reference = reference,
+        )
+    }
+    // A sentence, set as a sentence. `QuietControl` is small caps, which is
+    // right for a two-word control ("Mark a quiet day") and wrong for this:
+    // in small caps "Ruth left the ribbon at Mark 4:9" reads as a label
+    // shouting a fact, and the whole point of this line is that it is said
+    // rather than displayed.
+    Box(
+        modifier = Modifier
+            .sizeIn(minHeight = SEAT_MIN_TOUCH)
+            .clip(RibbonShape.rowShape)
+            .pressable(onClickLabel = Copy.GO_THERE) {
+                onGo(
+                    VerseAddress(
+                        bookID = reading.bookID,
+                        chapter = ribbon.chapter,
+                        verse = ribbon.verse,
+                    ),
+                )
+            }
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = line,
+            style = RibbonType.ui(14f),
+            color = Palette.muted,
+            textAlign = TextAlign.Center,
+        )
     }
 }
 

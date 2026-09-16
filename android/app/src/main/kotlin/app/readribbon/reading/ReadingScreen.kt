@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalUuidApi::class)
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalUuidApi::class)
 
 package app.readribbon.reading
 
@@ -34,12 +34,14 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -375,11 +377,34 @@ fun ReadingScreen(
      * in it. Separate from [close] because a page can also leave under a
      * finger, which is not a close *request* but a close that has happened.
      */
+/**
+     * Where this session started, so that closing the book without having
+     * read moves nothing.
+     *
+     * The ribbon goes where you stopped — but opening the book, looking at
+     * the page and closing it again is not stopping anywhere, and without
+     * this it would drag the room's ribbon back to wherever you happened to
+     * be. Worse than doing nothing: it would quietly undo somebody else's
+     * ribbon on a glance.
+     */
+    val openedAt = remember(reading.id) { model.myPosition(reading) }
+
     fun laidDown() {
         if (!model.state.hasSeenMarginHint) {
             model.markMarginHintSeen()
         }
         recordFuel()
+        // The ribbon goes where you stopped (A30). There is no control for
+        // this because there is no separate act: closing the book *is* the
+        // gesture, the same as it is with a ribbon in a physical Bible. Your
+        // own position is written separately and is untouched — the book
+        // still opens where you are (§6.2), never where the room is.
+        //
+        // Only if you actually went somewhere. See `openedAt`.
+        val stoppedAt = model.myPosition(reading)
+        if (stoppedAt.chapter != openedAt.chapter || stoppedAt.verse != openedAt.verse) {
+            model.leaveTheRibbon(reading, stoppedAt)
+        }
     }
 
     fun close() {
@@ -401,6 +426,28 @@ fun ReadingScreen(
      */
     LaunchedEffect(sheet.committed) {
         if (sheet.committed) closing = false
+    }
+
+    /** The chapter list is up (A31). */
+    var showChapters by remember { mutableStateOf(false) }
+
+    /**
+     * The chapter under the thumb, for the running head at the foot.
+     *
+     * Kept separately from the saved position because a position is written
+     * at most every few seconds (see `trackReading`) and a running head that
+     * lagged the page by three seconds would be telling you where you were.
+     */
+    var readingChapter by remember { mutableIntStateOf(model.myPosition(reading).chapter) }
+
+
+    /**
+     * The running head, repeated at the foot as the way into the chapter
+     * list. Read from the tracked chapter rather than from the position so it
+     * follows the page under the thumb, which is what a running head does.
+     */
+    val whereYouAre: String = remember(readingChapter, book) {
+        book?.chapterHeading(readingChapter) ?: "${reading.bookID} $readingChapter"
     }
 
     fun clearLift() {
@@ -500,6 +547,7 @@ fun ReadingScreen(
         if (model.followingPersonID != null && now > programmaticScrollUntil) {
             model.followingPersonID = null
         }
+        readingChapter = chapter
         val layout = chapterLayouts[chapter]
         val yInChapter = with(density) { (threshold - frame.top).toDp() }
         val verse = layout?.verseFirstLineY
@@ -751,6 +799,8 @@ fun ReadingScreen(
 
             // The way out, or the composer.
             BottomChrome(
+                whereYouAre = whereYouAre,
+                onOpenChapters = { showChapters = true },
                 sheet = sheet,
                 onDragClosed = {
                     laidDown()
@@ -806,6 +856,25 @@ fun ReadingScreen(
                 modifier = Modifier.align(Alignment.Center),
             )
         }
+    }
+
+    // Everywhere else in this book (A31). Outside the page's own Box so the
+    // sheet is not clipped by it, and so the page keeps drawing underneath
+    // exactly as the chooser leaves the room drawing underneath.
+    if (showChapters) {
+        ChaptersSheet(
+            model = model,
+            reading = reading,
+            onDismiss = { showChapters = false },
+            onGo = { address ->
+                showChapters = false
+                // The same jump the follow uses, so arriving from the list and
+                // arriving from somebody else's shoulder land the same way —
+                // and the grace window keeps the scroll from being read as a
+                // scroll of your own, which would break a follow in progress.
+                goToChapter(address.chapter)
+            },
+        )
     }
 }
 
@@ -1114,6 +1183,9 @@ private fun BottomChrome(
     onDismissVoice: () -> Unit,
     onGoBack: (VerseAddress) -> Unit,
     onClose: () -> Unit,
+    /** The running head, repeated at the foot as the way into the chapters. */
+    whereYouAre: String,
+    onOpenChapters: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(
@@ -1218,6 +1290,44 @@ private fun BottomChrome(
                     // tap since S02 was written. What is new is that the tap
                     // and the drag now run the same movement rather than two
                     // (design/Hearth.kt).
+                    // Where you are, and the way to anywhere else in this
+                    // book (A31).
+                    //
+                    // S02 says the way out is the Wave and "nothing else
+                    // down there", and this is a deliberate second thing —
+                    // owner's call. The gap it fills is real: a book opens at
+                    // your own position and is read forward, so reaching
+                    // Mark 10 from Mark 1 meant scrolling nine chapters.
+                    //
+                    // It keeps its distance from the rule it bends. The Wave
+                    // still has the bottom edge to itself; this sits above
+                    // it, in the same glass, at small-caps size and low
+                    // contrast — it says where you are, which is what a
+                    // running head does, and it is a door only if you press
+                    // it.
+                    Box(
+                        modifier = Modifier
+                            .sizeIn(minWidth = 88.dp, minHeight = 44.dp)
+                            .clickable(
+                                role = Role.Button,
+                                onClickLabel = Copy.CHAPTERS,
+                                onClick = onOpenChapters,
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Box(
+                            Modifier
+                                .ribbonGlass(CircleShape)
+                                .padding(horizontal = 18.dp, vertical = 7.dp),
+                        ) {
+                            SmallCaps(
+                                whereYouAre,
+                                size = 11f,
+                                color = Palette.text.copy(alpha = 0.5f),
+                            )
+                        }
+                    }
+
                     Box(
                         modifier = Modifier
                             .sizeIn(minWidth = 88.dp, minHeight = 52.dp)
