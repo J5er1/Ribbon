@@ -8,6 +8,7 @@ import android.provider.Settings
 import android.text.format.DateFormat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -380,10 +381,21 @@ private fun Segments(
                         .semantics { selected = chosen },
                     contentAlignment = Alignment.Center,
                 ) {
+                    // The pill slides on a spring and its three labels used
+                    // to change colour on one frame, so the object that moved
+                    // and the words it moved between were telling two
+                    // different stories about the same event. On the same
+                    // token the pill rides, so a word brightens as the pill
+                    // reaches it.
+                    val wordColour by animateColorAsState(
+                        targetValue = if (chosen) Palette.text else Palette.muted,
+                        animationSpec = RibbonMotion.handled(still),
+                        label = "the-chosen-word",
+                    )
                     Text(
                         text = label,
                         style = RibbonType.ui(15f),
-                        color = if (chosen) Palette.text else Palette.muted,
+                        color = wordColour,
                     )
                 }
             }
@@ -444,6 +456,7 @@ fun NotificationSettingsScreen(
 private fun AndroidIsSilencingThese() {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val still = rememberReduceMotion()
     var allowed by remember { mutableStateOf(true) }
 
     LaunchedEffect(lifecycle) {
@@ -457,8 +470,11 @@ private fun AndroidIsSilencingThese() {
     // moment anybody watches this line, and §9.1 has no cuts in it.
     AnimatedVisibility(
         visible = !allowed,
-        enter = fadeIn(RibbonMotion.settle()) + expandVertically(RibbonMotion.settle()),
-        exit = fadeOut(RibbonMotion.settle()) + shrinkVertically(RibbonMotion.settle()),
+        // The token takes the reduce-motion branch itself, as every other
+        // call site in this file does — calling it bare left the one line on
+        // the screen that still moved for somebody who had asked nothing to.
+        enter = fadeIn(RibbonMotion.settle(still)) + expandVertically(RibbonMotion.settle(still)),
+        exit = fadeOut(RibbonMotion.settle(still)) + shrinkVertically(RibbonMotion.settle(still)),
         label = "android-is-silencing-these",
     ) {
         Column(

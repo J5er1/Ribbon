@@ -240,6 +240,12 @@ fun RoomScreen(
         }
     }
 
+    // One branch for reduce motion, taken inside the token (§11), for the two
+    // things on this screen that grow in and out of the page.
+    val roomStill = rememberReduceMotion()
+    val roomSettle: FiniteAnimationSpec<Float> = RibbonMotion.settle(roomStill)
+    val roomSettleSize: FiniteAnimationSpec<IntSize> = RibbonMotion.settle(roomStill)
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -289,7 +295,18 @@ fun RoomScreen(
                 // sentence in the middle of the dark. The five good places to
                 // start are the chooser's own — the same cards, the same
                 // fires, one tap nearer.
-                if (reading == null && shelf.isEmpty() && !room.isPaused) {
+                // Animated, because the two moments it changes are the two
+                // moments it matters: starting the first book, and finishing
+                // one. The hearth immediately above cross-fades its fire over
+                // 320 ms while these used to blink out on the frame the tap
+                // landed, taking everything below them up by their whole
+                // height at once.
+                AnimatedVisibility(
+                    visible = reading == null && shelf.isEmpty() && !room.isPaused,
+                    enter = fadeIn(roomSettle) + expandVertically(roomSettleSize),
+                    exit = fadeOut(roomSettle) + shrinkVertically(roomSettleSize),
+                    label = "good-places-to-start",
+                ) {
                     StarterShelf(
                         onChoose = { bookID ->
                             val started = model.startReading(bookID = bookID, room = room)
@@ -312,7 +329,18 @@ fun RoomScreen(
                 // The shelf, below the fold (S10). No shelf until the first
                 // book is finished — an empty shelf is a reproach, so it is
                 // absent rather than empty-stated, and so is its head.
-                if (shelf.isNotEmpty()) {
+                //
+                // Nothing on the way in for a shelf that was already there
+                // when the room drew (§05 — the app opening on the room says
+                // nothing); the first ember arriving is the event.
+                AnimatedVisibility(
+                    visibleState = remember(room.id) {
+                        MutableTransitionState(shelf.isNotEmpty())
+                    }.apply { targetState = shelf.isNotEmpty() },
+                    enter = fadeIn(roomSettle) + expandVertically(roomSettleSize),
+                    exit = fadeOut(roomSettle) + shrinkVertically(roomSettleSize),
+                    label = "the-shelf",
+                ) {
                     Column(Modifier.padding(top = 40.dp, start = GUTTER, end = GUTTER)) {
                         SectionLabel(Copy.THE_SHELF)
                         ShelfView(
@@ -909,7 +937,18 @@ private fun Seats(
     val shown = remember(room.id) {
         mutableStateListOf<Uuid>().apply { addAll(members.map { it.personID }) }
     }
+    val seated = remember(room.id) { members.map { it.personID }.toSet() }
     val here = members.map { it.personID }
+
+    // Who was already seated when this room first drew. The seats seed their
+    // entrance from *this* rather than from `here`, and the difference is the
+    // whole of whether a new seat ever animates: on the composition where a
+    // newcomer's seat first exists they are already in `here`, so a transition
+    // state seeded from it starts and ends true and the entrance written
+    // twelve lines below could never run. The waiting rows got this right
+    // (`standing`, further down) by seeding from a snapshot; the seats did
+    // not. Everyone present at launch is still seeded true and still does not
+    // swell in (§05); anybody who arrives afterwards now does (§6.7).
     LaunchedEffect(here, reduceMotion) {
         here.forEach { if (it !in shown) shown.add(it) }
         if (shown.any { it !in here }) {
@@ -957,7 +996,7 @@ private fun Seats(
     ) {
         shown.take(Room.capacity).forEach { personID ->
             key(personID) {
-                val seat = remember { MutableTransitionState(personID in here) }
+                val seat = remember { MutableTransitionState(personID in seated) }
                 seat.targetState = personID in here
                 AnimatedVisibility(
                     visibleState = seat,

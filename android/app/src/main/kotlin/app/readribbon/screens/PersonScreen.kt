@@ -50,6 +50,15 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.togetherWith
 import app.readribbon.app.AppModel
 import app.readribbon.app.Copy
 import app.readribbon.app.firstName
@@ -426,14 +435,23 @@ fun LeaveRoomDialogs(
     onLeft: () -> Unit,
 ) {
     var askAboutNotes by remember { mutableStateOf(false) }
+    val still = rememberReduceMotion()
 
     fun leave(keepNotes: Boolean) {
         model.leaveRoom(room, keepNotesBehind = keepNotes)
         onLeft()
     }
 
+    // The two questions are one dialog whose words change, not two dialogs
+    // replacing each other: the second used to arrive by tearing the first
+    // one down, which is a second and harder cut in the middle of the most
+    // careful conversation the app has (§6.8).
+    RibbonConfirmDialog(
+        question = if (askAboutNotes) Copy.LEAVE_NOTES_QUESTION else Copy.LEAVE_ROOM_CONFIRM,
+        onDismiss = onDismiss,
+    ) {
     if (!askAboutNotes) {
-        RibbonConfirmDialog(question = Copy.LEAVE_ROOM_CONFIRM, onDismiss = onDismiss) {
+        run {
             ConfirmChoice(
                 title = Copy.LEAVE_THIS_ROOM,
                 destructive = true,
@@ -442,13 +460,14 @@ fun LeaveRoomDialogs(
             ConfirmChoice(title = Copy.STAY, onClick = onDismiss)
         }
     } else {
-        RibbonConfirmDialog(question = Copy.LEAVE_NOTES_QUESTION, onDismiss = onDismiss) {
+        run {
             // Leaving them is the default; taking them back is possible and
             // never the default (§6.8).
             ConfirmChoice(title = Copy.LEAVE_THEM, onClick = { leave(keepNotes = true) })
             ConfirmChoice(title = Copy.TAKE_THEM_BACK, onClick = { leave(keepNotes = false) })
             ConfirmChoice(title = Copy.STAY, onClick = onDismiss)
         }
+    }
     }
 }
 
@@ -472,25 +491,65 @@ fun RibbonConfirmDialog(
     modifier: Modifier = Modifier,
     choices: @Composable ColumnScope.() -> Unit,
 ) {
+    val still = rememberReduceMotion()
+    // The dialog window itself shows and removes with no animation of its
+    // own, so the question, its choices and the scrim all used to cut in and
+    // cut out — on the app's most careful conversation (§6.8), in a product
+    // whose motion table has no cuts in it at all. Every sheet in the app
+    // goes to real trouble to leave properly (`rememberSheetExit`); the
+    // dialogs had none of it.
+    //
+    // Seeded false and set true on arrival, so the first composition has
+    // something to animate *from*. It settles rather than springs: §9.1
+    // forbids overshoot, and a question that bounces is a question making
+    // light of itself.
+    val shown = remember { MutableTransitionState(false) }
+    shown.targetState = true
+
     BasicAlertDialog(onDismissRequest = onDismiss, modifier = modifier) {
-        Box(Modifier.clip(RoundedCornerShape(20.dp))) {
+        AnimatedVisibility(
+            visibleState = shown,
+            enter = fadeIn(RibbonMotion.arrive(still)) +
+                scaleIn(RibbonMotion.arrive(still), initialScale = 0.96f),
+            exit = fadeOut(RibbonMotion.arrive(still)) +
+                scaleOut(RibbonMotion.arrive(still), targetScale = 0.96f),
+            label = "a-question",
+        ) {
+        Box(
+            Modifier
+                .clip(RoundedCornerShape(20.dp))
+                // A question that becomes a second question grows or shrinks
+                // into it rather than jumping: §6.8's two steps are one
+                // conversation.
+                .animateContentSize(RibbonMotion.arrive(still)),
+        ) {
             // The ground and its grain sit behind the content rather than
             // under it, because `.room()` hides its node from accessibility
             // and a dialog that hid itself would take the question with it.
             Box(Modifier.matchParentSize().room())
-            Column(Modifier.fillMaxWidth()) {
-                Text(
-                    text = question,
-                    style = RibbonType.ui(15f),
-                    color = Palette.muted,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 22.dp, vertical = 20.dp),
-                )
-                HairlineRule()
-                choices()
+            AnimatedContent(
+                targetState = question,
+                transitionSpec = {
+                    fadeIn(RibbonMotion.arrive(still)) togetherWith
+                        fadeOut(RibbonMotion.arrive(still))
+                },
+                label = "the-question",
+            ) { asked ->
+                Column(Modifier.fillMaxWidth()) {
+                    Text(
+                        text = asked,
+                        style = RibbonType.ui(15f),
+                        color = Palette.muted,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 22.dp, vertical = 20.dp),
+                    )
+                    HairlineRule()
+                    choices()
+                }
             }
+        }
         }
     }
 }

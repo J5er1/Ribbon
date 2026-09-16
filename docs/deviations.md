@@ -1522,6 +1522,65 @@ A36a. **The room has S01's third waiting row.** S01's anatomy has always read
     blocking, and it goes the moment an ink is picked. Its mark is the one on
     that screen that is about a colour and cannot use one.
 
+A37. **The cuts that were left.** §9.1 opens "everything breathes rather
+    than snaps", and A21 and A22 did most of the work of making that true —
+    but a sweep of every animation primitive in the tree found ten places
+    where something still changed on one frame, and three of them were the
+    loudest moments in the app.
+
+    **The Wave blinked out as the long-press toolbar slid in over it.** The
+    foot of the reading page draws three things into one bottom-aligned box:
+    the toolbar, on a careful `AnimatedVisibility`, and — in a bare `when` —
+    the composer, the running-head pill and the Wave. The instant a verse was
+    long-pressed the Wave and the pill stopped composing and the toolbar rose
+    over the hole they left. It is an `AnimatedContent` now, keyed on which
+    of the four things is showing rather than on the composer itself, so
+    typing does not restart the transition, and the leaving branch holds its
+    last address the way the toolbar's range already did.
+
+    **The fire changed state in one frame while the word under it took 400 ms
+    to say the same thing.** `TheFire` cross-fades the fire's *name* on the
+    settle token, under a comment arguing that "a word swapped on one frame
+    under a fire that took its time getting there reads as a correction" —
+    and the fire was not taking its time. It crosses now: two stacked passes
+    inside the one offscreen layer, so the additive blending still
+    accumulates in the fire's own buffer (A15), sharing time, scale, coal
+    depth and seed so nothing moves except the flame. Going offline eased
+    too, rather than stepping the fire 8 % darker and back on every flap of a
+    bad connection.
+
+    **The thinking-of-you ring cut at the exact moment the gesture
+    succeeded.** A hold let go of early eased its ink back over 150 ms; a
+    hold that completed ran `snapTo(0f)`. The gesture that failed left
+    gracefully and the gesture that worked was the one that cut, which is the
+    wrong way round and the one cut §9.1 would least forgive.
+
+    The rest, in one line each. A seat's entrance was written and could never
+    run — the transition state was seeded from the live roster, so on the
+    composition where a newcomer's seat first exists it starts and ends true;
+    it seeds from a snapshot now, the way the waiting rows already did, so
+    launch is still silent (§05) and an arrival is an event (§6.7). The
+    confirmation dialogs had no motion at all, and §6.8's two questions
+    arrived by tearing each other down — they are one dialog whose words
+    cross-fade now. The segmented control's pill slid on a spring while its
+    three labels changed colour on one frame, which is exactly the argument
+    its own comment makes against. The follow ring and the follow thread were
+    plain conditionals. The starter shelf and the shelf blinked in and out
+    while the hearth above them cross-faded. And the onboarding progress bar
+    was the last raw `tween` in the tree: it borrowed the settle token's
+    *duration* and nothing else, so with no easing argument it took Compose's
+    ease-in-out — the only thing in the app moving on a curve §9.1's table
+    does not contain — and never asked about reduce motion at all.
+
+    Two of the ten were introduced by this very pass, which is worth
+    recording: the card's set-down exit played over an empty box, because the
+    content re-read the retired card and hit its own guard; and the "Android
+    isn't passing these on" line called the settle token bare, so it was the
+    one thing on the screen still moving for somebody who had asked nothing
+    to. Both are the mistakes Motion.kt's header predicts — "it used to be
+    written by hand in every file that animated anything, and one of them had
+    forgotten to".
+
 ## Licensed translations (decided: API.Bible)
 
 Open question §16.8 is now part-decided: **NKJV plus two undecided

@@ -163,9 +163,6 @@ private const val LOZENGE_HOLD_MS = 350L
  *  ink takes to fill, so the fill completing *is* the hold completing. */
 private val THINKING_HOLD_MS = RibbonMotion.INK_FILL_MS.toLong()
 
-/** The release when a hold is let go early. */
-private const val HOLD_RELEASE_MS = 150
-
 /**
  * The presence form: the lozenge at the right edge, and the panel it
  * becomes.
@@ -628,18 +625,24 @@ private fun PersonRow(
                         // Release completes it.
                         sendThinkingOfYou()
                         holding = false
-                        scope.launch { fill.snapTo(0f) }
+                        // The ring relaxes off the face as the haptic lands,
+                        // which is what a release is. It used to snap to
+                        // nothing on the frame the hold completed — so the
+                        // gesture that *failed* let go gracefully (below) and
+                        // the gesture that succeeded cut, which is the wrong
+                        // way round and the one cut §9.1 would least forgive.
+                        scope.launch { fill.animateTo(0f, RibbonMotion.settle(reduceMotion)) }
                         // The lift is the completion, never also a follow.
                         waitForUpOrCancellation()
                     } else {
                         haptics?.cancelThinkingOfYouHold()
                         holding = false
-                        scope.launch {
-                            fill.animateTo(
-                                0f,
-                                tween(HOLD_RELEASE_MS, easing = RibbonMotion.EaseOut),
-                            )
-                        }
+                        // A real token rather than an undocumented 150 ms:
+                        // arrive is 320 ms on the same ease-out and is the
+                        // nearest thing §9.1 actually contains — and it takes
+                        // the reduce-motion branch, which the raw tween never
+                        // did.
+                        scope.launch { fill.animateTo(0f, RibbonMotion.arrive(reduceMotion)) }
                         if (released) onFollow(person)
                     }
                 }
@@ -710,6 +713,7 @@ private fun PersonPortrait(
     person: PresentPerson,
     box: Dp = 38.dp,
 ) {
+    val reduceMotion = rememberReduceMotion()
     val ink = model.membership(person.id, room.id)?.ink
     Box(
         modifier = Modifier.size(box),
@@ -724,12 +728,26 @@ private fun PersonPortrait(
                 .requiredSize(38.dp)
                 .alpha(if (person.isIdle) 0.6f else 1f),
         )
-        if (model.followingPersonID == person.id && ink != null) {
+        if (ink != null) {
             val ringColor = ink.color
+            // The ring used to exist or not exist — a plain conditional on a
+            // thing that appears the moment a follow starts and disappears
+            // the moment it ends, which are two of the quietest events in the
+            // product (§4.2). The room's own presence ring three files away
+            // already does this properly; this is the same, on the same
+            // token, with the alpha read inside the draw so a fade never
+            // recomposes the panel.
+            val ringed = animateFloatAsState(
+                targetValue = if (model.followingPersonID == person.id) 1f else 0f,
+                animationSpec = RibbonMotion.arrive(reduceMotion),
+                label = "following",
+            )
             Canvas(Modifier.requiredSize(40.dp)) {
+                val shown = ringed.value
+                if (shown <= 0f) return@Canvas
                 val stroke = 1.6.dp.toPx()
                 drawCircle(
-                    color = ringColor,
+                    color = ringColor.copy(alpha = shown),
                     radius = size.minDimension / 2f - stroke / 2f,
                     style = Stroke(width = stroke),
                 )

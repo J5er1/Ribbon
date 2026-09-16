@@ -1,7 +1,6 @@
 package app.readribbon.screens
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -30,6 +29,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import app.readribbon.app.Copy
 import app.readribbon.design.Palette
+import app.readribbon.design.rememberReduceMotion
 import app.readribbon.design.RibbonMotion
 import app.readribbon.design.RibbonType
 import app.readribbon.design.SmallCaps
@@ -46,6 +46,7 @@ fun OnboardingProgressBar(
     onBack: (() -> Unit)? = null,
     onSignIn: (() -> Unit)? = null,
 ) {
+    val still = rememberReduceMotion()
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -102,7 +103,12 @@ fun OnboardingProgressBar(
                 val targetColor = if (i <= currentStep) Palette.chartreuse else Palette.rule
                 val color by animateColorAsState(
                     targetValue = targetColor,
-                    animationSpec = tween(RibbonMotion.SETTLE_MS),
+                    // The token, not its duration. `tween(SETTLE_MS)` with no easing
+            // argument takes Compose's default — `FastOutSlowInEasing`, an
+            // ease-in-*out* — so this was the one thing in the app moving on
+            // a curve §9.1's table does not contain, and the only animation
+            // left that reduce motion could not reach.
+            animationSpec = RibbonMotion.settle(still),
                     label = "segmentColor$i",
                 )
                 Box(

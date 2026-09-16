@@ -6,11 +6,13 @@ import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -835,8 +837,18 @@ fun ReadingScreen(
                 )
             }
 
-            if (model.followingPersonID != null) {
-                FollowThread(Modifier.align(Alignment.TopEnd))
+            // The thread down the edge is a full-height hairline that used
+            // to be switched on and off. Following somebody and stopping are
+            // among the quietest things in the product (§4.2); neither is a
+            // cut.
+            AnimatedVisibility(
+                visible = model.followingPersonID != null,
+                enter = fadeIn(RibbonMotion.arrive(reduceMotion)),
+                exit = fadeOut(RibbonMotion.arrive(reduceMotion)),
+                modifier = Modifier.align(Alignment.TopEnd),
+                label = "the-follow-thread",
+            ) {
+                FollowThread()
             }
 
             // The way out, or the composer.
@@ -1322,11 +1334,47 @@ private fun BottomChrome(
             }
         }
 
-        when (composer) {
-            is ComposerState.Toolbar -> Unit
+        // The three things that share the foot of the page cross-fade rather
+        // than cut.
+        //
+        // This was a bare `when (composer)` with no transition of any kind,
+        // sitting in the same bottom-aligned box as the toolbar's carefully
+        // animated `AnimatedVisibility` — so the instant a verse was
+        // long-pressed the Wave and the running-head pill blinked out of
+        // existence in one frame while the toolbar slid up over the hole they
+        // had left. The composer and its keyboard had no entrance either.
+        // §9.1 has no cuts in it, and the one the reading surface actually
+        // performs was the loudest in the app.
+        //
+        // Keyed on the *kind* rather than on the composer itself, so typing
+        // into the write composer — which changes nothing about which thing
+        // is on screen — does not restart the transition.
+        val reduceMotion = rememberReduceMotion()
+        val stage = when (composer) {
+            null -> BottomStage.TheWayOut
+            is ComposerState.Toolbar -> BottomStage.Toolbar
+            is ComposerState.Write -> BottomStage.Write
+            is ComposerState.Speak -> BottomStage.Speak
+        }
+        // The leaving branch still needs an address to draw with, exactly as
+        // the toolbar's range is held above.
+        val heldComposer = remember { mutableStateOf(composer) }
+        if (composer != null) heldComposer.value = composer
 
-            is ComposerState.Write -> {
-                val address = composer.address
+        AnimatedContent(
+            targetState = stage,
+            transitionSpec = {
+                fadeIn(RibbonMotion.arrive(reduceMotion)) togetherWith
+                    fadeOut(RibbonMotion.arrive(reduceMotion))
+            },
+            label = "the-foot-of-the-page",
+        ) { showing ->
+            when (showing) {
+            BottomStage.Toolbar -> Unit
+
+            BottomStage.Write -> {
+                val address = (heldComposer.value as? ComposerState.Write)?.address
+                    ?: return@AnimatedContent
                 WriteComposer(
                     verse = address,
                     initialText = editingNote?.body ?: "",
@@ -1337,8 +1385,9 @@ private fun BottomChrome(
                 )
             }
 
-            is ComposerState.Speak -> {
-                val address = composer.address
+            BottomStage.Speak -> {
+                val address = (heldComposer.value as? ComposerState.Speak)?.address
+                    ?: return@AnimatedContent
                 SpeakControl(
                     model = model,
                     ink = model.inkForNewHighlight(room) ?: model.lastUsedInk,
@@ -1352,7 +1401,7 @@ private fun BottomChrome(
                 )
             }
 
-            null -> {
+            BottomStage.TheWayOut -> {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -1439,9 +1488,20 @@ private fun BottomChrome(
                     }
                 }
             }
+            }
         }
     }
 }
+
+/**
+ * Which of the three things that share the foot of the page is showing.
+ *
+ * The `when` this replaces branched on `ComposerState` itself, which changes
+ * identity every keystroke in the write composer — so an `AnimatedContent`
+ * keyed on it would restart its transition as somebody typed. This is the
+ * only distinction the transition is about.
+ */
+private enum class BottomStage { TheWayOut, Toolbar, Write, Speak }
 
 /**
  * A small label naming who made a highlight, and remove if it's yours (S06).
@@ -1586,6 +1646,16 @@ fun PassageEnd(
 
         if (room != null) {
             val card = model.card(reading, chapter)
+            // Held across its own exit, the way every other leaving thing in
+            // this file is (`held`, `heldSlot`, `heldRange`) — and the cards
+            // were the one surface that was not. `ReflectionCardView` opens
+            // with a guard that returns on a set-down card, and the content
+            // lambda recomposes with the new state *during* the exit, so the
+            // question, the answers and the controls vanished on the frame the
+            // tap landed and an empty container shrank behind them. A retired
+            // card should leave looking like a card.
+            val held = remember(reading.id, chapter) { mutableStateOf(card) }
+            if (card.state != CardState.setDown) held.value = card
             // Setting a card down used to take it out of the composition on
             // the frame the tap landed, which is a cut — and §9.1 has no cuts
             // in it. §4.6's "it leaves without ceremony" is about there being
@@ -1604,7 +1674,7 @@ fun PassageEnd(
                 label = "the-card-set-down",
             ) {
                 ReflectionCardView(
-                    card = card,
+                    card = held.value,
                     reading = reading,
                     room = room,
                     model = model,
