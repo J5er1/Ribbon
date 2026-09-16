@@ -264,6 +264,61 @@ object Copy {
     const val INKS_FROM_WHEN_THE_ROOM_WAS_TWO =
         "These keep their colors. They're from when the room was two."
 
+    // The cards (S08/S09, §4.6)
+    //
+    // Every word on a reflection card used to be a literal inside
+    // `ReflectionCardView`, which is why the card is the one surface in the
+    // app that had never been through the copy system. Two of them were
+    // wrong the moment a room held three people, and one of them was
+    // "SET IT DOWN" typed in capitals — §09 sets small caps as a real face,
+    // and shouting a lowercase phrase at the type system is precisely what
+    // that rule exists to prevent.
+
+    /**
+     * The line under a sealed card, exactly as §4.6 sets it.
+     *
+     * Never "Ruth hasn't answered yet" and never "1 of 2 answered": naming
+     * the person who hasn't turns the card into an accusation, and counting
+     * the ones who have is Law 2 in the one place it is most tempting to
+     * break. It says only that the card is waiting, which is the feature.
+     */
+    const val CARD_OPENS_WHEN_EVERYONE_HAS_ANSWERED =
+        "This opens when everyone has answered."
+
+    /** Any member may retire a sealed card, for the room, at any time —
+     *  §4.6's pressure valve, so a card can wait forever without becoming a
+     *  debt. Lowercase, because [SmallCaps] sets the caps. */
+    const val SET_IT_DOWN = "set it down"
+
+    /** Your answer is yours until the moment the card opens (§4.6). */
+    const val EDIT_YOUR_ANSWER = "Edit your answer"
+
+    /** The control that keeps what you typed. A verb, like every other
+     *  control in the app, and never "Submit" or "Done". */
+    const val ANSWER = "Answer"
+
+    /** Backing out of an edit, leaving the answer you had already given. */
+    const val KEEP_WHAT_I_HAD = "Keep what I had"
+
+    /** The field itself, for a screen reader. S08 asks for an open field
+     *  with "no placeholder text beyond a single hairline", so there is no
+     *  visible prompt to borrow a label from and the label is said here. */
+    const val YOUR_ANSWER = "Your answer"
+
+    /** A sealed card, announced as one thing (§11): the question, then the
+     *  state it is in. Never who is missing, never how many. */
+    fun cardSealedSpoken(question: String) =
+        "$question. $CARD_OPENS_WHEN_EVERYONE_HAS_ANSWERED"
+
+    /** An open card, announced as one thing: the question, then that it is
+     *  open. The answers under it announce themselves, by author. */
+    fun cardOpenSpoken(question: String) = "$question. The card is open."
+
+    /** One answer on an open card, read aloud: whose it is, then what they
+     *  said. First names only (§10), and no time — a card is a moment, not
+     *  a thread, so there is nothing to timestamp. */
+    fun answerFrom(name: String, answer: String) = "$name answered. $answer"
+
     // The shelf and embers (S10/S11)
     const val START_ANOTHER = "Start another"
     const val ONE_DAY_THIS_IS_A_BOOK = "One day this is a book."
@@ -618,7 +673,14 @@ object Copy {
     // small thing about what the setting does, in the app's own voice —
     // never a feature description, never a benefit.
     const val NOTES_LEFT_FOR_YOU_SUB = "When they leave one at a verse."
-    const val CARDS_OPEN_SUB = "When you have both answered."
+
+    /**
+     * "Both" was wrong from three people up, and §2.3 says a room holds six.
+     * A card opens when *everyone* has answered (§4.6), which is also the
+     * word the card's own waiting line uses — so the switch and the card now
+     * describe the same event in the same word.
+     */
+    const val CARDS_OPEN_SUB = "When everyone has answered."
     const val WHEN_THEY_OPEN_THE_BOOK_SUB = "So you can read at the same time."
     const val THINKING_OF_YOU_SUB = "A touch on the shoulder. No words."
     const val TEXT_SIZE_SUB = "Scripture only. Everything else stays where it is."

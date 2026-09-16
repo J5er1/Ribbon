@@ -3,9 +3,11 @@ package app.readribbon.look
 import android.graphics.Bitmap
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -16,6 +18,7 @@ import androidx.test.core.app.ApplicationProvider
 import app.readribbon.R
 import app.readribbon.app.AppModel
 import app.readribbon.core.Bible
+import app.readribbon.core.CardState
 import app.readribbon.core.FireScale
 import app.readribbon.core.FireState
 import app.readribbon.core.FuelEvent
@@ -26,6 +29,7 @@ import app.readribbon.core.Note
 import app.readribbon.core.NoteKind
 import app.readribbon.core.Person
 import app.readribbon.core.Reading
+import app.readribbon.core.ReflectionCard
 import app.readribbon.core.ReadingPosition
 import app.readribbon.core.Ribbon
 import app.readribbon.core.Room
@@ -35,6 +39,7 @@ import app.readribbon.data.LocalStore
 import app.readribbon.design.Appearance
 import app.readribbon.design.RibbonTheme
 import app.readribbon.design.rememberBookSheet
+import app.readribbon.design.room
 import app.readribbon.app.Copy
 import app.readribbon.screens.AppearanceScreen
 import app.readribbon.screens.BookChooserContent
@@ -46,6 +51,7 @@ import app.readribbon.screens.NotificationSettingsScreen
 import app.readribbon.screens.PersonScreen
 import app.readribbon.reading.ChaptersContent
 import app.readribbon.reading.ReadingScreen
+import app.readribbon.reading.ReflectionCardView
 import app.readribbon.screens.RoomScreen
 import app.readribbon.screens.TextSettingsScreen
 import app.readribbon.services.LocalPresenceService
@@ -632,6 +638,114 @@ class LookBookTest {
         shoot("invite") {
             InviteContent(room = m.state.rooms.first(), model = m)
         }
+    }
+
+    // MARK: the cards (S08/S09)
+
+    /**
+     * Both faces of a reflection card, which had never been in the look book
+     * and are the hardest thing in the app to picture from source — the
+     * sealed one because §4.6's whole design is what it *doesn't* say, and
+     * the open one because it is the only place the eight inks appear beside
+     * each other at a readable size.
+     *
+     * Two members, two answers, so the open card is a room and not a mirror.
+     */
+    private fun cardState(
+        answers: Map<Uuid, String>,
+        state: CardState,
+    ): Pair<AppModel, ReflectionCard> {
+        val open = reading("MRK", FireScale.medium)
+        val card = ReflectionCard(
+            readingID = open.id,
+            chapter = 4,
+            question = "What did you notice that the other one probably didn't?",
+            answers = answers,
+            state = state,
+        )
+        val m = model(
+            AppState(
+                me = me,
+                people = mapOf(me.id to me, ruth.id to ruth),
+                rooms = listOf(room),
+                memberships = listOf(membership(me, Ink.teal), membership(ruth, Ink.crimson)),
+                readings = listOf(open),
+                cards = listOf(card),
+                currentRoomID = room.id,
+            ),
+        )
+        return m to card
+    }
+
+    /** Sealed, and already answered: your own words, the way back into them,
+     *  and the one line that never names anybody. */
+    @Test fun theCardSealed() {
+        val (m, card) = cardState(
+            answers = mapOf(me.id to "That he asked twice, and waited both times."),
+            state = CardState.sealed,
+        )
+        shoot("card-sealed") {
+            OnTheGround {
+            ReflectionCardView(
+                card = card,
+                reading = m.state.readings.first(),
+                room = m.state.rooms.first(),
+                model = m,
+                modifier = Modifier.padding(24.dp),
+            )
+            }
+        }
+    }
+
+    /** Sealed and unanswered: the field, open, with no prompt in it (S08). */
+    @Test fun theCardUnanswered() {
+        val (m, card) = cardState(answers = emptyMap(), state = CardState.sealed)
+        shoot("card-unanswered") {
+            OnTheGround {
+            ReflectionCardView(
+                card = card,
+                reading = m.state.readings.first(),
+                room = m.state.rooms.first(),
+                model = m,
+                modifier = Modifier.padding(24.dp),
+            )
+            }
+        }
+    }
+
+    /** Open: everyone's answers together, each with its author's ink (S09). */
+    @Test fun theCardOpen() {
+        val (m, card) = cardState(
+            answers = mapOf(
+                me.id to "That he asked twice, and waited both times.",
+                ruth.id to "The crowd went quiet before he did.",
+            ),
+            state = CardState.open,
+        )
+        shoot("card-open") {
+            OnTheGround {
+            ReflectionCardView(
+                card = card,
+                reading = m.state.readings.first(),
+                room = m.state.rooms.first(),
+                model = m,
+                modifier = Modifier.padding(24.dp),
+            )
+            }
+        }
+    }
+
+    /**
+     * The card, on the ground it actually sits on.
+     *
+     * Every other entry here renders a whole screen, which paints its own
+     * `.room()`; a card on its own would otherwise be shot against the
+     * theme's bare background and the grain under it — half of why a Ribbon
+     * card reads as paper — would not be in the picture at all.
+     */
+    @Composable
+    private fun OnTheGround(content: @Composable () -> Unit) {
+        Box(Modifier.fillMaxSize().room()) { content() }
     }
 
     private companion object {

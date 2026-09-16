@@ -3,9 +3,11 @@
 package app.readribbon.reading
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -78,6 +80,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Velocity
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import app.readribbon.app.AppModel
 import app.readribbon.app.Copy
@@ -1488,6 +1491,7 @@ fun PassageEnd(
     modifier: Modifier = Modifier,
 ) {
     val room = model.room(reading)
+    val reduceMotion = rememberReduceMotion()
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(26.dp),
@@ -1498,7 +1502,23 @@ fun PassageEnd(
 
         if (room != null) {
             val card = model.card(reading, chapter)
-            if (card.state != CardState.setDown) {
+            // Setting a card down used to take it out of the composition on
+            // the frame the tap landed, which is a cut — and §9.1 has no cuts
+            // in it. §4.6's "it leaves without ceremony" is about there being
+            // no dialog and no confirmation, not about the card vanishing
+            // from under the finger that retired it: it shrinks away on the
+            // settle token, the same way a note that has been taken back
+            // does, and the continue control comes up to meet the rule.
+            AnimatedVisibility(
+                visible = card.state != CardState.setDown,
+                // Nothing on the way in: a card that is simply there when you
+                // reach the end of a chapter has not arrived, it was always
+                // waiting. Only the leaving is an event.
+                enter = EnterTransition.None,
+                exit = fadeOut(RibbonMotion.settle<Float>(reduceMotion)) +
+                    shrinkVertically(RibbonMotion.settle<IntSize>(reduceMotion)),
+                label = "the-card-set-down",
+            ) {
                 ReflectionCardView(
                     card = card,
                     reading = reading,

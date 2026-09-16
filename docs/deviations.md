@@ -1079,6 +1079,80 @@ A31. **There is a chapter list, and the foot of the book is the way to it.**
     repeated — small caps, low contrast, saying where you are, which is what
     a running head does. It is a door only if you press it.
 
+A32. **The cards took the pass the rest of the app had already had.**
+    `ReflectionCardView` was written before either design pass and neither
+    reached it, so it was the last surface in the app still built out of
+    the materials the app had abandoned: a hand-rolled 12 dp rectangle with
+    a hairline border where everything else is on the shape scale and the
+    paper grain (A23); four bare `clickable` lines of text, all of them well
+    under the 44 dp floor (deviation 12); every word a literal rather than a
+    line of `Copy`; and `"SET IT DOWN"` typed in capitals at a small-caps
+    face, which is the textTransform §09 forbids, said out loud.
+
+    Three of the repairs are not cosmetic.
+
+    **The turn was never a turn.** S09 asks for "a slow turn over 480 ms,
+    ease-out, no bounce", and §11 says that under reduce motion "the card
+    turn becomes a fade" — a sentence that only means anything if there is a
+    turn to reduce. There was only ever the fade, on both settings, from a
+    raw `tween(480)` that also made this the one animation in the app with
+    no reduce-motion path at all. The card turns now, on `RibbonMotion.open`
+    (which *is* §9.1's 480 ms ease-out), swapping its face at the moment it
+    is edge-on so neither side is ever read in a mirror; reduce motion snaps
+    the angle and leaves §11's cross-fade, exactly as written. The angle is
+    read inside the layer block, so the card turns without recomposing a
+    word of what is written on it.
+
+    **A half-typed answer was lost.** `answerDraft` was `remember`, and the
+    keyboard resizing the window is enough to dispose that composition. It
+    is `rememberSaveable` now. A card is a thing people think about before
+    they type, which is the whole point of the mechanic.
+
+    **The answers were set in the author's ink.** §S09 asks for "every
+    answer, each with its author's portrait and ink", and the ink was being
+    applied to the answer's *body* at 16 sp. The eight inks are cut for a
+    24 % highlight wash and for a name at 12 sp; §11 asks for each to be
+    verified for the text *under* the wash, and a paragraph of Moss on the
+    surface is the one place the palette does not clear. The portrait's ring
+    and the name carry whose it is — the settlement `NoteCard` already
+    reached — and the answer is ivory, because an answer is something to
+    read.
+
+    Two smaller calls worth writing down. S08's "an answer field, open, no
+    placeholder text beyond a single hairline" was first read as a *size*,
+    72 dp of field with a rule under it, and on the page that is a hole:
+    a question, a void, and a faint line a long way beneath it with nothing
+    saying the void is where you write. The field takes the height of what
+    is in it instead, one line when that is nothing, so the hairline comes up
+    to meet the question — a line to write on is an invitation, a box of
+    empty space is a gap in the page. And the `Answer` control is no longer
+    drawn greyed-out over an empty field, which is a control that says
+    exactly what happens and then does not do it (the defect S22's row was
+    rewritten to remove); it arrives with the first thing typed.
+
+    Setting a card down also used to take it out of the composition on the
+    frame the tap landed. §4.6's "it leaves without ceremony" is about the
+    absence of a dialog, not about the card vanishing from under the finger
+    that retired it, and §9.1 has no cuts in it; it shrinks away on the
+    settle token now, the way a note that has been taken back does.
+
+    What is deliberately unchanged: a card still cannot be un-answered. §4.6
+    gives the room one escape hatch and it is *set it down*, which retires
+    the card for everybody; taking your own answer back would leave a card
+    that can never open and nobody to say so, which is the debt the whole
+    mechanic exists to avoid.
+
+    One line of copy went with it. The notifications screen described the
+    cards opening as "When you have both answered", which was wrong from
+    three people up, and §2.3 holds six. It says "everyone" now, which is
+    also the word the card's own waiting line uses.
+
+    iOS carries every one of these defects in
+    `ios/Ribbon/Reading/ReflectionCardView.swift` and is untouched on
+    purpose: this pass is Android's, at the owner's direction. The copy
+    constants are the shared half and port straight across when iOS takes
+    its turn.
+
 ## Licensed translations (decided: API.Bible)
 
 Open question §16.8 is now part-decided: **NKJV plus two undecided
