@@ -66,6 +66,7 @@ import app.readribbon.app.Copy
 import app.readribbon.core.BlockStyle
 import app.readribbon.core.Ink
 import app.readribbon.core.ScriptureChapter
+import app.readribbon.core.VerseRange
 import app.readribbon.design.LocalHaptics
 import app.readribbon.design.LocalRoomColours
 import app.readribbon.design.Palette
@@ -171,17 +172,21 @@ private const val WASH_BELOW_BASELINE = 0.28f
  * One chapter, set as a page.
  *
  * @param runningHead the running head, fully formed: "Mark 4", "Psalm 23".
- * @param verseInks inks covering each verse. One ink washes at 24%;
+ * @param marks every highlight on this chapter, as a mark per verse. One ink
+ *   washes at 24%;
  *   overlapping inks multiply into a third colour — the correct emotional
  *   result (§4.5).
- * @param liftedVerses verses currently lifted by a long-press (drawn raised,
- *   with a soft shadow).
+ * @param lifted the run currently lifted by a long-press (drawn raised, with
+ *   a soft shadow), and what the two handles are attached to.
  * @param justMarked the verses you have this moment highlighted yourself, so
  *   the wash is drawn travelling across them rather than appearing on them.
  *   Null for everything else, including a highlight arriving from somebody
  *   else's phone.
  * @param onMarkDrawn the stroke has finished travelling and [justMarked] can
  *   be let go of.
+ * @param onExtend one end of the lifted selection moved, to a verse and
+ *   optionally to a word inside it. A null char means the whole verse at that
+ *   end, which is what the first or last word of one comes back as.
  * @param openNote an open note's carve-out: verse and the height to open
  *   beneath it.
  * @param onNoteSlot y offset (in this composable's coordinates) of the
@@ -192,9 +197,9 @@ fun ChapterText(
     chapter: ScriptureChapter,
     runningHead: String,
     theme: ReadingTheme,
-    verseInks: Map<Int, List<Ink>>,
-    liftedVerses: IntRange?,
-    justMarked: IntRange?,
+    marks: List<VerseMark>,
+    lifted: VerseRange?,
+    justMarked: VerseRange?,
     onMarkDrawn: () -> Unit,
     openNote: OpenNote?,
     isFirstChapter: Boolean,
@@ -202,6 +207,7 @@ fun ChapterText(
     onLayout: (ChapterLayout) -> Unit,
     onLongPressVerse: (Int) -> Unit,
     onDragToVerse: (Int) -> Unit,
+    onExtend: (atStart: Boolean, verse: Int, char: Int?) -> Unit,
     onDragEnded: () -> Unit,
     onTapVerse: (Int) -> Unit,
     onNoteSlot: (Dp) -> Unit,
@@ -237,7 +243,7 @@ fun ChapterText(
     // animating gap re-lays out the text without re-typesetting it.
     val room = LocalRoomColours.current
     val page = remember(
-        chapter, runningHead, theme, liftedVerses,
+        chapter, runningHead, theme, lifted?.verses,
         isFirstChapter, showMarginHint, slotVerse, density,
         bodyStyle, descriptorStyle, room,
     ) {
@@ -246,7 +252,7 @@ fun ChapterText(
             runningHead = runningHead,
             theme = theme,
             room = room,
-            liftedVerses = liftedVerses,
+            liftedVerses = lifted?.verses,
             isFirstChapter = isFirstChapter,
             showMarginHint = showMarginHint,
             slotVerse = slotVerse,
@@ -283,6 +289,7 @@ fun ChapterText(
     // captured once.
     val currentLongPress by rememberUpdatedState(onLongPressVerse)
     val currentDragTo by rememberUpdatedState(onDragToVerse)
+    val currentExtend by rememberUpdatedState(onExtend)
     val currentDragEnded by rememberUpdatedState(onDragEnded)
     val currentTap by rememberUpdatedState(onTapVerse)
 
@@ -317,7 +324,13 @@ fun ChapterText(
     // The washes, already eased to whatever they are part-way through
     // becoming. Computed here rather than in the draw because none of it
     // needs the layout: only the rectangles do.
-    val washes = rememberArrivingWashes(verseInks, justMarked, onMarkDrawn, reduceMotion)
+    val washes = rememberArrivingWashes(
+        spans = remember(marks, page) { spansOf(marks) { page.verseText[it]?.length ?: 0 } },
+        justMarked = justMarked,
+        lengthOf = { page.verseText[it]?.length ?: 0 },
+        onMarkDrawn = onMarkDrawn,
+        still = reduceMotion,
+    )
 
     Box(
         modifier = modifier.padding(
@@ -398,28 +411,49 @@ fun ChapterText(
         // the shared model on both platforms and the backend, not an Android
         // drawing question. Written down in A41e rather than half-built.
         val lifting = layout
-        if (liftedVerses != null && lifting != null) {
+        val liftedVerses = lifted?.verses
+        if (lifted != null && liftedVerses != null && lifting != null) {
             // The first line of the first verse and the last line of the last,
             // not the corners of the box the selection fits inside. A verse
             // that wraps is wider than its own last line, so a bounding box
             // put the tail handle out at the end of the widest line — which,
             // on a selection ending mid-paragraph, is somewhere in the middle
             // of the *next* verse.
-            val head = page.verseRanges[liftedVerses.first]
-                ?.let { enclosingRects(lifting, it) }?.firstOrNull()
-            val tail = page.verseRanges[liftedVerses.last]
-                ?.let { enclosingRects(lifting, it) }?.lastOrNull()
+            val head = page.pageRanges(lifted.startVerse, lifted.startChar, null)
+                .firstOrNull()?.let { enclosingRects(lifting, it) }?.firstOrNull()
+            val tail = page.pageRanges(lifted.endVerse, null, lifted.endChar)
+                .lastOrNull()?.let { enclosingRects(lifting, it) }?.lastOrNull()
             if (head != null && tail != null) {
+                // Where a point on the page lands: a verse, and the word edge
+                // inside it. The first or last word of a verse comes back as
+                // `null` — the whole verse — so the ordinary case stays the
+                // ordinary case and stores nothing extra.
+                fun landing(point: Offset, atStart: Boolean): Triple<Int, Int?, Unit>? {
+                    val result = lifting
+                    val offset = result.getOffsetForPosition(point)
+                    val verse = page.verseAt(offset) ?: return null
+                    val body = page.verseText[verse] ?: return null
+                    val within = page.textOffset(verse, offset) ?: return null
+                    val edge = wordEdge(body, within, atStart)
+                    val whole = if (atStart) edge <= 0 else edge >= body.trimEnd().length
+                    return Triple(verse, if (whole) null else edge, Unit)
+                }
+
                 SelectionHandle(
                     x = head.left,
                     y = head.top,
                     label = Copy.WHERE_THE_MARK_STARTS,
                     density = density,
-                    onMoved = { point -> verseAt(point)?.let(currentDragTo) },
+                    onMoved = { point ->
+                        landing(point, atStart = true)?.let { (verse, char, _) ->
+                            currentExtend(true, verse, char)
+                        }
+                    },
                     onSettled = { currentDragEnded() },
-                    onStep = { forward ->
-                        val to = if (forward) liftedVerses.first + 1 else liftedVerses.first - 1
-                        if (page.verseText.containsKey(to)) currentDragTo(to)
+                    onStep = { forward, byWord ->
+                        stepEnd(page, atStart = true, forward = forward,
+                            byWord = byWord, verse = lifted.startVerse,
+                            char = lifted.startChar, extend = currentExtend)
                     },
                 )
                 SelectionHandle(
@@ -427,11 +461,16 @@ fun ChapterText(
                     y = tail.bottom,
                     label = Copy.WHERE_THE_MARK_ENDS,
                     density = density,
-                    onMoved = { point -> verseAt(point)?.let(currentDragTo) },
+                    onMoved = { point ->
+                        landing(point, atStart = false)?.let { (verse, char, _) ->
+                            currentExtend(false, verse, char)
+                        }
+                    },
                     onSettled = { currentDragEnded() },
-                    onStep = { forward ->
-                        val to = if (forward) liftedVerses.last + 1 else liftedVerses.last - 1
-                        if (page.verseText.containsKey(to)) currentDragTo(to)
+                    onStep = { forward, byWord ->
+                        stepEnd(page, atStart = false, forward = forward,
+                            byWord = byWord, verse = lifted.endVerse,
+                            char = lifted.endChar, extend = currentExtend)
                     },
                 )
             }
@@ -482,6 +521,82 @@ fun ChapterText(
     }
 }
 
+/**
+ * The edge of the word a character offset falls in.
+ *
+ * S06 asks for handles that snap "to verse boundaries by default and to word
+ * boundaries when dragged slowly". The slow-drag half is deliberately not
+ * built: a mode you enter by accident, according to how fast your thumb
+ * happened to be moving, is not discoverable and not repeatable — you cannot
+ * aim at it, and the same gesture gives two different answers. It would also
+ * be the only speed-sensitive control in an app whose whole argument is
+ * patience.
+ *
+ * Instead each handle always lands on a word edge: the one at the start of
+ * the mark snaps back to the beginning of its word, the one at the end snaps
+ * forward to the end of its. Which is *also* verse-boundary snapping, because
+ * the first and last words of a verse are its edges — a handle dragged to
+ * either end gives exactly the whole verse, and stores it as one (A41g). So
+ * the default S06 wants is still the easiest thing to hit, and the precision
+ * it wants is always available rather than hiding behind a speed.
+ */
+private fun wordEdge(text: String, at: Int, atStart: Boolean): Int {
+    if (text.isEmpty()) return 0
+    val here = at.coerceIn(0, text.length)
+    return if (atStart) {
+        var i = here
+        while (i > 0 && !text[i - 1].isWhitespace()) i--
+        i
+    } else {
+        var i = here
+        while (i < text.length && !text[i].isWhitespace()) i++
+        // Trailing space belongs to the gap, not to the word.
+        while (i > 0 && text[i - 1].isWhitespace()) i--
+        i
+    }
+}
+
+/** The next or previous word edge, for the tap equivalents (§11). */
+private fun wordStep(text: String, from: Int, forward: Boolean, atStart: Boolean): Int {
+    if (text.isEmpty()) return 0
+    var i = from.coerceIn(0, text.length)
+    if (forward) {
+        while (i < text.length && !text[i].isWhitespace()) i++
+        while (i < text.length && text[i].isWhitespace()) i++
+    } else {
+        while (i > 0 && text[i - 1].isWhitespace()) i--
+        while (i > 0 && !text[i - 1].isWhitespace()) i--
+    }
+    return wordEdge(text, i, atStart)
+}
+
+/**
+ * Moving one end of the mark by a word or by a verse — the tap equivalents of
+ * dragging a handle (§11). A word step that lands on a verse's first or last
+ * word reports the whole verse, exactly as a drag there does.
+ */
+private fun stepEnd(
+    page: ChapterPage,
+    atStart: Boolean,
+    forward: Boolean,
+    byWord: Boolean,
+    verse: Int,
+    char: Int?,
+    extend: (Boolean, Int, Int?) -> Unit,
+) {
+    val body = page.verseText[verse] ?: return
+    if (!byWord) {
+        val to = if (forward) verse + 1 else verse - 1
+        if (page.verseText.containsKey(to)) extend(atStart, to, null)
+        return
+    }
+    val last = body.trimEnd().length
+    val at = char ?: if (atStart) 0 else last
+    val next = wordStep(body, at, forward, atStart)
+    val whole = if (atStart) next <= 0 else next >= last
+    extend(atStart, verse, if (whole) null else next)
+}
+
 /** Whether this touch has already lifted a verse. */
 private class GestureState {
     var lifted: Boolean = false
@@ -510,7 +625,7 @@ private fun SelectionHandle(
     density: Density,
     onMoved: (Offset) -> Unit,
     onSettled: () -> Unit,
-    onStep: (forward: Boolean) -> Unit,
+    onStep: (forward: Boolean, byWord: Boolean) -> Unit,
 ) {
     val accent = Palette.accent
     val target = with(density) { HANDLE_TARGET.toPx() }
@@ -545,12 +660,20 @@ private fun SelectionHandle(
             .semantics {
                 contentDescription = label
                 customActions = listOf(
+                    CustomAccessibilityAction(Copy.A_WORD_FURTHER_ON) {
+                        onStep(true, true)
+                        true
+                    },
+                    CustomAccessibilityAction(Copy.A_WORD_BACK) {
+                        onStep(false, true)
+                        true
+                    },
                     CustomAccessibilityAction(Copy.A_VERSE_FURTHER_ON) {
-                        onStep(true)
+                        onStep(true, false)
                         true
                     },
                     CustomAccessibilityAction(Copy.A_VERSE_BACK) {
-                        onStep(false)
+                        onStep(false, false)
                         true
                     },
                 )
@@ -568,6 +691,64 @@ private val HANDLE_KNOB = 10.dp
 private val HANDLE_TARGET = 44.dp
 
 // MARK: - The washes
+
+/**
+ * One person's mark on a verse, or on part of one.
+ *
+ * [from] and [to] are offsets into the verse's *own* text, half-open; null at
+ * either end means the verse's own beginning or end. A whole-verse highlight
+ * — every highlight the app could make before A41g — is both of them null,
+ * and takes exactly the path it always did.
+ */
+@Immutable
+data class VerseMark(
+    val verse: Int,
+    val from: Int?,
+    val to: Int?,
+    val ink: Ink,
+)
+
+/** A stretch of one verse that carries the same set of inks all the way. */
+@Immutable
+private data class SpanKey(val verse: Int, val from: Int, val to: Int)
+
+/**
+ * The marks on a chapter, cut into stretches that each carry one set of inks.
+ *
+ * Two people marking *different* phrases of one verse is the case this
+ * exists for: with a wash per verse, either mark would have coloured the
+ * whole of it, and the overlap §4.5 is about would have been claimed where
+ * there is none. Every mark's two ends become a boundary, and the verse is
+ * cut at all of them; each piece then carries exactly the inks that cover it,
+ * so an overlap is drawn where the words actually overlap and nowhere else.
+ */
+private fun spansOf(marks: List<VerseMark>, lengthOf: (Int) -> Int): Map<SpanKey, List<Ink>> {
+    if (marks.isEmpty()) return emptyMap()
+    val out = LinkedHashMap<SpanKey, List<Ink>>()
+    for ((verse, ofVerse) in marks.groupBy { it.verse }) {
+        val length = lengthOf(verse)
+        if (length <= 0) continue
+        val resolved = ofVerse.map { mark ->
+            val a = (mark.from ?: 0).coerceIn(0, length)
+            val b = (mark.to ?: length).coerceIn(a, length)
+            Triple(a, b, mark.ink)
+        }.filter { it.second > it.first }
+        if (resolved.isEmpty()) continue
+
+        val cuts = sortedSetOf<Int>()
+        for ((a, b, _) in resolved) { cuts.add(a); cuts.add(b) }
+        val edges = cuts.toList()
+        for (i in 0 until edges.size - 1) {
+            val lo = edges[i]
+            val hi = edges[i + 1]
+            if (hi <= lo) continue
+            val inks = resolved.filter { it.first <= lo && it.second >= hi }.map { it.third }
+            if (inks.isEmpty()) continue
+            out[SpanKey(verse, lo, hi)] = inks
+        }
+    }
+    return out
+}
 
 /**
  * One verse's wash, as it is drawn this frame: the colour the inks on it
@@ -665,15 +846,14 @@ private const val WASH_CAP = 0.36f
  */
 @Composable
 private fun rememberArrivingWashes(
-    verseInks: Map<Int, List<Ink>>,
-    justMarked: IntRange?,
+    spans: Map<SpanKey, List<Ink>>,
+    justMarked: VerseRange?,
+    lengthOf: (Int) -> Int,
     onMarkDrawn: () -> Unit,
     still: Boolean,
-): Map<Int, Wash> {
-    val settled = remember(verseInks) {
-        verseInks.mapNotNull { (verse, inks) ->
-            if (inks.isEmpty()) null else verse to washFor(inks)
-        }.toMap()
+): Map<SpanKey, Wash> {
+    val settled = remember(spans) {
+        spans.mapValues { (_, inks) -> washFor(inks) }
     }
 
     // What the page is coming *from*. Seeded with the first set it is given,
@@ -705,7 +885,7 @@ private fun rememberArrivingWashes(
     // somebody else's mark would have lost their colour out from in front of
     // it for the last fifth of the stroke, which is the one moment it is
     // there to show.
-    var under by remember { mutableStateOf<Map<Int, Wash>>(emptyMap()) }
+    var under by remember { mutableStateOf<Map<SpanKey, Wash>>(emptyMap()) }
     LaunchedEffect(justMarked) {
         if (justMarked == null) return@LaunchedEffect
         under = from
@@ -720,12 +900,12 @@ private fun rememberArrivingWashes(
     val striking = if (pen < 1f) justMarked else null
     if (t >= 1f && striking == null) return settled
 
-    val drawn = LinkedHashMap<Int, Wash>(settled.size + from.size)
-    for ((verse, now) in settled) {
+    val drawn = LinkedHashMap<SpanKey, Wash>(settled.size + from.size)
+    for ((span, now) in settled) {
         // A verse you are marking right now is at full colour from the first
         // frame and is revealed along its length instead: the ink is not
         // getting darker, the pen is moving.
-        if (striking != null && verse in striking) {
+        if (striking != null && span.isInside(striking, lengthOf)) {
             // **Your ink meeting theirs.**
             //
             // Marking a verse somebody else has already marked is the one
@@ -743,21 +923,48 @@ private fun rememberArrivingWashes(
             // laid over a dry one. Nothing flashes, nothing overshoots, and
             // nothing is counted — it is just the colour arriving, and it is
             // the whole point of two people reading the same chapter.
-            drawn[verse] = now.copy(drawn = pen, beneath = under[verse])
+            drawn[span] = now.copy(drawn = pen, beneath = under.covering(span))
             continue
         }
-        val was = from[verse]
-        drawn[verse] = if (was == null) {
+        // A span that is *new* because an overlapping mark cut the verse into
+        // smaller pieces is not an arrival: the colour under those words was
+        // already on the page, it has only been re-described. So the wash it
+        // eases out of is whichever settled span used to cover it, not
+        // nothing — otherwise marking half of somebody's highlight would fade
+        // their whole verse out and three new pieces in.
+        val was = from[span] ?: from.covering(span)
+        drawn[span] = if (was == null) {
             now.copy(alpha = now.alpha * t)
         } else {
             Wash(lerp(was.color, now.color, t), was.alpha + (now.alpha - was.alpha) * t)
         }
     }
-    // Taken back: down to nothing rather than gone between two frames.
-    for ((verse, was) in from) {
-        if (verse !in settled) drawn[verse] = was.copy(alpha = was.alpha * (1f - t))
+    // Taken back: down to nothing rather than gone between two frames. A span
+    // that has merely been re-cut is still covered and does not fade.
+    for ((span, was) in from) {
+        if (span !in settled && settled.covering(span) == null) {
+            drawn[span] = was.copy(alpha = was.alpha * (1f - t))
+        }
     }
     return drawn
+}
+
+/** The settled wash whose words contain [span]'s, if one does. */
+private fun Map<SpanKey, Wash>.covering(span: SpanKey): Wash? {
+    val middle = (span.from + span.to) / 2
+    for ((key, wash) in this) {
+        if (key.verse == span.verse && key.from <= middle && key.to > middle) return wash
+    }
+    return null
+}
+
+/** Whether every word of this span lies inside a range somebody just marked. */
+private fun SpanKey.isInside(range: VerseRange, lengthOf: (Int) -> Int): Boolean {
+    if (verse < range.startVerse || verse > range.endVerse) return false
+    val length = lengthOf(verse)
+    val low = if (verse == range.startVerse) (range.startChar ?: 0) else 0
+    val high = if (verse == range.endVerse) (range.endChar ?: length) else length
+    return from >= low && to <= high
 }
 
 /**
@@ -799,7 +1006,7 @@ private fun rememberArrivingWashes(
 private fun DrawScope.drawWashes(
     layout: TextLayoutResult,
     page: ChapterPage,
-    washes: Map<Int, Wash>,
+    washes: Map<SpanKey, Wash>,
     bodySize: Float,
     density: Density,
 ) {
@@ -820,16 +1027,22 @@ private fun DrawScope.drawWashes(
     val aboveBaseline = bodyPx * WASH_ABOVE_BASELINE
     val belowBaseline = bodyPx * WASH_BELOW_BASELINE
 
+    // A span is a stretch of one verse's own text, and the page is somewhere
+    // else entirely — a verse of poetry is several runs with spacers between
+    // them — so each one turns into however many page ranges it actually
+    // occupies. A whole-verse mark comes back as the verse's own runs, which
+    // is what this drew before there was anything else to draw.
     val ordered = washes.entries
-        .mapNotNull { (verse, wash) ->
+        .mapNotNull { (span, wash) ->
             if (wash.alpha <= 0f) return@mapNotNull null
-            val range = page.verseRanges[verse] ?: return@mapNotNull null
-            range to wash
+            val ranges = page.pageRanges(span.verse, span.from, span.to)
+            if (ranges.isEmpty()) return@mapNotNull null
+            ranges to wash
         }
-        .sortedBy { it.first.first }
+        .sortedBy { it.first.first().first }
 
-    for ((range, wash) in ordered) {
-        val rects = enclosingRects(layout, range)
+    for ((ranges, wash) in ordered) {
+        val rects = ranges.flatMap { enclosingRects(layout, it) }
         if (rects.isEmpty()) continue
 
         // Each line's band, and the single shape they make together.
@@ -838,7 +1051,7 @@ private fun DrawScope.drawWashes(
         rects.forEachIndexed { index, rect ->
             // The pen lifting: a stable hash, so it does not shimmer on
             // redraw, and horizontal only.
-            val wobble = ((range.first * 31 + index * 7) % 3 - 1) * wobbleUnit
+            val wobble = ((ranges.first().first * 31 + index * 7) % 3 - 1) * wobbleUnit
             // Never outside the line's own box: a tall capital or a long
             // descender must not let one line's wash touch the next.
             val band = WashRect(
@@ -1040,6 +1253,17 @@ private data class WashRect(
 // MARK: - Setting the page
 
 /**
+ * One run of a verse's text, in both coordinate systems at once: where it
+ * begins inside the verse, and where it begins on the page.
+ */
+private data class TextSegment(
+    val textStart: Int,
+    val pageStart: Int,
+    val length: Int,
+)
+
+
+/**
  * The chapter, typeset: the string, the placeholders it reserves space for,
  * and where every verse ended up in it.
  */
@@ -1049,6 +1273,8 @@ private class ChapterPage(
     /** Verse → the union of its runs, for washes and for geometry. */
     val verseRanges: Map<Int, IntRange>,
     val verseText: Map<Int, String>,
+    /** Verse → the runs it is made of, in both coordinate systems. */
+    val verseSegments: Map<Int, List<TextSegment>>,
     val orderedVerses: List<Int>,
     /** Index of the carve among the string's placeholders, if one is open. */
     val noteSlotIndex: Int?,
@@ -1060,6 +1286,43 @@ private class ChapterPage(
         val at = offset.coerceIn(0, text.length - 1)
         return text.getStringAnnotations(TAG_VERSE, at, at)
             .firstOrNull()?.item?.toIntOrNull()
+    }
+
+    /**
+     * Where a stretch of one verse's own text sits on the page.
+     *
+     * [from] and [to] are offsets into `verseText[verse]`, half-open, and
+     * null means "from the beginning" and "to the end". The answer is a list
+     * rather than a range because a verse can be several runs — every line of
+     * a psalm is one — and a phrase can span the break between them.
+     */
+    fun pageRanges(verse: Int, from: Int?, to: Int?): List<IntRange> {
+        val body = verseText[verse] ?: return emptyList()
+        val runs = verseSegments[verse] ?: return emptyList()
+        val a = (from ?: 0).coerceIn(0, body.length)
+        val b = (to ?: body.length).coerceIn(a, body.length)
+        if (b <= a) return emptyList()
+        val out = mutableListOf<IntRange>()
+        for (run in runs) {
+            val lo = maxOf(a, run.textStart)
+            val hi = minOf(b, run.textStart + run.length)
+            if (hi <= lo) continue
+            val pageLo = run.pageStart + (lo - run.textStart)
+            val pageHi = run.pageStart + (hi - run.textStart)
+            out += pageLo until pageHi
+        }
+        return out
+    }
+
+    /** The offset into a verse's own text at a page offset, or null. */
+    fun textOffset(verse: Int, pageOffset: Int): Int? {
+        val runs = verseSegments[verse] ?: return null
+        for (run in runs) {
+            if (pageOffset >= run.pageStart && pageOffset <= run.pageStart + run.length) {
+                return run.textStart + (pageOffset - run.pageStart)
+            }
+        }
+        return null
     }
 
     /** The verse's whole box, for the screen reader. */
@@ -1122,6 +1385,7 @@ private fun buildChapterPage(
     val verseStart = mutableMapOf<Int, Int>()
     val verseEnd = mutableMapOf<Int, Int>()
     val verseText = mutableMapOf<Int, StringBuilder>()
+    val segments = mutableMapOf<Int, MutableList<TextSegment>>()
     val ordered = mutableListOf<Int>()
     var placeholderCount = 0
     var noteSlotIndex: Int? = null
@@ -1191,7 +1455,24 @@ private fun buildChapterPage(
                 ordered += verse
             }
             verseEnd[verse] = builder.length
-            if (spoken) verseText.getOrPut(verse) { StringBuilder() }.append(text)
+            if (spoken) {
+                // A verse's own text and its place on the page are two
+                // different coordinate systems, and they do not run in step:
+                // a verse of poetry is several runs with a paragraph spacer
+                // appended between them, so the page moves on while the
+                // verse's text does not. Every spoken run records both ends
+                // of the correspondence, which is what lets a mark on a
+                // *phrase* be found again on the page (A41g).
+                val body = verseText.getOrPut(verse) { StringBuilder() }
+                segments.getOrPut(verse) { mutableListOf() }.add(
+                    TextSegment(
+                        textStart = body.length,
+                        pageStart = start,
+                        length = text.length,
+                    ),
+                )
+                body.append(text)
+            }
         }
     }
 
@@ -1341,6 +1622,7 @@ private fun buildChapterPage(
         inlineContent = inline,
         verseRanges = ranges,
         verseText = verseText.mapValues { it.value.toString() },
+        verseSegments = segments.mapValues { it.value.toList() },
         orderedVerses = ordered.sorted(),
         noteSlotIndex = noteSlotIndex,
     )

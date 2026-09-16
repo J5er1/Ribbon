@@ -2177,6 +2177,67 @@ A41f. **Your ink meeting theirs, which was drawn as theirs being wiped away.**
     The look book holds the instant the pen touches down, because that is the
     frame that was empty. The travelling part is `theStrokeTravelling`.
 
+A41g. **A mark on a phrase.** A41e built S06's two handles and stopped at its
+    second clause — "snapping to verse boundaries by default and to word
+    boundaries when dragged slowly" — because `VerseRange` held a start verse
+    and an end verse and nothing finer, so a mark on part of a verse had
+    nowhere to be stored. Which is to say it could not be made. The owner
+    asked for it; here it is, and the model, the wire and the schema all move.
+
+    **The model.** `VerseRange` gains `startChar` and `endChar`, offsets into
+    the *verse's own text* at each end, and `charTranslation`, the translation
+    they were measured in. All three are optional in the strong sense: a range
+    of whole verses writes none of them and is byte-for-byte what it has
+    always been, on the wire and in the table. The migration's columns are
+    nullable for the same reason — iOS keeps making whole-verse marks and
+    never has to learn.
+
+    **Why the translation travels with the numbers.** Translation belongs to a
+    *person* (S20 puts it in Text settings), not to a room or a reading, so
+    two people in one room can be reading different words for the same verse
+    and an offset into one is nonsense in the other. A reader whose
+    translation does not match sees the whole verse marked. That is the honest
+    half of what the mark knows: somebody marked something here. Pointing at
+    words that are not on their page would be a lie, and hiding the mark would
+    lose the fact.
+
+    **The wash had to stop being per-verse.** Two people marking *different*
+    phrases of one verse is the case this exists for, and with one wash per
+    verse either mark would have coloured the whole of it — claiming §4.5's
+    overlap across words only one person had touched. Every mark's two ends
+    are a boundary now, the verse is cut at all of them, and each piece
+    carries exactly the inks that cover it. So a verse can read crimson, then
+    the third colour, then teal, which is what actually happened to it.
+
+    A verse's text and its place on the page are also two different coordinate
+    systems that do not run in step — a verse of poetry is several runs with a
+    paragraph spacer appended between them — so every run now records both
+    ends of the correspondence and a phrase resolves to however many page
+    ranges it really occupies.
+
+    **The handles snap to words, and that is S06's default too.** The
+    slow-drag mode is deliberately not built. A mode you enter by accident,
+    according to how fast your thumb happened to be moving, is not
+    discoverable and not repeatable: you cannot aim at it, and the same
+    gesture gives two answers. It would also be the only speed-sensitive
+    control in an app whose whole argument is patience. Instead the handle at
+    the start of a mark snaps back to the beginning of its word and the one at
+    the end snaps forward to the end of its — which *is* verse-boundary
+    snapping, because the first and last words of a verse are its edges. A
+    handle dragged to either end gives exactly the whole verse and stores it
+    as one, so the default S06 wants stays the easiest thing to hit while the
+    precision it wants is always there rather than hiding behind a speed.
+
+    Each handle carries four tap equivalents (§11) rather than two: a word
+    either way, and a verse either way.
+
+    **Still not here:** a sub-verse mark cannot be shown to somebody reading
+    another translation as anything narrower than the verse. Doing better
+    needs the marked words themselves stored and searched for in the reader's
+    text, and Scripture under licence is not ours to copy into our own
+    database to make a highlight prettier (§16.8). The whole verse is the
+    right answer until that is not true.
+
 ## Licensed translations (decided: API.Bible)
 
 Open question §16.8 is now part-decided: **NKJV plus two undecided

@@ -520,6 +520,35 @@ fun ReadingScreen(
         }
     }
 
+    /**
+     * One end of the lift moved, by a handle (S06) or by its tap equivalent.
+     *
+     * `char` is an offset into that verse's own text, or null for the whole
+     * verse at that end — which is what the first or last word comes back as,
+     * so marking a whole verse never quietly becomes a mark on all of its
+     * words. The translation is stamped only while an offset is actually
+     * being carried: those numbers mean nothing in anybody else's words, and
+     * a range of whole verses has to stay exactly what it has always been on
+     * the wire (A41g).
+     */
+    fun moveLiftEnd(atStart: Boolean, verse: Int, char: Int?) {
+        val current = lifted ?: return
+        val moved = if (atStart) {
+            current.copy(startVerse = verse, startChar = char)
+        } else {
+            current.copy(endVerse = verse, endChar = char)
+        }
+        val stamped = if (moved.isWholeVerses) {
+            moved.copy(charTranslation = null)
+        } else {
+            moved.copy(charTranslation = model.me?.translation)
+        }
+        if (stamped != current) {
+
+            lifted = stamped
+        }
+    }
+
     fun closeNote() {
         openNoteVerse = null
         noteSlotY.clear()
@@ -835,10 +864,9 @@ fun ReadingScreen(
                             openNoteVerse = openNoteVerse,
                             noteSlotY = noteSlotY[n],
                             noteCardHeight = noteCardHeight,
-                            liftedVerses = if (liftedChapter == n) lifted?.verses else null,
+                            lifted = if (liftedChapter == n) lifted else null,
                             justMarked = justMarked
-                                ?.takeIf { it.chapter == n && it.bookID == reading.bookID }
-                                ?.verses,
+                                ?.takeIf { it.chapter == n && it.bookID == reading.bookID },
                             onMarkDrawn = { justMarked = null },
                             measureInset = presenceInset,
                             onRemoteChapter = { remoteChapters[n] = it },
@@ -852,6 +880,7 @@ fun ReadingScreen(
                             onFrame = { frame -> trackReading(n, frame) },
                             onLongPressVerse = { verse -> beginLift(n, verse) },
                             onDragToVerse = { verse -> extendLift(n, verse) },
+                            onExtend = { atStart, verse, char -> moveLiftEnd(atStart, verse, char) },
                             onTapVerse = { verse -> tapVerse(n, verse) },
                             onToggleNote = { address -> toggleNote(address) },
                             onTakeBack = { note, stackSize ->
@@ -1077,8 +1106,8 @@ private fun ChapterSection(
     openNoteVerse: VerseAddress?,
     noteSlotY: Dp?,
     noteCardHeight: Dp,
-    liftedVerses: IntRange?,
-    justMarked: IntRange?,
+    lifted: VerseRange?,
+    justMarked: VerseRange?,
     onMarkDrawn: () -> Unit,
     measureInset: Dp,
     onRemoteChapter: (ScriptureChapter) -> Unit,
@@ -1088,6 +1117,7 @@ private fun ChapterSection(
     onFrame: (Rect) -> Unit,
     onLongPressVerse: (Int) -> Unit,
     onDragToVerse: (Int) -> Unit,
+    onExtend: (Boolean, Int, Int?) -> Unit,
     onTapVerse: (Int) -> Unit,
     onToggleNote: (VerseAddress) -> Unit,
     onTakeBack: (Note, Int) -> Unit,
@@ -1126,8 +1156,8 @@ private fun ChapterSection(
                     lineHeightMultiple = model.settings.lineHeightMultiple.toFloat(),
                     redLetter = model.settings.redLetter,
                 ),
-                verseInks = verseInks(model, reading, n),
-                liftedVerses = liftedVerses,
+                marks = verseMarks(model, reading, n),
+                lifted = lifted,
                 justMarked = justMarked,
                 onMarkDrawn = onMarkDrawn,
                 openNote = openNoteVerse
@@ -1138,6 +1168,7 @@ private fun ChapterSection(
                 onLayout = onLayout,
                 onLongPressVerse = onLongPressVerse,
                 onDragToVerse = onDragToVerse,
+                onExtend = onExtend,
                 onDragEnded = {},
                 onTapVerse = onTapVerse,
                 onNoteSlot = onNoteSlot,
@@ -1286,11 +1317,30 @@ private fun ChapterSection(
     )
 }
 
-private fun verseInks(model: AppModel, reading: Reading, chapter: Int): Map<Int, List<Ink>> {
-    val result = mutableMapOf<Int, MutableList<Ink>>()
+/**
+ * Every highlight on this chapter, as a mark per verse.
+ *
+ * A mark that names part of a verse only names it in the translation it was
+ * made in, because translation belongs to a *person* (S20) and two people in
+ * one room can be reading different words for the same verse. When they do
+ * not match, the mark widens to the whole verse rather than pointing at words
+ * that are not on this page: it says truthfully that somebody marked
+ * something here, which is the honest half of what it knows (A41g).
+ */
+private fun verseMarks(model: AppModel, reading: Reading, chapter: Int): List<VerseMark> {
+    val mine = model.me?.translation
+    val result = mutableListOf<VerseMark>()
     for (highlight in model.highlights(reading, chapter)) {
-        for (verse in highlight.range.verses) {
-            result.getOrPut(verse) { mutableListOf() }.add(highlight.ink)
+        val range = highlight.range
+        val readable = range.isWholeVerses ||
+            (range.charTranslation != null && range.charTranslation == mine)
+        for (verse in range.verses) {
+            result += VerseMark(
+                verse = verse,
+                from = if (readable && verse == range.startVerse) range.startChar else null,
+                to = if (readable && verse == range.endVerse) range.endChar else null,
+                ink = highlight.ink,
+            )
         }
     }
     return result

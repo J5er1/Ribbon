@@ -47,8 +47,25 @@ data class VerseAddress(
 }
 
 /**
- * A contiguous run of verses within one chapter. Highlights snap to verse
- * boundaries by default (S06), and a drag never crosses a chapter.
+ * A contiguous run of verses within one chapter, optionally starting or
+ * ending part-way through one.
+ *
+ * Highlights snap to verse boundaries by default (S06), and a drag never
+ * crosses a chapter. [startChar] and [endChar] are S06's other clause — a
+ * mark on a phrase rather than on a whole verse — and they are *optional* in
+ * the strong sense: a range with neither is exactly the range this type has
+ * always been, on the wire and in the database, so nothing that does not know
+ * about them has to change.
+ *
+ * The offsets are into a verse's own text, not the page's, and they are only
+ * meaningful in the translation they were taken in — which is why
+ * [charTranslation] travels with them. Translation is a property of a
+ * *person* (S20), so two people in one room can be reading different words
+ * for the same verse, and an offset into one is nonsense in the other. A
+ * reader whose translation does not match sees the whole verse marked: it
+ * says truthfully that somebody marked something here, which is better than
+ * pointing at words that are not on their page, and better than hiding the
+ * mark.
  */
 @Serializable
 data class VerseRange(
@@ -56,6 +73,12 @@ data class VerseRange(
     val chapter: Int,
     var startVerse: Int,
     var endVerse: Int,
+    /** Offset into [startVerse]'s own text; null starts at its first letter. */
+    var startChar: Int? = null,
+    /** Offset into [endVerse]'s own text; null runs to its last. */
+    var endChar: Int? = null,
+    /** The translation [startChar] and [endChar] were measured in. */
+    val charTranslation: TranslationID? = null,
 ) {
 
     init {
@@ -63,11 +86,29 @@ data class VerseRange(
         // drag made upwards is stored exactly as one made downwards. Doing it
         // here rather than in a factory means every route in gets it: the
         // constructor, `copy()`, and a decode off the wire.
-        val low = minOf(startVerse, endVerse)
-        val high = maxOf(startVerse, endVerse)
-        startVerse = low
-        endVerse = high
+        //
+        // The character offsets belong to their ends and turn over with them:
+        // a range dragged from the middle of verse five back to verse three
+        // keeps "the middle of five" as where it *stops*.
+        if (startVerse > endVerse) {
+            val verse = startVerse
+            startVerse = endVerse
+            endVerse = verse
+            val char = startChar
+            startChar = endChar
+            endChar = char
+        } else if (startVerse == endVerse) {
+            val low = listOfNotNull(startChar, endChar).minOrNull()
+            val high = listOfNotNull(startChar, endChar).maxOrNull()
+            if (startChar != null && endChar != null) {
+                startChar = low
+                endChar = high
+            }
+        }
     }
+
+    /** Whether this is a plain run of whole verses — the common case. */
+    val isWholeVerses: Boolean get() = startChar == null && endChar == null
 
     /** The one-verse range at [address] — Swift's `init(_ address:)`. */
     constructor(address: VerseAddress) :
