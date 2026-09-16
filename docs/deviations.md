@@ -990,6 +990,95 @@ A27. **The paused room stopped asking for something it withholds.** Its
     after a lapse, which would make it an apology"). The hearth holds its
     line and says nothing now, and S01's one row explains the rest.
 
+A28. **The launch window carries the Wave.** §05 says there is no splash
+    screen. The rule survives in the sense that matters — nothing is
+    *inserted* — because Android 12 and later show a system splash on every
+    cold start whether an app asks for one or not. It cannot be declined,
+    only styled, so the choice was never "splash or no splash" but "our mark
+    or the launcher icon on a grey plate". Owner's call: the mark, on the
+    unlit ground, unfurling from the top as a ribbon let out of a book. Built
+    from the same path data as the launcher icon so the two cannot drift, and
+    it **rests open** — the resting state of a launch drawable is what shows
+    when the animation does not run, and resting closed would turn an
+    unsupported device or system animations-off into a blank window rather
+    than a still mark. The splash is held by the store loading, as before; a
+    480 ms floor is the one concession, so a warm launch cannot cut the
+    unfurl off after three frames.
+
+A29. **The menu is two screens: the room, and you.** It was one scroll with
+    four sections, entered from two doors, which landed by calling `scrollTo`
+    on arrival. The split falls along a line the data already draws:
+    notifications are per room, the plan entitles a room, and the invite, the
+    inks and leaving are all about this room — while your name, your
+    translation, your text size, the wallpaper's colours and this phone's
+    downloads are yours. The room's title is the room's own name, because a
+    large Material title names the thing you are looking at and "Settings" is
+    not a thing anybody is looking at.
+
+    The settings screens also sit under Material's own large collapsing app
+    bar now (`RibbonScreen` → `LargeTopAppBar` +
+    `exitUntilCollapsedScrollBehavior`). The owner's note was that they did
+    not look like Material You, and the tell was the top of the screen: a
+    static display title that scrolled away with the content. Structure is
+    Material's, paint is Ribbon's — A18's argument one level up. The
+    expressive `LargeFlexibleTopAppBar` would have carried the lede in a
+    subtitle slot and is internal in material3 1.4.0; the lede reads better
+    as the first thing *in* the page anyway.
+
+A30. **The ribbon: one place in the book, kept by the room.** Owner's call,
+    and it sits deliberately close to a line §03 draws — *position is
+    per-person, per-reading; there is no shared "where we are."* That rule is
+    intact: `ReadingPosition` is untouched and the book still opens where
+    **you** are (§6.2). What §03 refuses is a shared position that turns two
+    people reading at different speeds into a problem to be solved, and this
+    is not that. It is the ribbon in a shared Bible: somebody reads, closes
+    the book, and the ribbon is where they stopped.
+
+    Four things keep it from becoming a race, and none of them should be
+    removed without reading this paragraph:
+
+      - It is an **address, never a measure** — "Mark 4:9", the same kind of
+        thing as an ember's date range, which §13 allows because it is "an
+        address in time, not a duration". Nothing subtracts it from your
+        position and nothing ever may.
+      - It is **offered, never applied**. Moving it moves nobody. It is one
+        quiet sentence on the room screen and a hairline under one number in
+        the chapter list, both of which you have to look at.
+      - It is **one object, not one per person.** A per-person ribbon would
+        be a leaderboard with the numbers taken out.
+      - **Nobody is behind**, because the app does not know: it holds one
+        address and your own and never puts them in a sentence together.
+
+    Placed by closing the book, because that is the whole of the act — a
+    "mark this verse" control would turn a consequence of reading into a
+    chore. Only when you actually moved: opening the book, glancing and
+    closing it again would otherwise drag the room's ribbon backwards and
+    quietly undo somebody else's. A finished reading keeps the ribbon it had;
+    an ember is a record, and editing it afterwards is editing the past.
+
+A31. **There is a chapter list, and the foot of the book is the way to it.**
+    A book opens at your own position and is read forward, so reaching Mark
+    10 from Mark 1 meant scrolling nine chapters. The build book never
+    specified one because S02's page is deliberately bare and §6.6 puts
+    navigation in the chooser — but the chooser *starts* a reading, it does
+    not move inside one.
+
+    So it is the chooser's own argument one level down: "the most
+    conventional screen in the app, and it should stay that way — this is
+    navigation, not atmosphere." A grid of numbers. No progress ring on each
+    chapter, no ticks for what has been read, nothing shaded by how far
+    anybody got — all of which are the counting Law 2 forbids, and all of
+    which a chapter grid is the classic place to smuggle in. Exactly two
+    things are marked and both are addresses: where you are (the tile raised
+    out of the page) and where the ribbon is (a hairline at the tile's foot,
+    which is what a ribbon looks like from outside a closed book).
+
+    S02 says the way out is the Wave and "nothing else down there", and this
+    is a deliberate second thing. It keeps its distance: the Wave still has
+    the bottom edge to itself, and the control above it is the running head
+    repeated — small caps, low contrast, saying where you are, which is what
+    a running head does. It is a door only if you press it.
+
 ## Licensed translations (decided: API.Bible)
 
 Open question §16.8 is now part-decided: **NKJV plus two undecided

@@ -71,6 +71,7 @@ import app.readribbon.core.Ink
 import app.readribbon.core.Note
 import app.readribbon.core.NoteKind
 import app.readribbon.core.Reading
+import app.readribbon.core.Ribbon
 import app.readribbon.core.Room
 import app.readribbon.core.VerseAddress
 import app.readribbon.design.Air
@@ -639,13 +640,17 @@ private fun Hearth(
             // for fixes that, and it is the better picture anyway: a warm
             // object in a dark recess, in a room the wallpaper may have
             // painted any colour at all.
+            // The well's own padding belongs to what stands in it rather
+            // than to the recess, so that on a lit hearth every pixel of the
+            // recess is part of the handle. An 18 dp band of dead ground
+            // around the one thing you are meant to take hold of is 18 dp of
+            // the gesture not working.
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RibbonShape.cardShape)
                     .background(Palette.ground)
-                    .grain()
-                    .padding(vertical = 18.dp),
+                    .grain(),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 if (current != null && currentBook != null) {
@@ -658,7 +663,10 @@ private fun Hearth(
                         onOpened = { onOpenReading(current, null) },
                     )
                 } else {
-                    UnlitHearth(paused = room.isPaused)
+                    UnlitHearth(
+                        paused = room.isPaused,
+                        modifier = Modifier.padding(vertical = 18.dp),
+                    )
                 }
             }
         }
@@ -703,33 +711,41 @@ private fun TheFire(
     val book = Bible.book(reading.bookID) ?: return
 
     Column(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            // The handle is the whole hearth, not the flame.
+            //
+            // It used to be the fire's own canvas alone, which on a short
+            // book is a 120 dp band in the middle of the recess with dead
+            // ground above and below it and the book's name — the most
+            // obviously grabbable thing here — outside the target entirely.
+            // The fire, the hearthline, the name and the state are one
+            // object (§4.1); you take hold of the object.
+            .opensTheBook(
+                sheet = sheet,
+                label = Copy.continueIn(book.name),
+                onEngaged = {
+                    // Taking hold of the fire *is* discovering the gesture,
+                    // whether or not the pull goes on to commit. The hint has
+                    // done its job and does not come back (§6.1).
+                    model.markFirePulled()
+                    onBeginOpening(reading)
+                },
+                onOpened = onOpened,
+                onAbandoned = onAbandonOpening,
+            )
+            .padding(vertical = 18.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                // Grabbing the fire and pulling puts the book up. The fire
-                // keeps its own "The fire is steady." label; this adds the
-                // action rather than replacing the sentence.
-                .opensTheBook(
-                    sheet = sheet,
-                    label = Copy.continueIn(book.name),
-                    onEngaged = {
-                        // Taking hold of the fire *is* discovering the
-                        // gesture, whether or not the pull goes on to commit.
-                        // The hint has done its job and does not come back
-                        // (§6.1).
-                        model.markFirePulled()
-                        onBeginOpening(reading)
-                    },
-                    onOpened = onOpened,
-                    onAbandoned = onAbandonOpening,
-                )
                 // Grows very slightly as it is pulled, which is the whole of
                 // the feedback the fire itself gives: an object being lifted
-                // toward you.
+                // toward you. Only the flame swells — the name under it
+                // holding still is what makes the fire read as rising rather
+                // than the card zooming.
                 .graphicsLayer {
                     val pull = sheet.progress
                     if (pull > 0f) {
@@ -804,9 +820,9 @@ private fun TheFire(
  *   invitation with no door does not.
  */
 @Composable
-private fun UnlitHearth(paused: Boolean) {
+private fun UnlitHearth(paused: Boolean, modifier: Modifier = Modifier) {
     Column(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+        modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -1142,6 +1158,29 @@ private fun WayIn(
                 // to ask for it.
                 onOpenReading(reading, null)
             }
+            // The ribbon (A30) — offered, never applied.
+            //
+            // This is the whole of the "suggestion" the owner asked for, and
+            // its restraint is the design. It says where the ribbon is and
+            // who left it; it never says where *you* are, never puts the two
+            // in a sentence together, and never subtracts one from the other.
+            // Tapping it is the only thing that moves you, and it is a tap
+            // you have to decide to make.
+            //
+            // Absent when there is no ribbon, when it is exactly where you
+            // already are, and when the book is finished (`ribbonWorthOffering`
+            // decides all three) — a room that told you where you were
+            // standing would be furniture, not a hand on your shoulder.
+            val ribbon = model.ribbonWorthOffering(reading)
+            if (ribbon != null) {
+                RibbonOffer(
+                    model = model,
+                    reading = reading,
+                    ribbon = ribbon,
+                    book = book,
+                    onGo = { address -> onOpenReading(reading, address) },
+                )
+            }
             // The gesture, said once. It goes for good the first time the
             // book is opened by any route — the same contract the margin
             // hint keeps (§6.1). A hint that comes back is worse than none.
@@ -1170,6 +1209,67 @@ private fun WayIn(
                 modifier = Modifier.padding(top = 4.dp),
             )
         }
+    }
+}
+
+/**
+ * The room's ribbon, said once and quietly.
+ *
+ * A [QuietControl] rather than a capsule, and that choice is the argument:
+ * the way in above it is the room's one loud control, and a second bright
+ * thing beside it would make the ribbon a competing instruction rather than
+ * an offer. A quiet line is what an offer looks like.
+ *
+ * Law 2 is kept by saying an address and stopping. "Ruth left the ribbon at
+ * Mark 4:9" is where a thing is; "Ruth is 3 chapters ahead" is a score, and
+ * there is deliberately no arithmetic anywhere near this that could produce
+ * one.
+ */
+@Composable
+private fun RibbonOffer(
+    model: AppModel,
+    reading: Reading,
+    ribbon: Ribbon,
+    book: app.readribbon.core.BibleBook,
+    onGo: (VerseAddress) -> Unit,
+) {
+    val mine = model.me?.id == ribbon.personID
+    val reference = "${book.chapterHeading(ribbon.chapter)}:${ribbon.verse}"
+    val line = if (mine) {
+        Copy.youLeftTheRibbonAt(reference)
+    } else {
+        Copy.ribbonIsAt(
+            who = model.person(ribbon.personID)?.name?.let { firstName(it) },
+            reference = reference,
+        )
+    }
+    // A sentence, set as a sentence. `QuietControl` is small caps, which is
+    // right for a two-word control ("Mark a quiet day") and wrong for this:
+    // in small caps "Ruth left the ribbon at Mark 4:9" reads as a label
+    // shouting a fact, and the whole point of this line is that it is said
+    // rather than displayed.
+    Box(
+        modifier = Modifier
+            .sizeIn(minHeight = SEAT_MIN_TOUCH)
+            .clip(RibbonShape.rowShape)
+            .pressable(onClickLabel = Copy.GO_THERE) {
+                onGo(
+                    VerseAddress(
+                        bookID = reading.bookID,
+                        chapter = ribbon.chapter,
+                        verse = ribbon.verse,
+                    ),
+                )
+            }
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = line,
+            style = RibbonType.ui(14f),
+            color = Palette.muted,
+            textAlign = TextAlign.Center,
+        )
     }
 }
 

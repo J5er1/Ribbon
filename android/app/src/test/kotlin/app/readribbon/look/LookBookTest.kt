@@ -13,6 +13,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
+import app.readribbon.R
 import app.readribbon.app.AppModel
 import app.readribbon.core.Bible
 import app.readribbon.core.FireScale
@@ -26,6 +27,7 @@ import app.readribbon.core.NoteKind
 import app.readribbon.core.Person
 import app.readribbon.core.Reading
 import app.readribbon.core.ReadingPosition
+import app.readribbon.core.Ribbon
 import app.readribbon.core.Room
 import app.readribbon.core.VerseAddress
 import app.readribbon.data.AppState
@@ -42,6 +44,7 @@ import app.readribbon.screens.MenuEntry
 import app.readribbon.screens.MenuScreen
 import app.readribbon.screens.NotificationSettingsScreen
 import app.readribbon.screens.PersonScreen
+import app.readribbon.reading.ChaptersContent
 import app.readribbon.reading.ReadingScreen
 import app.readribbon.screens.RoomScreen
 import app.readribbon.screens.TextSettingsScreen
@@ -338,6 +341,62 @@ class LookBookTest {
         }
     }
 
+    /** Everywhere else in the book, and the ribbon at the top of it (A31). */
+    @Test fun theChapters() {
+        val open = reading("MRK", FireScale.medium)
+        val state = AppState(
+            me = me,
+            people = mapOf(me.id to me, ruth.id to ruth),
+            rooms = listOf(room),
+            memberships = listOf(membership(me, Ink.teal), membership(ruth, Ink.crimson)),
+            readings = listOf(open),
+            positions = listOf(
+                ReadingPosition(
+                    readingID = open.id, personID = me.id,
+                    chapter = 2, verse = 1, updatedAt = now - 6.hours,
+                ),
+            ),
+            ribbons = listOf(
+                Ribbon(
+                    readingID = open.id, personID = ruth.id,
+                    chapter = 4, verse = 9, placedAt = now - 2.hours,
+                ),
+            ),
+            currentRoomID = room.id,
+        )
+        val m = model(state)
+        shoot("chapters") {
+            ChaptersContent(model = m, reading = open, onGo = {})
+        }
+    }
+
+    /** A room whose ribbon is somewhere you are not: the offer (A30). */
+    @Test fun roomWithARibbon() {
+        val open = reading("MRK", FireScale.medium)
+        val state = AppState(
+            me = me,
+            people = mapOf(me.id to me, ruth.id to ruth),
+            rooms = listOf(room),
+            memberships = listOf(membership(me, Ink.teal), membership(ruth, Ink.crimson)),
+            readings = listOf(open),
+            positions = listOf(
+                ReadingPosition(
+                    readingID = open.id, personID = me.id,
+                    chapter = 2, verse = 1, updatedAt = now - 6.hours,
+                ),
+            ),
+            ribbons = listOf(
+                Ribbon(
+                    readingID = open.id, personID = ruth.id,
+                    chapter = 4, verse = 9, placedAt = now - 2.hours,
+                ),
+            ),
+            currentRoomID = room.id,
+        )
+        val m = model(state)
+        shoot("room-with-a-ribbon") { Room(m, m.state.rooms.first()) }
+    }
+
     @Test fun aPerson() {
         val open = reading("MRK", FireScale.medium)
         val state = AppState(
@@ -391,8 +450,35 @@ class LookBookTest {
             currentRoomID = room.id,
         )
         val m = model(state)
-        shoot("menu") {
+        shoot("menu-you") {
             MenuScreen(model = m, entry = MenuEntry.YOU, onDismiss = {}, onSwitch = {})
+        }
+    }
+
+    /** The menu's other door: the room, its people and the rooms you are in. */
+    @Test fun theRoomMenu() {
+        val open = reading("MRK", FireScale.medium)
+        val second = Room(name = "Thursday", createdAt = now - 200.hours)
+        val state = AppState(
+            me = me,
+            people = mapOf(me.id to me, ruth.id to ruth),
+            rooms = listOf(room, second),
+            memberships = listOf(
+                membership(me, Ink.teal),
+                membership(ruth, Ink.crimson),
+                Membership(
+                    roomID = second.id,
+                    personID = me.id,
+                    ink = Ink.moss,
+                    joinedAt = now - 200.hours,
+                ),
+            ),
+            readings = listOf(open),
+            currentRoomID = room.id,
+        )
+        val m = model(state)
+        shoot("menu-room") {
+            MenuScreen(model = m, entry = MenuEntry.ROOMS, onDismiss = {}, onSwitch = {})
         }
     }
 
@@ -424,6 +510,39 @@ class LookBookTest {
         )
         val m = model(state)
         shoot("settings-notifications") { NotificationSettingsScreen(model = m, onBack = {}) }
+    }
+
+    /**
+     * The launch mark, drawn from the drawable the window actually uses.
+     *
+     * The splash is a system window, not a composition, so nothing else in
+     * this book can see it — and a vector whose clip-path is wrong shows up
+     * as a blank launch on a real phone and as nothing at all in a compile.
+     * This inflates the real `splash_wave` and draws it with the unfurl fully
+     * open, which is the frame the animation ends on.
+     */
+    @Test fun theLaunchMark() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val drawable = checkNotNull(context.getDrawable(R.drawable.splash_wave)) {
+            "splash_wave did not inflate"
+        }
+        val side = 432
+        val bitmap = Bitmap.createBitmap(side, side, Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bitmap)
+        canvas.drawColor(android.graphics.Color.parseColor("#0B0B0A"))
+        drawable.setBounds(0, 0, side, side)
+        // The drawable rests with the unfurl open, which is both the frame
+        // the animation lands on and what shows if it never runs.
+        drawable.draw(canvas)
+        File(out, "launch-mark.png").outputStream().use {
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
+        }
+        // The mark has to actually be there: a clip-path that does not match
+        // the animator's rectangle draws nothing and compiles perfectly.
+        val pixels = IntArray(side * side)
+        bitmap.getPixels(pixels, 0, side, 0, 0, side, side)
+        val ground = android.graphics.Color.parseColor("#0B0B0A")
+        check(pixels.any { it != ground }) { "the launch mark drew nothing but ground" }
     }
 
     @Test fun appearanceSettings() {

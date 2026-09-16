@@ -13,17 +13,28 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -37,13 +48,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import app.readribbon.app.Copy
 
 // The furniture: cards, groups, rows.
 //
@@ -604,11 +618,35 @@ fun GroupScope.SettingChoice(
                 Text(text = subtitle, style = RibbonType.ui(13f), color = Palette.muted)
             }
         }
+        // A check, not a dot.
+        //
+        // Material marks a single choice in a settings list with a check, and
+        // an 8 dp filled circle — which is what stood here — reads as a
+        // status light rather than as "this one". Drawn rather than an icon
+        // font, for the reason every mark in this app is drawn: the app ships
+        // no icon set and adding one for a single tick would be a dependency
+        // in exchange for a shape two lines describe.
         Box(
             Modifier
-                .size(8.dp)
-                .clip(CircleShape)
-                .background(dot),
+                .size(20.dp)
+                .drawBehind {
+                    if (dot.alpha == 0f) return@drawBehind
+                    val stroke = 2.dp.toPx()
+                    drawLine(
+                        color = dot,
+                        start = Offset(size.width * 0.18f, size.height * 0.52f),
+                        end = Offset(size.width * 0.42f, size.height * 0.76f),
+                        strokeWidth = stroke,
+                        cap = StrokeCap.Round,
+                    )
+                    drawLine(
+                        color = dot,
+                        start = Offset(size.width * 0.42f, size.height * 0.76f),
+                        end = Offset(size.width * 0.82f, size.height * 0.26f),
+                        strokeWidth = stroke,
+                        cap = StrokeCap.Round,
+                    )
+                },
         )
     }
 }
@@ -666,7 +704,13 @@ fun BackChevron(
     Box(
         modifier = modifier
             .size(MinTarget)
-            .pressablePaper(CircleShape, onClick = onBack)
+            // Bare, not a filled disc. This lives in a Material navigation
+            // slot now, where every other app on the phone has a plain arrow;
+            // a chartreuse-adjacent circle in that position reads as a button
+            // somebody added rather than as the way back. The 44 dp target is
+            // untouched — it is the box, not the ink.
+            .clip(CircleShape)
+            .pressable(onClick = onBack)
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) {
@@ -724,3 +768,125 @@ fun ScreenTitle(
 fun Air(height: Dp) {
     Spacer(Modifier.height(height))
 }
+
+// MARK: The screen itself
+
+/**
+ * A pushed screen, under Material 3's large collapsing app bar.
+ *
+ * The settings were tiles on a hand-drawn page: a back chevron, a display
+ * title, a lede, then the groups — all of it static, all of it scrolling away
+ * together. It read as *a* design rather than as Android's, and the owner's
+ * note was exactly that. The tell was the top of the screen: every Material
+ * app on the phone has a large title that shrinks into a bar as you scroll,
+ * and a screen whose title simply leaves is the one thing that cannot be
+ * mistaken for anything else.
+ *
+ * So the structure is Material's — [LargeTopAppBar] driven by
+ * `exitUntilCollapsedScrollBehavior` — and the paint is Ribbon's. That is
+ * what Material You means here, and it is A18's argument again: the platform
+ * decides how a thing *behaves*, the brand decides how it *looks*. The title
+ * stays Literata at display size, the container is transparent over the
+ * grained ground rather than a tonal slab, and there is no icon anywhere — an
+ * icon beside "Text" would be decoration standing in for the sentence under
+ * it that already says what the row does.
+ *
+ * The expressive `LargeFlexibleTopAppBar` would have carried [lede] in a
+ * subtitle slot of its own, and it is internal in material3 1.4.0. It is not
+ * missed: a lede is a sentence about the screen rather than a label on the
+ * bar, so it reads better as the first thing *in* the page — which is also
+ * where it scrolls away like the content it is.
+ *
+ * @param titleModifier carries the shared element that flows a settings row's
+ *   words up into this heading (`Flows.settingsTitle`). It belongs on the
+ *   `Text`, not on the bar, or the whole bar would try to travel.
+ * @param onBack null on a root that is closed rather than popped.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun RibbonScreen(
+    title: String,
+    modifier: Modifier = Modifier,
+    lede: String? = null,
+    titleModifier: Modifier = Modifier,
+    onBack: (() -> Unit)? = null,
+    backLabel: String = Copy.BACK,
+    actions: @Composable RowScope.() -> Unit = {},
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val room = LocalRoomColours.current
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val bottomBar = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+
+    Box(modifier = modifier.fillMaxSize()) {
+        // The ground and its grain, painted behind everything rather than by
+        // the scroll: `.room()` hides its node from accessibility, and a
+        // scroll that hid itself would take the screen with it.
+        Box(Modifier.matchParentSize().room())
+        Scaffold(
+            modifier = Modifier
+                .fillMaxSize()
+                .nestedScroll(scrollBehavior.nestedScrollConnection),
+            // The ground is already painted behind; a container colour here
+            // would put an opaque slab over the grain.
+            containerColor = Color.Transparent,
+            contentColor = room.text,
+            topBar = {
+                LargeTopAppBar(
+                    title = {
+                        Text(
+                            text = title,
+                            // Literata, not Material's own face. The bar is
+                            // Material's behaviour; the words are Ribbon's.
+                            style = RibbonType.display(30f),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = titleModifier.semantics { heading() },
+                        )
+                    },
+                    navigationIcon = {
+                        if (onBack != null) BackChevron(onBack = onBack, label = backLabel)
+                    },
+                    actions = actions,
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                        scrolledContainerColor = Color.Transparent,
+                        navigationIconContentColor = room.text,
+                        titleContentColor = room.text,
+                        actionIconContentColor = room.text,
+                    ),
+                    scrollBehavior = scrollBehavior,
+                )
+            },
+        ) { bars ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    // A Compose scroll draws no indicator of its own, so
+                    // `.scrollIndicators(.hidden)` has nothing to hide.
+                    .verticalScroll(rememberScrollState())
+                    .padding(top = bars.calculateTopPadding()),
+            ) {
+                Column(
+                    modifier = Modifier
+                        .readableColumn()
+                        .padding(horizontal = ScreenMargin)
+                        .padding(bottom = bottomBar + 44.dp),
+                ) {
+                    if (lede != null) {
+                        Text(
+                            text = lede,
+                            style = RibbonType.ui(15f),
+                            color = room.muted,
+                            modifier = Modifier.padding(bottom = 22.dp),
+                        )
+                    }
+                    content()
+                }
+            }
+        }
+    }
+}
+
+/** The side margin every pushed screen keeps. */
+val ScreenMargin = 20.dp

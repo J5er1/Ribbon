@@ -37,6 +37,7 @@ import app.readribbon.core.Person
 import app.readribbon.core.QuietDay
 import app.readribbon.core.Reading
 import app.readribbon.core.ReadingPosition
+import app.readribbon.core.Ribbon
 import app.readribbon.core.RibbonClock
 import app.readribbon.core.Room
 import app.readribbon.core.TranscriptState
@@ -745,6 +746,79 @@ class AppModel(
         }
     }
 
+    // MARK: - The ribbon (deviation A30)
+
+    /** Where the room left the ribbon in this book, if anybody has. */
+    fun ribbon(reading: Reading): Ribbon? =
+        state.ribbons.firstOrNull { it.readingID == reading.id }
+
+    /**
+     * Leave the ribbon here.
+     *
+     * Called when the book is set down, which is the whole of the gesture:
+     * you read, you close the book, the ribbon is where you stopped. There is
+     * no separate control for it because there is no separate act — that is
+     * what a ribbon in a physical Bible is, and inventing a "mark this verse"
+     * button would turn a consequence of reading into a chore.
+     *
+     * One row per reading, replaced in place. Anybody in the room may move
+     * it; nothing about moving it moves anybody else (§03 is intact — see
+     * [Ribbon]).
+     *
+     * A reading that is finished keeps the ribbon it had. An ember is a
+     * record of a book that was read, and moving its ribbon afterwards would
+     * be editing the past.
+     */
+    fun leaveTheRibbon(reading: Reading, address: VerseAddress) {
+        val me = state.me ?: return
+        if (reading.isFinished) return
+        val ribbon = Ribbon(
+            readingID = reading.id,
+            personID = me.id,
+            chapter = address.chapter,
+            verse = address.verse,
+            placedAt = Clock.System.now(),
+        )
+        val existing = state.ribbons.firstOrNull { it.readingID == reading.id }
+        // Nothing to write and nothing to say when it has not moved: a
+        // ribbon put back exactly where it already was is not an event, and
+        // writing it would move `placedAt` and make the room's one quiet line
+        // reappear for no reason.
+        if (existing != null &&
+            existing.chapter == ribbon.chapter &&
+            existing.verse == ribbon.verse &&
+            existing.personID == ribbon.personID
+        ) {
+            return
+        }
+        state = state.copy(
+            ribbons = state.ribbons.filterNot { it.readingID == reading.id } + ribbon,
+        )
+        persist()
+        val remote = this.remote
+        if (remote != null && remote.isSignedIn) {
+            viewModelScope.launch {
+                runCatching { remote.push(ribbon = ribbon) }
+            }
+        }
+    }
+
+    /**
+     * The ribbon, when it is worth offering — which is not always.
+     *
+     * Silent when there is no ribbon, when it is exactly where you already
+     * are (you do not need telling where you are), and when the reading is
+     * finished. Everything else is a place somebody left, and the room says
+     * so once, quietly, as a line you may tap.
+     */
+    fun ribbonWorthOffering(reading: Reading): Ribbon? {
+        if (reading.isFinished) return null
+        val ribbon = ribbon(reading) ?: return null
+        val mine = myPosition(reading)
+        if (ribbon.chapter == mine.chapter && ribbon.verse == mine.verse) return null
+        return ribbon
+    }
+
     /** Where I am in a reading — mine, not the room's (§03). */
     fun myPosition(reading: Reading): VerseAddress {
         val me = state.me
@@ -1398,6 +1472,12 @@ class AppModel(
             positions = state.positions.map {
                 if (it.personID == old) it.copy(personID = uid) else it
             },
+            // The ribbon carries who left it, and the room says so out loud
+            // — a ribbon whose author was a local id nobody has any more
+            // would read as left by nobody.
+            ribbons = state.ribbons.map {
+                if (it.personID == old) it.copy(personID = uid) else it
+            },
             quietDays = state.quietDays.map {
                 if (it.personID == old) it.copy(personID = uid) else it
             },
@@ -1818,6 +1898,28 @@ class AppModel(
             }
         }
         next = next.copy(positions = positions)
+
+        // The ribbon (A30). One per reading, last placement wins — the same
+        // last-write-wins §13 gives every single-author object, except that
+        // the "author" here is the room: whoever set the book down last is
+        // where the ribbon is.
+        val ribbons = next.ribbons.toMutableList()
+        for (row in graph.ribbons) {
+            val i = ribbons.indexOfFirst { it.readingID == row.readingId }
+            val incoming = Ribbon(
+                readingID = row.readingId,
+                personID = row.personId,
+                chapter = row.chapter,
+                verse = row.verse,
+                placedAt = row.placedAt,
+            )
+            if (i >= 0) {
+                if (row.placedAt > ribbons[i].placedAt) ribbons[i] = incoming
+            } else {
+                ribbons.add(incoming)
+            }
+        }
+        next = next.copy(ribbons = ribbons)
 
         // Reflection Cards & Answers
         val cards = next.cards.toMutableList()
