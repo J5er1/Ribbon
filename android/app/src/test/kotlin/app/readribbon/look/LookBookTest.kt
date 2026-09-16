@@ -392,8 +392,35 @@ class LookBookTest {
             currentRoomID = room.id,
         )
         val m = model(state)
-        shoot("menu") {
+        shoot("menu-you") {
             MenuScreen(model = m, entry = MenuEntry.YOU, onDismiss = {}, onSwitch = {})
+        }
+    }
+
+    /** The menu's other door: the room, its people and the rooms you are in. */
+    @Test fun theRoomMenu() {
+        val open = reading("MRK", FireScale.medium)
+        val second = Room(name = "Thursday", createdAt = now - 200.hours)
+        val state = AppState(
+            me = me,
+            people = mapOf(me.id to me, ruth.id to ruth),
+            rooms = listOf(room, second),
+            memberships = listOf(
+                membership(me, Ink.teal),
+                membership(ruth, Ink.crimson),
+                Membership(
+                    roomID = second.id,
+                    personID = me.id,
+                    ink = Ink.moss,
+                    joinedAt = now - 200.hours,
+                ),
+            ),
+            readings = listOf(open),
+            currentRoomID = room.id,
+        )
+        val m = model(state)
+        shoot("menu-room") {
+            MenuScreen(model = m, entry = MenuEntry.ROOMS, onDismiss = {}, onSwitch = {})
         }
     }
 

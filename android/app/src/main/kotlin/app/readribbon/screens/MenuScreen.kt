@@ -16,8 +16,8 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
@@ -44,6 +44,7 @@ import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -51,7 +52,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -103,8 +103,9 @@ import app.readribbon.app.AppModel
 import app.readribbon.app.Copy
 import app.readribbon.core.Bible
 import app.readribbon.core.Room
-import app.readribbon.design.Chevron
+import app.readribbon.design.Air
 import app.readribbon.design.BackChevron
+import app.readribbon.design.Chevron
 import app.readribbon.design.Flows
 import app.readribbon.design.LocalAppearance
 import app.readribbon.design.LocalFlowLayer
@@ -112,8 +113,9 @@ import app.readribbon.design.Palette
 import app.readribbon.design.PortraitView
 import app.readribbon.design.QuietControl
 import app.readribbon.design.RibbonMotion
-import app.readribbon.design.RibbonType
+import app.readribbon.design.RibbonScreen
 import app.readribbon.design.RibbonShape
+import app.readribbon.design.RibbonType
 import app.readribbon.design.SectionLabel
 import app.readribbon.design.Setting
 import app.readribbon.design.SettingsGroup
@@ -122,9 +124,9 @@ import app.readribbon.design.flows
 import app.readribbon.design.flowsAsWords
 import app.readribbon.design.grain
 import app.readribbon.design.paper
+import app.readribbon.design.peeled
 import app.readribbon.design.pressable
 import app.readribbon.design.pressablePaper
-import app.readribbon.design.peeled
 import app.readribbon.design.readableColumn
 import app.readribbon.design.rememberBackPeel
 import app.readribbon.design.rememberReduceMotion
@@ -132,12 +134,12 @@ import app.readribbon.design.room
 import app.readribbon.fire.CampfireGlyph
 import app.readribbon.services.Passkeys
 import app.readribbon.services.UpdateState
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 // S14 + S18, made one screen: the menu.
 //
@@ -187,7 +189,11 @@ enum class MenuEntry {
  * token travels as a path segment.
  */
 private object MenuRoute {
-    const val ROOT = "menu"
+    /** The room's name: the room you are in, and the rooms you are in. */
+    const val ROOM = "room"
+
+    /** Your portrait: you, this phone, and the account. */
+    const val YOU = "you"
     const val TEXT = "text"
     const val NOTIFICATIONS = "notifications"
     const val APPEARANCE = "appearance"
@@ -353,7 +359,9 @@ fun MenuScreen(
 
         NavHost(
             navController = navController,
-            startDestination = MenuRoute.ROOT,
+            // Which door was used *is* which screen this is, rather than
+            // where a single scroll happens to land (deviation A29).
+            startDestination = if (entry == MenuEntry.ROOMS) MenuRoute.ROOM else MenuRoute.YOU,
             modifier = Modifier.fillMaxSize(),
             enterTransition = { slideInHorizontally(slide) { it / 4 } + fadeIn(push) },
             exitTransition = { fadeOut(push) },
@@ -361,28 +369,42 @@ fun MenuScreen(
             popExitTransition = { slideOutHorizontally(slide) { it / 4 } + fadeOut(push) },
         ) {
             composable(
-                MenuRoute.ROOT,
-                // The root never slides: it is what the menu opened onto.
+                MenuRoute.ROOM,
+                // A root never slides: it is what the menu opened onto.
                 enterTransition = { EnterTransition.None },
                 exitTransition = { fadeOut(push) },
                 popEnterTransition = { fadeIn(push) },
                 popExitTransition = { ExitTransition.None },
             ) {
-                // The root is a layer like its five siblings, and it is the
+                // A root is a layer like the screens it pushes, and it is the
                 // one that holds the *leaving* half of every settings-title
                 // flow. Without this its rows bound themselves to the menu's
                 // own outer scope, which stays visible for as long as the
                 // menu is open — so both halves of the key were live and
                 // neither was going anywhere.
                 CompositionLocalProvider(LocalFlowLayer provides this) {
-                    MenuRoot(
+                    RoomMenu(
                         model = model,
-                        entry = entry,
                         onOpen = { route -> navController.navigate(route) },
                         onDismiss = { close() },
                         onSwitch = onSwitch,
                         onStartRoom = { showNewRoom = true },
                         onInvite = { room -> inviting = InviteTarget(room = room, isNew = false) },
+                    )
+                }
+            }
+            composable(
+                MenuRoute.YOU,
+                enterTransition = { EnterTransition.None },
+                exitTransition = { fadeOut(push) },
+                popEnterTransition = { fadeIn(push) },
+                popExitTransition = { ExitTransition.None },
+            ) {
+                CompositionLocalProvider(LocalFlowLayer provides this) {
+                    YouMenu(
+                        model = model,
+                        onOpen = { route -> navController.navigate(route) },
+                        onDismiss = { close() },
                     )
                 }
             }
@@ -483,15 +505,24 @@ fun MenuScreen(
 }
 
 /**
- * The menu itself: the rooms, the room you are in, you, and your account.
+ * The room: who is in it, what it tells you, and the rooms you are in.
  *
- * @param onOpen push one of the menu's screens.
- * @param onDismiss close the menu.
+ * One of the menu's two doors, and now genuinely its own screen rather than
+ * a place a single scroll landed (deviation A29). The split is not
+ * cosmetic — it falls along a line the data already draws. Notifications are
+ * per room (`RoomNotificationPrefs`, and S19 opens by saying so). The plan
+ * entitles a room, not a person (§14). The invite, the inks and leaving are
+ * all about this room. None of that belongs beside your name and your text
+ * size, and putting it there was what made one screen long enough to need
+ * landing at an offset.
+ *
+ * The title is the room's own name, because a large Material title names the
+ * thing you are looking at, and "Settings" is not a thing anybody is looking
+ * at.
  */
 @Composable
-private fun MenuRoot(
+private fun RoomMenu(
     model: AppModel,
-    entry: MenuEntry,
     onOpen: (String) -> Unit,
     onDismiss: () -> Unit,
     onSwitch: (Uuid) -> Unit,
@@ -499,38 +530,120 @@ private fun MenuRoot(
     onInvite: (Room) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var confirmDelete by rememberSaveable { mutableStateOf(false) }
+    val here = model.currentRoom
+    RibbonScreen(
+        title = here?.let { model.displayName(it) } ?: Copy.ROOMS,
+        lede = Copy.ROOM_LEDE,
+        modifier = modifier,
+        actions = { CloseControl(onDismiss) },
+    ) {
+        // This room (S12/S15).
+        here?.let { room ->
+            if (model.isFull(room)) {
+                // S15's full state, said where the invite would have been.
+                Text(
+                    text = Copy.ROOM_HOLDS_SIX,
+                    style = RibbonType.ui(15f),
+                    color = Palette.muted,
+                    modifier = Modifier.padding(bottom = 10.dp),
+                )
+            } else if (model.remote != null) {
+                // The link resolves through the backend, so without one there
+                // is nothing to hand out and no row for it.
+                SettingsGroup(count = 1) {
+                    Setting(
+                        title = Copy.INVITE_SOMEONE,
+                        subtitle = Copy.INVITE_SEND,
+                        onClick = { onInvite(room) },
+                    )
+                }
+                Air(SectionGap)
+            }
 
-    val context = LocalContext.current
-    val reduceMotion = rememberReduceMotion()
-    val scroll = rememberScrollState()
+            // The two doors that are about this room rather than about you.
+            SettingsGroup(count = 2) {
+                Setting(
+                    title = Copy.NOTIFICATIONS,
+                    subtitle = Copy.NOTIFICATIONS_SUB,
+                    onClick = { onOpen(MenuRoute.NOTIFICATIONS) },
+                    modifier = Modifier.flowsAsWords(Flows.settingsTitle(Flows.NOTIFICATIONS)),
+                )
+                Setting(
+                    title = Copy.PLAN,
+                    subtitle = Copy.PLAN_SUB,
+                    onClick = { onOpen(MenuRoute.PLAN) },
+                    modifier = Modifier.flowsAsWords(Flows.settingsTitle(Flows.PLAN)),
+                )
+            }
 
-    // Opened from the portrait: land on your own section rather than making
-    // you scroll past the rooms to reach it. The offset is read off the You
-    // section once it has been placed, and the jump is instant — this is
-    // where the menu opened, not somewhere it travelled to.
-    var youOffset by remember { mutableIntStateOf(-1) }
-    // Saveable, because `rememberScrollState` is: after a rotation the scroll
-    // is already where the person left it, and landing on You a second time
-    // would throw it away.
-    var landed by rememberSaveable { mutableStateOf(entry != MenuEntry.YOU) }
-    LaunchedEffect(youOffset, landed) {
-        if (!landed && youOffset >= 0) {
-            scroll.scrollTo(youOffset)
-            landed = true
+            Air(SectionGap)
+            RoomControls(model = model, room = room, onLeft = onDismiss)
+            Air(SectionGap)
+        }
+
+        // The rooms (S14).
+        SectionLabel(Copy.YOUR_ROOMS)
+        Air(10.dp)
+        // A seam of grained ground between tiles rather than a rule between
+        // lines — the divider every group in the app now uses.
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            model.state.rooms.forEach { room ->
+                key(room.id) {
+                    MenuRoomRow(
+                        model = model,
+                        room = room,
+                        onClick = {
+                            // Tap a room → switch, the menu closes, the room
+                            // screen cross-fades (S14). The book closes with
+                            // it: a reading belongs to the room it is in, and
+                            // leaving it open over another room would put
+                            // somebody else's fire under somebody else's page.
+                            onSwitch(room.id)
+                            model.switchRoom(room.id)
+                            onDismiss()
+                        },
+                    )
+                }
+            }
+        }
+        Column(
+            modifier = Modifier.padding(top = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            MenuRow(Copy.START_A_ROOM_CONTROL, onClick = onStartRoom)
+            // A join goes through the backend and cannot happen without one.
+            // No dead control (§6.1) — the same rule the account keeps.
+            if (model.remote != null) {
+                MenuRow(Copy.JOIN_WITH_AN_INVITE) { onOpen(MenuRoute.JOIN_WITH_INVITE) }
+            }
         }
     }
+}
+
+/**
+ * You: your name and face, how Scripture sets, and what this phone keeps.
+ *
+ * The menu's other door. Everything here is yours or this device's —
+ * translation and text size are personal by §2.6, the wallpaper's colours are
+ * a property of the phone, and the downloads are megabytes on it. Nothing on
+ * this screen is about a room, which is the whole point of there being two.
+ */
+@Composable
+private fun YouMenu(
+    model: AppModel,
+    onOpen: (String) -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val reduceMotion = rememberReduceMotion()
+    var confirmDelete by remember { mutableStateOf(false) }
+
     LaunchedEffect(Unit) {
         if (model.updateState is UpdateState.Idle) {
             model.checkForUpdates()
         }
     }
-
-    // Edge-to-edge is mandatory (§12.2), so the menu carries both insets
-    // itself: the status bar above the way out, the navigation bar under the
-    // last line.
-    val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val bottomBar = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     val version = remember(context) {
         runCatching {
@@ -538,202 +651,87 @@ private fun MenuRoot(
         }.getOrNull().orEmpty()
     }
 
-    Box(modifier.fillMaxSize()) {
-        Column(
+    RibbonScreen(
+        title = Copy.YOU,
+        lede = Copy.YOU_LEDE,
+        modifier = modifier,
+        actions = { CloseControl(onDismiss) },
+    ) {
+        YouIdentityRow(model = model)
+        Air(SectionGap)
+
+        // Three doors in one group, each saying what is behind it. A row that
+        // reads only "Downloads" makes you open it to find out what it is; a
+        // row that says what is actually on the phone has answered already.
+        SectionLabel(Copy.READING_SECTION)
+        Air(10.dp)
+        SettingsGroup(count = 3) {
+            Setting(
+                title = Copy.TEXT_AND_TRANSLATION,
+                subtitle = Copy.TEXT_SUB,
+                onClick = { onOpen(MenuRoute.TEXT) },
+                modifier = Modifier.flowsAsWords(Flows.settingsTitle(Flows.TEXT)),
+            )
+            Setting(
+                title = Copy.APPEARANCE,
+                // The state *is* the subtitle here, rather than a sentence
+                // about the screen with the state squeezed in beside it:
+                // "From your wallpaper" says both what the row is about and
+                // where it currently stands, in four words.
+                subtitle = if (LocalAppearance.current.wallpaperColour) {
+                    Copy.FROM_YOUR_WALLPAPER
+                } else {
+                    Copy.RIBBONS_OWN
+                },
+                onClick = { onOpen(MenuRoute.APPEARANCE) },
+                modifier = Modifier.flowsAsWords(Flows.settingsTitle(Flows.APPEARANCE)),
+            )
+            Setting(
+                title = Copy.DOWNLOADS,
+                subtitle = Copy.downloadsSub(context),
+                onClick = { onOpen(MenuRoute.DOWNLOADS) },
+                modifier = Modifier.flowsAsWords(Flows.settingsTitle(Flows.DOWNLOADS)),
+            )
+        }
+
+        Air(SectionGap)
+
+        // The account (§6.10).
+        SectionLabel(Copy.ACCOUNT)
+        Air(10.dp)
+        AccountControls(model = model)
+        QuietControl(
+            title = Copy.DELETE_ACCOUNT,
+            modifier = Modifier.offset(x = QuietControlInset),
+        ) { confirmDelete = true }
+
+        Air(SectionGap)
+        UpdateSection(model = model)
+
+        // Tapping the version checks for one, and the line says so while it
+        // looks. The words cross-fade rather than swap: the check is usually
+        // over in well under a second, and a line that flicked to "checking"
+        // and back would read as a glitch rather than as an answer. The
+        // control is the box around them, so the target does not move as they
+        // change.
+        Box(
             modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(scroll)
-                .imePadding(),
+                .padding(top = 18.dp)
+                .clickable(role = Role.Button) { model.checkForUpdates() },
         ) {
-            Column(
-                modifier = Modifier
-                    .readableColumn()
-                    .padding(horizontal = Margin)
-                    .padding(top = statusBar, bottom = bottomBar + 44.dp),
-                verticalArrangement = Arrangement.spacedBy(SectionGap),
-            ) {
-                // The way out. Back closes the menu too, and does it with the
-                // system gesture; a screen whose only way out is a gesture
-                // has no tap equivalent, so the control is drawn (§11).
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                    horizontalArrangement = Arrangement.End,
-                ) {
-                    QuietControl(
-                        title = Copy.CLOSE,
-                        modifier = Modifier.offset(x = 8.dp),
-                        onClick = onDismiss,
-                    )
-                }
-
-                // Rooms (S14).
-                Column {
-                    SectionHead(Copy.ROOMS)
-                    // A seam of grained ground between tiles rather than a
-                    // rule between lines — the divider every group in the app
-                    // now uses.
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    model.state.rooms.forEach { room ->
-                        key(room.id) {
-                            MenuRoomRow(
-                                model = model,
-                                room = room,
-                                onClick = {
-                                    // Tap a room → switch, the menu closes,
-                                    // the room screen cross-fades (S14). The
-                                    // book closes with it: a reading belongs
-                                    // to the room it is in, and leaving it
-                                    // open over another room would put
-                                    // somebody else's fire under somebody
-                                    // else's page.
-                                    onSwitch(room.id)
-                                    model.switchRoom(room.id)
-                                    onDismiss()
-                                },
-                            )
-                        }
-                    }
-                    }
-                    Column(
-                        modifier = Modifier.padding(top = 10.dp),
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        MenuRow(Copy.START_A_ROOM_CONTROL, onClick = onStartRoom)
-                        // A join goes through the backend and cannot happen
-                        // without one. No dead control (§6.1) — the same rule
-                        // the account keeps two sections down.
-                        if (model.remote != null) {
-                            MenuRow(Copy.JOIN_WITH_AN_INVITE) {
-                                onOpen(MenuRoute.JOIN_WITH_INVITE)
-                            }
-                        }
-                    }
-                }
-
-                // This room (S12/S15) — the controls for the room you are in.
-                model.currentRoom?.let { room ->
-                    Column {
-                        SectionHead(Copy.THIS_ROOM, detail = model.displayName(room))
-                        if (model.isFull(room)) {
-                            // S15's full state, said where the invite would
-                            // have been.
-                            Text(
-                                text = Copy.ROOM_HOLDS_SIX,
-                                style = RibbonType.ui(15f),
-                                color = Palette.muted,
-                                modifier = Modifier.padding(vertical = 10.dp),
-                            )
-                        } else if (model.remote != null) {
-                            // The link resolves through the backend, so
-                            // without one there is nothing to hand out and no
-                            // row for it.
-                            MenuRow(
-                                title = Copy.INVITE_SOMEONE,
-                                subtitle = Copy.INVITE_SEND,
-                            ) { onInvite(room) }
-                        }
-                        RoomControls(model = model, room = room, onLeft = onDismiss)
-                    }
-                }
-
-                // You (S18).
-                Column(
-                    Modifier.onGloballyPositioned { coordinates ->
-                        youOffset = coordinates.positionInParent().y.roundToInt()
-                    },
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    SectionHead(Copy.YOU)
-                    YouIdentityRow(model = model)
-                    // Five doors in one group, each saying what is behind it.
-                    // A row that reads only "Downloads" makes you open it to
-                    // find out what it is; a row that says what is actually
-                    // on the phone has answered already.
-                    SettingsGroup(count = 5) {
-                        Setting(
-                            title = Copy.TEXT_AND_TRANSLATION,
-                            subtitle = Copy.TEXT_SUB,
-                            onClick = { onOpen(MenuRoute.TEXT) },
-                            modifier = Modifier.flowsAsWords(Flows.settingsTitle(Flows.TEXT)),
-                        )
-                        Setting(
-                            title = Copy.NOTIFICATIONS,
-                            subtitle = Copy.NOTIFICATIONS_SUB,
-                            onClick = { onOpen(MenuRoute.NOTIFICATIONS) },
-                            modifier = Modifier.flowsAsWords(Flows.settingsTitle(Flows.NOTIFICATIONS)),
-                        )
-                        Setting(
-                            title = Copy.APPEARANCE,
-                            // The state *is* the subtitle here, rather than a
-                            // sentence about the screen with the state
-                            // squeezed in beside it: "From your wallpaper"
-                            // says both what the row is about and where it
-                            // currently stands, in four words.
-                            subtitle = if (LocalAppearance.current.wallpaperColour) {
-                                Copy.FROM_YOUR_WALLPAPER
-                            } else {
-                                Copy.RIBBONS_OWN
-                            },
-                            onClick = { onOpen(MenuRoute.APPEARANCE) },
-                            modifier = Modifier.flowsAsWords(Flows.settingsTitle(Flows.APPEARANCE)),
-                        )
-                        Setting(
-                            title = Copy.DOWNLOADS,
-                            subtitle = Copy.downloadsSub(LocalContext.current),
-                            onClick = { onOpen(MenuRoute.DOWNLOADS) },
-                            modifier = Modifier.flowsAsWords(Flows.settingsTitle(Flows.DOWNLOADS)),
-                        )
-                        Setting(
-                            title = Copy.PLAN,
-                            subtitle = Copy.PLAN_SUB,
-                            onClick = { onOpen(MenuRoute.PLAN) },
-                            modifier = Modifier.flowsAsWords(Flows.settingsTitle(Flows.PLAN)),
-                        )
-                    }
-                }
-
-                // The account (§6.10).
-                Column {
-                    SectionHead(Copy.ACCOUNT)
-                    AccountControls(model = model)
-                    QuietControl(
-                        title = Copy.DELETE_ACCOUNT,
-                        modifier = Modifier.offset(x = QuietControlInset),
-                    ) { confirmDelete = true }
-                }
-
-                UpdateSection(model = model)
-
-                // Tapping the version checks for one, and the line says so
-                // while it looks. The words cross-fade rather than swap: the
-                // check is usually over in well under a second, and a line
-                // that flicked to "checking" and back would read as a glitch
-                // rather than as an answer. The control is the box around
-                // them, so the target does not move as they change.
-                Box(
-                    modifier = Modifier.clickable(role = Role.Button) {
-                        model.checkForUpdates()
-                    },
-                ) {
-                    AnimatedContent(
-                        targetState = if (model.updateState is UpdateState.Checking) {
-                            Copy.CHECKING_FOR_UPDATES
-                        } else {
-                            Copy.versionLine(version)
-                        },
-                        transitionSpec = {
-                            fadeIn(RibbonMotion.arrive(reduceMotion)) togetherWith
-                                fadeOut(RibbonMotion.arrive(reduceMotion))
-                        },
-                        label = "the-version",
-                    ) { line ->
-                        SmallCaps(
-                            line,
-                            size = 11f,
-                            color = Palette.muted.copy(alpha = 0.7f),
-                        )
-                    }
-                }
+            AnimatedContent(
+                targetState = if (model.updateState is UpdateState.Checking) {
+                    Copy.CHECKING_FOR_UPDATES
+                } else {
+                    Copy.versionLine(version)
+                },
+                transitionSpec = {
+                    fadeIn(RibbonMotion.arrive(reduceMotion)) togetherWith
+                        fadeOut(RibbonMotion.arrive(reduceMotion))
+                },
+                label = "the-version",
+            ) { line ->
+                SmallCaps(line, size = 11f, color = Palette.muted.copy(alpha = 0.7f))
             }
         }
     }
@@ -747,9 +745,9 @@ private fun MenuRoot(
         ) {
             // The menu closes first, the way leaving a room does: the person
             // it was about is gone. The way in replaces this whole branch a
-            // moment later, so this is belt to that brace rather than the
-            // only thing holding it — iOS, where the menu is a presentation
-            // of its own, genuinely needs it.
+            // moment later, so this is belt to that brace rather than the only
+            // thing holding it — iOS, where the menu is a presentation of its
+            // own, genuinely needs it.
             ConfirmChoice(
                 title = Copy.DELETE_AND_LEAVE_THEM,
                 destructive = true,
@@ -774,6 +772,19 @@ private fun MenuRoot(
             ConfirmChoice(title = Copy.STAY, onClick = { confirmDelete = false })
         }
     }
+}
+
+/**
+ * The way out, in the app bar's action slot.
+ *
+ * Back closes the menu too, and does it with the system gesture; a screen
+ * whose only way out is a gesture has no tap equivalent, so the control is
+ * drawn (§11). It sits top-right because that is where a Material action
+ * goes, and because the door it closes was top-left or top-right on the room.
+ */
+@Composable
+private fun CloseControl(onDismiss: () -> Unit) {
+    QuietControl(title = Copy.CLOSE, onClick = onDismiss)
 }
 
 // MARK: Section furniture

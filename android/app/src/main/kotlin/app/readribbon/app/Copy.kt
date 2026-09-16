@@ -427,6 +427,16 @@ object Copy {
     const val THIS_ROOM = "This room"
     const val ACCOUNT = "Account"
 
+    // The menu's two doors, each now its own screen (deviation A29). The
+    // room's name is the room's title — a large Material title names the
+    // thing you are looking at, and "Settings" is not a thing anybody is
+    // looking at. The ledes say what is behind each, in one sentence, in the
+    // app's own voice.
+    const val ROOM_LEDE = "Who is in it, what it tells you, and the rooms you are in."
+    const val YOU_LEDE = "Your name and face, how Scripture sets, and what this phone keeps."
+    const val YOUR_ROOMS = "Your rooms"
+    const val READING_SECTION = "Reading"
+
     /**
      * Inviting someone to the room you are already in (S15). The room
      * screen's own line only appears while a room of one still has its first

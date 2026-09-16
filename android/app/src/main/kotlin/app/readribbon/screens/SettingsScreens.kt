@@ -60,15 +60,14 @@ import app.readribbon.core.Room
 import app.readribbon.core.TranslationID
 import app.readribbon.data.RoomNotificationPrefs
 import app.readribbon.design.Air
-import app.readribbon.design.BackChevron
 import app.readribbon.design.Flows
+import app.readribbon.design.RibbonScreen
 import app.readribbon.design.GroupScope
 import app.readribbon.design.LocalAppearance
 import app.readribbon.design.Palette
 import app.readribbon.design.RibbonMotion
 import app.readribbon.design.RibbonShape
 import app.readribbon.design.RibbonType
-import app.readribbon.design.ScreenTitle
 import app.readribbon.design.Setting
 import app.readribbon.design.SettingChoice
 import app.readribbon.design.SettingControl
@@ -722,38 +721,12 @@ private fun SettingsScaffold(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val bottomBar = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-
-    Box(modifier = modifier.fillMaxSize()) {
-        // The ground and its grain, painted behind the content rather than by
-        // the scroll: `.room()` hides its node from accessibility, and a
-        // scroll that hid itself would take the settings with it.
-        Box(Modifier.matchParentSize().room())
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                // A Compose scroll draws no indicator of its own, so
-                // `.scrollIndicators(.hidden)` has nothing to hide.
-                .verticalScroll(rememberScrollState()),
-        ) {
-            Column(
-                modifier = Modifier
-                    .readableColumn()
-                    .padding(top = statusBar, bottom = bottomBar + 44.dp)
-                    .padding(horizontal = Margin),
-            ) {
-                Air(8.dp)
-                BackChevron(onBack = onBack, label = Copy.BACK)
-                Air(18.dp)
-                ScreenTitle(
-                    title = title,
-                    subtitle = lede,
-                    modifier = Modifier.flowsAsWords(Flows.settingsTitle(route)),
-                )
-                Air(26.dp)
-                content()
-            }
-        }
-    }
+    RibbonScreen(
+        title = title,
+        lede = lede,
+        titleModifier = Modifier.flowsAsWords(Flows.settingsTitle(route)),
+        onBack = onBack,
+        modifier = modifier,
+        content = content,
+    )
 }
