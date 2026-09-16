@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -49,6 +50,7 @@ import app.readribbon.core.Ink
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -64,6 +66,8 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -76,13 +80,17 @@ import app.readribbon.core.Invite
 import app.readribbon.design.Palette
 import app.readribbon.design.QuietControl
 import app.readribbon.design.RibbonMotion
+import app.readribbon.design.RibbonShape
 import app.readribbon.design.RibbonType
+import app.readribbon.design.Seam
+import app.readribbon.design.pressablePaper
 import app.readribbon.design.SmallCaps
 import app.readribbon.design.WaveMark
 import app.readribbon.design.WayInButton
 import app.readribbon.design.readableColumn
 import app.readribbon.design.rememberReduceMotion
 import app.readribbon.design.room
+import app.readribbon.design.well
 import app.readribbon.design.color
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -156,7 +164,7 @@ fun OnboardingFlow(
     modifier: Modifier = Modifier,
 ) {
     var step: Step by remember { mutableStateOf<Step>(Step.Mark) }
-    var selectedIntent by remember { mutableStateOf(0) }
+    var selectedIntent by remember { mutableIntStateOf(0) }
     var name by remember { mutableStateOf("") }
     var portraitData: ByteArray? by remember { mutableStateOf<ByteArray?>(null) }
     // Swift decodes the picked data to a `UIImage` inline at draw time; a
@@ -425,6 +433,11 @@ private fun IntentStep(
             onSignIn = onSignIn,
         )
 
+        // One share above, two below — the same 1:2 every other step in the
+        // thread uses (`StepColumn`, and `NameStep` by hand). This step was
+        // the one that split its air evenly, which put a four-row question
+        // in the dead middle of a tall phone: the place a thing floats
+        // rather than the place it sits.
         Spacer(modifier = Modifier.weight(1f))
 
         Text(
@@ -439,11 +452,25 @@ private fun IntentStep(
 
         Spacer(modifier = Modifier.height(24.dp))
 
+        // One group of four, in the room's own tiles.
+        //
+        // Two things were wrong with the hand-rolled version and the picture
+        // is what showed them. The three choices you have not made were set
+        // in `muted` on a fill you cannot see, so they read as *disabled*:
+        // four options, three of which looked unavailable, on the screen
+        // that asks who you are going to read with. A choice not yet made is
+        // not a choice withheld. And the rows drew their own 12 dp corners
+        // and their own border, where every other list in the app is now a
+        // seam-separated group sharing one outer radius.
+        //
+        // So the words are `text` in both states, the accent hairline and
+        // the check carry the selection between them (colour is never the
+        // only signal, §11), and the tiles are the app's.
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(Seam),
         ) {
             val intents = listOf(
                 Pair(Copy.WALKTHROUGH_INTENT_SPOUSE, Ink.rose),
@@ -455,23 +482,29 @@ private fun IntentStep(
             intents.forEachIndexed { i, (title, ink) ->
                 val isSelected = selectedIntent == i
                 val dotColor = ink.color
+                val shape = RibbonShape.inGroup(i, intents.size)
 
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(if (isSelected) Palette.raised else Palette.surface)
-                        .border(
-                            width = 1.dp,
-                            color = if (isSelected) Palette.chartreuse.copy(alpha = 0.6f) else Palette.rule,
-                            shape = RoundedCornerShape(12.dp),
-                        )
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
+                        .heightIn(min = TouchTarget)
+                        .pressablePaper(
+                            shape = shape,
                             role = Role.RadioButton,
                             onClick = { onIntentSelected(i) },
                         )
+                        // The selected tile is ringed rather than repainted:
+                        // a fill change would have to be a colour the room
+                        // does not own, and a wallpaper may have taken the
+                        // one we would have used.
+                        .then(
+                            if (isSelected) {
+                                Modifier.border(1.dp, Palette.accent, shape)
+                            } else {
+                                Modifier
+                            },
+                        )
+                        .semantics { selected = isSelected }
                         .padding(horizontal = 18.dp, vertical = 15.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -488,22 +521,25 @@ private fun IntentStep(
                         Text(
                             text = title,
                             style = RibbonType.ui(16f),
-                            color = if (isSelected) Palette.text else Palette.muted,
+                            color = Palette.text,
                         )
                     }
 
                     if (isSelected) {
+                        // Read out here: a draw lambda is not a composition,
+                        // and the room's accent is a composition local now.
+                        val accent = Palette.accent
                         Canvas(modifier = Modifier.size(16.dp)) {
                             val stroke = 2.dp.toPx()
                             drawLine(
-                                color = Palette.chartreuse,
+                                color = accent,
                                 start = Offset(size.width * 0.2f, size.height * 0.5f),
                                 end = Offset(size.width * 0.45f, size.height * 0.75f),
                                 strokeWidth = stroke,
                                 cap = StrokeCap.Round,
                             )
                             drawLine(
-                                color = Palette.chartreuse,
+                                color = accent,
                                 start = Offset(size.width * 0.45f, size.height * 0.75f),
                                 end = Offset(size.width * 0.8f, size.height * 0.25f),
                                 strokeWidth = stroke,
@@ -515,7 +551,7 @@ private fun IntentStep(
             }
         }
 
-        Spacer(modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.weight(2f))
 
         WayInButton(
             title = Copy.CONTINUE_TOUR,
@@ -595,19 +631,20 @@ private fun SignInStep(
                     ),
                 contentAlignment = Alignment.Center,
             ) {
+                val muted = Palette.muted
                 Canvas(modifier = Modifier.size(18.dp)) {
                     val centre = Offset(size.width / 2f, size.height / 2f)
                     val arm = 4.5.dp.toPx()
                     val stroke = 1.6.dp.toPx()
                     drawLine(
-                        color = Palette.muted,
+                        color = muted,
                         start = Offset(centre.x + arm * 0.5f, centre.y - arm),
                         end = Offset(centre.x - arm * 0.5f, centre.y),
                         strokeWidth = stroke,
                         cap = StrokeCap.Round,
                     )
                     drawLine(
-                        color = Palette.muted,
+                        color = muted,
                         start = Offset(centre.x - arm * 0.5f, centre.y),
                         end = Offset(centre.x + arm * 0.5f, centre.y + arm),
                         strokeWidth = stroke,
@@ -695,16 +732,12 @@ private fun NameStep(
         Box(
             modifier = Modifier
                 .size(PortraitSide)
-                .clip(CircleShape)
-                .then(
-                    if (portrait == null) {
-                        Modifier
-                            .background(Palette.surface)
-                            .border(1.dp, Palette.rule, CircleShape)
-                    } else {
-                        Modifier
-                    },
-                )
+                // A recess you drop a face into — which is what `well` is,
+                // and it also settles the edge question the same way the
+                // rest of the app does: a hairline only on a palette where
+                // the fill alone cannot be seen. Hand-rolled, it drew a
+                // border on every wallpaper.
+                .then(if (portrait == null) Modifier.well(CircleShape) else Modifier.clip(CircleShape))
                 .clickable(role = Role.Button) {
                     picker.launch(
                         PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
@@ -944,6 +977,14 @@ private fun StepColumn(
  * until a character arrives. A step that wants the box (the paste field)
  * passes it in through [modifier], exactly as Swift layers it on.
  *
+ * There were three of these, in this file, in `JoinRoomScreen` and in
+ * `SignInInline` — the name, the invite code and the sign-in code, which is
+ * every place in the app where somebody types their way in. Two of the three
+ * had drifted: one put its 44 dp minimum on a wrapper rather than on the
+ * field's own decoration, which is deviation 12's defect exactly (a tall box
+ * around a short line leaves the same short line to hit), and all three drew
+ * the caret inside the prompt. One control, fixed once.
+ *
  * @param focusRequester when a step's field takes focus as it arrives. Only
  *   the name field does, which is Swift's one `.onAppear { nameFocused =
  *   true }` — the paste field waits to be tapped, as it does there.
@@ -964,44 +1005,72 @@ internal fun CentredTextField(
             runCatching { focusRequester.requestFocus() }
         }
     }
-    Box(
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = true,
+        textStyle = RibbonType.ui(size).copy(
+            color = Palette.text,
+            textAlign = TextAlign.Center,
+        ),
+        cursorBrush = SolidColor(Palette.chartreuse),
+        keyboardOptions = keyboardOptions,
+        keyboardActions = keyboardActions,
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = TouchTarget),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (value.isEmpty()) {
-            Text(
-                text = placeholder,
-                style = RibbonType.ui(size),
-                color = Palette.muted,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-        BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            singleLine = true,
-            textStyle = RibbonType.ui(size).copy(
-                color = Palette.text,
-                textAlign = TextAlign.Center,
+            .then(
+                if (focusRequester != null) {
+                    Modifier.focusRequester(focusRequester)
+                } else {
+                    Modifier
+                },
             ),
-            cursorBrush = SolidColor(Palette.chartreuse),
-            keyboardOptions = keyboardOptions,
-            keyboardActions = keyboardActions,
-            modifier = Modifier
-                .fillMaxWidth()
-                .then(
-                    if (focusRequester != null) {
-                        Modifier.focusRequester(focusRequester)
-                    } else {
-                        Modifier
-                    },
-                ),
-        )
-    }
+        // The 44 dp minimum belongs to the field itself, not to a box drawn
+        // around it: a text field's tappable area is exactly its decoration,
+        // so a taller wrapper would leave the same short line to hit
+        // (deviation 12 — the defect found on iPad, and the same defect
+        // here). One line of type, centred in a target a finger can find.
+        decorationBox = { field ->
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = TouchTarget),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (value.isEmpty()) {
+                    // The prompt goes *beside* the caret, not under it.
+                    //
+                    // Both were centred in the same box, so an empty field
+                    // drew its caret in the middle of the prompt — "Your
+                    // |name", on the first screen in the app that asks you
+                    // to type. Laying them out as one centred line puts the
+                    // caret where a caret belongs: in front of the words,
+                    // waiting.
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        // The caret alone: an empty field has no text to
+                        // clip, so the narrow window holds exactly the
+                        // cursor and the prompt follows it.
+                        Box(Modifier.width(CaretWidth)) { field() }
+                        Text(
+                            text = placeholder,
+                            style = RibbonType.ui(size),
+                            color = Palette.muted,
+                        )
+                    }
+                } else {
+                    field()
+                }
+            }
+        },
+    )
 }
+
+/** The window the caret sits in while a field is still empty. */
+private val CaretWidth = 3.dp
 
 /**
  * Portraits are small; keep them that way on disk.

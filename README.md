@@ -23,7 +23,9 @@ core/        RibbonCore — Swift package, Foundation only.
 ios/         The iOS app. Xcode 26+, SwiftUI, iOS 26, dark-only (dark is
              the product). Open ios/Ribbon.xcodeproj — no generators, no pods.
 android/     The Android app (phase three). Jetpack Compose, Material 3
-             Expressive, dark-only. :core is RibbonCore in Kotlin, checked
+             Expressive, dark-only, and — unlike iOS — coloured from the
+             wallpaper by default (Material You; Appearance turns it off,
+             docs/deviations.md A18). :core is RibbonCore in Kotlin, checked
              against the Swift by the same test suites; :app is the app.
              Scripture, the fonts and the grain are not duplicated — they
              are synced out of ios/Ribbon/Resources at build time.
@@ -139,6 +141,39 @@ same test suites), the design system, the campfire and the ember, the
 reading surface with real ink blending, notes, presence, and every screen
 through to the join flow and settings. It builds and its tests pass; it has
 not yet been run on a physical device.
+
+Android has since taken a design pass of its own, and the two platforms are
+deliberately no longer identical (docs/deviations.md A18–A32):
+
+- **Material You, unharmonised.** The room takes its colour from the
+  wallpaper. The fire and the eight inks never move — they are objects in
+  the room rather than the room itself. Appearance (S26) turns it off for
+  Ribbon's own chartreuse.
+- **The room is a hearth.** It greets you by name, says who is here in a
+  sentence rather than only to a screen reader, seats the room's people
+  around the fire, and stands the fire in a recess of the unlit ground.
+- **The fire opens the book.** Take hold of it and pull; the Wave at the
+  foot of the page pulls it closed again. One number drives the gesture and
+  the movement, so they cannot fall out of step.
+- **The settings are tiles**, and every row says what it actually does.
+- **The front door took the same pass.** The tour's fire is the app's own
+  fire rather than a drawn circle; the intent step's unchosen options are
+  legible rather than greyed; and the name, the invite code and the sign-in
+  code are one field instead of three drifted copies of it.
+- **The offline fire dims**, and that is the whole of it — no banner, no
+  retry, nothing counted.
+- **The ribbon.** The room keeps one place in the book — where whoever read
+  last set it down. It is offered, never applied: one quiet sentence you may
+  tap. Your own position is untouched and the book still opens where you are.
+- **A chapter list**, reached from the foot of the page, marking where you
+  are and where the ribbon is. Nothing else, because everything else a
+  chapter grid usually shows is a count.
+- **The launch window carries the Wave**, unfurling. Android always shows a
+  splash; this one is ours.
+- **There is a look book.** `./gradlew :app:testDebugUnitTest` renders every
+  screen this touched, on both palettes, to `android/app/build/shots` — and
+  CI keeps them as an artifact. Until somebody installs the APK it is the
+  only way to see this app.
 
 Still ahead on both platforms: the presence socket and the content half of
 sync (notes, highlights, positions), and everything §15 puts in phase two.

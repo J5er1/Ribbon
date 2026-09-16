@@ -5,6 +5,8 @@ import android.content.pm.ActivityInfo
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
+import android.os.SystemClock
+import android.view.animation.DecelerateInterpolator
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -12,6 +14,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import app.readribbon.app.RibbonRoot
 import app.readribbon.design.Haptics
+import app.readribbon.design.RibbonMotion
 import app.readribbon.design.RibbonTheme
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -28,6 +31,17 @@ import kotlinx.coroutines.flow.receiveAsFlow
  * window is still a phone and a tablet in a narrow split is still a tablet.
  */
 private const val TABLET_SMALLEST_WIDTH_DP = 600
+
+/**
+ * The shortest the mark is allowed to be on screen, in milliseconds.
+ *
+ * Not a duration — a floor. The splash is held by the store loading and
+ * nothing else; this only stops a warm launch cutting the unfurl off after
+ * three frames, which reads as a glitch rather than as a mark. Set just
+ * above the unfurl's own 440 ms (`animator/splash_unfurl.xml`) so the ribbon
+ * always finishes coming down.
+ */
+private const val MARK_FLOOR_MS = 480L
 
 class MainActivity : ComponentActivity() {
 
@@ -48,14 +62,40 @@ class MainActivity : ComponentActivity() {
     private var ready = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // The unlit ground, held — never a spinner. Nothing in Ribbon should
-        // be visibly loading (§8), and the window background is already
-        // `@color/unlit`, so what this holds is the same near-black the room
-        // is about to draw. The exit is removed rather than animated: an
-        // icon flying away is the interstitial §05 says there isn't one of.
+        // The Wave, unfurling on the unlit ground, and then the room.
+        //
+        // §05 says there is no splash screen. That rule survives here because
+        // nothing is inserted: Android 12 and later show a system splash on
+        // every cold start whether an app asks for one or not, so the only
+        // real choice is whether it carries our mark or the launcher icon on
+        // a plate. Owner's call (deviation A28) — it carries the mark.
+        //
+        // What §05 is actually protecting is the *time*: "nothing may be
+        // inserted between opening the app and reading". So the splash is
+        // held by the store coming off disk, exactly as before, and the floor
+        // below is the one concession — the mark's unfurl is 440 ms and a
+        // fast warm launch would otherwise show three frames of a ribbon and
+        // cut. A mark that flickers is worse than no mark. It is a floor, not
+        // a duration: on the cold start that actually needs the time, the
+        // store is slower than this and the floor costs nothing at all.
         val splash = installSplashScreen()
-        splash.setKeepOnScreenCondition { !ready }
-        splash.setOnExitAnimationListener { it.remove() }
+        val launchedAt = SystemClock.uptimeMillis()
+        splash.setKeepOnScreenCondition {
+            !ready || SystemClock.uptimeMillis() - launchedAt < MARK_FLOOR_MS
+        }
+        // Handed over rather than cut. The mark does not fly anywhere — §13's
+        // never-ship list is largely a list of logo animations — it simply
+        // stops being there, over the same fade the app uses for anything
+        // arriving (§9.1's arrive token, 240 ms), onto the room that has
+        // already drawn underneath.
+        splash.setOnExitAnimationListener { screen ->
+            screen.view.animate()
+                .alpha(0f)
+                .setDuration(RibbonMotion.ARRIVE_MS.toLong())
+                .setInterpolator(DecelerateInterpolator())
+                .withEndAction { screen.remove() }
+                .start()
+        }
 
         super.onCreate(savedInstanceState)
 

@@ -12,6 +12,7 @@ import app.readribbon.core.Person
 import app.readribbon.core.QuietDay
 import app.readribbon.core.Reading
 import app.readribbon.core.ReadingPosition
+import app.readribbon.core.Ribbon
 import app.readribbon.core.ReflectionCard
 import app.readribbon.core.Room
 import kotlinx.coroutines.Dispatchers
@@ -73,11 +74,33 @@ data class AppState(
     val highlights: List<Highlight> = emptyList(),
     val quietDays: List<QuietDay> = emptyList(),
     val positions: List<ReadingPosition> = emptyList(),
+    /**
+     * The room's own place in each open book (deviation A30). One per
+     * reading, not one per person — see [Ribbon].
+     */
+    val ribbons: List<Ribbon> = emptyList(),
     val cards: List<ReflectionCard> = emptyList(),
     val invites: List<Invite> = emptyList(),
     val currentRoomID: Uuid? = null,
     val settings: AppSettings = AppSettings(),
     val hasSeenMarginHint: Boolean = false,
+    /**
+     * Whether the fire has ever been *pulled* on this device.
+     *
+     * The room offers the hearth's gesture — "Pull the fire up to open the
+     * book" — until it has been used. Same contract as [hasSeenMarginHint]
+     * and for the same reason (§6.1): a hint that comes back is worse than
+     * no hint.
+     *
+     * The gesture and not the book, and the distinction is the whole value of
+     * the flag. Keyed on the book being open by any route, the first tap of
+     * the way-in capsule — which is what everybody does, because the gesture
+     * is undiscovered on first run — permanently retired the only sentence
+     * that teaches the gesture. The headline interaction of the whole pass
+     * would have got one viewing at 11 sp and then never been mentioned
+     * again.
+     */
+    val hasPulledTheFire: Boolean = false,
     /**
      * The tag of the portrait object each face on this device came from, so
      * a conditional fetch can be told what it already has. Persisted: a

@@ -355,3 +355,48 @@ data class ReadingPosition(
     val verse: Int,
     val updatedAt: Instant
 )
+
+/**
+ * The ribbon: one place in the book, kept by the room.
+ *
+ * Owner's call, deviation A30, and it sits deliberately close to a line §03
+ * draws: *position is per-person, per-reading; there is no shared "where we
+ * are."* That rule survives intact — [ReadingPosition] is untouched, and the
+ * book still opens where **you** are, never where the room is (§6.2). What
+ * §03 was refusing is a shared position that turns two people reading at
+ * different speeds into a problem to be solved, and this is not that.
+ *
+ * It is the ribbon in a physical Bible that two people share. One of them
+ * reads, closes the book, and the ribbon is where they stopped. The other
+ * opens it and the ribbon is there — a place somebody left, which they can
+ * take or flip straight past. The app's whole name is this object.
+ *
+ * What keeps it from becoming a race, stated so nobody removes it by
+ * accident:
+ *
+ *   - It is an **address**, never a measure. "Mark 4" is where the ribbon
+ *     is, in the same way an ember's date range is "an address in time, not
+ *     a duration" (§13). Nothing anywhere subtracts it from your position,
+ *     and nothing ever will.
+ *   - It is **offered, never applied**. Moving the ribbon does not move
+ *     anybody. It appears as one quiet line on the room screen and a mark in
+ *     the chapter list, both of which are places you have to look.
+ *   - It is **one object, not one per person**, so there is nothing to
+ *     compare. A per-person ribbon would be a leaderboard with the numbers
+ *     taken out.
+ *   - Nobody is behind. The app never says so, because it does not know: it
+ *     holds one address and the reader's own, and never puts them in a
+ *     sentence together.
+ *
+ * @property personID who left it, which the room does see — "Ruth left the
+ *   ribbon at Mark 4" is an act of care performed in public, the same shape
+ *   as banking the fire (§4.7).
+ */
+@Serializable
+data class Ribbon(
+    val readingID: Uuid,
+    val personID: Uuid,
+    val chapter: Int,
+    val verse: Int,
+    val placedAt: Instant
+)

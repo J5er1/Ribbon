@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The settle. The mark arrives a shade large and comes to rest, which is
+     the weight the unfurl on its own does not have — the ribbon is a thing
+     with a length of cloth behind it, not a wipe.
+
+     Deliberately small: 1.04 to 1.0. Anything more is a logo animation, and
+     §13's never-ship list is mostly a list of logo animations. -->
+<set xmlns:android="http://schemas.android.com/apk/res/android">
+    <objectAnimator
+        android:propertyName="scaleX"
+        android:valueFrom="1.04"
+        android:valueTo="1.0"
+        android:valueType="floatType"
+        android:duration="560"
+        android:interpolator="@android:interpolator/decelerate_quint" />
+    <objectAnimator
+        android:propertyName="scaleY"
+        android:valueFrom="1.04"
+        android:valueTo="1.0"
+        android:valueType="floatType"
+        android:duration="560"
+        android:interpolator="@android:interpolator/decelerate_quint" />
+</set>

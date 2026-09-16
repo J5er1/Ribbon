@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalUuidApi::class)
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalUuidApi::class)
 
 package app.readribbon.reading
 
@@ -34,12 +34,14 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -102,7 +104,9 @@ import app.readribbon.design.QuietControl
 import app.readribbon.design.RibbonMotion
 import app.readribbon.design.RibbonType
 import app.readribbon.design.SmallCaps
+import app.readribbon.design.BookSheet
 import app.readribbon.design.WaveMark
+import app.readribbon.design.closesTheBook
 import app.readribbon.design.WayInButton
 import app.readribbon.design.grain
 import app.readribbon.design.readableColumn
@@ -140,13 +144,6 @@ import kotlin.uuid.Uuid
 // Swift reaches the store through `@Environment(AppModel.self)`; nothing in
 // this build has an equivalent ambient value yet, so the model is a
 // parameter, exactly as it is in NoteCard and PresenceForm.
-
-/**
- * The closing drag: pulled this far past the top, the page settles closed.
- * Always duplicated by the Wave (§11) — no way out of the book is a gesture
- * only.
- */
-private val CLOSING_PULL = 90.dp
 
 /**
  * How long a scroll we asked for ourselves stays ours. Inside this window a
@@ -208,7 +205,20 @@ fun ReadingScreen(
     model: AppModel,
     room: Room,
     reading: Reading,
+    /**
+     * How open the book is (design/Hearth.kt). The Wave at the foot of this
+     * screen is one of the two handles on it — pull it down and the page goes
+     * with the finger, over the room it came out of.
+     */
+    sheet: BookSheet,
     onClose: () -> Unit,
+    /**
+     * The page has already been put down by the finger that was holding it.
+     * Distinct from [onClose], which *asks* for it to be put down — this one
+     * arrives when the movement has already finished, and re-animating it
+     * would be a second close over the first.
+     */
+    onDismissed: () -> Unit,
     onFinished: () -> Unit,
     onStartAnother: () -> Unit,
     modifier: Modifier = Modifier,
@@ -280,7 +290,13 @@ fun ReadingScreen(
      */
     var presenceInset by remember { mutableStateOf(0.dp) }
 
-    LaunchedEffect(room.id, model.me?.id, model.readingQuietly) {
+    // Keyed on `sheet.committed` as well, and that is load-bearing: the page
+    // is composed from the first millimetre of the pull that raises it, and
+    // announcing yourself into the book because a thumb brushed the fire and
+    // thought better of it would put "Jonathan is reading Mark" in front of
+    // the whole room for a gesture that never happened.
+    LaunchedEffect(room.id, model.me?.id, model.readingQuietly, sheet.committed) {
+        if (!sheet.committed) return@LaunchedEffect
         if (!model.readingQuietly && model.me != null) {
             // The channel is the room's and is already open; this is the
             // book's half — saying you are in it (§4.2).
@@ -349,14 +365,82 @@ fun ReadingScreen(
         )
     }
 
-    fun close() {
-        if (closing) return
-        closing = true
+    /**
+     * The book has been put down: the last things that belong to having been
+     * in it. Separate from [close] because a page can also leave under a
+     * finger, which is not a close *request* but a close that has happened.
+     */
+/**
+     * Where this session started, so that closing the book without having
+     * read moves nothing.
+     *
+     * The ribbon goes where you stopped — but opening the book, looking at
+     * the page and closing it again is not stopping anywhere, and without
+     * this it would drag the room's ribbon back to wherever you happened to
+     * be. Worse than doing nothing: it would quietly undo somebody else's
+     * ribbon on a glance.
+     */
+    val openedAt = remember(reading.id) { model.myPosition(reading) }
+
+    fun laidDown() {
         if (!model.state.hasSeenMarginHint) {
             model.markMarginHintSeen()
         }
         recordFuel()
+        // The ribbon goes where you stopped (A30). There is no control for
+        // this because there is no separate act: closing the book *is* the
+        // gesture, the same as it is with a ribbon in a physical Bible. Your
+        // own position is written separately and is untouched — the book
+        // still opens where you are (§6.2), never where the room is.
+        //
+        // Only if you actually went somewhere. See `openedAt`.
+        val stoppedAt = model.myPosition(reading)
+        if (stoppedAt.chapter != openedAt.chapter || stoppedAt.verse != openedAt.verse) {
+            model.leaveTheRibbon(reading, stoppedAt)
+        }
+    }
+
+    fun close() {
+        if (closing) return
+        closing = true
+        laidDown()
         onClose()
+    }
+
+    /**
+     * A close that was caught on its way down and did not finish.
+     *
+     * `close` latches so that a second press during the exit cannot fire it
+     * twice — but the exit it hands off to is an animation, and an animation
+     * a finger interrupts never reaches its own end. Without this, catching
+     * the page mid-close left the latch on with the book still open: the
+     * Wave's tap returned early, the back gesture was disabled, and there
+     * was no way out of the book at all.
+     */
+    LaunchedEffect(sheet.committed) {
+        if (sheet.committed) closing = false
+    }
+
+    /** The chapter list is up (A31). */
+    var showChapters by remember { mutableStateOf(false) }
+
+    /**
+     * The chapter under the thumb, for the running head at the foot.
+     *
+     * Kept separately from the saved position because a position is written
+     * at most every few seconds (see `trackReading`) and a running head that
+     * lagged the page by three seconds would be telling you where you were.
+     */
+    var readingChapter by remember { mutableIntStateOf(model.myPosition(reading).chapter) }
+
+
+    /**
+     * The running head, repeated at the foot as the way into the chapter
+     * list. Read from the tracked chapter rather than from the position so it
+     * follows the page under the thumb, which is what a running head does.
+     */
+    val whereYouAre: String = remember(readingChapter, book) {
+        book?.chapterHeading(readingChapter) ?: "${reading.bookID} $readingChapter"
     }
 
     fun clearLift() {
@@ -456,6 +540,7 @@ fun ReadingScreen(
         if (model.followingPersonID != null && now > programmaticScrollUntil) {
             model.followingPersonID = null
         }
+        readingChapter = chapter
         val layout = chapterLayouts[chapter]
         val yInChapter = with(density) { (threshold - frame.top).toDp() }
         val verse = layout?.verseFirstLineY
@@ -485,7 +570,13 @@ fun ReadingScreen(
         }
     }
 
-    val closeNow by rememberUpdatedState(::close)
+    // Held rather than captured: the connection below is `remember`ed on the
+    // list and the sheet, so a lambda captured into it would go on calling
+    // the first composition's `laidDown`. Both of these are the same pair the
+    // Wave's own drag ends on — putting the book down, and telling the room's
+    // stack the page has gone.
+    val laidDownNow by rememberUpdatedState(::laidDown)
+    val dismissedNow by rememberUpdatedState(onDismissed)
 
     // The closing drag. Swift watches the scroll view's content offset go
     // past -90 while a finger is down; Compose has no negative offset to
@@ -495,38 +586,95 @@ fun ReadingScreen(
     // `NestedScrollSource.UserInput` is what makes this a finger and not a
     // bounce: a momentum overscroll arrives as `SideEffect` and is ignored,
     // exactly as `fingerDown` gates the Swift.
-    val pull = remember { mutableFloatStateOf(0f) }
-    val pullThreshold = with(density) { CLOSING_PULL.toPx() }
-    val closingDrag = remember(pullThreshold, listState) {
+    /**
+     * True while *this* drag is taking the book down.
+     *
+     * `sheet.engaged` cannot answer it: that is true for as long as the page
+     * exists, which is the whole time the book is open. This is the narrower
+     * question — has a downward drag from the top of the page taken hold of
+     * the book — and it is what lets the connection below claim upward
+     * movement too, so that catching the page on its way down puts it back
+     * instead of scrolling Scripture.
+     */
+    var closingByDrag by remember { mutableStateOf(false) }
+
+    /**
+     * Drag down from scroll-top and the book comes with you (S02).
+     *
+     * This used to count pixels and then *snap*: it accumulated a running
+     * total, and past 90 dp it called `close()` outright. Nothing moved
+     * under the finger — it deliberately consumed nothing, so the only
+     * feedback was the list's own overscroll glow — and then the book simply
+     * went. That is the whole of why the way out felt finicky: an invisible
+     * threshold you cannot see approaching, cannot feel, and cannot back out
+     * of, on the one gesture that is supposed to feel like closing a book.
+     *
+     * It predates the sheet. A20's argument is that the drag and the
+     * animation are the same number, and this path was written before there
+     * was one; the Wave next to it was converted and this was not. So it
+     * drives [BookSheet] now, exactly as the fire does in reverse: the page
+     * follows the finger from the first millimetre, release decides by
+     * distance and velocity under the same physics, and a close caught
+     * halfway eases back to where it was.
+     *
+     * The old 90 dp threshold is gone rather than retuned. `RibbonMotion`
+     * already owns what "far enough" means, and a second opinion about it
+     * living in this file is how the two halves of one gesture drift apart.
+     */
+    val closingDrag = remember(listState, sheet) {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                if (source != NestedScrollSource.UserInput) {
-                    pull.floatValue = 0f
+                if (source != NestedScrollSource.UserInput) return Offset.Zero
+                // Once the book is coming down it owns the gesture in both
+                // directions. Without this, pushing back up would scroll
+                // Scripture underneath a page that is halfway off the screen.
+                if (!closingByDrag) return Offset.Zero
+                // Changed your mind and pushed it back up: once the page is
+                // fully up the gesture is over, and the rest of the movement
+                // belongs to Scripture again. Holding it until the finger
+                // lifts would mean pulling down an inch, thinking better of
+                // it, and finding the page frozen.
+                if (available.y < 0f && sheet.progress >= 1f) {
+                    closingByDrag = false
                     return Offset.Zero
                 }
-                if (available.y < 0f || listState.canScrollBackward) {
-                    // Reading on, or reading back up: not a close.
-                    pull.floatValue = 0f
-                    return Offset.Zero
+                sheet.drag(-available.y)
+                return available
+            }
+
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource,
+            ): Offset {
+                if (source != NestedScrollSource.UserInput) return Offset.Zero
+                // A downward drag the list could not spend is a drag at the
+                // top of the page, which is the gesture S02 describes. A
+                // momentum overscroll arrives as a different source and is
+                // ignored, so a fling that lands at the top does not close
+                // the book out from under the reader.
+                if (available.y <= 0f) return Offset.Zero
+                if (!closingByDrag) {
+                    closingByDrag = true
+                    sheet.engage()
                 }
-                pull.floatValue += available.y
-                if (pull.floatValue > pullThreshold) {
-                    pull.floatValue = 0f
-                    closeNow()
-                }
-                // Nothing is consumed: the list still rubber-bands, which is
-                // the drag's own feedback.
-                return Offset.Zero
+                sheet.drag(-available.y)
+                return available
             }
 
             override suspend fun onPreFling(available: Velocity): Velocity {
-                // The finger is up, so the pull is over whether or not it
-                // closed anything. Swift reads an absolute content offset,
-                // which cannot carry from one drag to the next; a running
-                // tally can, and two unrelated half-pulls would close the
-                // book between them. Put it down when the finger lifts.
-                pull.floatValue = 0f
-                return Velocity.Zero
+                if (!closingByDrag) return Velocity.Zero
+                closingByDrag = false
+                // Down is positive here and opening is positive there.
+                sheet.release(
+                    velocity = -available.y,
+                    onOpened = {},
+                    onClosed = {
+                        laidDownNow()
+                        dismissedNow()
+                    },
+                )
+                return available
             }
         }
     }
@@ -535,15 +683,32 @@ fun ReadingScreen(
     // a progress, not a commitment — releasing mid-gesture eases the book back
     // down where it was, and committing hands the pull on to the slide that
     // takes it away, so the close is one movement rather than two.
-    val peel = rememberBackPeel(enabled = !closing, onBack = { close() })
+    // Enabled for as long as the page is *on screen*, which is not the same
+    // as being in the book. `committed` only becomes true when the opening
+    // spring lands, roughly half a second after the way in is tapped — and
+    // for that whole window nothing here held back, the NavController's own
+    // callback is disabled at the start destination, and a system back
+    // closed the app rather than the book. The same hole was open for the
+    // length of every close. `close` latches, so a back during the close
+    // is consumed and does nothing, which is what it should do.
+    val peel = rememberBackPeel(enabled = sheet.engaged, onBack = { close() })
 
-    // Opening: at your own place, or at the place you were sent to.
+    // Opening, in two halves, because the page is raised before it is
+    // entered. Where it opens is settled at once — the page has to rise
+    // already showing the right chapter, not jump to it once it lands.
     LaunchedEffect(Unit) {
         val position = openAt ?: model.myPosition(reading)
         if (position.chapter > 1) {
             programmaticScrollUntil = Clock.System.now() + PROGRAMMATIC_SCROLL_GRACE
             listState.scrollToItem(itemIndexOfChapter(position.chapter))
         }
+    }
+
+    // And everything that means *being in the book* waits for the pull to
+    // commit: feeding the fire off an abandoned drag would be the app
+    // recording a reading that did not happen.
+    LaunchedEffect(sheet.committed) {
+        if (!sheet.committed) return@LaunchedEffect
         recordFuel()
     }
 
@@ -690,6 +855,13 @@ fun ReadingScreen(
 
             // The way out, or the composer.
             BottomChrome(
+                whereYouAre = whereYouAre,
+                onOpenChapters = { showChapters = true },
+                sheet = sheet,
+                onDragClosed = {
+                    laidDown()
+                    onDismissed()
+                },
                 model = model,
                 room = room,
                 reading = reading,
@@ -740,6 +912,25 @@ fun ReadingScreen(
                 modifier = Modifier.align(Alignment.Center),
             )
         }
+    }
+
+    // Everywhere else in this book (A31). Outside the page's own Box so the
+    // sheet is not clipped by it, and so the page keeps drawing underneath
+    // exactly as the chooser leaves the room drawing underneath.
+    if (showChapters) {
+        ChaptersSheet(
+            model = model,
+            reading = reading,
+            onDismiss = { showChapters = false },
+            onGo = { address ->
+                showChapters = false
+                // The same jump the follow uses, so arriving from the list and
+                // arriving from somebody else's shoulder land the same way —
+                // and the grace window keeps the scroll from being read as a
+                // scroll of your own, which would break a follow in progress.
+                goToChapter(address.chapter)
+            },
+        )
     }
 }
 
@@ -1031,6 +1222,8 @@ private fun BottomChrome(
     model: AppModel,
     room: Room,
     reading: Reading,
+    sheet: BookSheet,
+    onDragClosed: () -> Unit,
     composer: ComposerState?,
     lifted: VerseRange?,
     liftedChapter: Int?,
@@ -1046,6 +1239,9 @@ private fun BottomChrome(
     onDismissVoice: () -> Unit,
     onGoBack: (VerseAddress) -> Unit,
     onClose: () -> Unit,
+    /** The running head, repeated at the foot as the way into the chapters. */
+    whereYouAre: String,
+    onOpenChapters: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(
@@ -1142,9 +1338,59 @@ private fun BottomChrome(
                     // the bottom edge. Nothing else down there. The glass
                     // capsule stays small; the touch target doesn't — a
                     // finger must be able to close the book (44 dp minimum).
+                    //
+                    // It is also the handle: pull it down and the page goes
+                    // with the finger, back over the room. The tap is
+                    // untouched — §11 is explicit that no way out of the book
+                    // may be a gesture only, and this control has been the
+                    // tap since S02 was written. What is new is that the tap
+                    // and the drag now run the same movement rather than two
+                    // (design/Hearth.kt).
+                    // Where you are, and the way to anywhere else in this
+                    // book (A31).
+                    //
+                    // S02 says the way out is the Wave and "nothing else
+                    // down there", and this is a deliberate second thing —
+                    // owner's call. The gap it fills is real: a book opens at
+                    // your own position and is read forward, so reaching
+                    // Mark 10 from Mark 1 meant scrolling nine chapters.
+                    //
+                    // It keeps its distance from the rule it bends. The Wave
+                    // still has the bottom edge to itself; this sits above
+                    // it, in the same glass, at small-caps size and low
+                    // contrast — it says where you are, which is what a
+                    // running head does, and it is a door only if you press
+                    // it.
+                    Box(
+                        modifier = Modifier
+                            .sizeIn(minWidth = 88.dp, minHeight = 44.dp)
+                            .clickable(
+                                role = Role.Button,
+                                onClickLabel = Copy.CHAPTERS,
+                                onClick = onOpenChapters,
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Box(
+                            Modifier
+                                .ribbonGlass(CircleShape)
+                                .padding(horizontal = 18.dp, vertical = 7.dp),
+                        ) {
+                            SmallCaps(
+                                whereYouAre,
+                                size = 11f,
+                                color = Palette.text.copy(alpha = 0.5f),
+                            )
+                        }
+                    }
+
                     Box(
                         modifier = Modifier
                             .sizeIn(minWidth = 88.dp, minHeight = 52.dp)
+                            // The drag's own end, not the tap's: by the time
+                            // this runs the page is already down, so it
+                            // reports rather than asks.
+                            .closesTheBook(sheet = sheet, onClosed = onDragClosed)
                             .clickable(onClick = onClose)
                             .semantics {
                                 contentDescription = Copy.CLOSE_THE_BOOK
@@ -1418,6 +1664,7 @@ private fun Modifier.trackedIn(
  * Where glass never appears, on either platform: over Scripture, on the
  * fire, the shelf, embers, or as a screen background.
  */
+@Composable
 private fun Modifier.ribbonGlass(shape: Shape): Modifier = this
     .background(Palette.raised.copy(alpha = 0.55f), shape)
     .background(Palette.ground.copy(alpha = 0.72f), shape)

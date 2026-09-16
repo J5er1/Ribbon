@@ -529,8 +529,8 @@ object FirePainter {
                     ovalPath(ashRect),
                     Brush.linearGradient(
                         colors = listOf(
-                            Palette.text.opacity(0.12),
-                            Palette.muted.opacity(0.18),
+                            Palette.smoke.opacity(0.12),
+                            Palette.ash.opacity(0.18),
                         ),
                         start = Offset(cx.toFloat(), ashRect.top),
                         end = Offset(cx.toFloat(), ashRect.bottom),
@@ -542,7 +542,7 @@ object FirePainter {
                     x = cx - bedWidth * 0.18, y = baseY - bedHeight * 0.52,
                     width = bedWidth * 0.62, height = bedHeight * 0.5,
                 )
-                drawPath(ovalPath(driftRect), Palette.muted.opacity(0.1))
+                drawPath(ovalPath(driftRect), Palette.ash.opacity(0.1))
                 return  // coals under ash, a dim glow, no flame
             }
 

@@ -141,6 +141,7 @@ enum class ComposerMode {
  * Where glass never appears, on either platform: over Scripture, on the
  * fire, the shelf, embers, or as a screen background.
  */
+@Composable
 private fun Modifier.ribbonGlass(shape: Shape): Modifier = this
     .clip(shape)
     .background(Palette.raised.copy(alpha = 0.55f), shape)
@@ -310,6 +311,7 @@ fun InkSwatch(
     ) {
         // The selection ring sits 3 dp outside the swatch, so the canvas is
         // drawn wider than the swatch rather than the ring being inset.
+        val ivory = Palette.text
         Canvas(Modifier.size(SWATCH_DIAMETER + 8.dp)) {
             val centre = Offset(size.width / 2f, size.height / 2f)
             drawCircle(
@@ -320,7 +322,7 @@ fun InkSwatch(
             if (isSelected) {
                 val stroke = 1.4.dp.toPx()
                 drawCircle(
-                    color = Palette.text.copy(alpha = 0.7f),
+                    color = ivory.copy(alpha = 0.7f),
                     radius = SWATCH_DIAMETER.toPx() / 2f + 3.dp.toPx() - stroke / 2f,
                     center = centre,
                     style = Stroke(width = stroke),

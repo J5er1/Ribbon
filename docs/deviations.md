@@ -448,8 +448,9 @@ names Android (§12.2), and from the iOS app where the two platforms could
 not honestly be made identical. Everything §12.2 asks for that is *not*
 listed here is simply built: Expressive shapes and damped spring physics,
 no FAB, no bottom navigation, no visible loading, predictive back,
-mandatory edge-to-edge, Alegreya Sans SC as a real small-caps face rather
-than a textTransform, and dynamic colour declined.
+mandatory edge-to-edge, and Alegreya Sans SC as a real small-caps face
+rather than a textTransform. Dynamic colour was declined and is now
+taken — A18 — which is the largest single departure in this list.
 
 A1. **minSdk is 33, not the literal 36.** §12.2 reads "Target: Android 16+
     (API 36)". The app compiles against and targets exactly that, but taken
@@ -697,6 +698,432 @@ A17. **The menu is a layer over the room, not a cover.** iOS presents the
     too. And the menu's four settings screens plus its join live in a
     `NavHost` of the menu's own, registered *after* the close handler, so
     back pops a pushed screen first and only an unpushed menu closes.
+
+A18. **Material You is on, unharmonised, and §12.2's refusal of it is
+    overturned.** — the owner's call, September 2026. The build book is
+    unusually direct about this one: "Ribbon opts out of dynamic color …
+    a Ribbon tinted lavender because someone's wallpaper is lavender is
+    not Ribbon. Ship a fixed color scheme and set `isDynamicColor = false`
+    explicitly rather than by omission, so nobody turns it on later
+    thinking it was an oversight." Nobody turned it on thinking it was an
+    oversight. It was turned on deliberately, and the reasoning it was
+    weighed against is worth keeping rather than quietly deleting: the
+    argument for a fixed palette is an argument about the brand, and the
+    argument against it is an argument about the person holding the phone.
+    Material You is most of what the Android build was *for*, and a room
+    that takes its colour from the wallpaper is a room in their house.
+
+    **Unharmonised**, which was also the owner's call over the alternative
+    of blending each role back toward chartreuse. The six room roles are
+    read straight off `dynamicDarkColorScheme` with no correction:
+    `surfaceContainerLowest` is the ground, an ordinary container is a
+    card, a high container is a chip, `onSurface`/`onSurfaceVariant` are
+    the two inks, `outlineVariant` is the rule, `primary` is the accent.
+    A half-dynamic palette would look like neither thing.
+
+    **Two things never move, and it is the same reason twice: they are
+    objects in the room rather than the room itself.** The fire — §4.1's
+    "single warm object", whose warmth is the product and not chrome; a
+    blue fire is not a fire, and a warm fire in a cool room is a better
+    picture than either alone. And the eight inks, which are identity
+    (§4.5): repainting a highlight from a wallpaper would change whose it
+    was. Smoke and ash go with the fire, because `FirePainter` is a pure
+    function of a clock rather than a composition and cannot read a
+    composition local anyway.
+
+    **The way back is one switch**, in a new screen — Appearance, S26 —
+    which is the only thing S18's "not here" list gains. Its "no accent
+    picker: chartreuse is the brand's, not the user's" survives intact:
+    the switch offers the wallpaper's colours or the brand's, and never a
+    colour anyone chose by hand. It lives in its own two-value preference
+    file rather than in `AppSettings`, because `AppState` is read off disk
+    asynchronously and a theme that waited for it would paint one palette
+    on the first frame and another a moment later — a repaint on the front
+    door is exactly the instability S01 forbids.
+
+    **The one correction that is made**, and it is not a matter of taste:
+    a card has to be distinguishable from the ground, and some extracted
+    schemes put their lowest and ordinary containers within a hair of each
+    other. `ColorScheme.asRoom` takes the first tonal step that can
+    actually be seen against the ground, and where no step can, the card
+    draws a 1 dp edge in the palette's own `rule` instead of pretending a
+    fill it does not have. Ribbon's own palette is permanently in that
+    second case *by design* — `Brand.surface` on `Brand.ground` is 1.05:1
+    and `Brand.raised` is 1.13:1, which is correct for a room meant to be
+    nearly flat and useless as a card — so with the wallpaper declined a
+    card is a *drawn* card rather than a filled one. That is the more
+    bookish of the two answers anyway.
+
+    Mechanically: `Palette`'s room roles became `@Composable` getters over
+    `LocalRoomColours`. That was chosen over a plain rename so that the
+    compiler would find every colour read outside a composition, which is
+    every colour that could not have followed the wallpaper — it found
+    eleven, all of them in draw lambdas, and each is now hoisted or passed.
+
+A19. **The room is a hearth, not a column.** — the owner's call. S01's
+    anatomy is unchanged in content and rearranged in kind: the room held
+    everything the book asks for and read, in the owner's words, as barren,
+    worst in the two states a new person actually sees. The diagnosis was
+    not "too little on the screen"; it was that nothing on the screen was
+    *grouped*, so six objects floating in a column looked like six objects
+    rather than like a place.
+
+    What changed. The page **greets you** by name, once, in the display
+    face — three variants, first name, a full stop, no second sentence,
+    and §12's rules are doing real work: an exclamation point, an emoji or
+    a verse of the day would each make it the church bulletin §13 refuses.
+    Presence became **a sentence you can read** — `personIsReading`,
+    `personIsHereButStill` and `alsoHere` had existed since the port with
+    no visible call site at all, so the warmest copy in the product was
+    audible only to a screen reader. The fire, the book's name, its state
+    and the way in became **one raised object** with the room's people
+    seated around it, the fire standing in a recess of the room's own
+    unlit ground with a hairline under it. And the **empty states carry
+    something true**: first run offers the five books the chooser already
+    calls good places to start, and a room still expecting somebody shows
+    an open seat.
+
+    Two departures from S01's letter, both deliberate. The seats draw
+    **membership**, with presence as a ring around a seat (a whole ring
+    reading, a half ring here-but-still) where the book says "portraits of
+    whoever is in the book right now" — because the room of one that the
+    book's version draws nothing at all for is exactly the barren case.
+    And the seats are capped at six with no names, no overflow marker and
+    nothing counted, in membership order, because the thing this must
+    never become is the avatar row of a social network (§3).
+
+    The **open seat is scoped to somebody actually being expected** — a
+    room of one, or a live invite — and not to `members.size < capacity`.
+    A couple with no intention of being three would otherwise be shown
+    four empty chairs on their own front door, forever, with nobody asked:
+    an empty state drawn as an object, and a reproach.
+
+    Law 2 is untouched. Nothing here counts anything: not the people, not
+    the notes, not the shelf, and nothing anywhere near the fire.
+
+    One thing was tried and cut: a soft wash of the fire's own light on the
+    floor beneath it. Two alpha falloffs under the hero object is a
+    gradient by construction and a glow behind the one thing §7 and §13
+    protect hardest. The recess and the hairline do the same work with no
+    invented light source.
+
+A20. **The fire opens the book, and the Wave closes it — by hand.** —
+    the owner's call. S01 says "tap fire → nothing (deliberately inert; it
+    is an object, not a button)". It is now the way in: take hold of it and
+    pull, and the book rises under your thumb. The reasoning against was
+    that a fire is an object rather than a control; the reasoning for is
+    that a hearth is an object you can reach into, and a drag is not a
+    button. The Wave at the foot of the book is the same handle in reverse.
+
+    §11's rule that no way in or out of the book may be a gesture only is
+    kept twice over: the fire carries a custom click action, the way-in
+    capsule under it is unchanged, and the Wave's tap is exactly the tap it
+    has been since S02 was written.
+
+    What makes this more than a gesture bolted onto a transition: the book
+    is no longer a transition at all. It used to arrive by fading in and
+    leave by sliding out, as two unrelated `AnimatedContent` specs — which
+    is why opening it and closing it never looked like one thing happening
+    twice. There is now a single number (`BookSheet.progress`) that the
+    page's offset, the room's recession behind it, and the hearth riding up
+    under the finger all read, and that the drag and every tap drive
+    alike. A gesture and an animation made of the same value cannot fall
+    out of step.
+
+    The room recedes under the rising book using exactly the numbers
+    predictive back already uses to peel a screen *off* the room, run the
+    other way — so opening the book and closing it are plainly the same
+    movement, which is what a gesture has to be if it is going to be
+    believed. Reduce motion (§11): both gestures still work and still open
+    and close the book; the number jumps between its ends instead of
+    travelling.
+
+A21. **Springs, where a finger is involved.** §12.2 asks for "physics-based
+    motion … damped, with damping near critical", and until now every
+    token in `RibbonMotion` was a tween. A tween is right for a thing that
+    simply changes — a word swapping under the fire, a cross-dissolve
+    between rooms. It is wrong for a thing a finger is holding, because a
+    drag has a velocity when it is let go of and a tween throws that away:
+    the book would leave the finger's speed behind and travel at the
+    curve's instead, which is the commonest way a gesture reads as cheap.
+    The spring tokens (`cover`, `handled`, `touched`) are critically damped
+    at 1.0 — physical, and they never cross the target, so §9.1's "no
+    bounce, no spring overshoot" holds.
+
+A22. **The app flows rather than cuts.** Every screen change was a
+    substitution: the room faded and the menu slid over it, a settings row
+    was replaced by a settings screen. All of it moved and none of it
+    continued. One `SharedTransitionLayout` now spans the whole room stack
+    with an `AnimatedVisibilityScope` per layer, so the pieces that exist
+    on both sides of a change *are* the same piece and travel: your face in
+    the room's corner and your face at the top of You; the room's fire and
+    the small fire on its row in the menu; an ember on the shelf and the
+    same ember on its record; a settings row's words and the heading of the
+    screen it opens. Keys are built from ids in one place (`Flows`),
+    because a shared element with a mistyped key is not an error — it is an
+    element that silently stops flowing.
+
+    **Three rules came out of building it, and the third cost the nicest
+    two effects in the pass.** A key pairs exactly two halves, one leaving
+    and one arriving. Words set differently on the two sides — a row's title
+    at 17 sp and a screen's heading at 30 sp in the display face — go
+    through `flowsAsWords` (`sharedBounds`) rather than `flows`
+    (`sharedElement`), because one drawing carried between two frames
+    stretches type on the way.
+
+    And **a flow needs one of its halves to be on its way out**, which rules
+    out every pairing between the room and the menu. The menu is a *layer
+    over* the room rather than a replacement for it (A17, so predictive back
+    can peel the room in behind it), so the room stays composed and visible
+    underneath for as long as the menu is open: a shared key across that
+    boundary has two permanently live halves and neither is leaving. The
+    room's fire was going to shrink into its row in the menu and your face
+    was going to travel up into You, and both were built before the
+    architecture said no. They are gone. What flows is every NavHost push —
+    a seat into that person's screen, an ember into its record, a settings
+    row into the screen it opens — where exactly one side is always going.
+
+A22a. **The person screen took the same pass.** It was the barren room's
+    defect in its purest form — a portrait, a name, and then a column of
+    bare references to notes you could not read — and the room's new seats
+    make it far more reachable than it was. It now has a head, its notes are
+    tiles, and a note shows its own words (or a voice note's transcript;
+    never a duration, S04) **once it has been found in the margin, or if it
+    is yours**. §6.3's whole beat is being found later, and a list that read
+    every unfound note aloud would spend it before anybody opened the book;
+    an unfound one gives its address, which is an invitation to go. It also
+    draws a way back, which it never had — §11's tap equivalent, the same
+    one every pushed settings screen carries.
+
+A23. **The settings are tiles, and the hairlines under headings are
+    gone.** — the owner's call ("the settings is very condensed, and I
+    think it would look better in a completely new style"). The cause was
+    that the app had no drawn container at all, so a screen could only be a
+    column of sentences and the only lever was how much air to put between
+    them: a lot is barren, a little is condensed, and there was no third
+    option to reach for. There is one now — a group is a set of tiles on
+    the ground, separated by a two-dp seam rather than by a rule.
+
+    The half that matters most is not the shape: **almost every row gained
+    a sentence**. A switch used to be four words on a bare ground and you
+    were left to infer what it did; it now says the true small thing about
+    what it does, in the app's own voice. And each screen gained a display
+    title and one line saying what it is, where a pushed screen used to
+    open on a 12 sp small-caps word.
+
+    Six ruled lines under headings went with it, which is the church
+    bulletin §13 forbids in its most literal form; the edge of a tile does
+    that work instead. What keeps a screen of rounded rectangles from
+    reading as somebody else's Settings app, which is the real risk: the
+    paper grain is carried onto every tile, the corners are large, there
+    are no icons anywhere, the undoing controls (sign out, leave, delete)
+    stay off the tiles on the bare ground, and nothing is drawn that does
+    not say something.
+
+A24. **There is a look book, because nobody can see this app.** The CI
+    environment has no emulator and the Android build has still never run
+    on a physical device, so every layout decision in this pass would
+    otherwise have been made blind. `LookBookTest` renders the room, the
+    book and every settings screen from the app's real composables against
+    a real `AppModel`, on both palettes, and writes them to
+    `app/build/shots`; CI keeps them as an artifact. It asserts only that
+    each screen composes and is not one flat colour — the failure that
+    actually happens — because a pixel comparison on a screen under
+    redesign is a test that has to be deleted every time the design is
+    right. It is the first Robolectric test in the repo, which is the one
+    cost: CI now fetches an `android-all` jar.
+
+A25. **The front door took the same pass as the room — and the tour is an
+    undocumented deviation from S17 that this ledger is now recording
+    rather than resolving.** The room and the settings were rebuilt first
+    and everything a hesitant partner sees *before* the room was left
+    alone, which meant the friendliest part of the app was the part you
+    reached last. Rendering it is what showed the state it was in:
+
+    - The tour card that promises "a fire kept alive together" was drawing
+      a **gradient circle over a bar**. The product has one central object
+      and that was the card introducing it. It is `CampfireView` now — the
+      room's own fire, in a well, for the reason the room's is in one: the
+      fire throws ambient light across its whole canvas and clips it, which
+      is a visible rectangle on bare ground.
+    - The intent step set its three unchosen options in `muted` on a fill
+      that cannot be seen, so **three of four choices read as disabled** on
+      the screen that asks who you will read with. They are `text` in both
+      states now, in the app's own group tiles, with the accent ring and
+      the check carrying the selection between them.
+    - **Three copies of one text field** — the name, the invite code and
+      the sign-in code, which is every place in the app somebody types
+      their way in. Two of the three had drifted; one had deviation 12's
+      exact defect back (the 44 dp minimum on a wrapper rather than on the
+      field's own decoration). All three drew the **caret inside the
+      prompt**: "Your |name", on the first screen that asks you to type.
+      One `CentredTextField` now, with the prompt beside the caret.
+    - Onboarding's tour cards, its portrait well and the join's portrait
+      well were each hand-rolling a background and a border, so the front
+      door was the one place in the app that drew outlines on every
+      wallpaper. They go through `paper` and `well`.
+
+    **What is recorded and not changed:** S17 says onboarding is "a thread,
+    not a screen. Four questions, no tour, no carousel" — and the file's own
+    header says so too, above four tour cards and a six-step progress bar.
+    That predates this pass and removing four screens is a product call, not
+    a friendliness one. It is written down here because an undocumented
+    deviation is the kind that gets mistaken for the design.
+
+A26. **The offline fire is wired.** `CampfireView` has carried a `dimmed`
+    parameter since it was written and **nothing ever passed it**, so S01's
+    "fire renders in its last known state, dimmed by ~8%" was unreachable
+    code. `Connectivity` (a default-network callback asking for
+    `NET_CAPABILITY_VALIDATED`, so a router with no uplink counts as
+    offline) hangs off `AppModel` and the room's fire reads it. That is the
+    entire user-visible surface: no banner, no retry control, no queue
+    count — §13 puts a connectivity banner on the never-ship list, and the
+    presence half of S01's offline state needs no code at all, because
+    presence comes off the wire and is already absent. Costs one normal
+    install-time permission (`ACCESS_NETWORK_STATE`), no prompt.
+
+A27. **The paused room stopped asking for something it withholds.** Its
+    hearth was printing "Pick something to read together" over a room where
+    picking a book is exactly the half a lapse holds, and its foot was
+    offering to mark a quiet day directly under the line that had just said
+    the room was paused — which §4.7 rules out by name ("never surfaced
+    after a lapse, which would make it an apology"). The hearth holds its
+    line and says nothing now, and S01's one row explains the rest.
+
+A28. **The launch window carries the Wave.** §05 says there is no splash
+    screen. The rule survives in the sense that matters — nothing is
+    *inserted* — because Android 12 and later show a system splash on every
+    cold start whether an app asks for one or not. It cannot be declined,
+    only styled, so the choice was never "splash or no splash" but "our mark
+    or the launcher icon on a grey plate". Owner's call: the mark, on the
+    unlit ground, unfurling from the top as a ribbon let out of a book. Built
+    from the same path data as the launcher icon so the two cannot drift, and
+    it **rests open** — the resting state of a launch drawable is what shows
+    when the animation does not run, and resting closed would turn an
+    unsupported device or system animations-off into a blank window rather
+    than a still mark. The splash is held by the store loading, as before; a
+    480 ms floor is the one concession, so a warm launch cannot cut the
+    unfurl off after three frames.
+
+A29. **The menu is two screens: the room, and you.** It was one scroll with
+    four sections, entered from two doors, which landed by calling `scrollTo`
+    on arrival. The split falls along a line the data already draws:
+    notifications are per room, the plan entitles a room, and the invite, the
+    inks and leaving are all about this room — while your name, your
+    translation, your text size, the wallpaper's colours and this phone's
+    downloads are yours. The room's title is the room's own name, because a
+    large Material title names the thing you are looking at and "Settings" is
+    not a thing anybody is looking at.
+
+    The settings screens also sit under Material's own large collapsing app
+    bar now (`RibbonScreen` → `LargeTopAppBar` +
+    `exitUntilCollapsedScrollBehavior`). The owner's note was that they did
+    not look like Material You, and the tell was the top of the screen: a
+    static display title that scrolled away with the content. Structure is
+    Material's, paint is Ribbon's — A18's argument one level up. The
+    expressive `LargeFlexibleTopAppBar` would have carried the lede in a
+    subtitle slot and is internal in material3 1.4.0; the lede reads better
+    as the first thing *in* the page anyway.
+
+A30. **The ribbon: one place in the book, kept by the room.** Owner's call,
+    and it sits deliberately close to a line §03 draws — *position is
+    per-person, per-reading; there is no shared "where we are."* That rule is
+    intact: `ReadingPosition` is untouched and the book still opens where
+    **you** are (§6.2). What §03 refuses is a shared position that turns two
+    people reading at different speeds into a problem to be solved, and this
+    is not that. It is the ribbon in a shared Bible: somebody reads, closes
+    the book, and the ribbon is where they stopped.
+
+    Four things keep it from becoming a race, and none of them should be
+    removed without reading this paragraph:
+
+      - It is an **address, never a measure** — "Mark 4:9", the same kind of
+        thing as an ember's date range, which §13 allows because it is "an
+        address in time, not a duration". Nothing subtracts it from your
+        position and nothing ever may.
+      - It is **offered, never applied**. Moving it moves nobody. It is one
+        quiet sentence on the room screen and a hairline under one number in
+        the chapter list, both of which you have to look at.
+      - It is **one object, not one per person.** A per-person ribbon would
+        be a leaderboard with the numbers taken out.
+      - **Nobody is behind**, because the app does not know: it holds one
+        address and your own and never puts them in a sentence together.
+
+    Placed by closing the book, because that is the whole of the act — a
+    "mark this verse" control would turn a consequence of reading into a
+    chore. Only when you actually moved: opening the book, glancing and
+    closing it again would otherwise drag the room's ribbon backwards and
+    quietly undo somebody else's. A finished reading keeps the ribbon it had;
+    an ember is a record, and editing it afterwards is editing the past.
+
+A31. **There is a chapter list, and the foot of the book is the way to it.**
+    A book opens at your own position and is read forward, so reaching Mark
+    10 from Mark 1 meant scrolling nine chapters. The build book never
+    specified one because S02's page is deliberately bare and §6.6 puts
+    navigation in the chooser — but the chooser *starts* a reading, it does
+    not move inside one.
+
+    So it is the chooser's own argument one level down: "the most
+    conventional screen in the app, and it should stay that way — this is
+    navigation, not atmosphere." A grid of numbers. No progress ring on each
+    chapter, no ticks for what has been read, nothing shaded by how far
+    anybody got — all of which are the counting Law 2 forbids, and all of
+    which a chapter grid is the classic place to smuggle in. Exactly two
+    things are marked and both are addresses: where you are (the tile raised
+    out of the page) and where the ribbon is (a hairline at the tile's foot,
+    which is what a ribbon looks like from outside a closed book).
+
+    S02 says the way out is the Wave and "nothing else down there", and this
+    is a deliberate second thing. It keeps its distance: the Wave still has
+    the bottom edge to itself, and the control above it is the running head
+    repeated — small caps, low contrast, saying where you are, which is what
+    a running head does. It is a door only if you press it.
+
+A32. **Three things the owner found by using it, and what each turned out to
+    be.** Worth recording together, because none of them was a taste
+    disagreement — each was a defect with a cause.
+
+    - **The launch mark never animated.** The theme set androidx's *compat*
+      splash attributes, and on API 31 and later the platform draws the
+      splash from its own `android:windowSplashScreen*` slots. This app's
+      minSdk is 33, so every device on earth fell through to the system
+      default — the launcher icon on a plate — with the animated vector
+      sitting unused in the APK. The `android:` prefix is the fix, and the
+      look book now drives the real `AnimatedVectorDrawable` and asserts two
+      frames 600 ms apart are different pictures: an `animated-vector` whose
+      target names do not match its vector is not an error, it is a still
+      picture that says nothing. The settle also had no pivot, so it was not
+      a settle — the mark slid diagonally as it shrank.
+    - **The way out of Scripture was finicky, and it was not a tuning
+      problem.** S02 gives two ways out: the Wave, and a downward drag from
+      scroll-top. The drag existed and *counted pixels* — it accumulated a
+      running total, deliberately consumed nothing, and past 90 dp called
+      `close()` outright. Nothing moved under the finger; the only feedback
+      was the list's overscroll glow, and then the book simply went. An
+      invisible threshold you cannot see approaching, cannot feel and cannot
+      back out of, on the one gesture that should feel like closing a book.
+      It predates the sheet: A20's whole argument is that the drag and the
+      animation are one number, and this path was written before there was
+      one — the Wave beside it was converted and this was not. It drives
+      `BookSheet` now, so the page follows the finger from the first
+      millimetre and a close caught halfway eases back. The 90 dp threshold
+      is gone rather than retuned, because `RibbonMotion` already owns what
+      "far enough" means and a second opinion in another file is how two
+      halves of one gesture drift apart.
+    - **You was a wide tile with a circle at one end.** Nothing said either
+      half was a control — a portrait you can change and a name you can edit
+      looked exactly like a portrait and a name. It is centred now, at the
+      size of a face you can see rather than one being celebrated, with the
+      line that says where they are seen and the small caps that say the
+      face is a control. The sections below are named for what they are
+      about — how you read, this phone, your account — rather than by which
+      screen they open; "Reading" had Downloads in it, which is filing by
+      convenience. The lede went with them: it listed the same three things
+      the headings underneath already say.
+
+      What keeps it from being a profile page, which §13 would not have:
+      nothing is counted. No rooms joined, no books finished, no
+      member-since, no badge. A face, a name, and one sentence.
 
 ## Licensed translations (decided: API.Bible)
 
