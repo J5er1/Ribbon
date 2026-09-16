@@ -96,7 +96,7 @@ import kotlin.uuid.ExperimentalUuidApi
 //
 // iOS carries the same defects in `ios/Ribbon/Reading/ReflectionCardView.swift`
 // and is left alone on purpose — this pass is Android's (docs/deviations.md
-// A32). The copy constants above are the shared half and port straight across.
+// A33). The copy constants above are the shared half and port straight across.
 
 /** `.padding(22)` — the card's own inset, unchanged. */
 private val CardPadding = 22.dp

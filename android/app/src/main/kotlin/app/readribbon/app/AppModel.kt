@@ -254,7 +254,7 @@ class AppModel(
      * subtitle is "So you can read at the same time", which a quarter-hour-old
      * version of would be a lie. So it posts from the live roster and only
      * while Ribbon is running — which is the honest shape of the feature and
-     * is written down in `RoomWatch`'s header and in docs/deviations.md A33.
+     * is written down in `RoomWatch`'s header and in docs/deviations.md A34.
      *
      * Once per arrival rather than per heartbeat: the roster repeats, and a
      * notification for every beat of somebody else's presence would be the

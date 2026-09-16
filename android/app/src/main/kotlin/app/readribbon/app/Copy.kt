@@ -34,18 +34,6 @@ object Copy {
     const val THATS_ME = "That's me"
     const val PORTRAIT_REASON = "They'll see your face when you're reading."
 
-    /**
-     * The sentence under your face and your name on You (S18).
-     *
-     * The sibling of [PORTRAIT_REASON], which says the same thing at
-     * onboarding about the face alone. A23's argument was that almost every
-     * row gained a sentence and that this was the half of the pass that
-     * mattered most; the identity tile was the one tile left that said
-     * nothing about itself, on the screen S18 calls the place your identity
-     * lives — and both of its targets are controls whose only affordance was
-     * an invisible accessibility label.
-     */
-    const val IDENTITY_REASON = "They'll see your face and your name when you're reading."
     const val ADD_A_PORTRAIT = "Add a portrait"
 
     /** The same control, said to somebody who already has a face behind it. */
@@ -712,9 +700,19 @@ object Copy {
         "$heading, where you are and where the ribbon is"
 
     const val ROOM_LEDE = "Who is in it, what it tells you, and the rooms you are in."
-    const val YOU_LEDE = "Your name and face, how Scripture sets, and what this phone keeps."
     const val YOUR_ROOMS = "Your rooms"
-    const val READING_SECTION = "Reading"
+
+    // The You screen's own sections (deviation A29a). Each one answers "what
+    // is this about" rather than naming a category: how you read, this phone,
+    // your account. A heading that says "General" is a heading that gave up.
+    const val HOW_YOU_READ = "How you read"
+    const val THIS_PHONE = "This phone"
+    const val YOUR_ACCOUNT = "Your account"
+
+    /** Under the face, saying where it is seen. Never "profile photo". */
+    const val YOUR_FACE_REASON = "Your name and face are what the room sees."
+
+    const val TAP_TO_CHANGE = "Tap to change"
 
     /**
      * Inviting someone to the room you are already in (S15). The room

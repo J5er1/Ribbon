@@ -578,6 +578,49 @@ class LookBookTest {
         check(pixels.any { it != ground }) { "the launch mark drew nothing but ground" }
     }
 
+    /**
+     * The launch mark actually animates.
+     *
+     * The static test above proves the mark draws; it would pass just as
+     * happily on a drawable whose animation never runs, which is exactly the
+     * bug that shipped — an `animated-vector` whose target names do not match
+     * its vector, or whose property is not animatable, is not an error. It is
+     * a still picture, and nothing anywhere says so.
+     *
+     * So this drives the real `AnimatedVectorDrawable` and asserts the first
+     * frame and a later one are different pictures.
+     */
+    @Test fun theLaunchMarkMoves() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val avd = checkNotNull(context.getDrawable(R.drawable.splash_wave_animated)) {
+            "splash_wave_animated did not inflate"
+        }
+        check(avd is android.graphics.drawable.Animatable) {
+            "splash_wave_animated is not animatable: ${'$'}{avd::class.java.name}"
+        }
+        val side = 432
+        fun frame(): IntArray {
+            val bitmap = Bitmap.createBitmap(side, side, Bitmap.Config.ARGB_8888)
+            val canvas = android.graphics.Canvas(bitmap)
+            canvas.drawColor(android.graphics.Color.parseColor("#0B0B0A"))
+            avd.setBounds(0, 0, side, side)
+            avd.draw(canvas)
+            val pixels = IntArray(side * side)
+            bitmap.getPixels(pixels, 0, side, 0, 0, side, side)
+            return pixels
+        }
+
+        (avd as android.graphics.drawable.Animatable).start()
+        val first = frame()
+        // Past the unfurl's own 440 ms, so the clip has opened.
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(600, java.util.concurrent.TimeUnit.MILLISECONDS)
+        val later = frame()
+
+        check(!first.contentEquals(later)) {
+            "the launch mark drew the same picture 600 ms apart — the animation is not running"
+        }
+    }
+
     @Test fun appearanceSettings() {
         shoot("settings-appearance") { AppearanceScreen(onBack = {}) }
     }

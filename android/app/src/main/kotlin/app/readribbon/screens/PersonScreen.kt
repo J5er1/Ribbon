@@ -180,7 +180,7 @@ fun PersonScreen(
     // centred column does.
     //
     // Two deliberate differences from the settings screens, both recorded in
-    // A33a. **No lede**: the one slot on this screen that invites a sentence
+    // A35. **No lede**: the one slot on this screen that invites a sentence
     // about a person is exactly where a join date or a "last seen" would
     // arrive, and S12's anatomy ends "nothing else". **The face is on the bare
     // ground**, where S18's identity tile puts its face on paper — here the

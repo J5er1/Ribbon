@@ -482,7 +482,7 @@ private fun PreviewStep(
         // only by co-members, and a person holding an invite is not one yet.
         // Reaching the real face needs an edge function that takes the token,
         // validates it and streams the portrait — worth doing, not an
-        // Android-only change, and recorded in docs/deviations.md A36. A
+        // Android-only change, and recorded in docs/deviations.md A37. A
         // monogram in the right recess is a person; nothing at all is a form.
         if (!inviterName.isNullOrBlank()) {
             PortraitView(person = Person(name = inviterName), size = PortraitSize)

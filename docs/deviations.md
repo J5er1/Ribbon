@@ -1079,7 +1079,53 @@ A31. **There is a chapter list, and the foot of the book is the way to it.**
     repeated — small caps, low contrast, saying where you are, which is what
     a running head does. It is a door only if you press it.
 
-A32. **The cards took the pass the rest of the app had already had.**
+A32. **Three things the owner found by using it, and what each turned out to
+    be.** Worth recording together, because none of them was a taste
+    disagreement — each was a defect with a cause.
+
+    - **The launch mark never animated.** The theme set androidx's *compat*
+      splash attributes, and on API 31 and later the platform draws the
+      splash from its own `android:windowSplashScreen*` slots. This app's
+      minSdk is 33, so every device on earth fell through to the system
+      default — the launcher icon on a plate — with the animated vector
+      sitting unused in the APK. The `android:` prefix is the fix, and the
+      look book now drives the real `AnimatedVectorDrawable` and asserts two
+      frames 600 ms apart are different pictures: an `animated-vector` whose
+      target names do not match its vector is not an error, it is a still
+      picture that says nothing. The settle also had no pivot, so it was not
+      a settle — the mark slid diagonally as it shrank.
+    - **The way out of Scripture was finicky, and it was not a tuning
+      problem.** S02 gives two ways out: the Wave, and a downward drag from
+      scroll-top. The drag existed and *counted pixels* — it accumulated a
+      running total, deliberately consumed nothing, and past 90 dp called
+      `close()` outright. Nothing moved under the finger; the only feedback
+      was the list's overscroll glow, and then the book simply went. An
+      invisible threshold you cannot see approaching, cannot feel and cannot
+      back out of, on the one gesture that should feel like closing a book.
+      It predates the sheet: A20's whole argument is that the drag and the
+      animation are one number, and this path was written before there was
+      one — the Wave beside it was converted and this was not. It drives
+      `BookSheet` now, so the page follows the finger from the first
+      millimetre and a close caught halfway eases back. The 90 dp threshold
+      is gone rather than retuned, because `RibbonMotion` already owns what
+      "far enough" means and a second opinion in another file is how two
+      halves of one gesture drift apart.
+    - **You was a wide tile with a circle at one end.** Nothing said either
+      half was a control — a portrait you can change and a name you can edit
+      looked exactly like a portrait and a name. It is centred now, at the
+      size of a face you can see rather than one being celebrated, with the
+      line that says where they are seen and the small caps that say the
+      face is a control. The sections below are named for what they are
+      about — how you read, this phone, your account — rather than by which
+      screen they open; "Reading" had Downloads in it, which is filing by
+      convenience. The lede went with them: it listed the same three things
+      the headings underneath already say.
+
+      What keeps it from being a profile page, which §13 would not have:
+      nothing is counted. No rooms joined, no books finished, no
+      member-since, no badge. A face, a name, and one sentence.
+
+A33. **The cards took the pass the rest of the app had already had.**
     `ReflectionCardView` was written before either design pass and neither
     reached it, so it was the last surface in the app still built out of
     the materials the app had abandoned: a hand-rolled 12 dp rectangle with
@@ -1153,7 +1199,7 @@ A32. **The cards took the pass the rest of the app had already had.**
     constants are the shared half and port straight across when iOS takes
     its turn.
 
-A33. **Notifications exist.** S19 is the screen the build book calls "the
+A34. **Notifications exist.** S19 is the screen the build book calls "the
     setting screen that decides whether people keep this app", and until now
     it decided nothing: nothing in the Android build had ever posted a
     notification. No channel, no `notify`, no small icon, no PendingIntent.
@@ -1262,7 +1308,7 @@ A33. **Notifications exist.** S19 is the screen the build book calls "the
     has nothing to pull, and waking their phone four times an hour to find
     that out is a battery cost with no feature behind it.
 
-A34. **S12 joins the rest of the app, and says something when there is
+A35. **S12 joins the rest of the app, and says something when there is
     nothing.** The person screen was the last one standing on its own page
     furniture, and A22a is why: that pass gave it a head, tiles and a way
     back *before* `RibbonScreen` existed, and nothing came back for it.
@@ -1326,7 +1372,7 @@ A34. **S12 joins the rest of the app, and says something when there is
     note and jumped to the middle with none. The content column fills its
     measure now. A24 again: only a picture catches that.
 
-A34a. **The identity tile on You says what it is for, and the name it holds
+A35a. **The identity tile on You says what it is for, and the name it holds
     is saved by every way out of it.** S18's name field committed in exactly
     one place — the keyboard's Done key. Tapping the face beside it, tapping
     anything that took focus, pressing back, closing the menu or pushing a
@@ -1345,14 +1391,22 @@ A34a. **The identity tile on You says what it is for, and the name it holds
     fixed across onboarding's three fields. It draws `Your name` behind the
     caret, the way the room's own name field already did.
 
-    And the tile gained a sentence. It was the only tile on the screen that
-    said nothing about itself, while the three rows beneath it each carry one
-    — which A23 calls the half of that pass that mattered most. Neither of its
-    two targets was drawn as a control: the portrait's affordance existed only
-    as a content description and the name's only as a click label, both
-    invisible on the screen S18 calls the place your identity lives.
+    The third half of this entry was written and then withdrawn, and the
+    reason is worth keeping. The tile said nothing about itself while the
+    three rows beneath it each carried a sentence — A23 calls that the half
+    of its pass that mattered most — and neither of its two targets was drawn
+    as a control: the portrait's affordance existed only as a content
+    description, the name's only as a click label, both invisible on the
+    screen S18 calls the place your identity lives. So it gained a sentence
+    of its own, `IDENTITY_REASON`. A32's rebuild of You, which landed on
+    `main` while this branch was open, answers the same complaint in a better
+    shape — the small caps under the face saying the face is a control, and
+    one centred line saying where a name and a face are seen — so the tile's
+    own sentence would have been that line said twice. It is gone, and the
+    string with it: an unused constant in `Copy.kt` is the defect A39 is
+    about, and a merge is the usual way one gets there.
 
-A35. **Taking something back now takes it back.** The app has had "take
+A36. **Taking something back now takes it back.** The app has had "take
     back", "remove" and "leave your notes behind?" since the beginning, and
     under them the deletions reached the backend and stopped. Five defects,
     which are one defect seen from five places.
@@ -1444,7 +1498,7 @@ A35. **Taking something back now takes it back.** The app has had "take
     anybody, including the person who wrote them. A recording is re-made the
     way it was made.
 
-A36. **The invite path, end to end.** S15 says "the link is the whole
+A37. **The invite path, end to end.** S15 says "the link is the whole
     mechanism", and five things were wrong with the whole mechanism.
 
     **A link minted while the network was down died.** `createInvite` fired
@@ -1505,7 +1559,7 @@ A36. **The invite path, end to end.** S15 says "the link is the whole
     to another account was the sign-out control two taps deep in the menu. The
     preview says who it will be and offers the other door.
 
-A36a. **The room has S01's third waiting row.** S01's anatomy has always read
+A37a. **The room has S01's third waiting row.** S01's anatomy has always read
     "notes left for you, cards open, **an ink to pick**", and the third one
     had never been drawn. §6.7 asks for it in so many words — when a room
     becomes three, "the two originals get an invitation on the room screen to
@@ -1522,7 +1576,7 @@ A36a. **The room has S01's third waiting row.** S01's anatomy has always read
     blocking, and it goes the moment an ink is picked. Its mark is the one on
     that screen that is about a colour and cannot use one.
 
-A37. **The cuts that were left.** §9.1 opens "everything breathes rather
+A38. **The cuts that were left.** §9.1 opens "everything breathes rather
     than snaps", and A21 and A22 did most of the work of making that true —
     but a sweep of every animation primitive in the tree found ten places
     where something still changed on one frame, and three of them were the
@@ -1581,7 +1635,7 @@ A37. **The cuts that were left.** §9.1 opens "everything breathes rather
     written by hand in every file that animated anything, and one of them had
     forgotten to".
 
-A38. **The word "streak" was shipping, on screen.** It is the first entry
+A39. **The word "streak" was shipping, on screen.** It is the first entry
     on §10.2's Never list and on the brief's §12, and `Copy.kt`'s own header
     says "Never used anywhere: streak" — which made the header false about the
     file it heads. It was in the fourth tour card: "No gamified streak
@@ -1615,9 +1669,9 @@ A38. **The word "streak" was shipping, on screen.** It is the first entry
     is ephemeral and socket-only, and a quarter-hour-old "so you can read at
     the same time" is a lie — so it posts from the live roster, once per
     arrival rather than per heartbeat, and only while Ribbon is running. That
-    limit is stated in `RoomWatch`'s header and in A33.
+    limit is stated in `RoomWatch`'s header and in A34.
 
-A38a. **The gestures had no tap equivalents, on the app's central act.** §11
+A39a. **The gestures had no tap equivalents, on the app's central act.** §11
     Motor is one sentence — "every gesture has a tap equivalent" — and four
     places did not keep it.
 
@@ -1663,11 +1717,11 @@ A38a. **The gestures had no tap equivalents, on the app's central act.** §11
     *only* place its author is named, and the gutter mark, whose own doc
     comment quotes §11's "Note from Ruth, verse 9, not yet found".
 
-A39. **The seams.** The states a polish pass is judged by, and the easiest
+A40. **The seams.** The states a polish pass is judged by, and the easiest
     to leave half-made.
 
     **A voice note left offline never reached anybody.** The written path was
-    queued and replayed on every foreground (A35); the voice path was left out
+    queued and replayed on every foreground (A36); the voice path was left out
     of both halves, so a note recorded on a train drew its pending hairline
     (§4.4) and waited for a push that was never attempted again. Worse, the
     replay loop pushed the row without the file — `RemoteSync.push` only
@@ -1678,13 +1732,13 @@ A39. **The seams.** The states a polish pass is judged by, and the easiest
 
     **The background worker leaked a whole app every fifteen minutes.**
     `AppModel` is a `ViewModel`, and one built outside a `ViewModelStore`
-    never has `onCleared` called — so A33's worker left an orphaned
+    never has `onCleared` called — so A34's worker left an orphaned
     `ConnectivityManager` callback (A26 says it "has to be unregistered"), a
     live Realtime websocket with its own heartbeat and reconnect loop, and an
     uncancelled scope behind it on every run, forever. It also ran a GitHub
     update check each time. There is a `shutDown()` now, and
     `load(forBackgroundPull = true)` skips the three launch-time side effects
-    a pull that exists to post a notification has no use for. A33's own note
+    a pull that exists to post a notification has no use for. A34's own note
     says this route must stay cheap; it was not.
 
     **A licensed translation offline was a blank page.** Every chapter of a
@@ -1716,10 +1770,10 @@ A39. **The seams.** The states a polish pass is judged by, and the easiest
     now, which is the honest way to make it read as held: a recess in the
     page, rather than light coming from nowhere.
 
-A39a. **Two repairs that were themselves defects, and the queue that was
+A40a. **Two repairs that were themselves defects, and the queue that was
     still missing.** An adversarial pass over this work found three things.
 
-    **The presence form's new semantics closed the panel it opened.** A38a
+    **The presence form's new semantics closed the panel it opened.** A39a
     gave the lozenge the action §11 asks for by merging the Box the gestures
     sit on — and that Box wraps the *expanded panel* as well. Compose's merge
     swallows descendant merge roots, which is the rule `NoteCard` states in
@@ -1729,17 +1783,17 @@ A39a. **Two repairs that were themselves defects, and the queue that was
     collapsed now; the open panel's children speak for themselves and
     predictive back closes it.
 
-    **The ember record's new way back scrolled away.** A38a put a chevron on
+    **The ember record's new way back scrolled away.** A39a put a chevron on
     the screen that had none, inside the scrolling column — which is verbatim
-    the defect A34 had just removed from S12, named in that entry's own
+    the defect A35 had just removed from S12, named in that entry's own
     words. It is outside the scroll now.
 
     Both are the same lesson twice: a repair copied from a fix is not the
     fix, and the second half of each of those entries was the half that
     mattered.
 
-    **Three offline mutations still had no queue.** A35 gave one to note
-    pushes, note deletes and highlight deletes; A36 gave one to invites; A39
+    **Three offline mutations still had no queue.** A36 gave one to note
+    pushes, note deletes and highlight deletes; A37 gave one to invites; A40
     gave one to voice notes. `addHighlight`, `markQuietDay` and — worst —
     `answerCard` pushed once through a bare `runCatching` and were forgotten.
     The card answer is the damaging one: `answerCard` decides whether a card
