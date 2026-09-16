@@ -6,6 +6,7 @@ import android.app.Activity
 import android.content.Context
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.os.PowerManager
 import android.util.Log
 import app.readribbon.data.SupabaseConfig
 import app.readribbon.services.Auth0Service
@@ -54,11 +55,16 @@ import app.readribbon.data.RoomNotificationPrefs
 import app.readribbon.data.ScriptureStore
 import app.readribbon.design.Haptics
 import app.readribbon.services.Connectivity
+import app.readribbon.services.Destination
 import app.readribbon.services.LocalPresenceService
+import app.readribbon.services.NotificationKind
+import app.readribbon.services.Notifications
+import app.readribbon.services.notesLeftLine
 import app.readribbon.services.PresenceEvent
 import app.readribbon.services.PresenceService
 import app.readribbon.services.PresentPerson
 import app.readribbon.services.RemoteSync
+import app.readribbon.services.RoomWatch
 import app.readribbon.services.ReleaseInfo
 import app.readribbon.services.RoomGraph
 import app.readribbon.services.SupabaseClient
@@ -168,6 +174,24 @@ class AppModel(
     /** Set by an opened invite link; RootView and onboarding watch it. */
     var pendingInvite: PendingInvite? by mutableStateOf(null)
 
+    /**
+     * Where a tapped notification is asking the app to go (S19). Cleared by
+     * whoever honours it, exactly as [pendingInvite] is.
+     */
+    var pendingDestination: Destination? by mutableStateOf(null)
+
+    /**
+     * The room the person is actually looking at, or null when Ribbon is not
+     * in front of them.
+     *
+     * Not [currentRoom], which is a *selection* and stays set in a pocket.
+     * This is what lets a notification stay quiet about something the room is
+     * already unfurling in place under the fire — §6.3 asks for "a
+     * notification, or nothing at all", and a heads-up sliding over a waiting
+     * row about the same note is both at once.
+     */
+    var visibleRoomID: Uuid? by mutableStateOf(null)
+
     /** Who is in the book right now (empty means the form is absent). */
     var presentPeople: List<PresentPerson> by mutableStateOf(emptyList())
         private set
@@ -188,6 +212,16 @@ class AppModel(
     /** Portraits cache (person id → image). */
     private val portraits = mutableStateMapOf<Uuid, ImageBitmap>()
 
+    /**
+     * One [Haptics] for the model's whole life.
+     *
+     * It used to be constructed per arriving tap, which re-did the
+     * `VibratorManager` lookup and the primitive-support probe every time —
+     * on the one interaction in the product that §9.3 says must feel
+     * immediate.
+     */
+    private val haptics = Haptics(appContext)
+
     init {
         viewModelScope.launch {
             presence.events.collect { event ->
@@ -196,7 +230,7 @@ class AppModel(
                         presentPeople = event.people
                     }
                     is PresenceEvent.ThinkingOfYou -> {
-                        Haptics(appContext).tapOnTheShoulder()
+                        thinkingOfYouArrived(event.fromName)
                     }
                     is PresenceEvent.RoomChanged -> {
                         roomChangedRemotely(event.roomID)
@@ -204,6 +238,52 @@ class AppModel(
                 }
             }
         }
+    }
+
+    /**
+     * Somebody held your face for 700 ms (§4.3).
+     *
+     * What used to be here was one line — a haptic — and it threw away the
+     * only thing the gesture carries. §10.3 is unambiguous that the name *is*
+     * the payload ("Ruth"), and a buzz with no name is a phone twitching in a
+     * pocket for no stated reason. It also consulted nothing: a person who had
+     * turned the switch off in S19 was buzzed anyway, and so was a person
+     * asleep inside their own quiet hours.
+     *
+     * The order below is the build book's, and the middle step is the one
+     * worth reading twice. S19 says thinking of you "is the only thing
+     * permitted to arrive silently inside [quiet hours], as a haptic on an
+     * already-woken device" — so inside them there is no notification at all,
+     * and the haptic plays only if the screen is already on. That is the
+     * difference between a tap on the shoulder and waking somebody up.
+     *
+     * Outside quiet hours it posts even when Ribbon is in the foreground,
+     * which is the one exception to the rule that a visible room stays quiet.
+     * There is no in-app surface that carries a name and nothing else, and
+     * §4.3 is explicit that the notification *is* the delivery; §6.3's "a
+     * notification, or nothing at all" is about notes.
+     */
+    private fun thinkingOfYouArrived(fromName: String) {
+        val room = currentRoom ?: return
+        val prefs = notificationPrefs(room)
+        // The switch is off: no notification, and no haptic either. A buzz
+        // with no explanation is worse than silence, and the person has said no.
+        if (!prefs.thinkingOfYou) return
+
+        if (state.settings.isQuietNow()) {
+            val power = appContext.getSystemService(PowerManager::class.java)
+            if (power?.isInteractive == true) haptics.tapOnTheShoulder()
+            return
+        }
+
+        haptics.tapOnTheShoulder()
+        Notifications.post(
+            context = appContext,
+            id = Notifications.id(room.id, NotificationKind.thinkingOfYou),
+            kind = NotificationKind.thinkingOfYou,
+            line = Copy.notifThinkingOfYou(firstName(fromName)),
+            to = Destination.Room(roomID = room.id),
+        )
     }
 
     /**
@@ -1281,6 +1361,53 @@ class AppModel(
     }
 
     /**
+     * Whether now is the moment to ask about notifications (§6.1).
+     *
+     * "Notifications: after the first note is left or found — never at
+     * launch. In context: *Tell you when Ruth leaves a note?*" Four things
+     * have to be true and each is in that sentence:
+     *
+     *  - a note has just been left or found, which is the caller's business;
+     *  - this device has never been asked, because the app asks once and a
+     *    question that comes back is worse than no question;
+     *  - Android has not already granted it, so we never raise a dialog that
+     *    would be answered before it was drawn;
+     *  - and there is somebody else in the room. "Tell you when Ruth leaves
+     *    a note?" has no name to put in it, and nothing to promise, in a room
+     *    of one — S17 forbids a notification pre-prompt and asking a person
+     *    reading alone is one in everything but timing.
+     */
+    fun shouldAskAboutNotifications(room: Room): Boolean =
+        !state.hasAskedAboutNotifications &&
+            !Notifications.allowed(appContext) &&
+            members(room).size > 1
+
+    /**
+     * Whoever it would be about — the other person in a room of two, and the
+     * one who has most recently left something in a larger room. The ask
+     * names a person because §6.1's copy does, and a name is the whole
+     * difference between this question and a pre-prompt.
+     */
+    fun whoTheAskIsAbout(room: Room): String? {
+        val me = state.me?.id
+        val others = members(room).map { it.personID }.filter { it != me }
+        if (others.isEmpty()) return null
+        val readingIDs = state.readings.filter { it.roomID == room.id }.map { it.id }.toSet()
+        val mostRecent = state.notes
+            .filter { readingIDs.contains(it.readingID) && others.contains(it.authorID) }
+            .maxByOrNull { it.createdAt }
+            ?.authorID
+        return person(mostRecent ?: others.first())?.name
+    }
+
+    /** Asked, whatever the answer was. Never asked again (§6.1). */
+    fun markAskedAboutNotifications() {
+        if (state.hasAskedAboutNotifications) return
+        state = state.copy(hasAskedAboutNotifications = true)
+        persist()
+    }
+
+    /**
      * Account deletion (§6.8). The notes question is asked once, at
      * deletion, and the answer travels with the remote delete when sync
      * exists; locally both paths clear this device.
@@ -1308,6 +1435,9 @@ class AppModel(
         state = AppState()
         portraits.clear()
         persist()
+        // Nothing left to watch for, and on this path watching on would be
+        // wrong rather than merely pointless.
+        RoomWatch.stop(appContext)
     }
 
     // MARK: - The account and the room surface of sync (§6.10, S16)
@@ -1445,6 +1575,8 @@ class AppModel(
 
     suspend fun signOutRemote() {
         remote?.signOut()
+        // Nobody to pull for any more.
+        RoomWatch.stop(appContext)
     }
 
     /**
@@ -1571,9 +1703,9 @@ class AppModel(
      * Pull every room I'm in and fold it into local state. Called on
      * launch, on foreground, and after joining.
      */
-    suspend fun refreshFromRemote() {
-        val remote = this.remote ?: return
-        if (!remote.isSignedIn) return
+    suspend fun refreshFromRemote(): Arrivals {
+        val remote = this.remote ?: return Arrivals.none
+        if (!remote.isSignedIn) return Arrivals.none
         // An unpushed rename goes first, so the pull can't revert it.
         for (roomID in pendingRenamePushes.toList()) {
             val room = state.rooms.firstOrNull { it.id == roomID }
@@ -1581,8 +1713,102 @@ class AppModel(
                 pendingRenamePushes.remove(roomID)
             }
         }
-        val graph = runCatching { remote.pullRooms() }.getOrNull() ?: return
-        merge(graph)
+        val graph = runCatching { remote.pullRooms() }.getOrNull() ?: return Arrivals.none
+        val landed = merge(graph)
+        announce(landed)
+        return landed
+    }
+
+    /**
+     * Say what arrived, out loud (S19, §10.3).
+     *
+     * Called from the one place that can tell an arrival from a row that was
+     * already there. Everything it posts goes through
+     * [Notifications.shouldPost] first, which is what makes S19's "per room,
+     * not global" true even though the channels are per kind.
+     *
+     * The order of the three is the order the build book puts them in, and
+     * the one thing worth saying about it: a note names its verse when it is
+     * the only one from that person in that room, and names only the person
+     * when several landed (§10.3's two strings). Nothing here ever says how
+     * many, in prose or through a group summary — Android writes "+2 more"
+     * into a summary of its own accord, which is a count attached to reading
+     * posted by the platform, in the last place anybody would look for it.
+     */
+    private fun announce(arrivals: Arrivals) {
+        if (arrivals.isEmpty) return
+        if (!Notifications.allowed(appContext)) return
+        val settings = state.settings
+
+        fun gate(kind: NotificationKind, roomID: Uuid): Boolean {
+            val room = state.rooms.firstOrNull { it.id == roomID } ?: return false
+            return Notifications.shouldPost(
+                kind = kind,
+                roomID = roomID,
+                prefs = notificationPrefs(room),
+                settings = settings,
+                visibleRoomID = visibleRoomID,
+            )
+        }
+
+        arrivals.notes.forEach { (roomID, notes) ->
+            if (!gate(NotificationKind.notesLeft, roomID)) return@forEach
+            // By author, because §10.3's collapsed string names a person. Two
+            // people who both left something are two posts, not one summary.
+            notes.groupBy { it.authorID }.forEach { (authorID, theirs) ->
+                val name = person(authorID)?.name ?: return@forEach
+                val newest = theirs.maxByOrNull { it.createdAt } ?: return@forEach
+                Notifications.post(
+                    context = appContext,
+                    // Per room *and* author, so a second note from the same
+                    // person replaces the first — which is what makes the
+                    // collapsed string a replacement rather than a pile.
+                    id = Notifications.id(roomID, NotificationKind.notesLeft) + authorID.hashCode(),
+                    kind = NotificationKind.notesLeft,
+                    line = notesLeftLine(
+                        name = name,
+                        verse = newest.verse,
+                        several = theirs.size > 1,
+                    ),
+                    to = Destination.Verse(
+                        roomID = roomID,
+                        readingID = newest.readingID,
+                        verse = newest.verse,
+                    ),
+                )
+            }
+        }
+
+        arrivals.cardsOpened.forEach { (roomID, cards) ->
+            if (!gate(NotificationKind.cardsOpen, roomID)) return@forEach
+            // "The room gets one notification: The cards are open" (§4.6).
+            // One, however many turned over — the plural is in the noun.
+            val card = cards.firstOrNull() ?: return@forEach
+            Notifications.post(
+                context = appContext,
+                id = Notifications.id(roomID, NotificationKind.cardsOpen),
+                kind = NotificationKind.cardsOpen,
+                line = Copy.NOTIF_CARDS_OPEN,
+                to = Destination.Cards(
+                    roomID = roomID,
+                    readingID = card.readingID,
+                    chapter = card.chapter,
+                ),
+            )
+        }
+
+        arrivals.finished.forEach { (roomID, readings) ->
+            if (!gate(NotificationKind.bookFinished, roomID)) return@forEach
+            val reading = readings.lastOrNull() ?: return@forEach
+            val book = Bible.book(reading.bookID)?.name ?: return@forEach
+            Notifications.post(
+                context = appContext,
+                id = Notifications.id(roomID, NotificationKind.bookFinished),
+                kind = NotificationKind.bookFinished,
+                line = Copy.notifFinished(book),
+                to = Destination.Room(roomID = roomID),
+            )
+        }
     }
 
     /**
@@ -1624,8 +1850,103 @@ class AppModel(
         pendingInvite = PendingInvite(token = token)
     }
 
-    private fun merge(graph: RoomGraph) {
-        val me = state.me ?: return
+    /**
+     * What arrived in a merge that had not been seen before (S19, §10.3).
+     *
+     * `merge` used to publish one `next` value and say nothing about what was
+     * new in it, so a note that landed and a note that had been sitting in
+     * the database for a month were indistinguishable by the time anything
+     * downstream could look. There was, literally, no event to post a
+     * notification from — which is most of why there were no notifications.
+     *
+     * The diff is taken at the one moment both values are in hand, which is
+     * the seam `merge` already had: it builds a whole state locally and
+     * publishes it once.
+     */
+    data class Arrivals(
+        /** Notes left for me, by the room they landed in. */
+        val notes: Map<Uuid, List<Note>> = emptyMap(),
+        /** Readings whose cards turned over, by room. */
+        val cardsOpened: Map<Uuid, List<ReflectionCard>> = emptyMap(),
+        /** Books this room finished, by room. */
+        val finished: Map<Uuid, List<Reading>> = emptyMap(),
+    ) {
+        val isEmpty: Boolean
+            get() = notes.isEmpty() && cardsOpened.isEmpty() && finished.isEmpty()
+
+        companion object {
+            val none = Arrivals()
+        }
+    }
+
+    /**
+     * What is new in [next] that was not in [before], and is newer than the
+     * watermark.
+     *
+     * The watermark — `AppState.notifiedThrough` — is the whole of §6.10's
+     * protection, and it is worth being explicit about what it prevents: a
+     * first sync on a new device restores every room a person is in, which
+     * for a couple a year into this is several hundred notes. Without a
+     * watermark that is several hundred notifications, in one breath, the
+     * first time somebody signs in on a new phone. So on the very first merge
+     * the watermark is null, it is set to the newest row seen, and *nothing*
+     * is reported. A new phone arrives quiet.
+     */
+    private fun arrivals(before: AppState, next: AppState): Arrivals {
+        val me = next.me?.id ?: return Arrivals.none
+        val watermark = before.notifiedThrough ?: return Arrivals.none
+
+        fun roomOf(readingID: Uuid): Uuid? =
+            next.readings.firstOrNull { it.id == readingID }?.roomID
+
+        val knownNotes = before.notes.map { it.id }.toSet()
+        val notes = next.notes
+            .filter { note ->
+                note.id !in knownNotes &&
+                    note.authorID != me &&
+                    !note.foundBy.contains(me) &&
+                    note.createdAt > watermark
+            }
+            .groupBy { roomOf(it.readingID) }
+            .mapNotNull { (room, list) -> room?.let { it to list } }
+            .toMap()
+
+        val wasOpen = before.cards.filter { it.state == CardState.open }.map { it.id }.toSet()
+        val cardsOpened = next.cards
+            .filter { card ->
+                card.state == CardState.open &&
+                    card.id !in wasOpen &&
+                    (card.openedAt?.let { it > watermark } ?: false)
+            }
+            .groupBy { roomOf(it.readingID) }
+            .mapNotNull { (room, list) -> room?.let { it to list } }
+            .toMap()
+
+        val wasFinished = before.readings.filter { it.finishedAt != null }.map { it.id }.toSet()
+        val finished = next.readings
+            .filter { reading ->
+                reading.finishedAt?.let { it > watermark } == true && reading.id !in wasFinished
+            }
+            .groupBy { it.roomID }
+
+        return Arrivals(notes = notes, cardsOpened = cardsOpened, finished = finished)
+    }
+
+    /**
+     * The newest thing this state knows about, whenever that was.
+     *
+     * Advanced on every merge whether or not anything was posted, so a
+     * notification that was suppressed — quiet hours, a switch turned off,
+     * the room already on screen — is not re-offered by the next merge.
+     */
+    private fun newestRow(state: AppState): Instant? = listOfNotNull(
+        state.notes.maxOfOrNull { it.createdAt },
+        state.cards.mapNotNull { it.openedAt }.maxOrNull(),
+        state.readings.mapNotNull { it.finishedAt }.maxOrNull(),
+    ).maxOrNull()
+
+    private fun merge(graph: RoomGraph): Arrivals {
+        val me = state.me ?: return Arrivals.none
 
         // Swift mutates `state` in place, step by step, and every later step
         // reads what the earlier ones wrote. AppState is immutable here, so
@@ -1974,8 +2295,15 @@ class AppModel(
         }
         next = next.copy(cards = cards)
 
+        // The one seam where both states are in hand. Everything downstream
+        // that needs to know something *arrived* rather than merely being
+        // true reads this.
+        val landed = arrivals(before = state, next = next)
+        next = next.copy(notifiedThrough = newestRow(next) ?: next.notifiedThrough)
+
         state = next
         persist()
+        return landed
     }
 
     /**
@@ -2168,6 +2496,12 @@ class AppModel(
             model.loadPortraits()
             model.checkForUpdates()
             model.openRoomChannel()
+            // Watch for what arrives while the app is closed (S19), but only
+            // for somebody there is an account to watch on behalf of: a
+            // person who has never signed in has nothing to pull, and waking
+            // their phone four times an hour to find that out is a battery
+            // cost with no feature behind it.
+            if (remote?.isSignedIn == true) RoomWatch.start(app)
             return model
         }
 

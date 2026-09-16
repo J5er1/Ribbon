@@ -1153,6 +1153,115 @@ A32. **The cards took the pass the rest of the app had already had.**
     constants are the shared half and port straight across when iOS takes
     its turn.
 
+A33. **Notifications exist.** S19 is the screen the build book calls "the
+    setting screen that decides whether people keep this app", and until now
+    it decided nothing: nothing in the Android build had ever posted a
+    notification. No channel, no `notify`, no small icon, no PendingIntent.
+    `Copy` held all six of §10.3's strings and exactly one of them was read
+    anywhere — as the text of an in-app waiting row. The four switches, the
+    two quiet-hours rows and `RoomNotificationPrefs` were a settings screen
+    for a feature that did not exist, which is deviation 15 in its most
+    literal form.
+
+    The whole of it is in `services/Notifications.kt`,
+    `services/RoomWatch.kt`, and a handful of seams elsewhere. Six calls
+    worth arguing with:
+
+    **Channels are per kind, and S19 says "per room, not global".** A
+    channel's importance belongs to the person and cannot be changed by the
+    app once created, so four channels times six rooms is up to twenty-four
+    rows in Android's settings for somebody to curate — and a room they
+    leave would strand dead ones there forever. So the *platform's* grouping
+    is by kind and Ribbon's own code does the per-room gating before a post
+    ever reaches the platform. §12.2's Law 5 is the authority: the platform
+    owns chrome, Ribbon owns content, and which rooms a person wants to hear
+    from is content. The five channels take their names from the four switch
+    titles verbatim plus "A book finished", so Android's settings page and
+    Ribbon's say the same words about the same thing.
+
+    **Law 2 leaks through the platform, not through our prose.** Every
+    channel is created `setShowBadge(false)` and nothing calls `setNumber` —
+    §13's "no red number badge on the app icon", in its Android form, refused
+    once at the channel rather than remembered at every post. And §10.3's
+    collapsed string ("Ruth left you a note", no verse) is *not* implemented
+    as a notification group: Android writes its own summary with "+2 more" in
+    it, which would be a count attached to reading, posted by the platform,
+    in the last place anybody would look for a Law 2 breach. Several notes
+    from one person in one room share an id and replace each other instead.
+
+    **The watermark, and why a new phone is quiet.** `merge` used to publish
+    one state and say nothing about what was new in it, so there was no event
+    to post from — which is most of why there were no notifications. It
+    returns an `Arrivals` now, diffed at the one moment both states are in
+    hand. The guard that matters is `AppState.notifiedThrough`: on the very
+    first merge on a device it is null, it is set to the newest row seen, and
+    *nothing* is reported. Without it, signing in on a new phone (§6.10)
+    would restore every room a person is in and post a notification for every
+    note in it — several hundred, in one breath. It advances on every merge
+    whether or not anything was posted, so a suppressed notification is not
+    re-offered by the next one.
+
+    **Asked in context, once.** §6.1: "after the first note is left or found
+    — never at launch. In context: *Tell you when Ruth leaves a note?*" That
+    is where it is asked and those are the words, with two answers and no
+    "not now" — the shape that only exists in apps that intend to ask again.
+    It is never raised in a room of one: there is no name to put in the
+    question and nothing to promise, and a nameless version of it is the
+    notification pre-prompt S17 forbids. `hasAskedAboutNotifications` keeps
+    the same contract as the margin hint and the fire's gesture, for the same
+    reason Android forces on us — `shouldShowRequestPermissionRationale`
+    cannot tell never-asked from refused-for-good, which `AudioNotes` already
+    had to work around for the microphone.
+
+    **Quiet hours are honoured, and the arithmetic is not the obvious
+    arithmetic.** The default window runs 10 p.m. to 6 a.m., so `start` is
+    *after* `end`: `minute >= start && minute < end` is false for every
+    minute of the default window and true for the whole of the day it exists
+    to leave alone. That is the bug inverted rather than missing — it would
+    have silenced 6:40 a.m. and 10:15 p.m., the two hours §1 says the app is
+    actually opened in, and let everything through at 3 a.m. `isQuietAt` is
+    written for the wrapping case and `QuietHoursTest` holds it, which is the
+    one part of this feature a unit test can reach. Equal ends mean *never*,
+    not a silent day. Inside quiet hours thinking-of-you is the one thing
+    that arrives, and even then only as a haptic and only when
+    `PowerManager.isInteractive` — S19's "as a haptic on an already-woken
+    device", read literally.
+
+    **What the background route honestly cannot carry.** There is no FCM and
+    no foreground service. A foreground service means a permanent "Ribbon is
+    connected" notification in the shade, which is chrome about the app's own
+    plumbing and the opposite of §1's room; push means a Google dependency
+    and a server-side sender, which would not be an Android-only change.
+    So a 15-minute `WorkManager` job pulls and posts. Anything with a row
+    behind it rides along — notes, cards, a finished book — up to fifteen
+    minutes late, which for a note that was *left to be found later* is not a
+    defect. Two things do not: "Ruth is reading Mark" is presence, socket-only
+    and ephemeral, and a fifteen-minute-old version of "so you can read at the
+    same time" is a lie, so it posts only while Ribbon is running; and
+    "thinking of you" is a client-to-client broadcast with no row anywhere, so
+    a tap sent to a closed phone is still lost. Fixing that needs a table on
+    the shared backend and is not an Android-only change — it is the next
+    piece of work on this feature, and it is written down here rather than
+    left to be discovered.
+
+    Two smaller things went in with it. A tapped notification now has
+    somewhere to land: `AppModel.pendingDestination`, honoured by the room's
+    stack, switching rooms first if it has to. It travels as extras on a
+    private action rather than on the `ribbon://` scheme, which is exported
+    and BROWSABLE — an invite token the model validates is one thing to let a
+    web page hand us, and *somewhere to go* is another. And `visibleRoomID`
+    lets a post stay quiet about something the room is already unfurling in
+    place under the fire, which is what §6.3's "a notification, or nothing at
+    all" means when the interface is already handling the beat well.
+
+    The look book earned its keep here (A24): starting the worker from
+    `Application.onCreate` took every screen in it down at once, because
+    `WorkManager.getInstance` throws when its `androidx.startup` initializer
+    has not run. That moved the call to where there is an account to watch
+    for, which is where it belonged anyway — a person who has never signed in
+    has nothing to pull, and waking their phone four times an hour to find
+    that out is a battery cost with no feature behind it.
+
 ## Licensed translations (decided: API.Bible)
 
 Open question §16.8 is now part-decided: **NKJV plus two undecided

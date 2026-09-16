@@ -19,9 +19,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.File
+import kotlin.time.Clock
+import kotlin.time.Instant
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
@@ -60,6 +64,47 @@ data class AppSettings(
 ) {
     val lineHeightMultiple: Double
         get() = listOf(1.55, 1.72, 1.9)[lineSpacingStep.coerceIn(0, 2)]
+
+    /**
+     * Whether the clock is inside quiet hours (S19).
+     *
+     * The two rows on S19 have been writing these minutes since the screen
+     * was built and nothing has ever read them back, which is deviation 15's
+     * complaint in its narrowest form: a control the person sets and the app
+     * does not honour.
+     *
+     * The arithmetic is not the obvious arithmetic, and that is the whole
+     * reason this is a function rather than a comparison written out at the
+     * call site. The default window runs 10 p.m. to 6 a.m., so `start` is
+     * *after* `end` — a window that wraps midnight is the normal case here
+     * and not the edge case. `minute >= start && minute < end` is false for
+     * every minute of the default window and true for the whole of the day
+     * it exists to leave alone, which is the bug inverted rather than
+     * missing, and the kind that ships.
+     *
+     * Equal ends mean no quiet hours rather than a silent day: a person who
+     * drags both rows to the same time has said "never", and reading it as
+     * "always" would take the app away from them.
+     *
+     * @param minuteOfDay minutes since local midnight, in the zone the phone
+     *   is in *now* — §1's friend four time zones away makes a person who has
+     *   flown the ordinary case, so this is evaluated at the moment something
+     *   would be posted rather than when the setting was made.
+     */
+    fun isQuietAt(minuteOfDay: Int): Boolean {
+        if (quietHoursStart == quietHoursEnd) return false
+        return if (quietHoursStart < quietHoursEnd) {
+            minuteOfDay >= quietHoursStart && minuteOfDay < quietHoursEnd
+        } else {
+            minuteOfDay >= quietHoursStart || minuteOfDay < quietHoursEnd
+        }
+    }
+
+    /** The same, against the clock on this phone right now. */
+    fun isQuietNow(now: Instant = Clock.System.now()): Boolean {
+        val local = now.toLocalDateTime(TimeZone.currentSystemDefault()).time
+        return isQuietAt(local.hour * 60 + local.minute)
+    }
 }
 
 /** The whole of what the app remembers. */
@@ -107,6 +152,37 @@ data class AppState(
      * relaunch must not re-download every face in the room.
      */
     val portraitETags: Map<Uuid, String> = emptyMap(),
+    /**
+     * The newest row this device has already accounted for, for the purpose
+     * of notifications (S19).
+     *
+     * Null means this device has never merged anything, and that case is the
+     * whole reason the field exists: a first sync on a new phone restores
+     * every room a person is in, which for a couple a year into this is
+     * several hundred notes. Reported naively that is several hundred
+     * notifications in one breath, the first time somebody signs in on a new
+     * phone — the single most destructive failure this feature has. So the
+     * first merge sets the watermark and posts nothing at all (§6.10).
+     *
+     * It advances on every merge whether or not anything was posted, so a
+     * notification that was suppressed — quiet hours, a switch turned off,
+     * the room already on screen — is not re-offered by the next one.
+     */
+    val notifiedThrough: Instant? = null,
+    /**
+     * Whether this device has been asked about notifications yet (§6.1).
+     *
+     * The same contract as [hasSeenMarginHint] and [hasPulledTheFire], and
+     * for the same reason: the app asks once, in context, and a question that
+     * comes back is worse than no question. Android cannot tell "never asked"
+     * from "refused for good" — `shouldShowRequestPermissionRationale` is
+     * false in both cases — so the app has to remember, exactly as
+     * `AudioNotes` already does for the microphone.
+     *
+     * Per install, and never pushed to the backend: it is a fact about this
+     * phone and not about the person.
+     */
+    val hasAskedAboutNotifications: Boolean = false,
 )
 
 /**

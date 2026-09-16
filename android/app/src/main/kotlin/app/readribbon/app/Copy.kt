@@ -57,6 +57,25 @@ object Copy {
     const val PICK_A_BOOK_CONTROL = "Pick a book"
     const val FIRST_RUN_HINT = "Notes go in the margin. Hold a verse to leave one."
 
+    /**
+     * The one time the app asks about notifications (§6.1).
+     *
+     * "Notifications: after the first note is left or found — never at
+     * launch. In context: *Tell you when Ruth leaves a note?*" — the build
+     * book gives this string, and the name in it is the whole reason it is
+     * allowed to be asked at all. A version with no name is a notification
+     * pre-prompt, which S17 forbids by name; this one is a question about a
+     * person, asked at the moment a note has just passed between two people.
+     *
+     * Asked once, whatever the answer. There is no "not now", because a
+     * question that comes back is worse than no question.
+     */
+    fun tellYouWhen(name: String) = "Tell you when ${firstName(name)} leaves a note?"
+
+    /** Its two answers. Verbs, like every other pair in the app. */
+    const val TELL_ME = "Tell me"
+    const val DONT_TELL_ME = "Don't"
+
     // Walkthrough Tour (Duolingo-style feature walkthrough)
     const val WALKTHROUGH_VISION_TITLE = "Read Scripture together."
     const val WALKTHROUGH_VISION_BODY = "Ribbon is made for reading with one person or a few — a partner on the same couch, or a friend four time zones away."
@@ -653,6 +672,21 @@ object Copy {
      */
     const val TEXT_LEDE = "How Scripture sets on the page. Yours, not the room's."
     const val NOTIFICATIONS_LEDE = "Every room asks for something different. These are per room."
+
+    /**
+     * What S19 says when Android is dropping everything on it.
+     *
+     * The four switches are the person's answer to Ribbon's question and stay
+     * exactly as they set them; this is the OS's answer to a different one,
+     * and it is said plainly and once. Greying the switches out would make
+     * Android's decision look like Ribbon's, which is Law 5 backwards.
+     *
+     * No "oops", no exclamation point, and no scolding: it names what is
+     * happening and where it is decided, and then stops (S25).
+     */
+    const val ANDROID_IS_NOT_PASSING_THESE_ON =
+        "Android isn't passing these on."
+    const val OPEN_ANDROIDS_SETTINGS = "open Android's settings"
     const val APPEARANCE_LEDE = "Ribbon's colours, or your phone's."
     /**
      * Not "and what it costs". The screen cannot say what it costs — §6.11
@@ -840,6 +874,19 @@ object Copy {
     fun notifReading(name: String, book: String) = "$name is reading $book"
     fun notifThinkingOfYou(name: String) = name
     fun notifFinished(book: String) = "You finished $book together"
+
+    /**
+     * The channel a finished book posts on, as Android's own settings page
+     * names it (S19).
+     *
+     * The other four channels take their names from the four switches, so
+     * the OS and Ribbon say the same words about the same thing. This one has
+     * no switch to borrow from — S19 is explicit that it has none, because it
+     * fires a handful of times a year and is an invitation back rather than
+     * an absence notification — so it is named here, in the same voice: the
+     * event, not a feature.
+     */
+    const val A_BOOK_FINISHED = "A book finished"
 }
 
 /** First names only, everywhere a person is addressed in a line of copy. */

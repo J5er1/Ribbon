@@ -2,6 +2,9 @@
 
 package app.readribbon.reading
 
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.core.animateFloatAsState
@@ -119,6 +122,8 @@ import app.readribbon.design.rememberReduceMotion
 import app.readribbon.design.room
 import app.readribbon.fire.FireBecomesEmber
 import app.readribbon.services.PresentPerson
+import app.readribbon.screens.ConfirmChoice
+import app.readribbon.screens.RibbonConfirmDialog
 import app.readribbon.services.VoiceRecorder
 import app.readribbon.services.ensureRemoteChapter
 import kotlinx.coroutines.delay
@@ -259,6 +264,21 @@ fun ReadingScreen(
     var composer by remember { mutableStateOf<ComposerState?>(null) }
     val recorder = remember(context) { VoiceRecorder(context) }
     var editingNote by remember { mutableStateOf<Note?>(null) }
+
+    /**
+     * Whether the one question about notifications is on screen (§6.1).
+     *
+     * Raised from the two moments the build book names — a note left, and a
+     * note found — and never from anywhere else. `shouldAskAboutNotifications`
+     * holds the rest of the conditions: never asked before, not already
+     * granted, and somebody else in the room to name.
+     */
+    var askAboutNotifications by remember { mutableStateOf(false) }
+
+    fun considerAsking() {
+        val room = model.room(reading) ?: return
+        if (model.shouldAskAboutNotifications(room)) askAboutNotifications = true
+    }
 
     // Open note (one at a time; a stack opens whole)
     var openNoteVerse by remember { mutableStateOf<VerseAddress?>(null) }
@@ -494,9 +514,18 @@ fun ReadingScreen(
             // wrong for a frame.
             noteSlotY.remove(address.chapter)
             openNoteVerse = address
+            var found = false
             for (note in model.notes(reading, address.chapter)) {
-                if (note.verse.verse == address.verse) model.markFound(note)
+                if (note.verse.verse == address.verse) {
+                    model.markFound(note)
+                    found = true
+                }
             }
+            // §6.1's second moment: a note has just been found. Asked here
+            // rather than when the note was left, because this is the beat
+            // the question is actually about — something was waiting, and you
+            // only saw it because you happened to open the book.
+            if (found) considerAsking()
         }
     }
 
@@ -830,6 +859,9 @@ fun ReadingScreen(
                         model.editWrittenNote(note, body)
                     } else {
                         model.leaveWrittenNote(body, address, reading)
+                        // The first of §6.1's two moments. Never on an edit:
+                        // nothing new was left for anybody.
+                        considerAsking()
                     }
                     editingNote = null
                     clearLift()
@@ -840,6 +872,7 @@ fun ReadingScreen(
                 },
                 onKeepVoice = { address, file, waveform ->
                     model.leaveVoiceNote(file, waveform, address, reading)
+                    considerAsking()
                     clearLift()
                 },
                 onDismissVoice = ::clearLift,
@@ -857,6 +890,33 @@ fun ReadingScreen(
                 },
                 onDismiss = { highlightLabel = null },
                 modifier = Modifier.align(Alignment.Center),
+            )
+        }
+    }
+
+    // §6.1's one question about notifications, asked in context and once.
+    //
+    // Outside the page's Box for the same reason the chapter list is: it is a
+    // dialog over the book, not a thing on the page. It uses the app's own
+    // confirmation rather than a system rationale sheet, because the words
+    // §6.1 specifies are Ribbon's and the platform's dialog can only carry
+    // Android's.
+    if (askAboutNotifications) {
+        val room = model.room(reading)
+        val name = room?.let { model.whoTheAskIsAbout(it) }
+        if (room == null || name == null) {
+            // Nobody to name means nothing to ask. Should not happen —
+            // `shouldAskAboutNotifications` requires a second member — but a
+            // question with a blank in it is the one outcome worth a guard.
+            askAboutNotifications = false
+        } else {
+            NotificationAsk(
+                name = name,
+                onAnswered = {
+                    // Asked, whatever the answer. There is no second ask.
+                    model.markAskedAboutNotifications()
+                    askAboutNotifications = false
+                },
             )
         }
     }
@@ -1639,3 +1699,38 @@ private fun Modifier.ribbonGlass(shape: Shape): Modifier = this
         ),
         shape = shape,
     )
+
+/**
+ * "Tell you when Ruth leaves a note?" — §6.1's exact question, asked once.
+ *
+ * Two answers and no third. "Not now" is the shape that makes a permission
+ * prompt feel like a negotiation, and it only exists in apps that intend to
+ * ask again; this one does not, so it is not offered.
+ *
+ * On "Tell me" the system dialog follows, which is the only way a permission
+ * can be requested on Android. On "Don't" it never appears — the person has
+ * answered Ribbon's question and Android's would be the same question again,
+ * in somebody else's words. Either way the app remembers that it asked.
+ *
+ * What happens after a refusal is nothing: no banner, no second ask, no dead
+ * control. S19 grows one line admitting the OS is silencing it, and that is
+ * the whole of the refusal path.
+ */
+@Composable
+private fun NotificationAsk(name: String, onAnswered: () -> Unit) {
+    val ask = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { _ ->
+        // The answer itself changes nothing here. Granted, the next arrival
+        // posts; refused, it does not — and either way the question is spent.
+        onAnswered()
+    }
+
+    RibbonConfirmDialog(question = Copy.tellYouWhen(name), onDismiss = onAnswered) {
+        ConfirmChoice(
+            title = Copy.TELL_ME,
+            onClick = { ask.launch(Manifest.permission.POST_NOTIFICATIONS) },
+        )
+        ConfirmChoice(title = Copy.DONT_TELL_ME, onClick = onAnswered)
+    }
+}

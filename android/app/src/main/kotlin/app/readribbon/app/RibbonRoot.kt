@@ -49,6 +49,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.withContext
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -58,6 +59,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import app.readribbon.core.Reading
+import app.readribbon.services.Destination
 import app.readribbon.core.Room
 import app.readribbon.core.VerseAddress
 import app.readribbon.design.LocalFlowLayer
@@ -175,6 +177,7 @@ internal class RootHolder : ViewModel() {
 @Composable
 fun RibbonRoot(
     links: Flow<Uri>,
+    destinations: Flow<Destination> = emptyFlow(),
     modifier: Modifier = Modifier,
     onReady: () -> Unit = {},
 ) {
@@ -188,6 +191,9 @@ fun RibbonRoot(
      */
     var bufferedURL by remember { mutableStateOf<Uri?>(null) }
 
+    /** The same, for a notification tapped while the app was cold (S19). */
+    var bufferedDestination by remember { mutableStateOf<Destination?>(null) }
+
     // An invite link, tapped. Swift's `.onOpenURL`, with the same two cases:
     // hand it straight over, or hold it for the model that is still loading.
     LaunchedEffect(links) {
@@ -197,12 +203,31 @@ fun RibbonRoot(
         }
     }
 
+    // A tapped notification, on the same two terms as a link: hand it over,
+    // or hold it for a model that is still loading. Cold-started by a
+    // notification is the *ordinary* case for this stream rather than the
+    // edge — a notification is tapped precisely when the app is not running.
+    LaunchedEffect(destinations) {
+        destinations.collect { destination ->
+            val loaded = holder.model
+            if (loaded != null) {
+                loaded.pendingDestination = destination
+            } else {
+                bufferedDestination = destination
+            }
+        }
+    }
+
     LaunchedEffect(Unit) {
         if (holder.model == null) {
             val loaded = AppModel.load(context)
             bufferedURL?.let { url ->
                 loaded.handleInviteURL(url)
                 bufferedURL = null
+            }
+            bufferedDestination?.let { destination ->
+                loaded.pendingDestination = destination
+                bufferedDestination = null
             }
             holder.model = loaded
         }
@@ -222,6 +247,12 @@ fun RibbonRoot(
         LaunchedEffect(model, lifecycle) {
             lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 model.refreshFromRemote()
+                // What the person is actually looking at, as opposed to
+                // which room is selected. Set here and cleared in the same
+                // `finally` as the socket, so a process that went away can
+                // never leave it reading true and silence the notifications
+                // it was supposed to suppress (§6.3).
+                model.visibleRoomID = model.currentRoom?.id
                 // The room's live line comes back with the app, and only
                 // with it: a phone in a pocket is not present, and saying
                 // otherwise is the one lie presence must never tell (§4.2).
@@ -232,6 +263,7 @@ fun RibbonRoot(
                     model.openRoomChannel()
                     awaitCancellation()
                 } finally {
+                    model.visibleRoomID = null
                     withContext(NonCancellable) { model.closeRoomChannel() }
                 }
             }
@@ -386,6 +418,64 @@ private fun RoomStack(model: AppModel, room: Room) {
         sheet.reset()
         openReading = null
         openTarget = null
+    }
+
+    /**
+     * A tapped notification, honoured (S19).
+     *
+     * The room is switched first if it is not the one the notification was
+     * about — a notification that cannot reach its own room is worse than no
+     * notification, and a person reading Mark with their wife should not have
+     * to find the Thursday study by hand to read what somebody left there.
+     *
+     * §6.3 asks for the reading to open *at that verse, the mark breathing*,
+     * which is the path `openBook` already drives for a waiting row. A
+     * destination with no verse — a finished book — lands on the room, which
+     * is where the ember is and the way to the shelf.
+     *
+     * The menu and the chooser are put away on the way: whatever the person
+     * had open, they asked to be somewhere else.
+     */
+    LaunchedEffect(model.pendingDestination) {
+        val destination = model.pendingDestination ?: return@LaunchedEffect
+        model.pendingDestination = null
+
+        if (destination.roomID != room.id) {
+            if (model.room(destination.roomID) == null) return@LaunchedEffect
+            model.switchRoom(destination.roomID)
+        }
+        menu = null
+        chooserRequested = false
+
+        when (destination) {
+            is Destination.Verse -> {
+                val reading = model.state.readings
+                    .firstOrNull { it.id == destination.readingID }
+                if (reading != null) openBook(reading, destination.verse)
+            }
+
+            is Destination.Cards -> {
+                // The cards sit at the end of a chapter, so the chapter's
+                // last verse is where the page has to land for them to be
+                // on screen at all.
+                val reading = model.state.readings
+                    .firstOrNull { it.id == destination.readingID }
+                if (reading != null) {
+                    openBook(
+                        reading,
+                        VerseAddress(
+                            bookID = reading.bookID,
+                            chapter = destination.chapter,
+                            verse = 1,
+                        ),
+                    )
+                }
+            }
+
+            // S01 is a destination in its own right, and switching the room
+            // above was the whole of it.
+            is Destination.Room -> dropBook()
+        }
     }
 
     fun openPerson(personID: Uuid, roomID: Uuid) {
