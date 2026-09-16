@@ -2,8 +2,10 @@ package app.readribbon.reading
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Box
@@ -22,6 +24,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
@@ -43,6 +46,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.ParagraphStyle
 import androidx.compose.ui.text.Placeholder
@@ -377,6 +381,62 @@ fun ChapterText(
             onTextLayout = { layout = it },
         )
 
+        // **The two handles S06 asks for.**
+        //
+        // "Extending — drag handles at both ends of the selection, snapping to
+        // verse boundaries." They did not exist. The only way to select more
+        // than one verse was to keep the finger down after the long press and
+        // drag; once it lifted, the selection was final. Overshoot by a verse
+        // — which is easy, because the thing under your thumb is the thing you
+        // cannot see — and the only way back was to mark it wrongly, tap it,
+        // and remove it. On the app's central act.
+        //
+        // They snap to verse boundaries and *only* to verse boundaries. S06's
+        // second clause, word boundaries on a slow drag, is not here and is
+        // not an oversight: `VerseRange` holds a start verse and an end verse,
+        // so a sub-verse highlight has nowhere to be stored. It is a change to
+        // the shared model on both platforms and the backend, not an Android
+        // drawing question. Written down in A41e rather than half-built.
+        val lifting = layout
+        if (liftedVerses != null && lifting != null) {
+            // The first line of the first verse and the last line of the last,
+            // not the corners of the box the selection fits inside. A verse
+            // that wraps is wider than its own last line, so a bounding box
+            // put the tail handle out at the end of the widest line — which,
+            // on a selection ending mid-paragraph, is somewhere in the middle
+            // of the *next* verse.
+            val head = page.verseRanges[liftedVerses.first]
+                ?.let { enclosingRects(lifting, it) }?.firstOrNull()
+            val tail = page.verseRanges[liftedVerses.last]
+                ?.let { enclosingRects(lifting, it) }?.lastOrNull()
+            if (head != null && tail != null) {
+                SelectionHandle(
+                    x = head.left,
+                    y = head.top,
+                    label = Copy.WHERE_THE_MARK_STARTS,
+                    density = density,
+                    onMoved = { point -> verseAt(point)?.let(currentDragTo) },
+                    onSettled = { currentDragEnded() },
+                    onStep = { forward ->
+                        val to = if (forward) liftedVerses.first + 1 else liftedVerses.first - 1
+                        if (page.verseText.containsKey(to)) currentDragTo(to)
+                    },
+                )
+                SelectionHandle(
+                    x = tail.right,
+                    y = tail.bottom,
+                    label = Copy.WHERE_THE_MARK_ENDS,
+                    density = density,
+                    onMoved = { point -> verseAt(point)?.let(currentDragTo) },
+                    onSettled = { currentDragEnded() },
+                    onStep = { forward ->
+                        val to = if (forward) liftedVerses.last + 1 else liftedVerses.last - 1
+                        if (page.verseText.containsKey(to)) currentDragTo(to)
+                    },
+                )
+            }
+        }
+
         // Verse-by-verse screen-reader navigation (§11): one element per
         // verse, so a swipe moves by verse — and the label obeys Law 2
         // ("Verse nine." then the words; never a position report).
@@ -426,6 +486,86 @@ fun ChapterText(
 private class GestureState {
     var lifted: Boolean = false
 }
+
+/**
+ * One end of a lifted selection: a small knob you can pull, in the accent —
+ * this is the app's own furniture rather than anybody's ink, and it is drawn
+ * in the same chartreuse as the caret for that reason (§4.5 keeps chartreuse
+ * out of the eight and out of the reader's hands).
+ *
+ * The knob is 10 dp and the target is 44 (§11, deviation 12), hung off the
+ * corner it marks so the drawn part sits on the text's edge while the part a
+ * thumb has to find is the size of a thumb.
+ *
+ * Every drag has the tap equivalent §11 requires, as two custom actions on the
+ * handle itself — move this end on a verse, either way — because a handle you
+ * can only *drag* is a handle that does not exist for half the people S06 was
+ * written for.
+ */
+@Composable
+private fun SelectionHandle(
+    x: Float,
+    y: Float,
+    label: String,
+    density: Density,
+    onMoved: (Offset) -> Unit,
+    onSettled: () -> Unit,
+    onStep: (forward: Boolean) -> Unit,
+) {
+    val accent = Palette.accent
+    val target = with(density) { HANDLE_TARGET.toPx() }
+    val knob = with(density) { HANDLE_KNOB.toPx() }
+    // Where the finger last was, in the text's own coordinates, so a drag can
+    // be hit-tested against the page exactly as the long-press drag is.
+    var travel by remember(x, y) { mutableStateOf(Offset(x, y)) }
+
+    Box(
+        modifier = Modifier
+            // Centred on the corner it marks: the top-left of the first verse
+            // and the bottom-right of the last, which is where a hand expects
+            // the ends of a run of text to be held.
+            .offset {
+                IntOffset(
+                    (x - target / 2f).roundToInt(),
+                    (y - target / 2f).roundToInt(),
+                )
+            }
+            .size(HANDLE_TARGET)
+            .pointerInput(x, y) {
+                detectDragGestures(
+                    onDragStart = { travel = Offset(x, y) },
+                    onDragEnd = { onSettled() },
+                    onDragCancel = { onSettled() },
+                ) { change, delta ->
+                    change.consume()
+                    travel += delta
+                    onMoved(travel)
+                }
+            }
+            .semantics {
+                contentDescription = label
+                customActions = listOf(
+                    CustomAccessibilityAction(Copy.A_VERSE_FURTHER_ON) {
+                        onStep(true)
+                        true
+                    },
+                    CustomAccessibilityAction(Copy.A_VERSE_BACK) {
+                        onStep(false)
+                        true
+                    },
+                )
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(Modifier.size(HANDLE_TARGET)) {
+            drawCircle(color = accent, radius = knob / 2f)
+        }
+    }
+}
+
+/** The knob, and the target around it (§11, deviation 12). */
+private val HANDLE_KNOB = 10.dp
+private val HANDLE_TARGET = 44.dp
 
 // MARK: - The washes
 

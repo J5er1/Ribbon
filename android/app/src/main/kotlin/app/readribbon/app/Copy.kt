@@ -330,6 +330,15 @@ object Copy {
      *  gesture the eye can see is a gesture a screen reader can hear). */
     const val DISMISS = "dismiss"
 
+    // The two ends of a selection (S06), and the tap equivalents of dragging
+    // them (§11). Named for the mark rather than for the selection, because a
+    // "selection" is a thing a text editor has and this is a thing you are
+    // about to write on Scripture with.
+    const val WHERE_THE_MARK_STARTS = "Where the mark starts"
+    const val WHERE_THE_MARK_ENDS = "Where the mark ends"
+    const val A_VERSE_FURTHER_ON = "A verse further on"
+    const val A_VERSE_BACK = "A verse back"
+
     const val TRANSCRIPT_COMING = "Transcript coming"
     const val NO_TRANSCRIPT = "No transcript for this one."
     const val TRY_AGAIN = "Try again"

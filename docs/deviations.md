@@ -2107,6 +2107,43 @@ A41d. **A highlight you make yourself is drawn travelling.** A41b made the
     frame is the only way to check that it reveals along the words rather
     than wiping the block, and that is not a thing source can be read for.
 
+A41e. **A selection could not be adjusted, at all.** S06's *Extending* reads:
+    "Drag handles at both ends of the selection, snapping to verse boundaries
+    by default and to word boundaries when dragged slowly." There were no
+    handles. The one way to select more than a verse was to keep your finger
+    down after the long press and drag, and the moment it lifted the selection
+    was final.
+
+    Overshoot by a verse — which is easy, because the thing under your thumb is
+    the thing you cannot see — and there was no way back at all. Not a shorter
+    way back: none. You marked it wrongly, tapped it, removed it, and started
+    over, on the app's central act. That is the sort of gap that never shows up
+    in a screenshot and is the first thing anybody hits using it.
+
+    Two handles now, one at the first line of the first verse and one at the
+    last line of the last. Not the corners of the box the selection fits
+    inside: a verse that wraps is wider than its own last line, so a bounding
+    box puts the tail handle at the end of the widest line, which on a
+    selection ending mid-paragraph is somewhere in the middle of the *next*
+    verse. The look book caught that in the first picture of them.
+
+    They are 10 dp drawn in a 44 dp target (§11, deviation 12) and in the
+    accent, because they are the app's own furniture rather than anybody's
+    ink — §4.5 keeps chartreuse out of the eight and out of the reader's
+    hands, and this is the same reasoning that puts the caret in it.
+
+    Every drag has the tap equivalent §11 requires, as two custom actions on
+    each handle — *a verse further on*, *a verse back*. A handle you can only
+    drag is a handle that does not exist for half the people S06 was written
+    for, and the last pass (A39a) found exactly this defect on the gesture
+    that opens the toolbar in the first place.
+
+    **What is deliberately not here:** S06's second clause, word boundaries on
+    a slow drag. `VerseRange` holds a start verse and an end verse, so a
+    sub-verse highlight has nowhere to be stored — it is a change to the shared
+    model on both platforms and to the backend, not an Android drawing
+    question. Written down rather than half-built.
+
 ## Licensed translations (decided: API.Bible)
 
 Open question §16.8 is now part-decided: **NKJV plus two undecided

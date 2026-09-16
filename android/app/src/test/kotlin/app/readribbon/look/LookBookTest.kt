@@ -948,6 +948,63 @@ class LookBookTest {
     }
 
     /**
+     * A lifted selection with S06's two handles on it — the ends of the mark
+     * you are about to make, which until now could not be adjusted at all.
+     */
+    @Test fun theSelectionHandles() {
+        val chapter = ScriptureChapter(
+            n = 1,
+            blocks = listOf(
+                ScriptureBlock(
+                    s = BlockStyle.p,
+                    x = listOf(
+                        ScriptureSpan(
+                            v = 1,
+                            t = "In the beginning was the Word, and the Word was with " +
+                                "God, and the Word was God. ",
+                        ),
+                        ScriptureSpan(
+                            v = 2,
+                            t = "He was with God in the beginning. ",
+                        ),
+                        ScriptureSpan(
+                            v = 3,
+                            t = "Through him all things were made.",
+                        ),
+                    ),
+                ),
+            ),
+        )
+        shoot("selection-handles") {
+            OnTheGround {
+                ChapterText(
+                    chapter = chapter,
+                    runningHead = "John 1",
+                    theme = ReadingTheme(
+                        fontSize = 19f,
+                        lineHeightMultiple = 1.62f,
+                        redLetter = false,
+                    ),
+                    verseInks = emptyMap(),
+                    liftedVerses = 1..2,
+                    justMarked = null,
+                    onMarkDrawn = {},
+                    openNote = null,
+                    isFirstChapter = true,
+                    showMarginHint = false,
+                    onLayout = {},
+                    onLongPressVerse = {},
+                    onDragToVerse = {},
+                    onDragEnded = {},
+                    onTapVerse = {},
+                    onNoteSlot = {},
+                    modifier = Modifier.padding(top = 60.dp),
+                )
+            }
+        }
+    }
+
+    /**
      * The long-press toolbar, in the case that has eight inks in it.
      *
      * A room of two picks an ink per highlight, so all eight are on the bar;
