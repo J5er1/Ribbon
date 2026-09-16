@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalUuidApi::class)
+
 package app.readribbon
 
 import android.content.Intent
@@ -13,11 +15,16 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import app.readribbon.app.RibbonRoot
+import app.readribbon.core.VerseAddress
 import app.readribbon.design.Haptics
 import app.readribbon.design.RibbonMotion
 import app.readribbon.design.RibbonTheme
+import app.readribbon.services.Destination
+import app.readribbon.services.Notifications
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
 
 // The scene. Swift's `WindowGroup` has no Android counterpart that is also a
 // view, so the Activity keeps the three things only it can do — the launch
@@ -57,6 +64,20 @@ class MainActivity : ComponentActivity() {
      */
     private val links = Channel<Uri>(Channel.UNLIMITED)
     private val linkStream = links.receiveAsFlow()
+
+    /**
+     * Where a tapped notification is asking the app to go (S19), on the same
+     * terms and for the same reason as [links].
+     *
+     * A second stream rather than a second kind of Uri on the first one. The
+     * `ribbon://` filter in the manifest is exported and BROWSABLE, so any
+     * web page can send this Activity a link of that shape; a destination
+     * carried as extras on a private action cannot be reached from outside
+     * the app at all. Somewhere to *go* is a bigger thing to hand a stranger
+     * than an invite token, which the model validates anyway.
+     */
+    private val destinations = Channel<Destination>(Channel.UNLIMITED)
+    private val destinationStream = destinations.receiveAsFlow()
 
     /** Set once the store is loaded; until then the launch ground holds. */
     private var ready = false
@@ -121,6 +142,7 @@ class MainActivity : ComponentActivity() {
             RibbonTheme(haptics = haptics) {
                 RibbonRoot(
                     links = linkStream,
+                    destinations = destinationStream,
                     onReady = { ready = true },
                 )
             }
@@ -140,9 +162,45 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun deliver(intent: Intent?) {
-        if (intent == null || intent.action != Intent.ACTION_VIEW) return
-        val url = intent.data ?: return
-        links.trySend(url)
+        if (intent == null) return
+        when (intent.action) {
+            Intent.ACTION_VIEW -> intent.data?.let(links::trySend)
+            Notifications.ACTION_OPEN -> destination(intent)?.let(destinations::trySend)
+        }
+    }
+
+    /**
+     * A tapped notification, as somewhere to go.
+     *
+     * Read defensively: an intent that has been through the system's parcel
+     * machinery and back can be missing anything, and a malformed one should
+     * land the person on the room rather than on a crash. A room id that will
+     * not parse is the one case with nothing to fall back to, so it returns
+     * null and the app simply opens where it was.
+     */
+    private fun destination(intent: Intent): Destination? {
+        val room = intent.getStringExtra(Notifications.EXTRA_ROOM)
+            ?.let { runCatching { Uuid.parse(it) }.getOrNull() }
+            ?: return null
+        val reading = intent.getStringExtra(Notifications.EXTRA_READING)
+            ?.let { runCatching { Uuid.parse(it) }.getOrNull() }
+        val book = intent.getStringExtra(Notifications.EXTRA_BOOK)
+        val chapter = intent.getIntExtra(Notifications.EXTRA_CHAPTER, 0)
+        val verse = intent.getIntExtra(Notifications.EXTRA_VERSE, 0)
+
+        return when {
+            reading != null && book != null && chapter > 0 && verse > 0 ->
+                Destination.Verse(
+                    roomID = room,
+                    readingID = reading,
+                    verse = VerseAddress(bookID = book, chapter = chapter, verse = verse),
+                )
+
+            reading != null && chapter > 0 ->
+                Destination.Cards(roomID = room, readingID = reading, chapter = chapter)
+
+            else -> Destination.Room(roomID = room)
+        }
     }
 
     /**

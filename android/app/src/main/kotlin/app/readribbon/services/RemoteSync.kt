@@ -16,6 +16,7 @@ import app.readribbon.core.ReadingPosition
 import app.readribbon.core.Ribbon
 import app.readribbon.core.ReflectionCard
 import app.readribbon.core.Room
+import app.readribbon.core.TranslationID
 import java.io.File
 import java.util.Base64
 import kotlinx.coroutines.Dispatchers
@@ -65,6 +66,22 @@ data class RoomGraph(
     val ribbons: List<RemoteSync.RibbonRow> = emptyList(),
     val cards: List<RemoteSync.CardRow> = emptyList(),
     val cardAnswers: List<RemoteSync.CardAnswerRow> = emptyList(),
+    /**
+     * Whether the notes and highlights in this graph are the *whole* of what
+     * the backend holds for these readings.
+     *
+     * Both selects are wrapped in `runCatching { … }.getOrDefault(emptyList())`
+     * — deliberately, because a room must still render when one table is
+     * unreachable — and that makes "this room has no notes" and "the notes
+     * request failed" the same value. Harmless while the merge only ever
+     * added rows; fatal the moment it started removing them, because one
+     * failed request would delete every note in the room from the phone.
+     *
+     * So the two cases are told apart here, once, at the only place that
+     * knows which it was.
+     */
+    val notesComplete: Boolean = false,
+    val highlightsComplete: Boolean = false,
 )
 
 /**
@@ -367,16 +384,48 @@ class RemoteSync(
      * Best-effort on the portrait object first (its policy is the
      * person's own).
      */
-    suspend fun deleteAccountData() {
+    /**
+     * Forget the person, and keep what they wrote for the room to decide
+     * about (§6.8).
+     *
+     * This used to `delete` the profiles row, and that one line quietly
+     * overruled the question the app had just asked. `notes.author_id` and
+     * `highlights.author_id` are both `references public.profiles (id) on
+     * delete cascade`, so deleting the profile deleted every note and every
+     * highlight the person had ever left — whichever answer they gave to
+     * "leave your notes behind?", and in flat contradiction of §6.8's "their
+     * highlights: stay, always". S11 needs the same row for a different
+     * reason: a departed member's notes must "render normally, with their
+     * portrait", and nothing marks them as gone.
+     *
+     * So the row is blanked rather than removed. The name goes to the
+     * app's own word for somebody it has no profile for, the portrait path
+     * goes to null, and the portrait object is deleted outright. Nothing
+     * personal survives; the rows that hang off the row do.
+     *
+     * The caller deals with the notes themselves, because the caller is the
+     * one that knows the answer to §6.8's question.
+     */
+    suspend fun forgetProfile(neutralName: String) {
         val userID = userID ?: return
         runCatching {
             withAuthRetry { client.deletePortrait(personID = userID) }
         }
         runCatching {
             withAuthRetry {
-                client.delete(
+                client.upsert(
                     table = "profiles",
-                    query = listOf("id" to "eq.${userID.lowercased()}"))
+                    rowsJson = SupabaseClient.json.encodeToString(
+                        listOf(
+                            ProfileRow(
+                                id = userID,
+                                name = neutralName,
+                                portraitPath = null,
+                                translation = TranslationID.bsb.rawValue,
+                            ),
+                        ),
+                    ),
+                )
             }
         }
     }
@@ -443,7 +492,22 @@ class RemoteSync(
         }
     }
 
-    suspend fun deleteNote(id: Uuid) {
+    /**
+     * Take a note back, everywhere (S04 — "no tombstone").
+     *
+     * @param readingID and [voice] together say whether there is a recording
+     *   behind it. The object goes first and the row second, in that order
+     *   and each in its own `runCatching`: `voice_notes_delete` checks the
+     *   note's author against the `notes` row, so deleting the row first
+     *   would make the object permanently unreachable rather than deleted.
+     *   And one failing must not stop the other — a row left behind is a
+     *   note that comes back, an object left behind is a recording of
+     *   somebody's voice that does not go away.
+     */
+    suspend fun deleteNote(id: Uuid, readingID: Uuid? = null, voice: Boolean = false) {
+        if (voice && readingID != null) {
+            runCatching { withAuthRetry { client.deleteAudio(readingID = readingID, noteID = id) } }
+        }
         withAuthRetry {
             client.delete(
                 table = "notes",
@@ -614,6 +678,8 @@ class RemoteSync(
         var notes: List<NoteRow> = emptyList()
         var noteFounds: List<NoteFoundRow> = emptyList()
         var highlights: List<HighlightRow> = emptyList()
+        var notesComplete = false
+        var highlightsComplete = false
         var positions: List<PositionRow> = emptyList()
         var ribbons: List<RibbonRow> = emptyList()
         var cards: List<CardRow> = emptyList()
@@ -629,18 +695,26 @@ class RemoteSync(
                 SupabaseClient.json.decodeFromString<List<FuelEventRow>>(
                     client.select(table = "fuel_events", query = listOf("reading_id" to readingList)))
             }
-            notes = withAuthRetry {
+            // The two that the merge now *prunes* against carry whether they
+            // actually arrived, because an empty list from a failed request
+            // would otherwise read as "the room has none" and take every note
+            // in it off the phone.
+            withAuthRetry {
                 runCatching {
                     SupabaseClient.json.decodeFromString<List<NoteRow>>(
                         client.select(table = "notes", query = listOf("reading_id" to readingList)))
-                }.getOrDefault(emptyList())
-            }
-            highlights = withAuthRetry {
+                }
+            }.onSuccess { notes = it; notesComplete = true }
+            withAuthRetry {
                 runCatching {
                     SupabaseClient.json.decodeFromString<List<HighlightRow>>(
-                        client.select(table = "highlights", query = listOf("reading_id" to readingList)))
-                }.getOrDefault(emptyList())
-            }
+                        client.select(
+                            table = "highlights",
+                            query = listOf("reading_id" to readingList),
+                        ),
+                    )
+                }
+            }.onSuccess { highlights = it; highlightsComplete = true }
             positions = withAuthRetry {
                 runCatching {
                     SupabaseClient.json.decodeFromString<List<PositionRow>>(
@@ -690,7 +764,8 @@ class RemoteSync(
             readings = readings, fires = fires, fuelEvents = fuelEvents,
             quietDays = quietDays, invites = invites, notes = notes,
             noteFounds = noteFounds, highlights = highlights,
-            positions = positions, ribbons = ribbons, cards = cards, cardAnswers = cardAnswers)
+            positions = positions, ribbons = ribbons, cards = cards, cardAnswers = cardAnswers,
+            notesComplete = notesComplete, highlightsComplete = highlightsComplete)
     }
 
     /**

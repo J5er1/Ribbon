@@ -227,6 +227,9 @@ fun RoomScreen(
     var showChooser by remember { mutableStateOf(false) }
     var showInviteShare by remember { mutableStateOf(false) }
 
+    /** §6.7's invitation to pick an ink, taken up (S01's third waiting row). */
+    var showInkPicker by remember { mutableStateOf(false) }
+
     val reading: Reading? = model.openReading(room)
     val shelf: List<Reading> = model.shelf(room)
 
@@ -236,6 +239,12 @@ fun RoomScreen(
             showChooser = true
         }
     }
+
+    // One branch for reduce motion, taken inside the token (§11), for the two
+    // things on this screen that grow in and out of the page.
+    val roomStill = rememberReduceMotion()
+    val roomSettle: FiniteAnimationSpec<Float> = RibbonMotion.settle(roomStill)
+    val roomSettleSize: FiniteAnimationSpec<IntSize> = RibbonMotion.settle(roomStill)
 
     Box(
         modifier = modifier
@@ -286,7 +295,18 @@ fun RoomScreen(
                 // sentence in the middle of the dark. The five good places to
                 // start are the chooser's own — the same cards, the same
                 // fires, one tap nearer.
-                if (reading == null && shelf.isEmpty() && !room.isPaused) {
+                // Animated, because the two moments it changes are the two
+                // moments it matters: starting the first book, and finishing
+                // one. The hearth immediately above cross-fades its fire over
+                // 320 ms while these used to blink out on the frame the tap
+                // landed, taking everything below them up by their whole
+                // height at once.
+                AnimatedVisibility(
+                    visible = reading == null && shelf.isEmpty() && !room.isPaused,
+                    enter = fadeIn(roomSettle) + expandVertically(roomSettleSize),
+                    exit = fadeOut(roomSettle) + shrinkVertically(roomSettleSize),
+                    label = "good-places-to-start",
+                ) {
                     StarterShelf(
                         onChoose = { bookID ->
                             val started = model.startReading(bookID = bookID, room = room)
@@ -302,13 +322,25 @@ fun RoomScreen(
                     reading = reading,
                     onOpenReading = onOpenReading,
                     onSendItAgain = { showInviteShare = true },
+                    onPickAnInk = { showInkPicker = true },
                     modifier = Modifier.padding(horizontal = GUTTER),
                 )
 
                 // The shelf, below the fold (S10). No shelf until the first
                 // book is finished — an empty shelf is a reproach, so it is
                 // absent rather than empty-stated, and so is its head.
-                if (shelf.isNotEmpty()) {
+                //
+                // Nothing on the way in for a shelf that was already there
+                // when the room drew (§05 — the app opening on the room says
+                // nothing); the first ember arriving is the event.
+                AnimatedVisibility(
+                    visibleState = remember(room.id) {
+                        MutableTransitionState(shelf.isNotEmpty())
+                    }.apply { targetState = shelf.isNotEmpty() },
+                    enter = fadeIn(roomSettle) + expandVertically(roomSettleSize),
+                    exit = fadeOut(roomSettle) + shrinkVertically(roomSettleSize),
+                    label = "the-shelf",
+                ) {
                     Column(Modifier.padding(top = 40.dp, start = GUTTER, end = GUTTER)) {
                         SectionLabel(Copy.THE_SHELF)
                         ShelfView(
@@ -358,6 +390,13 @@ fun RoomScreen(
 
     if (showInviteShare) {
         InviteSheet(room = room, model = model, onDismiss = { showInviteShare = false })
+    }
+
+    // The same eight swatches the menu and a person's own screen present.
+    // §6.7's invitation waits on the room; taking it up happens here, in the
+    // one sheet that already knows which inks are spoken for.
+    if (showInkPicker) {
+        InkPickerSheet(model = model, room = room, onDismiss = { showInkPicker = false })
     }
 }
 
@@ -1355,6 +1394,7 @@ private fun WaitingSection(
     reading: Reading?,
     onOpenReading: (Reading, VerseAddress?) -> Unit,
     onSendItAgain: () -> Unit,
+    onPickAnInk: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // Paused: waiting rows gone (S01) — the pause line stands alone.
@@ -1370,7 +1410,14 @@ private fun WaitingSection(
         it.readingID == reading.id && it.state == CardState.open
     }
 
-    val hasRows = waiting.isNotEmpty() || cardsOpen
+    // Ink is identity from three people up (§4.5) and this membership has
+    // none. Never in a room of two, where the whole palette is free per
+    // highlight and there is nothing to pick.
+    val anInkToPick = !room.isPaused &&
+        model.inkIsIdentity(room) &&
+        model.myMembership(room)?.ink == null
+
+    val hasRows = waiting.isNotEmpty() || cardsOpen || anInkToPick
     // A *live link*, not merely a room of one. "The invite is still out."
     // told somebody who had just made their first room and asked nobody that
     // an invite was outstanding, and offered to send it again — and this pass
@@ -1458,6 +1505,35 @@ private fun WaitingSection(
                     },
                     text = Copy.NOTIF_CARDS_OPEN,
                     onClick = { onOpenReading(reading, null) },
+                )
+            }
+
+            // S01's third waiting row, which the room had never drawn: "notes
+            // left for you, cards open, **an ink to pick**". §6.7 asks for it
+            // in so many words — when a room becomes three, "the two
+            // originals get an invitation on the room screen to pick an ink.
+            // Not a blocking dialog; it waits" — and it is the newcomer's
+            // side of the same beat, since their membership arrives with no
+            // ink and every mark they make falls back to a colour that may
+            // already be somebody else's.
+            //
+            // It waits, exactly as the book says: no dialog, no badge,
+            // nothing blocking, and it goes the moment an ink is picked.
+            if (anInkToPick) {
+                WaitingRow(
+                    mark = {
+                        // An open ring in the ivory, because there is no ink
+                        // yet to draw it in — the one mark on this screen
+                        // that is about a colour and cannot use one.
+                        Box(
+                            Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(Palette.text.copy(alpha = 0.55f)),
+                        )
+                    },
+                    text = Copy.PICK_AN_INK,
+                    onClick = onPickAnInk,
                 )
             }
         }

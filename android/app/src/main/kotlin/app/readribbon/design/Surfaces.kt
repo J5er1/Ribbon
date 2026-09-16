@@ -105,8 +105,16 @@ private val TallRowHeight = 76.dp
  */
 val Seam = 2.dp
 
-/** How far in a title sits from a tile's own edge. */
-private val TextInset = 20.dp
+/**
+ * How far in a title sits from a tile's own edge.
+ *
+ * Public for the same reason [Seam] is: the group DSL below is not the only
+ * place a group is built. S12's list of what somebody left is a group of
+ * tiles drawn at its call site — `GroupScope.slot()` is private here and a
+ * custom row cannot reach it — and a second opinion about this number there
+ * would put that screen's words 4 dp off every other screen's.
+ */
+val TextInset = 20.dp
 
 /** How far in a control sits: nearer the edge than words are. */
 private val WellInset = RibbonShape.nest
@@ -740,29 +748,6 @@ fun BackChevron(
     }
 }
 
-/** A screen's own big heading: the one line that says what you are looking at. */
-@Composable
-fun ScreenTitle(
-    title: String,
-    modifier: Modifier = Modifier,
-    subtitle: String? = null,
-) {
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text(
-            text = title,
-            style = RibbonType.display(30f),
-            color = Palette.text,
-            modifier = Modifier.semantics { heading() },
-        )
-        if (subtitle != null) {
-            Text(text = subtitle, style = RibbonType.ui(15f), color = Palette.muted)
-        }
-    }
-}
-
 /** Vertical air, named, so a screen's rhythm is legible in its source. */
 @Composable
 fun Air(height: Dp) {
@@ -870,6 +855,16 @@ fun RibbonScreen(
                 Column(
                     modifier = Modifier
                         .readableColumn()
+                        // `readableColumn` ends in `wrapContentSize`, so
+                        // without this the page is only as wide as its widest
+                        // child — and a screen whose children all happen to
+                        // be narrow centres itself and everything on it. The
+                        // settings screens never showed it, because a group
+                        // of tiles fills the width; S12 with nothing left in
+                        // it does, and a portrait that sits on the margin
+                        // with one note and jumps to the middle with none is
+                        // the kind of thing only a picture catches (A24).
+                        .fillMaxWidth()
                         .padding(horizontal = ScreenMargin)
                         .padding(bottom = bottomBar + 44.dp),
                 ) {

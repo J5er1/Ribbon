@@ -6,6 +6,7 @@ import android.app.Activity
 import android.content.Context
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.os.PowerManager
 import android.util.Log
 import app.readribbon.data.SupabaseConfig
 import app.readribbon.services.Auth0Service
@@ -54,11 +55,16 @@ import app.readribbon.data.RoomNotificationPrefs
 import app.readribbon.data.ScriptureStore
 import app.readribbon.design.Haptics
 import app.readribbon.services.Connectivity
+import app.readribbon.services.Destination
 import app.readribbon.services.LocalPresenceService
+import app.readribbon.services.NotificationKind
+import app.readribbon.services.Notifications
+import app.readribbon.services.notesLeftLine
 import app.readribbon.services.PresenceEvent
 import app.readribbon.services.PresenceService
 import app.readribbon.services.PresentPerson
 import app.readribbon.services.RemoteSync
+import app.readribbon.services.RoomWatch
 import app.readribbon.services.ReleaseInfo
 import app.readribbon.services.RoomGraph
 import app.readribbon.services.SupabaseClient
@@ -72,6 +78,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.TimeZone
@@ -168,6 +175,24 @@ class AppModel(
     /** Set by an opened invite link; RootView and onboarding watch it. */
     var pendingInvite: PendingInvite? by mutableStateOf(null)
 
+    /**
+     * Where a tapped notification is asking the app to go (S19). Cleared by
+     * whoever honours it, exactly as [pendingInvite] is.
+     */
+    var pendingDestination: Destination? by mutableStateOf(null)
+
+    /**
+     * The room the person is actually looking at, or null when Ribbon is not
+     * in front of them.
+     *
+     * Not [currentRoom], which is a *selection* and stays set in a pocket.
+     * This is what lets a notification stay quiet about something the room is
+     * already unfurling in place under the fire — §6.3 asks for "a
+     * notification, or nothing at all", and a heads-up sliding over a waiting
+     * row about the same note is both at once.
+     */
+    var visibleRoomID: Uuid? by mutableStateOf(null)
+
     /** Who is in the book right now (empty means the form is absent). */
     var presentPeople: List<PresentPerson> by mutableStateOf(emptyList())
         private set
@@ -188,15 +213,26 @@ class AppModel(
     /** Portraits cache (person id → image). */
     private val portraits = mutableStateMapOf<Uuid, ImageBitmap>()
 
+    /**
+     * One [Haptics] for the model's whole life.
+     *
+     * It used to be constructed per arriving tap, which re-did the
+     * `VibratorManager` lookup and the primitive-support probe every time —
+     * on the one interaction in the product that §9.3 says must feel
+     * immediate.
+     */
+    private val haptics = Haptics(appContext)
+
     init {
         viewModelScope.launch {
             presence.events.collect { event ->
                 when (event) {
                     is PresenceEvent.Roster -> {
+                        someoneOpenedTheBook(event.people)
                         presentPeople = event.people
                     }
                     is PresenceEvent.ThinkingOfYou -> {
-                        Haptics(appContext).tapOnTheShoulder()
+                        thinkingOfYouArrived(event.fromName)
                     }
                     is PresenceEvent.RoomChanged -> {
                         roomChangedRemotely(event.roomID)
@@ -204,6 +240,103 @@ class AppModel(
                 }
             }
         }
+    }
+
+    /** Who was in the book last time the roster spoke. */
+    private var wasReading: Set<Uuid> = emptySet()
+
+    /**
+     * §10.3's fourth notification — "Ruth is reading Mark" — which had a
+     * switch on S19, a channel in Android's settings and no post anywhere.
+     *
+     * It is the one of the six that cannot ride the fifteen-minute pull:
+     * presence is ephemeral and lives only on the socket, and its own switch
+     * subtitle is "So you can read at the same time", which a quarter-hour-old
+     * version of would be a lie. So it posts from the live roster and only
+     * while Ribbon is running — which is the honest shape of the feature and
+     * is written down in `RoomWatch`'s header and in docs/deviations.md A34.
+     *
+     * Once per arrival rather than per heartbeat: the roster repeats, and a
+     * notification for every beat of somebody else's presence would be the
+     * app tapping a shoulder every thirty seconds. The stable id means a
+     * second arrival replaces rather than stacks, exactly as a note does.
+     *
+     * Never for me, and never when there is no reading to name.
+     */
+    private fun someoneOpenedTheBook(people: List<PresentPerson>) {
+        val now = people.map { it.id }.toSet()
+        val arrived = now - wasReading
+        wasReading = now
+        if (arrived.isEmpty()) return
+
+        val room = currentRoom ?: return
+        val reading = openReading(room) ?: return
+        val book = Bible.book(reading.bookID)?.name ?: return
+        val me = state.me?.id
+        val newcomer = arrived.firstOrNull { it != me } ?: return
+        val name = person(newcomer)?.name ?: return
+
+        val allowed = Notifications.shouldPost(
+            kind = NotificationKind.inTheBook,
+            roomID = room.id,
+            prefs = notificationPrefs(room),
+            settings = state.settings,
+            visibleRoomID = visibleRoomID,
+        )
+        if (!allowed) return
+        Notifications.post(
+            context = appContext,
+            id = Notifications.id(room.id, NotificationKind.inTheBook),
+            kind = NotificationKind.inTheBook,
+            line = Copy.notifReading(firstName(name), book),
+            to = Destination.Room(roomID = room.id),
+        )
+    }
+
+    /**
+     * Somebody held your face for 700 ms (§4.3).
+     *
+     * What used to be here was one line — a haptic — and it threw away the
+     * only thing the gesture carries. §10.3 is unambiguous that the name *is*
+     * the payload ("Ruth"), and a buzz with no name is a phone twitching in a
+     * pocket for no stated reason. It also consulted nothing: a person who had
+     * turned the switch off in S19 was buzzed anyway, and so was a person
+     * asleep inside their own quiet hours.
+     *
+     * The order below is the build book's, and the middle step is the one
+     * worth reading twice. S19 says thinking of you "is the only thing
+     * permitted to arrive silently inside [quiet hours], as a haptic on an
+     * already-woken device" — so inside them there is no notification at all,
+     * and the haptic plays only if the screen is already on. That is the
+     * difference between a tap on the shoulder and waking somebody up.
+     *
+     * Outside quiet hours it posts even when Ribbon is in the foreground,
+     * which is the one exception to the rule that a visible room stays quiet.
+     * There is no in-app surface that carries a name and nothing else, and
+     * §4.3 is explicit that the notification *is* the delivery; §6.3's "a
+     * notification, or nothing at all" is about notes.
+     */
+    private fun thinkingOfYouArrived(fromName: String) {
+        val room = currentRoom ?: return
+        val prefs = notificationPrefs(room)
+        // The switch is off: no notification, and no haptic either. A buzz
+        // with no explanation is worse than silence, and the person has said no.
+        if (!prefs.thinkingOfYou) return
+
+        if (state.settings.isQuietNow()) {
+            val power = appContext.getSystemService(PowerManager::class.java)
+            if (power?.isInteractive == true) haptics.tapOnTheShoulder()
+            return
+        }
+
+        haptics.tapOnTheShoulder()
+        Notifications.post(
+            context = appContext,
+            id = Notifications.id(room.id, NotificationKind.thinkingOfYou),
+            kind = NotificationKind.thinkingOfYou,
+            line = Copy.notifThinkingOfYou(firstName(fromName)),
+            to = Destination.Room(roomID = room.id),
+        )
     }
 
     /**
@@ -215,6 +348,23 @@ class AppModel(
      */
     override fun onCleared() {
         connectivity.stop()
+    }
+
+    /**
+     * Let go of everything this model holds open.
+     *
+     * `onCleared` is called by a `ViewModelStore`, and the background worker
+     * builds a model outside one — so without this, every fifteen minutes the
+     * process gained one more orphaned `ConnectivityManager` callback (A26
+     * says in so many words that it "has to be unregistered"), one more live
+     * Realtime websocket with its own 25-second heartbeat and reconnect loop,
+     * and one more never-cancelled scope. A pull that exists to post a
+     * notification must not cost more than the notification.
+     */
+    suspend fun shutDown() {
+        connectivity.stop()
+        closeRoomChannel()
+        viewModelScope.cancel()
     }
 
     // MARK: - The room's live line (§4.2)
@@ -483,24 +633,78 @@ class AppModel(
         // The link only works once the backend knows it — push it (and the
         // room, in case this room predates sign-in) whenever it's handed
         // out.
+        //
+        // Written down before it is attempted, and cleared only when it
+        // lands. The failure used to be logged and forgotten: the invite sat
+        // in local state until the next successful pull, at which point the
+        // prune deleted it *because* the backend did not have it, and the
+        // link already sitting in somebody's message thread was dead for
+        // good.
         val remote = this.remote
         if (remote != null && remote.isSignedIn) {
-            viewModelScope.launch {
-                runCatching {
-                    pushInvite(invite, room)
-                }.onFailure {
-                    Log.e("AppModel", "pushInvite failed for room ${room.id}", it)
-                }
-            }
+            state = state.copy(invitesNotYetPushed = state.invitesNotYetPushed + invite.id)
+            persist()
+            viewModelScope.launch { pushInviteIfNeeded(invite, room) }
         }
         return invite
+    }
+
+    /**
+     * Register a link with the backend, and remember whether it landed.
+     *
+     * Not `pushInvite` itself, which is also called by `pushLocalGraph` at
+     * sign-in with a whole graph's worth of invites behind it.
+     */
+    private suspend fun pushInviteIfNeeded(invite: Invite, room: Room) {
+        val landed = runCatching { pushInvite(invite, room) }
+        if (landed.isSuccess) {
+            state = state.copy(invitesNotYetPushed = state.invitesNotYetPushed - invite.id)
+            persist()
+        } else {
+            Log.e("AppModel", "pushInvite failed for room ${room.id}", landed.exceptionOrNull())
+        }
+    }
+
+    /**
+     * The link left this phone (S15).
+     *
+     * Called where the share intent is fired, and not where the invite is
+     * minted. A chooser the person then backs out of still counts: Android
+     * only reports the chosen component through an `EXTRA_CHOSEN_COMPONENT`
+     * PendingIntent, and that machinery buys less honesty than it costs —
+     * somebody who opened the share sheet and changed their mind is far
+     * closer to "the invite is out" than somebody who has never seen it.
+     */
+    fun inviteWasHandedOut(invite: Invite) {
+        if (invite.id in state.invitesHandedOut) return
+        state = state.copy(invitesHandedOut = state.invitesHandedOut + invite.id)
+        persist()
     }
 
     fun isFull(room: Room): Boolean = members(room).size >= Room.capacity
 
     /** Is a link to this room live — actually handed out, and not expired? */
-    fun hasLiveInvite(room: Room, now: Instant = Clock.System.now()): Boolean =
-        state.invites.any { it.roomID == room.id && it.expiresAt > now }
+    /**
+     * Is there a live link out for this room?
+     *
+     * "Out", not "minted". Both the onboarding step and the invite sheet mint
+     * one the moment they appear, so this used to answer true for anybody who
+     * had merely *seen* either — and the room then told a person who had
+     * asked nobody that "The invite is still out", with a control to send it
+     * again, on the first morning of their room.
+     *
+     * Somebody else's invite counts without asking: their `invitesHandedOut`
+     * is not ours to see, and an invite that reached this phone through a
+     * pull is the room's live link by definition.
+     */
+    fun hasLiveInvite(room: Room, now: Instant = Clock.System.now()): Boolean {
+        val me = state.me?.id
+        return state.invites.any { invite ->
+            invite.roomID == room.id &&
+                invite.expiresAt > now &&
+                (invite.createdBy != me || invite.id in state.invitesHandedOut)
+        }
+    }
 
     /**
      * Is somebody still expected in this room?
@@ -524,6 +728,94 @@ class AppModel(
      * rename.
      */
     private val pendingRenamePushes: MutableSet<Uuid> = mutableSetOf()
+
+    /**
+     * Notes taken back whose delete hasn't landed, and notes edited whose
+     * push hasn't.
+     *
+     * The same shape as [pendingRenamePushes], and they exist for a defect
+     * that was worse than the rename's. `takeBack` and `editWrittenNote` both
+     * wrapped their remote call in `runCatching` and forgot the outcome, and
+     * nothing anywhere retried either — the one thing `refreshFromRemote`
+     * replayed was a rename. So a take-back made offline was applied here and
+     * never sent, the row stayed in Postgres, and the next successful pull
+     * put the note back on the phone of the person who had just taken it
+     * back. An edit made offline was worse than lost: the merge takes
+     * `body = row.body ?: local`, so the server's old words silently
+     * overwrote the new ones with nothing on screen to say so.
+     *
+     * Both are consulted by the merge as well as replayed by the refresh: a
+     * pull that races a pending delete must not re-add the row, and a pull
+     * that races a pending edit must not take the server's body.
+     *
+     * In-memory, like the rename queue: a relaunch before the push lands
+     * re-exposes the edge. Accepted for the same reason — the alternative is
+     * a durable outbox, which is the sync engine's job and not this pass's.
+     */
+    private val pendingNoteDeletes: MutableSet<Uuid> = mutableSetOf()
+
+    /**
+     * What a queued delete needs to know besides the id: the reading the
+     * recording lives under, and whether there is one.
+     *
+     * The note is gone from state the moment it is taken back, so by the time
+     * a replay runs there is nothing left to read its kind off — and a replay
+     * that dropped the recording would leave the one thing S04 most means by
+     * "no tombstone" sitting in the bucket.
+     */
+    private val pendingNoteDeleteShapes: MutableMap<Uuid, Pair<Uuid, Boolean>> = mutableMapOf()
+    private val pendingNotePushes: MutableSet<Uuid> = mutableSetOf()
+
+    /** The same, for a highlight removed while the request could not land. */
+    private val pendingHighlightDeletes: MutableSet<Uuid> = mutableSetOf()
+
+    /**
+     * Everything else this device has said and the backend has not heard.
+     *
+     * Renames, note pushes, note deletes, highlight deletes and unregistered
+     * invites each got a queue as the defect that needed one was found; three
+     * mutations never did, and they pushed once through a bare `runCatching`
+     * and were forgotten. `docs/deviations.md` has claimed since deviation 10
+     * that "offline mutations queue with hairline `isPending` state and
+     * automatically push upon reconnection", and it was true of written notes
+     * and nothing else.
+     *
+     * The card answer is the damaging one. `answerCard` decides whether a
+     * card opens from *local* state, so an answer given offline leaves the
+     * card sealed here and never reaches the backend — and the merge unions
+     * the local answer straight back in on every pull, so the device goes on
+     * believing it was recorded. Nobody else in the room ever sees it, and
+     * "This opens when everyone has answered" never comes true. The one
+     * object in the app explicitly blocked on everybody was the one whose
+     * answer had no queue.
+     *
+     * A highlight (S06) and a marked quiet day (§4.7 — an act of care
+     * performed in public) made offline were likewise invisible to the room
+     * for good.
+     *
+     * Kept as thunks rather than as ids: each of the three pushes a different
+     * shape, and one list of "say this again" is smaller than three sets and
+     * three drain loops.
+     */
+    private val unsaid: MutableList<Pair<Uuid, suspend (RemoteSync) -> Unit>> = mutableListOf()
+
+    /**
+     * Push it, and remember to push it again if it does not land.
+     *
+     * @param key what this is about, so a second mutation of the same thing
+     *   replaces the first rather than queueing both.
+     */
+    private fun sayItAgainIfNeeded(key: Uuid, push: suspend (RemoteSync) -> Unit) {
+        val remote = this.remote
+        if (remote == null || !remote.isSignedIn) return
+        unsaid.removeAll { it.first == key }
+        unsaid.add(key to push)
+        pushing {
+            if (runCatching { push(remote) }.isSuccess) {
+                unsaid.removeAll { it.first == key }
+            }
+        }
+    }
 
     /** Naming a room after the fact (S15's naming half, reachable later). */
     fun renameRoom(room: Room, name: String?) {
@@ -554,6 +846,18 @@ class AppModel(
         val me = state.me ?: return
         val readingIDs = state.readings.filter { it.roomID == room.id }.map { it.id }.toSet()
         var next = state
+        // Held before the local filter, because they are what has to be
+        // deleted *remotely* and in a moment they will not be in state to
+        // find. "Take them back" used to be a local filter and nothing else:
+        // the rows stayed in Postgres, the recordings stayed in the bucket,
+        // and every other member's phone kept its copy — so the one answer
+        // §6.8 offers to somebody who wants their words back did nothing
+        // except hide them from the person who asked.
+        val mine = if (keepNotesBehind) {
+            emptyList()
+        } else {
+            state.notes.filter { readingIDs.contains(it.readingID) && it.authorID == me.id }
+        }
         if (!keepNotesBehind) {
             next = next.copy(notes = next.notes.filterNot {
                 readingIDs.contains(it.readingID) && it.authorID == me.id
@@ -573,8 +877,32 @@ class AppModel(
         if (remote != null && remote.isSignedIn) {
             val roomID = room.id
             val personID = me.id
+            // Queued the same way a single take-back is, so a delete that
+            // cannot land right now is replayed on the next refresh rather
+            // than forgotten.
+            mine.forEach {
+                pendingNoteDeletes.add(it.id)
+                pendingNoteDeleteShapes[it.id] = it.readingID to (it.kind == NoteKind.voice)
+            }
             viewModelScope.launch {
-                // The nudge goes first, and it has to: once the membership
+                // The notes go before the membership. `notes_delete` keys on
+                // the author alone, so it does not need the membership — but
+                // the room's own policies do, and leaving first would take
+                // away the standing to do anything else here.
+                for (note in mine) {
+                    val gone = runCatching {
+                        remote.deleteNote(
+                            id = note.id,
+                            readingID = note.readingID,
+                            voice = note.kind == NoteKind.voice,
+                        )
+                    }
+                    if (gone.isSuccess) {
+                        pendingNoteDeletes.remove(note.id)
+                        pendingNoteDeleteShapes.remove(note.id)
+                    }
+                }
+                // The nudge goes next, and it has to: once the membership
                 // row is gone the channel's own policy refuses this device,
                 // and the room would hear nothing at all. The others pull a
                 // beat later, by which time the delete has landed — and their
@@ -879,7 +1207,7 @@ class AppModel(
         persist()
         val remote = this.remote
         if (remote != null && remote.isSignedIn) {
-            pushing { runCatching { remote.push(quietDay = day) } }
+            sayItAgainIfNeeded(day.id) { it.push(quietDay = day) }
         }
     }
 
@@ -928,9 +1256,18 @@ class AppModel(
         persist()
         val remote = this.remote
         if (remote != null && remote.isSignedIn) {
+            // Queued as well as pushed. A note composed offline drew its
+            // pending hairline (§4.4) and then waited for a push that was
+            // never attempted again — the refresh replayed a rename and
+            // nothing else — so it stayed a hairline until the app was
+            // restarted, and the person it was left for never got it.
+            pendingNotePushes.add(note.id)
             pushing {
                 runCatching { remote.push(note = note) }
-                    .onSuccess { markNoteSent(note.id) }
+                    .onSuccess {
+                        pendingNotePushes.remove(note.id)
+                        markNoteSent(note.id)
+                    }
             }
         }
         return note
@@ -963,9 +1300,18 @@ class AppModel(
         }
         val remote = this.remote
         if (remote != null && remote.isSignedIn) {
+            // The written path was queued and this one was not, so a voice
+            // note left on a train drew its pending hairline (§4.4) and then
+            // waited for a push that was never attempted again. S25's "note
+            // failed to send" row and §6.10's "notes queue with hairline
+            // marks" both describe a queue; only half of one existed.
+            pendingNotePushes.add(note.id)
             pushing {
                 runCatching { remote.push(note = note, audioFile = audioFile) }
-                    .onSuccess { markNoteSent(note.id) }
+                    .onSuccess {
+                        pendingNotePushes.remove(note.id)
+                        markNoteSent(note.id)
+                    }
             }
         }
         return note
@@ -1047,8 +1393,24 @@ class AppModel(
         persist()
         val remote = this.remote
         if (remote != null && remote.isSignedIn) {
+            // Remembered until it lands. Without this a delete that failed —
+            // offline, a dropped request — was forgotten on the spot and the
+            // next pull put the note back.
+            pendingNoteDeletes.add(note.id)
+            pendingNoteDeleteShapes[note.id] =
+                note.readingID to (note.kind == NoteKind.voice)
             pushing {
-                runCatching { remote.deleteNote(id = note.id) }
+                val gone = runCatching {
+                    remote.deleteNote(
+                        id = note.id,
+                        readingID = note.readingID,
+                        voice = note.kind == NoteKind.voice,
+                    )
+                }
+                if (gone.isSuccess) {
+                    pendingNoteDeletes.remove(note.id)
+                    pendingNoteDeleteShapes.remove(note.id)
+                }
             }
         }
     }
@@ -1058,14 +1420,22 @@ class AppModel(
         val index = state.notes.indexOfFirst { it.id == note.id }
         if (index < 0) return
         val notes = state.notes.toMutableList()
-        notes[index] = notes[index].copy(body = body)
+        // §4.4's pending mark: an edit that has not landed is drawn as a
+        // hairline outline in the margin, exactly as a note composed offline
+        // is. It never was before — only a *new* note was ever pending — so
+        // an edit made on a train looked identical to one the room had.
+        notes[index] = notes[index].copy(body = body, isPending = true)
         state = state.copy(notes = notes)
         persist()
         val remote = this.remote
         if (remote != null && remote.isSignedIn) {
             val updated = notes[index]
+            pendingNotePushes.add(updated.id)
             pushing {
-                runCatching { remote.push(note = updated) }
+                if (runCatching { remote.push(note = updated) }.isSuccess) {
+                    pendingNotePushes.remove(updated.id)
+                    markNoteSent(updated.id)
+                }
             }
         }
     }
@@ -1098,9 +1468,7 @@ class AppModel(
         persist()
         val remote = this.remote
         if (remote != null && remote.isSignedIn) {
-            pushing {
-                runCatching { remote.push(highlight = highlight) }
-            }
+            sayItAgainIfNeeded(highlight.id) { it.push(highlight = highlight) }
         }
     }
 
@@ -1111,8 +1479,11 @@ class AppModel(
         persist()
         val remote = this.remote
         if (remote != null && remote.isSignedIn) {
+            pendingHighlightDeletes.add(highlight.id)
             pushing {
-                runCatching { remote.deleteHighlight(id = highlight.id) }
+                if (runCatching { remote.deleteHighlight(id = highlight.id) }.isSuccess) {
+                    pendingHighlightDeletes.remove(highlight.id)
+                }
             }
         }
     }
@@ -1173,21 +1544,17 @@ class AppModel(
         state = state.copy(cards = cards)
         persist()
 
-        val remote = this.remote
-        if (remote != null && remote.isSignedIn) {
-            pushing {
-                runCatching {
-                    remote.push(
-                        RemoteSync.CardAnswerRow(
-                            cardId = updatedCard.id,
-                            personId = me.id,
-                            answer = answer,
-                            createdAt = Clock.System.now()
-                        )
-                    )
-                    remote.push(card = updatedCard)
-                }
-            }
+        val answeredAt = Clock.System.now()
+        sayItAgainIfNeeded(updatedCard.id) { remote ->
+            remote.push(
+                RemoteSync.CardAnswerRow(
+                    cardId = updatedCard.id,
+                    personId = me.id,
+                    answer = answer,
+                    createdAt = answeredAt,
+                ),
+            )
+            remote.push(card = updatedCard)
         }
     }
 
@@ -1281,33 +1648,110 @@ class AppModel(
     }
 
     /**
+     * Whether now is the moment to ask about notifications (§6.1).
+     *
+     * "Notifications: after the first note is left or found — never at
+     * launch. In context: *Tell you when Ruth leaves a note?*" Four things
+     * have to be true and each is in that sentence:
+     *
+     *  - a note has just been left or found, which is the caller's business;
+     *  - this device has never been asked, because the app asks once and a
+     *    question that comes back is worse than no question;
+     *  - Android has not already granted it, so we never raise a dialog that
+     *    would be answered before it was drawn;
+     *  - and there is somebody else in the room. "Tell you when Ruth leaves
+     *    a note?" has no name to put in it, and nothing to promise, in a room
+     *    of one — S17 forbids a notification pre-prompt and asking a person
+     *    reading alone is one in everything but timing.
+     */
+    fun shouldAskAboutNotifications(room: Room): Boolean =
+        !state.hasAskedAboutNotifications &&
+            !Notifications.allowed(appContext) &&
+            members(room).size > 1
+
+    /**
+     * Whoever it would be about — the other person in a room of two, and the
+     * one who has most recently left something in a larger room. The ask
+     * names a person because §6.1's copy does, and a name is the whole
+     * difference between this question and a pre-prompt.
+     */
+    fun whoTheAskIsAbout(room: Room): String? {
+        val me = state.me?.id
+        val others = members(room).map { it.personID }.filter { it != me }
+        if (others.isEmpty()) return null
+        val readingIDs = state.readings.filter { it.roomID == room.id }.map { it.id }.toSet()
+        val mostRecent = state.notes
+            .filter { readingIDs.contains(it.readingID) && others.contains(it.authorID) }
+            .maxByOrNull { it.createdAt }
+            ?.authorID
+        return person(mostRecent ?: others.first())?.name
+    }
+
+    /** Asked, whatever the answer was. Never asked again (§6.1). */
+    fun markAskedAboutNotifications() {
+        if (state.hasAskedAboutNotifications) return
+        state = state.copy(hasAskedAboutNotifications = true)
+        persist()
+    }
+
+    /**
      * Account deletion (§6.8). The notes question is asked once, at
      * deletion, and the answer travels with the remote delete when sync
      * exists; locally both paths clear this device.
      */
     fun deleteAccount(keepNotesBehind: Boolean) {
-        // The backend forgets the person: deleting the profile cascades
-        // memberships, invites, fuel, quiet days and positions; shared
-        // rooms and their content stay for the people still in them.
-        // (Notes aren't remote yet, so the keep/take answer is local-only
-        // until the full sync engine; the bare auth user — an email and
-        // nothing else — needs a service-role function and rides along
-        // then too.)
+        // §6.8's question, finally asked of something.
         //
-        // Swift writes `_ = keepNotesBehind` to silence its unused-value
-        // warning; Kotlin needs no such line, and the parameter stays in the
-        // signature because the question is asked at the call site today and
-        // the answer travels the moment notes are remote.
+        // What used to be here read `keepNotesBehind` nowhere at all — its
+        // comment said "notes aren't remote yet, so the keep/take answer is
+        // local-only", which stopped being true when deviation 10 put notes
+        // on the wire. Worse, the answer could not have been honoured either
+        // way: `deleteAccountData` deleted the profiles row, and both
+        // `notes.author_id` and `highlights.author_id` cascade from it, so
+        // *both* answers erased every note and every highlight the person had
+        // ever left. §6.8 is explicit that highlights "stay, always", and
+        // S11 needs a departed member's notes to render normally with their
+        // portrait.
+        //
+        // So the profile is blanked rather than deleted (see
+        // `RemoteSync.forgetProfile`), which leaves the rows that hang off it
+        // standing, and the answer decides what happens to the notes:
+        //
+        //  - leave them behind — the default, because they were left for the
+        //    other person — and nothing authored is touched;
+        //  - take them back, and the notes go, recordings and all.
+        //
+        // Highlights are never deleted on either path. A highlight is a mark
+        // on a shared page rather than a possession, which is the same
+        // reason leaving a room does not take them.
+        val me = state.me
         val remote = this.remote
+        val mine = if (keepNotesBehind || me == null) {
+            emptyList()
+        } else {
+            state.notes.filter { it.authorID == me.id }
+        }
         if (remote != null && remote.isSignedIn) {
             viewModelScope.launch {
-                remote.deleteAccountData()
+                for (note in mine) {
+                    runCatching {
+                        remote.deleteNote(
+                            id = note.id,
+                            readingID = note.readingID,
+                            voice = note.kind == NoteKind.voice,
+                        )
+                    }
+                }
+                remote.forgetProfile(neutralName = Copy.SOMEONE)
                 remote.signOut()
             }
         }
         state = AppState()
         portraits.clear()
         persist()
+        // Nothing left to watch for, and on this path watching on would be
+        // wrong rather than merely pointless.
+        RoomWatch.stop(appContext)
     }
 
     // MARK: - The account and the room surface of sync (§6.10, S16)
@@ -1445,6 +1889,8 @@ class AppModel(
 
     suspend fun signOutRemote() {
         remote?.signOut()
+        // Nobody to pull for any more.
+        RoomWatch.stop(appContext)
     }
 
     /**
@@ -1571,18 +2017,172 @@ class AppModel(
      * Pull every room I'm in and fold it into local state. Called on
      * launch, on foreground, and after joining.
      */
-    suspend fun refreshFromRemote() {
-        val remote = this.remote ?: return
-        if (!remote.isSignedIn) return
-        // An unpushed rename goes first, so the pull can't revert it.
+    suspend fun refreshFromRemote(): Arrivals {
+        val remote = this.remote ?: return Arrivals.none
+        if (!remote.isSignedIn) return Arrivals.none
+        // Everything this device meant to say goes before the pull that would
+        // otherwise contradict it. A rename, a take-back, an edit, a removed
+        // highlight — the rename was the only one of the four that was ever
+        // replayed, and the other three were the ones that lost data.
         for (roomID in pendingRenamePushes.toList()) {
             val room = state.rooms.firstOrNull { it.id == roomID }
             if (room != null && runCatching { remote.push(room = room) }.isSuccess) {
                 pendingRenamePushes.remove(roomID)
             }
         }
-        val graph = runCatching { remote.pullRooms() }.getOrNull() ?: return
-        merge(graph)
+        for (noteID in pendingNoteDeletes.toList()) {
+            val shape = pendingNoteDeleteShapes[noteID]
+            val gone = runCatching {
+                remote.deleteNote(
+                    id = noteID,
+                    readingID = shape?.first,
+                    voice = shape?.second ?: false,
+                )
+            }
+            if (gone.isSuccess) {
+                pendingNoteDeletes.remove(noteID)
+                pendingNoteDeleteShapes.remove(noteID)
+            }
+        }
+        for (noteID in pendingNotePushes.toList()) {
+            val note = state.notes.firstOrNull { it.id == noteID } ?: run {
+                // Taken back after the edit: there is nothing to push.
+                pendingNotePushes.remove(noteID)
+                return@run null
+            }
+            // With its recording. `RemoteSync.push` only uploads audio when
+            // it is handed a file, so a replay without one would have sent a
+            // voice note's row and never its voice — a waveform on the other
+            // person's phone with nothing behind it.
+            val audio = note?.audioPath?.let(store::audioFile)
+            val sent = note != null &&
+                runCatching { remote.push(note = note, audioFile = audio) }.isSuccess
+            if (sent) {
+                pendingNotePushes.remove(noteID)
+                markNoteSent(noteID)
+            }
+        }
+        for (highlightID in pendingHighlightDeletes.toList()) {
+            if (runCatching { remote.deleteHighlight(id = highlightID) }.isSuccess) {
+                pendingHighlightDeletes.remove(highlightID)
+            }
+        }
+        for ((key, push) in unsaid.toList()) {
+            if (runCatching { push(remote) }.isSuccess) {
+                unsaid.removeAll { it.first == key }
+            }
+        }
+        // A link that was handed out before the backend could be told about
+        // it starts working by itself the moment this phone has a network.
+        // No banner and no line on the sheet: §6.10 is explicit that the app
+        // working is not news, and self-healing is the honest answer.
+        for (inviteID in state.invitesNotYetPushed.toList()) {
+            val invite = state.invites.firstOrNull { it.id == inviteID }
+            val room = invite?.let { i -> state.rooms.firstOrNull { it.id == i.roomID } }
+            if (invite == null || room == null) {
+                // The room or the invite has gone; there is nothing to register.
+                state = state.copy(invitesNotYetPushed = state.invitesNotYetPushed - inviteID)
+                persist()
+                continue
+            }
+            pushInviteIfNeeded(invite, room)
+        }
+        val graph = runCatching { remote.pullRooms() }.getOrNull() ?: return Arrivals.none
+        val landed = merge(graph)
+        announce(landed)
+        return landed
+    }
+
+    /**
+     * Say what arrived, out loud (S19, §10.3).
+     *
+     * Called from the one place that can tell an arrival from a row that was
+     * already there. Everything it posts goes through
+     * [Notifications.shouldPost] first, which is what makes S19's "per room,
+     * not global" true even though the channels are per kind.
+     *
+     * The order of the three is the order the build book puts them in, and
+     * the one thing worth saying about it: a note names its verse when it is
+     * the only one from that person in that room, and names only the person
+     * when several landed (§10.3's two strings). Nothing here ever says how
+     * many, in prose or through a group summary — Android writes "+2 more"
+     * into a summary of its own accord, which is a count attached to reading
+     * posted by the platform, in the last place anybody would look for it.
+     */
+    private fun announce(arrivals: Arrivals) {
+        if (arrivals.isEmpty) return
+        if (!Notifications.allowed(appContext)) return
+        val settings = state.settings
+
+        fun gate(kind: NotificationKind, roomID: Uuid): Boolean {
+            val room = state.rooms.firstOrNull { it.id == roomID } ?: return false
+            return Notifications.shouldPost(
+                kind = kind,
+                roomID = roomID,
+                prefs = notificationPrefs(room),
+                settings = settings,
+                visibleRoomID = visibleRoomID,
+            )
+        }
+
+        arrivals.notes.forEach { (roomID, notes) ->
+            if (!gate(NotificationKind.notesLeft, roomID)) return@forEach
+            // By author, because §10.3's collapsed string names a person. Two
+            // people who both left something are two posts, not one summary.
+            notes.groupBy { it.authorID }.forEach { (authorID, theirs) ->
+                val name = person(authorID)?.name ?: return@forEach
+                val newest = theirs.maxByOrNull { it.createdAt } ?: return@forEach
+                Notifications.post(
+                    context = appContext,
+                    // Per room *and* author, so a second note from the same
+                    // person replaces the first — which is what makes the
+                    // collapsed string a replacement rather than a pile.
+                    id = Notifications.id(roomID, NotificationKind.notesLeft) + authorID.hashCode(),
+                    kind = NotificationKind.notesLeft,
+                    line = notesLeftLine(
+                        name = name,
+                        verse = newest.verse,
+                        several = theirs.size > 1,
+                    ),
+                    to = Destination.Verse(
+                        roomID = roomID,
+                        readingID = newest.readingID,
+                        verse = newest.verse,
+                    ),
+                )
+            }
+        }
+
+        arrivals.cardsOpened.forEach { (roomID, cards) ->
+            if (!gate(NotificationKind.cardsOpen, roomID)) return@forEach
+            // "The room gets one notification: The cards are open" (§4.6).
+            // One, however many turned over — the plural is in the noun.
+            val card = cards.firstOrNull() ?: return@forEach
+            Notifications.post(
+                context = appContext,
+                id = Notifications.id(roomID, NotificationKind.cardsOpen),
+                kind = NotificationKind.cardsOpen,
+                line = Copy.NOTIF_CARDS_OPEN,
+                to = Destination.Cards(
+                    roomID = roomID,
+                    readingID = card.readingID,
+                    chapter = card.chapter,
+                ),
+            )
+        }
+
+        arrivals.finished.forEach { (roomID, readings) ->
+            if (!gate(NotificationKind.bookFinished, roomID)) return@forEach
+            val reading = readings.lastOrNull() ?: return@forEach
+            val book = Bible.book(reading.bookID)?.name ?: return@forEach
+            Notifications.post(
+                context = appContext,
+                id = Notifications.id(roomID, NotificationKind.bookFinished),
+                kind = NotificationKind.bookFinished,
+                line = Copy.notifFinished(book),
+                to = Destination.Room(roomID = roomID),
+            )
+        }
     }
 
     /**
@@ -1624,8 +2224,103 @@ class AppModel(
         pendingInvite = PendingInvite(token = token)
     }
 
-    private fun merge(graph: RoomGraph) {
-        val me = state.me ?: return
+    /**
+     * What arrived in a merge that had not been seen before (S19, §10.3).
+     *
+     * `merge` used to publish one `next` value and say nothing about what was
+     * new in it, so a note that landed and a note that had been sitting in
+     * the database for a month were indistinguishable by the time anything
+     * downstream could look. There was, literally, no event to post a
+     * notification from — which is most of why there were no notifications.
+     *
+     * The diff is taken at the one moment both values are in hand, which is
+     * the seam `merge` already had: it builds a whole state locally and
+     * publishes it once.
+     */
+    data class Arrivals(
+        /** Notes left for me, by the room they landed in. */
+        val notes: Map<Uuid, List<Note>> = emptyMap(),
+        /** Readings whose cards turned over, by room. */
+        val cardsOpened: Map<Uuid, List<ReflectionCard>> = emptyMap(),
+        /** Books this room finished, by room. */
+        val finished: Map<Uuid, List<Reading>> = emptyMap(),
+    ) {
+        val isEmpty: Boolean
+            get() = notes.isEmpty() && cardsOpened.isEmpty() && finished.isEmpty()
+
+        companion object {
+            val none = Arrivals()
+        }
+    }
+
+    /**
+     * What is new in [next] that was not in [before], and is newer than the
+     * watermark.
+     *
+     * The watermark — `AppState.notifiedThrough` — is the whole of §6.10's
+     * protection, and it is worth being explicit about what it prevents: a
+     * first sync on a new device restores every room a person is in, which
+     * for a couple a year into this is several hundred notes. Without a
+     * watermark that is several hundred notifications, in one breath, the
+     * first time somebody signs in on a new phone. So on the very first merge
+     * the watermark is null, it is set to the newest row seen, and *nothing*
+     * is reported. A new phone arrives quiet.
+     */
+    private fun arrivals(before: AppState, next: AppState): Arrivals {
+        val me = next.me?.id ?: return Arrivals.none
+        val watermark = before.notifiedThrough ?: return Arrivals.none
+
+        fun roomOf(readingID: Uuid): Uuid? =
+            next.readings.firstOrNull { it.id == readingID }?.roomID
+
+        val knownNotes = before.notes.map { it.id }.toSet()
+        val notes = next.notes
+            .filter { note ->
+                note.id !in knownNotes &&
+                    note.authorID != me &&
+                    !note.foundBy.contains(me) &&
+                    note.createdAt > watermark
+            }
+            .groupBy { roomOf(it.readingID) }
+            .mapNotNull { (room, list) -> room?.let { it to list } }
+            .toMap()
+
+        val wasOpen = before.cards.filter { it.state == CardState.open }.map { it.id }.toSet()
+        val cardsOpened = next.cards
+            .filter { card ->
+                card.state == CardState.open &&
+                    card.id !in wasOpen &&
+                    (card.openedAt?.let { it > watermark } ?: false)
+            }
+            .groupBy { roomOf(it.readingID) }
+            .mapNotNull { (room, list) -> room?.let { it to list } }
+            .toMap()
+
+        val wasFinished = before.readings.filter { it.finishedAt != null }.map { it.id }.toSet()
+        val finished = next.readings
+            .filter { reading ->
+                reading.finishedAt?.let { it > watermark } == true && reading.id !in wasFinished
+            }
+            .groupBy { it.roomID }
+
+        return Arrivals(notes = notes, cardsOpened = cardsOpened, finished = finished)
+    }
+
+    /**
+     * The newest thing this state knows about, whenever that was.
+     *
+     * Advanced on every merge whether or not anything was posted, so a
+     * notification that was suppressed — quiet hours, a switch turned off,
+     * the room already on screen — is not re-offered by the next merge.
+     */
+    private fun newestRow(state: AppState): Instant? = listOfNotNull(
+        state.notes.maxOfOrNull { it.createdAt },
+        state.cards.mapNotNull { it.openedAt }.maxOrNull(),
+        state.readings.mapNotNull { it.finishedAt }.maxOrNull(),
+    ).maxOrNull()
+
+    private fun merge(graph: RoomGraph): Arrivals {
+        val me = state.me ?: return Arrivals.none
 
         // Swift mutates `state` in place, step by step, and every later step
         // reads what the earlier ones wrote. AppState is immutable here, so
@@ -1739,7 +2434,12 @@ class AppModel(
         invites.removeAll {
             it.roomID in pulledRooms &&
                 it.id !in pulledInvites &&
-                it.id !in pendingInvitePushes
+                it.id !in pendingInvitePushes &&
+                // A link this phone minted and has not managed to register
+                // yet. The backend cannot see it, and that is exactly why it
+                // must not be taken away — it is already in somebody's
+                // message thread.
+                it.id !in next.invitesNotYetPushed
         }
         next = next.copy(invites = invites)
 
@@ -1806,15 +2506,25 @@ class AppModel(
             val transcriptState = row.transcriptState?.let { raw ->
                 TranscriptState.entries.firstOrNull { it.name == raw }
             }
+            // A note this device has taken back and not yet managed to
+            // delete must not be handed back to it by the pull that raced the
+            // delete. Without this the take-back looked like it had worked
+            // and the note reappeared a moment later.
+            if (pendingNoteDeletes.contains(row.id)) continue
             val i = notes.indexOfFirst { it.id == row.id }
             if (i >= 0) {
+                // An edit this device has made and not yet pushed keeps its
+                // own words. `body = row.body ?: local` took the server's old
+                // body over the new one, silently, which is the one failure
+                // on this path that loses something a person wrote.
+                val mine = pendingNotePushes.contains(row.id)
                 notes[i] = notes[i].copy(
-                    body = row.body ?: notes[i].body,
+                    body = if (mine) notes[i].body else row.body ?: notes[i].body,
                     waveform = row.waveform ?: notes[i].waveform,
                     transcript = row.transcript ?: notes[i].transcript,
                     transcriptState = transcriptState ?: notes[i].transcriptState,
                     audioPath = row.audioPath ?: notes[i].audioPath,
-                    isPending = false
+                    isPending = mine,
                 )
             } else {
                 val note = Note(
@@ -1851,6 +2561,53 @@ class AppModel(
                 notes[i] = notes[i].copy(foundBy = notes[i].foundBy + row.personId)
             }
         }
+        // **The prune.** Memberships are pruned above ("departures
+        // propagate") and invites are pruned below, and notes were not — so a
+        // note the backend no longer holds stayed on the phone forever. Both
+        // `takeBack` and `removeHighlight` delete the row remotely and nudge
+        // the other device to pull immediately; the pull came back without
+        // the row, this loop added nothing, removed nothing, and the note the
+        // author had taken back sat on the other person's phone permanently.
+        // S04 is explicit that a taken-back note vanishes "with no
+        // tombstone", and docs/deviations.md:94 already claimed take-backs
+        // propagate. They reached the backend and stopped there.
+        //
+        // Three guards, and each of them is load-bearing:
+        //
+        //  - `notesComplete`, because the notes select is wrapped in a
+        //    `runCatching` that returns an empty list on failure. Pruning
+        //    against that would delete every note in the room the first time
+        //    one request timed out.
+        //  - only readings the pull actually covered, because a graph is
+        //    scoped to the rooms this account is in and a reading it never
+        //    asked about has nothing to say about its notes.
+        //  - never a pending one, which is a note composed offline that the
+        //    backend has not been told about yet (§4.4).
+        if (graph.notesComplete) {
+            val pulledReadings = graph.readings.map { it.id }.toSet()
+            val pulledNotes = graph.notes.map { it.id }.toSet()
+            val gone = notes.filter { note ->
+                note.readingID in pulledReadings &&
+                    note.id !in pulledNotes &&
+                    !note.isPending &&
+                    note.id !in pendingNotePushes
+            }
+            if (gone.isNotEmpty()) {
+                notes.removeAll(gone.toSet())
+                // A voice note that has gone takes its recording with it. The
+                // author's own device already does this in `takeBack`; this
+                // is the same for everybody else's, and without it the room
+                // keeps the audio of a note nobody can see.
+                val paths = gone.mapNotNull { it.audioPath }
+                if (paths.isNotEmpty()) {
+                    viewModelScope.launch {
+                        withContext(Dispatchers.IO) {
+                            paths.forEach { runCatching { store.audioFile(it).delete() } }
+                        }
+                    }
+                }
+            }
+        }
         next = next.copy(notes = notes)
 
         // Highlights
@@ -1874,6 +2631,18 @@ class AppModel(
                         createdAt = row.createdAt
                     )
                 )
+            }
+        }
+        // The same prune, for the same reason: S06's "remove if it's yours"
+        // removed it from the author's phone and from Postgres and from
+        // nowhere else.
+        if (graph.highlightsComplete) {
+            val pulledReadings = graph.readings.map { it.id }.toSet()
+            val pulledHighlights = graph.highlights.map { it.id }.toSet()
+            highlights.removeAll { highlight ->
+                highlight.readingID in pulledReadings &&
+                    highlight.id !in pulledHighlights &&
+                    highlight.id !in pendingHighlightDeletes
             }
         }
         next = next.copy(highlights = highlights)
@@ -1974,8 +2743,15 @@ class AppModel(
         }
         next = next.copy(cards = cards)
 
+        // The one seam where both states are in hand. Everything downstream
+        // that needs to know something *arrived* rather than merely being
+        // true reads this.
+        val landed = arrivals(before = state, next = next)
+        next = next.copy(notifiedThrough = newestRow(next) ?: next.notifiedThrough)
+
         state = next
         persist()
+        return landed
     }
 
     /**
@@ -2150,7 +2926,13 @@ class AppModel(
          */
         private val PORTRAIT_RECHECK = 15.minutes
 
-        suspend fun load(context: Context): AppModel {
+        /**
+         * @param forBackgroundPull skips everything a launch does that a
+         *   fifteen-minute pull has no use for: the update check, the room's
+         *   websocket, and starting the watcher that is already running. The
+         *   caller must `shutDown()` the model it gets back.
+         */
+        suspend fun load(context: Context, forBackgroundPull: Boolean = false): AppModel {
             val app = context.applicationContext
             val store = LocalStore(app)
             val state = store.load()
@@ -2165,9 +2947,16 @@ class AppModel(
             }
             val model = AppModel(app, state, store, presence)
             model.remote = remote
+            if (forBackgroundPull) return model
             model.loadPortraits()
             model.checkForUpdates()
             model.openRoomChannel()
+            // Watch for what arrives while the app is closed (S19), but only
+            // for somebody there is an account to watch on behalf of: a
+            // person who has never signed in has nothing to pull, and waking
+            // their phone four times an hour to find that out is a battery
+            // cost with no feature behind it.
+            if (remote?.isSignedIn == true) RoomWatch.start(app)
             return model
         }
 

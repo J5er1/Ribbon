@@ -147,6 +147,10 @@ dependencies {
     implementation(libs.auth0)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation(libs.androidx.media3.exoplayer)
+    // The only way a notification can arrive while Ribbon is closed (S19).
+    // There is no FCM here and no foreground service — see services/RoomWatch.kt
+    // for why neither, and what this route can and cannot carry.
+    implementation(libs.androidx.work.runtime)
 
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)

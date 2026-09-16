@@ -37,6 +37,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -45,12 +48,12 @@ import app.readribbon.app.Copy
 import app.readribbon.core.Invite
 import app.readribbon.core.Room
 import app.readribbon.design.Palette
-import app.readribbon.design.well
 import app.readribbon.design.RibbonType
 import app.readribbon.design.SmallCaps
 import app.readribbon.design.WayInButton
 import app.readribbon.design.rememberSheetExit
 import app.readribbon.design.room
+import app.readribbon.design.well
 import kotlin.uuid.ExperimentalUuidApi
 
 // S15 — making a room, and inviting. The link is the whole mechanism: no
@@ -170,12 +173,13 @@ fun InviteContent(
     // added under the content rather than clipped off it.
     val bottomBar = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
+    // `createInvite` registers the link with the backend itself. A second
+    // push here did the whole of it again — including reading the sender's
+    // portrait off disk and uploading the JPEG a second time — on every
+    // appearance of the sheet, and swallowed its own failure more quietly
+    // than the first one did.
     LaunchedEffect(room.id, full) {
-        if (!full) {
-            val live = model.createInvite(room)
-            invite = live
-            runCatching { model.pushInvite(live, room) }
-        }
+        if (!full) invite = model.createInvite(room)
     }
 
     Box(modifier = modifier.fillMaxWidth()) {
@@ -232,7 +236,12 @@ fun InviteContent(
                     modifier = Modifier.padding(horizontal = LineMargin),
                 )
 
-                invite?.let { live -> SendTheInvite(invite = live) }
+                invite?.let { live ->
+                    SendTheInvite(
+                        invite = live,
+                        onHandedOut = { model.inviteWasHandedOut(live) },
+                    )
+                }
             }
         }
     }
@@ -247,7 +256,7 @@ fun InviteContent(
  * there — no subject, no preview title, nothing about the room.
  */
 @Composable
-private fun SendTheInvite(invite: Invite) {
+private fun SendTheInvite(invite: Invite, onHandedOut: () -> Unit) {
     val context = LocalContext.current
     Text(
         text = Copy.SEND_THE_INVITE,
@@ -263,6 +272,10 @@ private fun SendTheInvite(invite: Invite) {
                     putExtra(Intent.EXTRA_TEXT, invite.url())
                 }
                 context.startActivity(Intent.createChooser(send, null))
+                // The link is out now — which is a different thing from
+                // having been minted, and the only thing S15's pending state
+                // on the room is about.
+                onHandedOut()
             }
             .sizeIn(minWidth = TouchTarget, minHeight = TouchTarget)
             .padding(horizontal = CapsuleH, vertical = CapsuleV),
@@ -382,12 +395,15 @@ private fun RoomNameField(
         contentAlignment = Alignment.CenterStart,
     ) {
         // SwiftUI's `prompt:`, which is drawn behind the text rather than
-        // being a label above it.
+        // being a label above it. Decoration: the field carries the name and
+        // the word "Optional" is not one — a screen reader was being handed
+        // "Optional", then an unlabelled edit box, and had to join them.
         if (name.isEmpty()) {
             Text(
                 text = Copy.OPTIONAL,
                 style = RibbonType.ui(18f),
                 color = Palette.muted,
+                modifier = Modifier.clearAndSetSemantics {},
             )
         }
         BasicTextField(
@@ -396,7 +412,9 @@ private fun RoomNameField(
             singleLine = true,
             textStyle = RibbonType.ui(18f).copy(color = Palette.text),
             cursorBrush = SolidColor(Palette.chartreuse),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .semantics { contentDescription = Copy.ROOM_NAME },
         )
     }
 }

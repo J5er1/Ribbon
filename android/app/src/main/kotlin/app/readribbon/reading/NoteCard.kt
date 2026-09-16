@@ -45,6 +45,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.readribbon.app.AppModel
 import app.readribbon.app.Copy
+import app.readribbon.app.firstName
 import app.readribbon.core.Ink
 import app.readribbon.core.Note
 import app.readribbon.core.NoteKind
@@ -105,25 +106,34 @@ fun NoteCard(
     // good — ARC does that half on iOS without being asked.
     DisposableEffect(player) { onDispose { player.dispose() } }
 
-    val name = author?.name ?: ""
+    // First names only, everywhere a person is named in a line of copy (§10).
+    // The card draws a 22 dp portrait and no name at all, so this label is
+    // the only place the author is named — and it said "Note from Ruth
+    // Alderman" where every visible surface in the app says "Ruth".
+    val name = author?.name?.let(::firstName) ?: ""
     val accessibilityText = when (note.kind) {
         NoteKind.written -> Copy.noteFrom(name, note.body ?: "")
         NoteKind.voice -> Copy.voiceNoteFrom(name, note.transcript ?: "")
     }
 
     // .contextMenu — long-press anywhere on the card, your own note only.
-    // The same two actions are published as accessibility actions, so a
-    // screen reader reaches them without holding a press (§11: every gesture
-    // has an equivalent that is not a gesture).
-    val menuActions =
-        if (isMine) {
-            listOf(
-                CustomAccessibilityAction(Copy.EDIT) { onEdit(); true },
-                CustomAccessibilityAction(Copy.TAKE_BACK) { onTakeBack(); true },
-            )
-        } else {
-            emptyList()
-        }
+    // The same actions are published as accessibility actions, so a screen
+    // reader reaches them without holding a press (§11: every gesture has an
+    // equivalent that is not a gesture).
+    //
+    // Edit is only offered on a written note, and it used not to be. A voice
+    // note has no body — it is a waveform and a transcript (§4.4) — so "edit"
+    // opened the *written* composer, empty, over a recording; typing into it
+    // and keeping it set `body` on a note whose kind is still `voice`, which
+    // `NoteCard` never reads. The words went to the server and were never
+    // seen again by anybody, including the person who wrote them. A recording
+    // is re-made the way it was made: take it back and speak again, which is
+    // the press-and-hold S05 already describes.
+    val canEdit = isMine && note.kind == NoteKind.written
+    val menuActions = buildList {
+        if (canEdit) add(CustomAccessibilityAction(Copy.EDIT) { onEdit(); true })
+        if (isMine) add(CustomAccessibilityAction(Copy.TAKE_BACK) { onTakeBack(); true })
+    }
 
     Box(modifier) {
         Column(
@@ -190,10 +200,12 @@ fun NoteCard(
         }
 
         DropdownMenu(expanded = menuShown, onDismissRequest = { menuShown = false }) {
-            DropdownMenuItem(
-                text = { Text(Copy.EDIT, style = RibbonType.ui(16f), color = Palette.text) },
-                onClick = { menuShown = false; onEdit() },
-            )
+            if (canEdit) {
+                DropdownMenuItem(
+                    text = { Text(Copy.EDIT, style = RibbonType.ui(16f), color = Palette.text) },
+                    onClick = { menuShown = false; onEdit() },
+                )
+            }
             DropdownMenuItem(
                 // SwiftUI's destructive role, which has no Compose
                 // equivalent. The palette's deep flame, read directly: the
@@ -272,7 +284,19 @@ private fun VoiceBody(
                     Box(
                         modifier = Modifier
                             .heightIn(min = 44.dp)
-                            .clickable(onClick = onToggleTranscript)
+                            // A fold that opens and closes, announced as the
+                            // word "transcript" and nothing else: no role, no
+                            // act, and no way to know it was a control or
+                            // which way it was pointing (§11).
+                            .clickable(
+                                role = Role.Button,
+                                onClickLabel = if (transcriptShown) {
+                                    Copy.HIDES_THE_TRANSCRIPT
+                                } else {
+                                    Copy.SHOWS_THE_TRANSCRIPT
+                                },
+                                onClick = onToggleTranscript,
+                            )
                             // The fold opens on a settle; reduce motion
                             // takes the same two states with no travel
                             // between them (§11).

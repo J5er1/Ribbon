@@ -4,8 +4,15 @@ package app.readribbon.screens
 
 import android.content.Intent
 import android.content.res.AssetManager
+import android.provider.Settings
 import android.text.format.DateFormat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -35,6 +42,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,6 +61,9 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import app.readribbon.app.AppModel
 import app.readribbon.app.Copy
 import app.readribbon.core.Bible
@@ -65,6 +76,7 @@ import app.readribbon.design.RibbonScreen
 import app.readribbon.design.GroupScope
 import app.readribbon.design.LocalAppearance
 import app.readribbon.design.Palette
+import app.readribbon.design.QuietControl
 import app.readribbon.design.RibbonMotion
 import app.readribbon.design.RibbonShape
 import app.readribbon.design.RibbonType
@@ -84,6 +96,7 @@ import app.readribbon.design.rememberReduceMotion
 import app.readribbon.design.room
 import app.readribbon.design.paper
 import app.readribbon.design.well
+import app.readribbon.services.Notifications
 import java.util.Calendar
 import kotlin.uuid.ExperimentalUuidApi
 
@@ -368,10 +381,21 @@ private fun Segments(
                         .semantics { selected = chosen },
                     contentAlignment = Alignment.Center,
                 ) {
+                    // The pill slides on a spring and its three labels used
+                    // to change colour on one frame, so the object that moved
+                    // and the words it moved between were telling two
+                    // different stories about the same event. On the same
+                    // token the pill rides, so a word brightens as the pill
+                    // reaches it.
+                    val wordColour by animateColorAsState(
+                        targetValue = if (chosen) Palette.text else Palette.muted,
+                        animationSpec = RibbonMotion.handled(still),
+                        label = "the-chosen-word",
+                    )
                     Text(
                         text = label,
                         style = RibbonType.ui(15f),
-                        color = if (chosen) Palette.text else Palette.muted,
+                        color = wordColour,
                     )
                 }
             }
@@ -403,12 +427,77 @@ fun NotificationSettingsScreen(
         onBack = onBack,
         modifier = modifier,
     ) {
+        AndroidIsSilencingThese()
         model.state.rooms.forEachIndexed { index, room ->
             if (index > 0) Air(GroupGap)
             NotificationRoomGroup(model = model, room = room)
         }
         Air(GroupGap)
         QuietHoursGroup(model)
+    }
+}
+
+/**
+ * The line that appears only when Android is dropping everything this screen
+ * configures — refused at the prompt, or turned off later in the OS.
+ *
+ * On the bare ground rather than in a tile, which is where this screen's
+ * undoing controls already stand (deviation A23): a tile is a thing Ribbon
+ * decides, and this is a fact about the phone. The switches below stay
+ * enabled and keep their values — they are the person's answer to Ribbon's
+ * question, and greying them out would make the OS's answer look like ours,
+ * which is §12.2's Law 5 backwards.
+ *
+ * Re-read on every resume rather than once at composition, because the
+ * likeliest way this line goes away is the person tapping the control under
+ * it, changing the switch in Android's settings, and coming straight back.
+ */
+@Composable
+private fun AndroidIsSilencingThese() {
+    val context = LocalContext.current
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val still = rememberReduceMotion()
+    var allowed by remember { mutableStateOf(true) }
+
+    LaunchedEffect(lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            allowed = Notifications.allowed(context)
+        }
+    }
+
+    // Grows in and shrinks away rather than appearing: coming back from
+    // Android's settings having just turned notifications on is the one
+    // moment anybody watches this line, and §9.1 has no cuts in it.
+    AnimatedVisibility(
+        visible = !allowed,
+        // The token takes the reduce-motion branch itself, as every other
+        // call site in this file does — calling it bare left the one line on
+        // the screen that still moved for somebody who had asked nothing to.
+        enter = fadeIn(RibbonMotion.settle(still)) + expandVertically(RibbonMotion.settle(still)),
+        exit = fadeOut(RibbonMotion.settle(still)) + shrinkVertically(RibbonMotion.settle(still)),
+        label = "android-is-silencing-these",
+    ) {
+        Column(
+            modifier = Modifier.padding(bottom = GroupGap),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = Copy.ANDROID_IS_NOT_PASSING_THESE_ON,
+                style = RibbonType.ui(15f),
+                color = Palette.muted,
+            )
+            QuietControl(
+                title = Copy.OPEN_ANDROIDS_SETTINGS,
+                modifier = Modifier.offset(x = (-8).dp),
+            ) {
+                context.startActivity(
+                    Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(
+                        Settings.EXTRA_APP_PACKAGE,
+                        context.packageName,
+                    ),
+                )
+            }
+        }
     }
 }
 

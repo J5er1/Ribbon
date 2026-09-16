@@ -46,6 +46,12 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sin
 import kotlin.random.Random
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import app.readribbon.design.RibbonMotion
 
 // The campfire (§4.1) — a single warm object, abstract, never a cartoon
 // flame, never a number anywhere near it.
@@ -156,6 +162,41 @@ fun CampfireView(
         }
     }
 
+    // The fire crosses from one state to the next rather than redrawing as a
+    // different fire on one frame.
+    //
+    // `FirePainter.draw` switches tongue geometry, character and warm throw
+    // discretely, and nothing interpolated between two of them — so catching
+    // → burning → steady → banked was a cut, while the *word* under the fire
+    // took the settle token to say the same thing, under a comment asserting
+    // that "a word swapped on one frame under a fire that took its time
+    // getting there reads as a correction". The fire was not taking its time.
+    //
+    // Two stacked passes, the outgoing one fading out as the incoming one
+    // fades in, both inside the one offscreen layer so the additive blending
+    // still accumulates in the fire's own buffer (A15). They share `time`,
+    // `scale`, `coalDepth` and the seed, so nothing moves except the flame —
+    // the same property the fire→ember become already relies on. Under
+    // reduce motion the token snaps and this is exactly the cut it was.
+    val dim = animateFloatAsState(
+        targetValue = if (dimmed) 0.92f else 1f,
+        animationSpec = RibbonMotion.settle(reduceMotion),
+        label = "offline",
+    )
+    val leaving = remember { mutableStateOf(state) }
+    val crossing = remember { Animatable(1f) }
+    LaunchedEffect(state) {
+        // A state that changes again mid-cross keeps whatever was leaving —
+        // the effect is cancelled and relaunched, so `leaving` is only ever
+        // written when a cross has finished. Two states deep the older one is
+        // simply dropped, which is right: a fire that has moved twice in
+        // 400 ms is not a thing anybody is watching the middle of.
+        crossing.snapTo(0f)
+        crossing.animateTo(1f, RibbonMotion.settle(reduceMotion))
+        leaving.value = state
+    }
+    val from = leaving.value
+
     Canvas(
         modifier = modifier
             .widthIn(max = 560.dp)
@@ -167,16 +208,31 @@ fun CampfireView(
             // compositing strategy gives Compose the same two properties,
             // and carries the offline dimming with it.
             .graphicsLayer {
-                alpha = if (dimmed) 0.92f else 1f
+                // Eased, not stepped. `dimmed` is the room's connectivity,
+                // which flips whenever the socket drops or comes back, so on
+                // a flaky line the one warm object on the screen used to step
+                // down and back up in brightness in single frames, repeatedly.
+                // S01 asks for the fire to render "in its last known state,
+                // dimmed by ~8%" (A26); a step is not how a fire dims.
+                alpha = dim.value
                 compositingStrategy = CompositingStrategy.Offscreen
             }
             // Law 2, and §11: a state, a full stop. Never a percentage,
             // never a count, never a duration.
             .clearAndSetSemantics { contentDescription = Copy.fireIs(state.displayName) },
     ) {
+        val t = crossing.value
+        if (from != state) {
+            FirePainter.draw(
+                into = this, time = time,
+                state = from, scale = scale, coalDepth = coalDepth,
+                opacity = 1f - t,
+            )
+        }
         FirePainter.draw(
             into = this, time = time,
             state = state, scale = scale, coalDepth = coalDepth,
+            opacity = if (from != state) t else 1f,
         )
     }
 }
@@ -359,7 +415,36 @@ object FirePainter {
      * scale reaches the drawing through the height of the frame it is given,
      * never as a number the painter reads.
      */
+    /**
+     * @param opacity how much of this pass to composite, for the cross-fade
+     *   between two fire states. Applied as one layer over the whole pass
+     *   rather than to each draw inside it: the fire is built out of additive
+     *   blends, and fading the individual strokes would change how they
+     *   accumulate rather than how much of the result shows.
+     */
     fun draw(
+        into: DrawScope,
+        time: Double,
+        state: FireState,
+        scale: FireScale,
+        coalDepth: Double,
+        opacity: Float = 1f,
+    ) {
+        if (opacity <= 0f) return
+        if (opacity >= 1f) {
+            paint(into, time, state, scale, coalDepth)
+            return
+        }
+        val canvas = into.drawContext.canvas
+        canvas.saveLayer(
+            Rect(Offset.Zero, into.size),
+            Paint().apply { alpha = opacity },
+        )
+        paint(into, time, state, scale, coalDepth)
+        canvas.restore()
+    }
+
+    private fun paint(
         into: DrawScope,
         time: Double,
         state: FireState,

@@ -8,8 +8,10 @@ import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
@@ -44,7 +46,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -77,6 +81,8 @@ import androidx.graphics.shapes.Morph
 import androidx.graphics.shapes.RoundedPolygon
 import androidx.graphics.shapes.rectangle
 import androidx.graphics.shapes.toPath
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.Role
 import app.readribbon.app.AppModel
 import app.readribbon.app.Copy
 import app.readribbon.app.firstName
@@ -162,9 +168,6 @@ private const val LOZENGE_HOLD_MS = 350L
 /** `onLongPressGesture(minimumDuration: 0.7)` in a row — the same 700 ms the
  *  ink takes to fill, so the fill completing *is* the hold completing. */
 private val THINKING_HOLD_MS = RibbonMotion.INK_FILL_MS.toLong()
-
-/** The release when a hold is let go early. */
-private const val HOLD_RELEASE_MS = 150
 
 /**
  * The presence form: the lozenge at the right edge, and the panel it
@@ -426,7 +429,41 @@ private fun PresenceSurface(
             // Every touch target is at least 44 dp even when the drawn
             // control is smaller — the quiet shape is 20 dp wide.
             .sizeIn(minWidth = TOUCH_TARGET, minHeight = TOUCH_TARGET)
-            .then(if (expanded) panelGestures else collapsedGestures),
+            .then(if (expanded) panelGestures else collapsedGestures)
+            // What the gestures do, said out loud (§11 Motor).
+            //
+            // This node carried none, and the node under it — `CollapsedForm`
+            // — is a merge root with a sentence on it, which takes the
+            // screen-reader focus for itself so the one above is never landed
+            // on. That is the exact mechanism `Hearth.kt` documents for the
+            // fire and was fixed there by merging; the form never was. So
+            // everything behind the lozenge was closed: following the one
+            // person present, opening the panel, and inside it "read
+            // quietly" — which is the only route to reading quietly anywhere
+            // in the app.
+            //
+            // Merged here so the label and the action are one stop rather
+            // than two nodes fighting over the focus — **and only while the
+            // form is collapsed**. Compose's merge swallows descendant merge
+            // roots, so merging this Box with the panel open would collapse
+            // every control inside it — each `PersonRow`'s follow and
+            // thinking-of-you actions, and "read quietly" — into one
+            // unactionable label, which is the same defect one level up.
+            // The open panel's own children speak for themselves and
+            // predictive back closes it, so it needs nothing here.
+            .then(
+                if (expanded) {
+                    Modifier
+                } else {
+                    Modifier.semantics(mergeDescendants = true) {
+                        role = Role.Button
+                        onClick(label = Copy.WHOS_HERE) {
+                            onExpand()
+                            true
+                        }
+                    }
+                },
+            ),
         contentAlignment = Alignment.CenterEnd,
     ) {
         AnimatedContent(
@@ -507,6 +544,55 @@ private fun CollapsedForm(
     }
 }
 
+/**
+ * The roster the panel draws: everybody here, plus anybody who has just left
+ * and is still on their way out, each paired with whether they are still here.
+ *
+ * `people` alone cannot express a departure — the moment somebody goes they
+ * are not in it, so there is nothing left to animate away. This keeps them
+ * for as long as the exit lasts and then forgets them. Order is kept: a
+ * leaver stays where they were standing rather than jumping to the end of the
+ * queue on their way out.
+ */
+@Composable
+private fun rememberRoster(people: List<PresentPerson>): List<Pair<PresentPerson, Boolean>> {
+    val leaving = remember { mutableStateMapOf<Uuid, PresentPerson>() }
+    val here = people.map { it.id }.toSet()
+
+    LaunchedEffect(here) {
+        // Anybody back before their exit finished is simply here again.
+        leaving.keys.retainAll { it !in here }
+    }
+    val lastSeen = remember { mutableStateListOf<PresentPerson>() }
+    LaunchedEffect(people) {
+        val gone = lastSeen.filter { it.id !in here }
+        gone.forEach { leaving[it.id] = it }
+        lastSeen.clear()
+        lastSeen.addAll(people)
+        if (gone.isNotEmpty()) {
+            delay(RibbonMotion.ARRIVE_MS.toLong())
+            gone.forEach { if (it.id !in here) leaving.remove(it.id) }
+        }
+    }
+
+    val roster = ArrayList<Pair<PresentPerson, Boolean>>(people.size + leaving.size)
+    // The order the panel last had, so a leaver keeps their place.
+    val order = if (lastSeen.isEmpty()) people else lastSeen
+    val placed = HashSet<Uuid>()
+    for (person in order) {
+        val current = people.firstOrNull { it.id == person.id }
+        when {
+            current != null -> roster.add(current to true)
+            leaving[person.id] != null -> roster.add(leaving.getValue(person.id) to false)
+            else -> continue
+        }
+        placed.add(person.id)
+    }
+    // Arrivals since that order was taken.
+    for (person in people) if (person.id !in placed) roster.add(person to true)
+    return roster
+}
+
 /** Who's here, and the one gesture. */
 @Composable
 private fun PresencePanel(
@@ -525,15 +611,38 @@ private fun PresencePanel(
         verticalArrangement = Arrangement.spacedBy(14.dp),
         horizontalAlignment = Alignment.Start,
     ) {
-        people.forEach { person ->
-            PersonRow(
-                model = model,
-                room = room,
-                people = people,
-                person = person,
-                reduceMotion = reduceMotion,
-                onFollow = onFollow,
-            )
+        // Somebody arriving while the panel is open is the panel's whole
+        // subject, and it used to be the one thing on it that happened
+        // between two frames: a row appeared, every row under it jumped down
+        // by its height, and the panel changed size around them. Leaving was
+        // the same in reverse and worse — a face you were looking at was
+        // simply not there.
+        //
+        // Each row opens and closes in its own space now, so the ones below
+        // slide rather than jump, and a row on its way out stays until it has
+        // finished going (see [rememberRoster] — a list you iterate cannot
+        // animate a departure, because the departing item is already gone
+        // from it).
+        rememberRoster(people).forEach { (person, here) ->
+            key(person.id) {
+                AnimatedVisibility(
+                    visible = here,
+                    enter = fadeIn(RibbonMotion.arrive(reduceMotion)) +
+                        expandVertically(RibbonMotion.arrive(reduceMotion)),
+                    exit = fadeOut(RibbonMotion.arrive(reduceMotion)) +
+                        shrinkVertically(RibbonMotion.arrive(reduceMotion)),
+                    label = "someone-here",
+                ) {
+                    PersonRow(
+                        model = model,
+                        room = room,
+                        people = people,
+                        person = person,
+                        reduceMotion = reduceMotion,
+                        onFollow = onFollow,
+                    )
+                }
+            }
         }
         if (model.readingQuietly) {
             Row(
@@ -628,18 +737,24 @@ private fun PersonRow(
                         // Release completes it.
                         sendThinkingOfYou()
                         holding = false
-                        scope.launch { fill.snapTo(0f) }
+                        // The ring relaxes off the face as the haptic lands,
+                        // which is what a release is. It used to snap to
+                        // nothing on the frame the hold completed — so the
+                        // gesture that *failed* let go gracefully (below) and
+                        // the gesture that succeeded cut, which is the wrong
+                        // way round and the one cut §9.1 would least forgive.
+                        scope.launch { fill.animateTo(0f, RibbonMotion.settle(reduceMotion)) }
                         // The lift is the completion, never also a follow.
                         waitForUpOrCancellation()
                     } else {
                         haptics?.cancelThinkingOfYouHold()
                         holding = false
-                        scope.launch {
-                            fill.animateTo(
-                                0f,
-                                tween(HOLD_RELEASE_MS, easing = RibbonMotion.EaseOut),
-                            )
-                        }
+                        // A real token rather than an undocumented 150 ms:
+                        // arrive is 320 ms on the same ease-out and is the
+                        // nearest thing §9.1 actually contains — and it takes
+                        // the reduce-motion branch, which the raw tween never
+                        // did.
+                        scope.launch { fill.animateTo(0f, RibbonMotion.arrive(reduceMotion)) }
                         if (released) onFollow(person)
                     }
                 }
@@ -710,6 +825,7 @@ private fun PersonPortrait(
     person: PresentPerson,
     box: Dp = 38.dp,
 ) {
+    val reduceMotion = rememberReduceMotion()
     val ink = model.membership(person.id, room.id)?.ink
     Box(
         modifier = Modifier.size(box),
@@ -724,12 +840,26 @@ private fun PersonPortrait(
                 .requiredSize(38.dp)
                 .alpha(if (person.isIdle) 0.6f else 1f),
         )
-        if (model.followingPersonID == person.id && ink != null) {
+        if (ink != null) {
             val ringColor = ink.color
+            // The ring used to exist or not exist — a plain conditional on a
+            // thing that appears the moment a follow starts and disappears
+            // the moment it ends, which are two of the quietest events in the
+            // product (§4.2). The room's own presence ring three files away
+            // already does this properly; this is the same, on the same
+            // token, with the alpha read inside the draw so a fade never
+            // recomposes the panel.
+            val ringed = animateFloatAsState(
+                targetValue = if (model.followingPersonID == person.id) 1f else 0f,
+                animationSpec = RibbonMotion.arrive(reduceMotion),
+                label = "following",
+            )
             Canvas(Modifier.requiredSize(40.dp)) {
+                val shown = ringed.value
+                if (shown <= 0f) return@Canvas
                 val stroke = 1.6.dp.toPx()
                 drawCircle(
-                    color = ringColor,
+                    color = ringColor.copy(alpha = shown),
                     radius = size.minDimension / 2f - stroke / 2f,
                     style = Stroke(width = stroke),
                 )
@@ -748,10 +878,15 @@ private fun presenceLabel(
     person: PresentPerson,
     othersCount: Int,
 ): String {
-    val name = model.person(person.id)?.name ?: person.name
+    // First names, like the visible line eighteen lines up this same file
+    // and like the room's identical labels. This was the one place the
+    // reading surface and the room disagreed about what a person is called,
+    // and the a11y label disagreed with the visible text inside the same
+    // composable.
+    val name = (model.person(person.id)?.name ?: person.name).let(::firstName)
     val base = if (person.isIdle) Copy.personIsHereButStill(name) else Copy.personIsReading(name)
     if (othersCount > 0) {
-        val others = people.drop(1).map { model.person(it.id)?.name ?: it.name }
+        val others = people.drop(1).map { (model.person(it.id)?.name ?: it.name).let(::firstName) }
         return Copy.alsoHere(base, others)
     }
     return base

@@ -3,23 +3,31 @@ package app.readribbon.look
 import android.graphics.Bitmap
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import app.readribbon.R
 import app.readribbon.app.AppModel
+import app.readribbon.app.Copy
 import app.readribbon.core.Bible
+import app.readribbon.core.BlockStyle
+import app.readribbon.core.CardState
 import app.readribbon.core.FireScale
 import app.readribbon.core.FireState
 import app.readribbon.core.FuelEvent
 import app.readribbon.core.Handiwork
+import app.readribbon.core.Highlight
 import app.readribbon.core.Ink
 import app.readribbon.core.Membership
 import app.readribbon.core.Note
@@ -27,39 +35,51 @@ import app.readribbon.core.NoteKind
 import app.readribbon.core.Person
 import app.readribbon.core.Reading
 import app.readribbon.core.ReadingPosition
+import app.readribbon.core.ReflectionCard
 import app.readribbon.core.Ribbon
 import app.readribbon.core.Room
+import app.readribbon.core.ScriptureBlock
+import app.readribbon.core.ScriptureChapter
+import app.readribbon.core.ScriptureSpan
 import app.readribbon.core.VerseAddress
+import app.readribbon.core.VerseRange
 import app.readribbon.data.AppState
 import app.readribbon.data.LocalStore
 import app.readribbon.design.Appearance
+import app.readribbon.design.RibbonMotion
 import app.readribbon.design.RibbonTheme
 import app.readribbon.design.rememberBookSheet
-import app.readribbon.app.Copy
+import app.readribbon.design.room
+import app.readribbon.reading.ChapterText
+import app.readribbon.reading.ChaptersContent
+import app.readribbon.reading.LeaveToolbar
+import app.readribbon.reading.ReadingScreen
+import app.readribbon.reading.ReadingTheme
+import app.readribbon.reading.ReflectionCardView
 import app.readribbon.screens.AppearanceScreen
 import app.readribbon.screens.BookChooserContent
 import app.readribbon.screens.InviteContent
-import app.readribbon.screens.OnboardingFlow
 import app.readribbon.screens.MenuEntry
 import app.readribbon.screens.MenuScreen
 import app.readribbon.screens.NotificationSettingsScreen
+import app.readribbon.screens.OnboardingFlow
 import app.readribbon.screens.PersonScreen
-import app.readribbon.reading.ChaptersContent
-import app.readribbon.reading.ReadingScreen
+import app.readribbon.screens.PreviewStep
 import app.readribbon.screens.RoomScreen
+import app.readribbon.screens.ShelfView
 import app.readribbon.screens.TextSettingsScreen
 import app.readribbon.services.LocalPresenceService
+import java.io.File
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.hours
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
-import java.io.File
-import kotlin.time.Clock
-import kotlin.time.Duration.Companion.hours
-import kotlin.uuid.ExperimentalUuidApi
-import kotlin.uuid.Uuid
 
 /**
  * The look book: every screen this pass touched, rendered to a PNG.
@@ -429,6 +449,33 @@ class LookBookTest {
         }
     }
 
+    /**
+     * The same screen with nothing on it — the first-run state of every
+     * person screen in the product (§6.1), and the one this pass existed to
+     * fix. It used to be a face, a name and blank ground.
+     */
+    @Test fun aPersonWithNothing() {
+        val open = reading("MRK", FireScale.medium)
+        val state = AppState(
+            me = me,
+            people = mapOf(me.id to me, ruth.id to ruth),
+            rooms = listOf(room),
+            memberships = listOf(membership(me, Ink.teal), membership(ruth, Ink.crimson)),
+            readings = listOf(open),
+            currentRoomID = room.id,
+        )
+        val m = model(state)
+        shoot("person-empty") {
+            PersonScreen(
+                model = m,
+                personID = ruth.id,
+                room = m.state.rooms.first(),
+                onOpenVerse = { _, _ -> },
+                onDismiss = {},
+            )
+        }
+    }
+
     @Test fun theMenu() {
         val open = reading("MRK", FireScale.medium)
         val second = Room(name = "Thursday", createdAt = now - 200.hours)
@@ -675,6 +722,498 @@ class LookBookTest {
         shoot("invite") {
             InviteContent(room = m.state.rooms.first(), model = m)
         }
+    }
+
+    // MARK: the cards (S08/S09)
+
+    /**
+     * Both faces of a reflection card, which had never been in the look book
+     * and are the hardest thing in the app to picture from source — the
+     * sealed one because §4.6's whole design is what it *doesn't* say, and
+     * the open one because it is the only place the eight inks appear beside
+     * each other at a readable size.
+     *
+     * Two members, two answers, so the open card is a room and not a mirror.
+     */
+    private fun cardState(
+        answers: Map<Uuid, String>,
+        state: CardState,
+    ): Pair<AppModel, ReflectionCard> {
+        val open = reading("MRK", FireScale.medium)
+        val card = ReflectionCard(
+            readingID = open.id,
+            chapter = 4,
+            question = "What did you notice that the other one probably didn't?",
+            answers = answers,
+            state = state,
+        )
+        val m = model(
+            AppState(
+                me = me,
+                people = mapOf(me.id to me, ruth.id to ruth),
+                rooms = listOf(room),
+                memberships = listOf(membership(me, Ink.teal), membership(ruth, Ink.crimson)),
+                readings = listOf(open),
+                cards = listOf(card),
+                currentRoomID = room.id,
+            ),
+        )
+        return m to card
+    }
+
+    /** Sealed, and already answered: your own words, the way back into them,
+     *  and the one line that never names anybody. */
+    @Test fun theCardSealed() {
+        val (m, card) = cardState(
+            answers = mapOf(me.id to "That he asked twice, and waited both times."),
+            state = CardState.sealed,
+        )
+        shoot("card-sealed") {
+            OnTheGround {
+            ReflectionCardView(
+                card = card,
+                reading = m.state.readings.first(),
+                room = m.state.rooms.first(),
+                model = m,
+                modifier = Modifier.padding(24.dp),
+            )
+            }
+        }
+    }
+
+    /** Sealed and unanswered: the field, open, with no prompt in it (S08). */
+    @Test fun theCardUnanswered() {
+        val (m, card) = cardState(answers = emptyMap(), state = CardState.sealed)
+        shoot("card-unanswered") {
+            OnTheGround {
+            ReflectionCardView(
+                card = card,
+                reading = m.state.readings.first(),
+                room = m.state.rooms.first(),
+                model = m,
+                modifier = Modifier.padding(24.dp),
+            )
+            }
+        }
+    }
+
+    /** Open: everyone's answers together, each with its author's ink (S09). */
+    @Test fun theCardOpen() {
+        val (m, card) = cardState(
+            answers = mapOf(
+                me.id to "That he asked twice, and waited both times.",
+                ruth.id to "The crowd went quiet before he did.",
+            ),
+            state = CardState.open,
+        )
+        shoot("card-open") {
+            OnTheGround {
+            ReflectionCardView(
+                card = card,
+                reading = m.state.readings.first(),
+                room = m.state.rooms.first(),
+                model = m,
+                modifier = Modifier.padding(24.dp),
+            )
+            }
+        }
+    }
+
+    // MARK: the four screens that had never been in a picture
+
+    /**
+     * The page in use: two people's highlights, one verse carrying both, and
+     * the marks in the gutter.
+     *
+     * `theBook` above draws a clean page with a single note far down it, so
+     * the two things the reading surface is actually *for* — a wash and an
+     * overlap — had never been photographed. The overlap especially: §4.5
+     * says two inks on one verse make a third colour and that the colours are
+     * never averaged, which is arithmetic nobody can check by reading it.
+     */
+    @Test fun theBookInUse() {
+        val open = reading("MRK", FireScale.medium)
+        fun mark(verse: Int, who: Person, kind: NoteKind) = Note(
+            readingID = open.id,
+            authorID = who.id,
+            verse = VerseAddress(bookID = "MRK", chapter = 1, verse = verse),
+            kind = kind,
+            body = if (kind == NoteKind.written) "The wilderness, again." else null,
+            createdAt = now - 3.hours,
+        )
+        fun wash(from: Int, to: Int, ink: Ink, who: Person) = Highlight(
+            readingID = open.id,
+            authorID = who.id,
+            range = VerseRange(bookID = "MRK", chapter = 1, startVerse = from, endVerse = to),
+            ink = ink,
+            createdAt = now - 3.hours,
+        )
+        val state = AppState(
+            me = me,
+            people = mapOf(me.id to me, ruth.id to ruth),
+            rooms = listOf(room),
+            memberships = listOf(membership(me, Ink.teal), membership(ruth, Ink.crimson)),
+            readings = listOf(open),
+            notes = listOf(mark(2, ruth, NoteKind.written), mark(4, me, NoteKind.voice)),
+            highlights = listOf(
+                wash(3, 3, Ink.crimson, ruth),
+                // Verse 3 twice, in two inks: the third colour (§4.5).
+                wash(3, 4, Ink.teal, me),
+                wash(6, 6, Ink.crimson, ruth),
+            ),
+            currentRoomID = room.id,
+        )
+        val m = model(state)
+        shoot("reading-in-use") {
+            val sheet = rememberBookSheet()
+            LaunchedEffect(sheet) { sheet.animate(open = true) }
+            ReadingScreen(
+                model = m,
+                room = m.state.rooms.first(),
+                reading = open,
+                sheet = sheet,
+                onClose = {},
+                onDismissed = {},
+                onFinished = {},
+                onStartAnother = {},
+            )
+        }
+    }
+
+    /**
+     * Your own highlight, caught half-way across the words.
+     *
+     * The stroke is the one thing on this surface the app can honestly show
+     * as the movement of a hand, and a still frame is the only way to check
+     * that it reveals along the *words* rather than wiping the whole block.
+     * The clock is held and stepped to a little under half of a settle, so
+     * the second line is part-marked and the third has not been reached.
+     */
+    @Test fun theStrokeTravelling() {
+        val chapter = ScriptureChapter(
+            n = 1,
+            blocks = listOf(
+                ScriptureBlock(
+                    s = BlockStyle.p,
+                    x = listOf(
+                        ScriptureSpan(
+                            v = 1,
+                            t = "In the beginning was the Word, and the Word was with " +
+                                "God, and the Word was God. ",
+                        ),
+                        ScriptureSpan(v = 2, t = "He was with God in the beginning."),
+                    ),
+                ),
+            ),
+        )
+        val appearance = Appearance(ApplicationProvider.getApplicationContext())
+        appearance.wallpaperColour = false
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            RibbonTheme(appearance = appearance) {
+                Box(Modifier.fillMaxSize().room()) {
+                    ChapterText(
+                        chapter = chapter,
+                        runningHead = "John 1",
+                        theme = ReadingTheme(
+                            fontSize = 19f,
+                            lineHeightMultiple = 1.62f,
+                            redLetter = false,
+                        ),
+                        verseInks = mapOf(1 to listOf(Ink.teal)),
+                        liftedVerses = null,
+                        justMarked = 1..1,
+                        onMarkDrawn = {},
+                        openNote = null,
+                        isFirstChapter = true,
+                        showMarginHint = false,
+                        onLayout = {},
+                        onLongPressVerse = {},
+                        onDragToVerse = {},
+                        onDragEnded = {},
+                        onTapVerse = {},
+                        onNoteSlot = {},
+                        modifier = Modifier.padding(top = 60.dp),
+                    )
+                }
+            }
+        }
+        // Let the first frame land, then step to part-way through the settle.
+        compose.mainClock.advanceTimeByFrame()
+        compose.mainClock.advanceTimeBy(RibbonMotion.SETTLE_MS * 45L / 100L)
+        val image = compose.onRoot().captureToImage().asAndroidBitmap()
+        File(out, "stroke-travelling.png").outputStream().use {
+            image.compress(Bitmap.CompressFormat.PNG, 100, it)
+        }
+        compose.mainClock.autoAdvance = true
+    }
+
+    /**
+     * The instant your pen touches down on somebody else's mark.
+     *
+     * This is the frame that was broken. Only one wash is drawn per verse, and
+     * it had already become the mixture of the two inks — so at the start of
+     * the stroke, with nothing yet revealed, **their highlight was not on the
+     * page at all**. It came back from the left as the mixture, which reads as
+     * their mark being wiped away and replaced rather than yours being added
+     * to theirs.
+     *
+     * Their ink now stays whole in front of the tip and the pen mixes it as it
+     * passes. The travelling part of that is `theStrokeTravelling`, which
+     * catches a pen mid-verse; this one holds the moment before it moves,
+     * which is the one that used to be empty.
+     */
+    @Test fun theInksMeeting() {
+        val chapter = ScriptureChapter(
+            n = 1,
+            blocks = listOf(
+                ScriptureBlock(
+                    s = BlockStyle.p,
+                    x = listOf(
+                        ScriptureSpan(
+                            v = 1,
+                            t = "In the beginning was the Word, and the Word was with " +
+                                "God, and the Word was God. ",
+                        ),
+                        ScriptureSpan(v = 2, t = "He was with God in the beginning."),
+                    ),
+                ),
+            ),
+        )
+        val appearance = Appearance(ApplicationProvider.getApplicationContext())
+        appearance.wallpaperColour = false
+        // Theirs is on the page first and has settled; yours goes on after.
+        // The sequence is the whole point — a page that *opens* with both
+        // inks has no "before" for the pen to mix out of.
+        val inks = mutableStateOf(mapOf(1 to listOf(Ink.crimson)))
+        val marking = mutableStateOf<IntRange?>(null)
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            RibbonTheme(appearance = appearance) {
+                Box(Modifier.fillMaxSize().room()) {
+                    ChapterText(
+                        chapter = chapter,
+                        runningHead = "John 1",
+                        theme = ReadingTheme(
+                            fontSize = 19f,
+                            lineHeightMultiple = 1.62f,
+                            redLetter = false,
+                        ),
+                        verseInks = inks.value,
+                        liftedVerses = null,
+                        justMarked = marking.value,
+                        onMarkDrawn = {},
+                        openNote = null,
+                        isFirstChapter = true,
+                        showMarginHint = false,
+                        onLayout = {},
+                        onLongPressVerse = {},
+                        onDragToVerse = {},
+                        onDragEnded = {},
+                        onTapVerse = {},
+                        onNoteSlot = {},
+                        modifier = Modifier.padding(top = 60.dp),
+                    )
+                }
+            }
+        }
+        // Their mark is simply what the page already shows; nothing has to
+        // animate for that, so one frame is enough.
+        compose.mainClock.advanceTimeByFrame()
+
+        inks.value = mapOf(1 to listOf(Ink.crimson, Ink.teal))
+        marking.value = 1..1
+        // Stepped a frame at a time rather than jumped: an animation started
+        // in the same batch as the state change takes its start time on the
+        // next frame, and a single long jump lands on that frame with nothing
+        // elapsed.
+        repeat(12) { compose.mainClock.advanceTimeByFrame() }
+
+        val image = compose.onRoot().captureToImage().asAndroidBitmap()
+        File(out, "inks-meeting.png").outputStream().use {
+            image.compress(Bitmap.CompressFormat.PNG, 100, it)
+        }
+        compose.mainClock.autoAdvance = true
+    }
+
+    /**
+     * A lifted selection with S06's two handles on it — the ends of the mark
+     * you are about to make, which until now could not be adjusted at all.
+     */
+    @Test fun theSelectionHandles() {
+        val chapter = ScriptureChapter(
+            n = 1,
+            blocks = listOf(
+                ScriptureBlock(
+                    s = BlockStyle.p,
+                    x = listOf(
+                        ScriptureSpan(
+                            v = 1,
+                            t = "In the beginning was the Word, and the Word was with " +
+                                "God, and the Word was God. ",
+                        ),
+                        ScriptureSpan(
+                            v = 2,
+                            t = "He was with God in the beginning. ",
+                        ),
+                        ScriptureSpan(
+                            v = 3,
+                            t = "Through him all things were made.",
+                        ),
+                    ),
+                ),
+            ),
+        )
+        shoot("selection-handles") {
+            OnTheGround {
+                ChapterText(
+                    chapter = chapter,
+                    runningHead = "John 1",
+                    theme = ReadingTheme(
+                        fontSize = 19f,
+                        lineHeightMultiple = 1.62f,
+                        redLetter = false,
+                    ),
+                    verseInks = emptyMap(),
+                    liftedVerses = 1..2,
+                    justMarked = null,
+                    onMarkDrawn = {},
+                    openNote = null,
+                    isFirstChapter = true,
+                    showMarginHint = false,
+                    onLayout = {},
+                    onLongPressVerse = {},
+                    onDragToVerse = {},
+                    onDragEnded = {},
+                    onTapVerse = {},
+                    onNoteSlot = {},
+                    modifier = Modifier.padding(top = 60.dp),
+                )
+            }
+        }
+    }
+
+    /**
+     * The long-press toolbar, in the case that has eight inks in it.
+     *
+     * A room of two picks an ink per highlight, so all eight are on the bar;
+     * a room of three or more shows one. The eight-across case is the one
+     * that has to scroll, and the one whose targets were 34 dp until A41a —
+     * which is exactly the sort of thing that is obvious in a picture and
+     * invisible in source.
+     */
+    @Test fun theLeaveToolbar() {
+        val open = reading("MRK", FireScale.medium)
+        val m = model(
+            AppState(
+                me = me,
+                people = mapOf(me.id to me, ruth.id to ruth),
+                rooms = listOf(room),
+                memberships = listOf(membership(me, null), membership(ruth, null)),
+                readings = listOf(open),
+                currentRoomID = room.id,
+            ),
+        )
+        shoot("leave-toolbar") {
+            OnTheGround {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    LeaveToolbar(
+                        model = m,
+                        room = m.state.rooms.first(),
+                        range = VerseRange(
+                            bookID = "MRK",
+                            chapter = 1,
+                            startVerse = 3,
+                            endVerse = 3,
+                        ),
+                        roomPaused = false,
+                        onHighlight = {},
+                        onWrite = {},
+                        onSpeak = {},
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * The invite, from the other end (S16).
+     *
+     * The build book calls this the most important conversion surface in the
+     * product, and it is the last screen in the app that had never been
+     * looked at — which is how it kept a monogram where S16's anatomy names a
+     * portrait (A37) until somebody read the source.
+     */
+    @Test fun theWayIntoSomebodyElsesRoom() {
+        shoot("join") {
+            OnTheGround {
+                Box(
+                    Modifier.fillMaxSize().padding(24.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    PreviewStep(
+                        inviteLine = Copy.wantsToReadWithYou("Ruth"),
+                        inviterName = "Ruth Alderman",
+                        roomName = null,
+                        joiningAs = null,
+                        onJoin = {},
+                        onJoinAsSomeoneElse = null,
+                        onStartInstead = {},
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * The shelf (S10): every book this room has finished, as embers on a
+     * shared baseline.
+     *
+     * Four of them, because one is the case the code special-cases and three
+     * is the first that has to wrap — and because a shelf of one is a picture
+     * of a component rather than of a shelf.
+     */
+    @Test fun theShelf() {
+        val finished = listOf("RUT" to FireScale.small, "MRK" to FireScale.medium,
+            "JON" to FireScale.small, "PHP" to FireScale.large)
+            .map { (book, scale) ->
+                reading(book, scale).copy(finishedAt = now - 20.hours)
+            }
+        val m = model(
+            AppState(
+                me = me,
+                people = mapOf(me.id to me),
+                rooms = listOf(room),
+                memberships = listOf(membership(me, null)),
+                readings = finished,
+                currentRoomID = room.id,
+            ),
+        )
+        shoot("shelf") {
+            OnTheGround {
+                Box(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
+                    ShelfView(
+                        room = m.state.rooms.first(),
+                        readings = finished,
+                        onStartAnother = {},
+                        onOpenEmber = {},
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * The card, on the ground it actually sits on.
+     *
+     * Every other entry here renders a whole screen, which paints its own
+     * `.room()`; a card on its own would otherwise be shot against the
+     * theme's bare background and the grain under it — half of why a Ribbon
+     * card reads as paper — would not be in the picture at all.
+     */
+    @Composable
+    private fun OnTheGround(content: @Composable () -> Unit) {
+        Box(Modifier.fillMaxSize().room()) { content() }
     }
 
     private companion object {

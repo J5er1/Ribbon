@@ -54,6 +54,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -69,6 +70,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
@@ -80,10 +82,12 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
@@ -997,6 +1001,32 @@ private fun YouIdentity(model: AppModel) {
     var editingName by rememberSaveable { mutableStateOf(false) }
     var name by rememberSaveable { mutableStateOf("") }
 
+    /**
+     * Keep what was typed, wherever the edit ended.
+     *
+     * The field used to commit in exactly one place — the keyboard's Done key
+     * — so tapping the face beside it, tapping anything that took focus,
+     * pressing back, closing the menu or pushing a settings screen all threw
+     * the edit away with nothing said. S18 calls the name "editable in place",
+     * and an in-place edit that only one specific soft-keyboard key can land
+     * is not one. It is also the most load-bearing field in the app: the name
+     * is the one thing S17 will not let a person skip, and it is what their
+     * partner sees on every seat and every note.
+     *
+     * An empty name reverts silently. A person cannot delete their own name,
+     * and §10.1's unbothered interface does not scold them for trying.
+     */
+    fun commitName() {
+        if (!editingName) return
+        val trimmed = name.trim()
+        if (trimmed.isNotEmpty()) model.updateMe(name = trimmed)
+        editingName = false
+    }
+
+    // An edit still in flight when this screen is disposed — the menu closed,
+    // a settings screen pushed over it — lands rather than evaporating.
+    DisposableEffect(Unit) { onDispose { commitName() } }
+
     val context = LocalContext.current
     val reduceMotion = rememberReduceMotion()
     val hasFace = model.me?.let { model.portrait(it.id) } != null
@@ -1087,6 +1117,10 @@ private fun YouIdentity(model: AppModel) {
             if (editing) {
                 val focus = remember { FocusRequester() }
                 LaunchedEffect(focus) { runCatching { focus.requestFocus() } }
+                // The prompt is drawn *behind* the caret rather than above the
+                // field, which is SwiftUI's `prompt:` and what the room's own
+                // name field one section down already does.
+                Box(contentAlignment = Alignment.CenterStart) {
                 BasicTextField(
                     value = name,
                     onValueChange = { name = it },
@@ -1100,18 +1134,31 @@ private fun YouIdentity(model: AppModel) {
                         capitalization = KeyboardCapitalization.Words,
                         imeAction = ImeAction.Done,
                     ),
-                    keyboardActions = KeyboardActions(
-                        onDone = {
-                            val trimmed = name.trim()
-                            if (trimmed.isNotEmpty()) model.updateMe(name = trimmed)
-                            editingName = false
-                        },
-                    ),
+                    keyboardActions = KeyboardActions(onDone = { commitName() }),
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = MinTarget)
-                        .focusRequester(focus),
+                        .focusRequester(focus)
+                        .onFocusChanged { if (!it.isFocused) commitName() }
+                        // With no prompt drawn when the field is empty there
+                        // is nothing on screen to take a label from, and this
+                        // was the one typing surface in the app with neither
+                        // (§11, and A25 found the same class of defect across
+                        // onboarding's three fields).
+                        .semantics { contentDescription = Copy.YOUR_NAME },
                 )
+                // Cleared of its text the field was a bare caret. The room's
+                // own name field one section down already draws its prompt
+                // this way; this is the same, at the same size, so the prompt
+                // sits exactly where the text will.
+                if (name.isEmpty()) {
+                    Text(
+                        text = Copy.YOUR_NAME,
+                        style = RibbonType.ui(18f),
+                        color = Palette.muted,
+                    )
+                }
+                }
             } else {
                 Box(
                     // A short name draws a short word, and the word is the
@@ -1201,6 +1248,10 @@ private fun RoomControls(
                             text = Copy.ROOM_NAME,
                             style = RibbonType.ui(17f),
                             color = Palette.muted,
+                            // The prompt belongs to the field, which says its
+                            // own name below — the same shape the name field
+                            // one section up already keeps.
+                            modifier = Modifier.clearAndSetSemantics {},
                         )
                     }
                     BasicTextField(
@@ -1219,7 +1270,10 @@ private fun RoomControls(
                                 editingRoomName = false
                             },
                         ),
-                        modifier = Modifier.fillMaxWidth().focusRequester(focus),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(focus)
+                            .semantics { contentDescription = Copy.ROOM_NAME },
                     )
                 }
             } else {
@@ -1274,6 +1328,7 @@ private fun AccountControls(model: AppModel) {
     var signingIn by rememberSaveable { mutableStateOf(false) }
     var passkeyLine by rememberSaveable { mutableStateOf<String?>(null) }
 
+    val reduceMotion = rememberReduceMotion()
     val scope = rememberCoroutineScope()
     val activity = LocalActivity.current
 
@@ -1293,9 +1348,37 @@ private fun AccountControls(model: AppModel) {
         }
     }
 
+    // Four states in one place, and until now they traded places on a single
+    // frame: tapping Sign in replaced a control and a sentence with the whole
+    // inline form, and signing out replaced the form with them again — the
+    // section changing height under your thumb with nothing moving. The
+    // update card directly below this one is the same shape and already says
+    // why it was rebuilt ("four cards ... each appearing and vanishing on the
+    // frame its state changed"); this is the last place on You still doing
+    // it. What it says cross-fades, and the section grows or shrinks to fit
+    // rather than jumping.
+    val phase = when {
+        model.isSignedIn -> AccountPhase.signedIn
+        model.remote == null -> AccountPhase.noAccounts
+        signingIn -> AccountPhase.signingIn
+        else -> AccountPhase.signedOut
+    }
+
+    AnimatedContent(
+        targetState = phase,
+        transitionSpec = {
+            (
+                fadeIn(RibbonMotion.settle(reduceMotion)) togetherWith
+                    fadeOut(RibbonMotion.settle(reduceMotion))
+                ).using(
+                SizeTransform(clip = false) { _, _ -> RibbonMotion.settle(reduceMotion) },
+            )
+        },
+        label = "your-account",
+    ) { shown ->
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        when {
-            model.isSignedIn -> {
+        when (shown) {
+            AccountPhase.signedIn -> {
                 model.accountEmail?.let { address -> SmallCaps(address, size = 12f) }
                 // §6.10 wants a passkey where there is one. Offered here, on
                 // the account, because that is what it belongs to — and only
@@ -1305,10 +1388,19 @@ private fun AccountControls(model: AppModel) {
                         title = Copy.ADD_A_PASSKEY,
                         modifier = Modifier.offset(x = QuietControlInset),
                     ) { addPasskey() }
+                    // The one line on this screen that changes because of
+                    // something the person just did, with nothing taking
+                    // focus and nothing else moving — so a screen reader was
+                    // told neither that the passkey was added nor that it had
+                    // failed. §11's rule that colour is never alone has a
+                    // twin: a result is never silent.
                     Text(
                         text = passkeyLine ?: Copy.PASSKEY_REASON,
                         style = RibbonType.ui(13f),
                         color = Palette.muted,
+                        modifier = Modifier.semantics {
+                            if (passkeyLine != null) liveRegion = LiveRegionMode.Polite
+                        },
                     )
                 }
                 QuietControl(
@@ -1322,15 +1414,15 @@ private fun AccountControls(model: AppModel) {
             }
 
             // Remote is not configured in this build; no dead control.
-            model.remote == null -> Unit
+            AccountPhase.noAccounts -> Unit
 
-            signingIn -> SignInInline(
+            AccountPhase.signingIn -> SignInInline(
                 model = model,
                 onSignedIn = { signingIn = false },
                 onCancel = { signingIn = false },
             )
 
-            else -> {
+            AccountPhase.signedOut -> {
                 QuietControl(
                     title = Copy.SIGN_IN,
                     modifier = Modifier.offset(x = QuietControlInset),
@@ -1343,7 +1435,11 @@ private fun AccountControls(model: AppModel) {
             }
         }
     }
+    }
 }
+
+/** What the account section is showing. One of four, and it eases between them. */
+private enum class AccountPhase { signedIn, signingIn, signedOut, noAccounts }
 
 /**
  * The update card (§A-OTA): one card, four things it can say.

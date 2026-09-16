@@ -2,10 +2,17 @@
 
 package app.readribbon.reading
 
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -33,15 +40,15 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -71,16 +78,19 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import app.readribbon.app.AppModel
 import app.readribbon.app.Copy
+import app.readribbon.app.firstName
 import app.readribbon.core.Bible
 import app.readribbon.core.BibleBook
 import app.readribbon.core.CardState
@@ -95,6 +105,7 @@ import app.readribbon.core.TranslationID
 import app.readribbon.core.TranslationRegistry
 import app.readribbon.core.VerseAddress
 import app.readribbon.core.VerseRange
+import app.readribbon.design.BookSheet
 import app.readribbon.design.HairlineRule
 import app.readribbon.design.InkDot
 import app.readribbon.design.Measure
@@ -104,22 +115,21 @@ import app.readribbon.design.QuietControl
 import app.readribbon.design.RibbonMotion
 import app.readribbon.design.RibbonType
 import app.readribbon.design.SmallCaps
-import app.readribbon.design.BookSheet
 import app.readribbon.design.WaveMark
-import app.readribbon.design.closesTheBook
 import app.readribbon.design.WayInButton
+import app.readribbon.design.closesTheBook
 import app.readribbon.design.grain
-import app.readribbon.design.readableColumn
 import app.readribbon.design.peeled
+import app.readribbon.design.readableColumn
 import app.readribbon.design.rememberBackPeel
 import app.readribbon.design.rememberReduceMotion
 import app.readribbon.design.room
 import app.readribbon.fire.FireBecomesEmber
+import app.readribbon.screens.ConfirmChoice
+import app.readribbon.screens.RibbonConfirmDialog
 import app.readribbon.services.PresentPerson
 import app.readribbon.services.VoiceRecorder
 import app.readribbon.services.ensureRemoteChapter
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import java.io.File
 import kotlin.math.abs
 import kotlin.time.Clock
@@ -128,6 +138,8 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 // S02 — the surface everything else exists to protect. No top bar, no back
 // button, no toolbar until you ask for one. Two ways out, both at the
@@ -246,9 +258,36 @@ fun ReadingScreen(
     // Composition state
     var lifted by remember { mutableStateOf<VerseRange?>(null) }
     var liftedChapter by remember { mutableStateOf<Int?>(null) }
+
+    /**
+     * The verse you have this moment marked, so the page can draw the stroke
+     * travelling rather than the wash simply being there.
+     *
+     * Held for exactly as long as the stroke takes and then let go. It is
+     * deliberately about *your hand*, not about the highlight: one arriving
+     * from the other person eases in where it lies, because it did not happen
+     * here and pretending a stroke travelled across your page would be the
+     * app acting out something that did not occur.
+     */
+    var justMarked by remember { mutableStateOf<VerseRange?>(null) }
     var composer by remember { mutableStateOf<ComposerState?>(null) }
     val recorder = remember(context) { VoiceRecorder(context) }
     var editingNote by remember { mutableStateOf<Note?>(null) }
+
+    /**
+     * Whether the one question about notifications is on screen (§6.1).
+     *
+     * Raised from the two moments the build book names — a note left, and a
+     * note found — and never from anywhere else. `shouldAskAboutNotifications`
+     * holds the rest of the conditions: never asked before, not already
+     * granted, and somebody else in the room to name.
+     */
+    var askAboutNotifications by remember { mutableStateOf(false) }
+
+    fun considerAsking() {
+        val room = model.room(reading) ?: return
+        if (model.shouldAskAboutNotifications(room)) askAboutNotifications = true
+    }
 
     // Open note (one at a time; a stack opens whole)
     var openNoteVerse by remember { mutableStateOf<VerseAddress?>(null) }
@@ -447,6 +486,16 @@ fun ReadingScreen(
         lifted = null
         liftedChapter = null
         composer = null
+        // The note being edited goes with the composer it was being edited
+        // in, and it never used to. This is S05's own dismiss route — "the
+        // toolbar is dismissed by tapping anywhere in the text" calls exactly
+        // this — so opening your note, starting an edit and then tapping the
+        // Scripture left `editingNote` set with nothing on screen holding it.
+        // The next verse you long-pressed and wrote at opened the composer
+        // pre-filled with the *old* note's words, and saving overwrote that
+        // note's body while leaving nothing at all at the verse you had
+        // picked. An abandoned edit has to be abandoned.
+        editingNote = null
     }
 
     fun beginLift(chapter: Int, verse: Int) {
@@ -484,9 +533,18 @@ fun ReadingScreen(
             // wrong for a frame.
             noteSlotY.remove(address.chapter)
             openNoteVerse = address
+            var found = false
             for (note in model.notes(reading, address.chapter)) {
-                if (note.verse.verse == address.verse) model.markFound(note)
+                if (note.verse.verse == address.verse) {
+                    model.markFound(note)
+                    found = true
+                }
             }
+            // §6.1's second moment: a note has just been found. Asked here
+            // rather than when the note was left, because this is the beat
+            // the question is actually about — something was waiting, and you
+            // only saw it because you happened to open the book.
+            if (found) considerAsking()
         }
     }
 
@@ -778,6 +836,10 @@ fun ReadingScreen(
                             noteSlotY = noteSlotY[n],
                             noteCardHeight = noteCardHeight,
                             liftedVerses = if (liftedChapter == n) lifted?.verses else null,
+                            justMarked = justMarked
+                                ?.takeIf { it.chapter == n && it.bookID == reading.bookID }
+                                ?.verses,
+                            onMarkDrawn = { justMarked = null },
                             measureInset = presenceInset,
                             onRemoteChapter = { remoteChapters[n] = it },
                             onLayout = { chapterLayouts[n] = it },
@@ -849,8 +911,18 @@ fun ReadingScreen(
                 )
             }
 
-            if (model.followingPersonID != null) {
-                FollowThread(Modifier.align(Alignment.TopEnd))
+            // The thread down the edge is a full-height hairline that used
+            // to be switched on and off. Following somebody and stopping are
+            // among the quietest things in the product (§4.2); neither is a
+            // cut.
+            AnimatedVisibility(
+                visible = model.followingPersonID != null,
+                enter = fadeIn(RibbonMotion.arrive(reduceMotion)),
+                exit = fadeOut(RibbonMotion.arrive(reduceMotion)),
+                modifier = Modifier.align(Alignment.TopEnd),
+                label = "the-follow-thread",
+            ) {
+                FollowThread()
             }
 
             // The way out, or the composer.
@@ -873,16 +945,34 @@ fun ReadingScreen(
                 followBackOffer = followBackOffer,
                 onHighlight = { range, ink ->
                     model.addHighlight(range, ink, reading)
+                    justMarked = range
                     clearLift()
                 },
-                onWrite = { address -> composer = ComposerState.Write(address) },
-                onSpeak = { address -> composer = ComposerState.Speak(address) },
+                // Said outright at both entry points as well, rather than
+                // relying on `clearLift` having been called first: a composer
+                // opened from the toolbar is a *new* note, and the one way
+                // this defect gets back in is somebody adding a third route
+                // in that does not go through the dismiss.
+                onWrite = { address ->
+                    editingNote = null
+                    composer = ComposerState.Write(address)
+                },
+                onSpeak = { address ->
+                    editingNote = null
+                    composer = ComposerState.Speak(address)
+                },
                 onSaveWritten = { address, body ->
-                    val note = editingNote
+                    // Belt to the brace above: an edit only counts as one if
+                    // it is still about the verse the note lives at. Anything
+                    // else is a new note, wherever `editingNote` came from.
+                    val note = editingNote?.takeIf { it.verse == address }
                     if (note != null) {
                         model.editWrittenNote(note, body)
                     } else {
                         model.leaveWrittenNote(body, address, reading)
+                        // The first of §6.1's two moments. Never on an edit:
+                        // nothing new was left for anybody.
+                        considerAsking()
                     }
                     editingNote = null
                     clearLift()
@@ -893,6 +983,7 @@ fun ReadingScreen(
                 },
                 onKeepVoice = { address, file, waveform ->
                     model.leaveVoiceNote(file, waveform, address, reading)
+                    considerAsking()
                     clearLift()
                 },
                 onDismissVoice = ::clearLift,
@@ -910,6 +1001,33 @@ fun ReadingScreen(
                 },
                 onDismiss = { highlightLabel = null },
                 modifier = Modifier.align(Alignment.Center),
+            )
+        }
+    }
+
+    // §6.1's one question about notifications, asked in context and once.
+    //
+    // Outside the page's Box for the same reason the chapter list is: it is a
+    // dialog over the book, not a thing on the page. It uses the app's own
+    // confirmation rather than a system rationale sheet, because the words
+    // §6.1 specifies are Ribbon's and the platform's dialog can only carry
+    // Android's.
+    if (askAboutNotifications) {
+        val room = model.room(reading)
+        val name = room?.let { model.whoTheAskIsAbout(it) }
+        if (room == null || name == null) {
+            // Nobody to name means nothing to ask. Should not happen —
+            // `shouldAskAboutNotifications` requires a second member — but a
+            // question with a blank in it is the one outcome worth a guard.
+            askAboutNotifications = false
+        } else {
+            NotificationAsk(
+                name = name,
+                onAnswered = {
+                    // Asked, whatever the answer. There is no second ask.
+                    model.markAskedAboutNotifications()
+                    askAboutNotifications = false
+                },
             )
         }
     }
@@ -960,6 +1078,8 @@ private fun ChapterSection(
     noteSlotY: Dp?,
     noteCardHeight: Dp,
     liftedVerses: IntRange?,
+    justMarked: IntRange?,
+    onMarkDrawn: () -> Unit,
     measureInset: Dp,
     onRemoteChapter: (ScriptureChapter) -> Unit,
     onLayout: (ChapterLayout) -> Unit,
@@ -1008,6 +1128,8 @@ private fun ChapterSection(
                 ),
                 verseInks = verseInks(model, reading, n),
                 liftedVerses = liftedVerses,
+                justMarked = justMarked,
+                onMarkDrawn = onMarkDrawn,
                 openNote = openNoteVerse
                     ?.takeIf { it.chapter == n }
                     ?.let { OpenNote(verse = it.verse, height = noteCardHeight) },
@@ -1101,17 +1223,55 @@ private fun ChapterSection(
         // running head appears and the body fades in — no skeleton lines,
         // which read as fake text. (§12.2 forbids a loading indicator, and
         // this is what stands in its place: nothing, and then the words.)
+        // The fetch's outcome is held rather than dropped. It used to be
+        // `ensureRemoteChapter(...)?.let(onRemoteChapter)` — and that function
+        // swallows every failure into a null — so offline, or on a 503, the
+        // `?.let` did nothing, the effect's keys never changed so it could
+        // never retry, and nothing watched the network. The page was a
+        // running head over 320 dp of nothing, with no line and no way
+        // forward (S25's "book won't download").
+        var missed by remember(n, licensed) { mutableStateOf(false) }
+        var attempt by remember(n, licensed) { mutableIntStateOf(0) }
         Column(
             modifier = Modifier
                 .readingMeasure(measureInset)
                 .padding(start = 36.dp),
         ) {
             SmallCaps(runningHead, size = 14f, color = Palette.text.copy(alpha = 0.4f))
-            Spacer(Modifier.height(320.dp))
+            if (missed) {
+                // §08's shape: name it, name what is intact, offer the one
+                // action that helps. The same two parts a failed transcript
+                // already uses.
+                Text(
+                    text = Copy.chapterWouldntCome(
+                        Bible.book(reading.bookID)?.name ?: reading.bookID,
+                    ),
+                    style = RibbonType.ui(15f),
+                    color = Palette.muted,
+                    modifier = Modifier.padding(top = 18.dp),
+                )
+                QuietControl(
+                    title = Copy.TRY_AGAIN,
+                    modifier = Modifier.offset(x = (-8).dp),
+                ) { attempt++ }
+                Spacer(Modifier.height(180.dp))
+            } else {
+                // Waiting is wordless: §08 forbids a loading indicator, and a
+                // skeleton reads as fake text.
+                Spacer(Modifier.height(320.dp))
+            }
         }
-        LaunchedEffect(n, licensed) {
+        // Keyed on the network as well, so a connection coming back retries
+        // without anybody having to tap anything.
+        LaunchedEffect(n, licensed, attempt, model.isOnline) {
             val address = VerseAddress(bookID = reading.bookID, chapter = n, verse = 1)
-            model.scripture.ensureRemoteChapter(context, address, licensed)?.let(onRemoteChapter)
+            val chapter = model.scripture.ensureRemoteChapter(context, address, licensed)
+            if (chapter != null) {
+                missed = false
+                onRemoteChapter(chapter)
+            } else {
+                missed = true
+            }
         }
         return
     }
@@ -1158,7 +1318,10 @@ private fun GutterStack(
 
     // §11, exactly: "Note from Ruth, verse 9, not yet found." A stack
     // announces by author and never by count.
-    val names = notes.mapNotNull { model.person(it.authorID)?.name }
+    // §11 quotes the shape of this label exactly — "Note from Ruth, verse 9,
+    // not yet found" — and it was announcing "Note from Ruth Alderman". The
+    // dedupe below now dedupes on the spoken form, which is the right one.
+    val names = notes.mapNotNull { model.person(it.authorID)?.name?.let(::firstName) }
     val unfound = notes.any { !foundByMe(it) && it.authorID != mine }
     val label = Copy.marginNotes(
         authors = names.toSortedSet().toList(),
@@ -1291,11 +1454,47 @@ private fun BottomChrome(
             }
         }
 
-        when (composer) {
-            is ComposerState.Toolbar -> Unit
+        // The three things that share the foot of the page cross-fade rather
+        // than cut.
+        //
+        // This was a bare `when (composer)` with no transition of any kind,
+        // sitting in the same bottom-aligned box as the toolbar's carefully
+        // animated `AnimatedVisibility` — so the instant a verse was
+        // long-pressed the Wave and the running-head pill blinked out of
+        // existence in one frame while the toolbar slid up over the hole they
+        // had left. The composer and its keyboard had no entrance either.
+        // §9.1 has no cuts in it, and the one the reading surface actually
+        // performs was the loudest in the app.
+        //
+        // Keyed on the *kind* rather than on the composer itself, so typing
+        // into the write composer — which changes nothing about which thing
+        // is on screen — does not restart the transition.
+        val reduceMotion = rememberReduceMotion()
+        val stage = when (composer) {
+            null -> BottomStage.TheWayOut
+            is ComposerState.Toolbar -> BottomStage.Toolbar
+            is ComposerState.Write -> BottomStage.Write
+            is ComposerState.Speak -> BottomStage.Speak
+        }
+        // The leaving branch still needs an address to draw with, exactly as
+        // the toolbar's range is held above.
+        val heldComposer = remember { mutableStateOf(composer) }
+        if (composer != null) heldComposer.value = composer
 
-            is ComposerState.Write -> {
-                val address = composer.address
+        AnimatedContent(
+            targetState = stage,
+            transitionSpec = {
+                fadeIn(RibbonMotion.arrive(reduceMotion)) togetherWith
+                    fadeOut(RibbonMotion.arrive(reduceMotion))
+            },
+            label = "the-foot-of-the-page",
+        ) { showing ->
+            when (showing) {
+            BottomStage.Toolbar -> Unit
+
+            BottomStage.Write -> {
+                val address = (heldComposer.value as? ComposerState.Write)?.address
+                    ?: return@AnimatedContent
                 WriteComposer(
                     verse = address,
                     initialText = editingNote?.body ?: "",
@@ -1306,8 +1505,9 @@ private fun BottomChrome(
                 )
             }
 
-            is ComposerState.Speak -> {
-                val address = composer.address
+            BottomStage.Speak -> {
+                val address = (heldComposer.value as? ComposerState.Speak)?.address
+                    ?: return@AnimatedContent
                 SpeakControl(
                     model = model,
                     ink = model.inkForNewHighlight(room) ?: model.lastUsedInk,
@@ -1321,7 +1521,7 @@ private fun BottomChrome(
                 )
             }
 
-            null -> {
+            BottomStage.TheWayOut -> {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -1408,9 +1608,20 @@ private fun BottomChrome(
                     }
                 }
             }
+            }
         }
     }
 }
+
+/**
+ * Which of the three things that share the foot of the page is showing.
+ *
+ * The `when` this replaces branched on `ComposerState` itself, which changes
+ * identity every keystroke in the write composer — so an `AnimatedContent`
+ * keyed on it would restart its transition as somebody typed. This is the
+ * only distinction the transition is about.
+ */
+private enum class BottomStage { TheWayOut, Toolbar, Write, Speak }
 
 /**
  * A small label naming who made a highlight, and remove if it's yours (S06).
@@ -1448,7 +1659,14 @@ private fun HighlightLabelOverlay(
             verticalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier
                 .ribbonGlass(RoundedCornerShape(16.dp))
-                .clickable(onClick = onDismiss)
+                // It goes on its own after a moment, and a tap sends it early
+                // — but the tap was unannounced, so the one way to dismiss it
+                // deliberately was invisible to a screen reader (§11).
+                .clickable(
+                    role = Role.Button,
+                    onClickLabel = Copy.DISMISS,
+                    onClick = onDismiss,
+                )
                 .padding(16.dp),
         ) {
             Row(
@@ -1508,6 +1726,7 @@ private fun FinishingSection(
             text = bookName,
             style = RibbonType.display(30f),
             color = Palette.text,
+            modifier = Modifier.semantics { heading() },
         )
         SmallCaps(
             text = RibbonClock.emberRange(
@@ -1544,6 +1763,7 @@ fun PassageEnd(
     modifier: Modifier = Modifier,
 ) {
     val room = model.room(reading)
+    val reduceMotion = rememberReduceMotion()
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(26.dp),
@@ -1554,9 +1774,35 @@ fun PassageEnd(
 
         if (room != null) {
             val card = model.card(reading, chapter)
-            if (card.state != CardState.setDown) {
+            // Held across its own exit, the way every other leaving thing in
+            // this file is (`held`, `heldSlot`, `heldRange`) — and the cards
+            // were the one surface that was not. `ReflectionCardView` opens
+            // with a guard that returns on a set-down card, and the content
+            // lambda recomposes with the new state *during* the exit, so the
+            // question, the answers and the controls vanished on the frame the
+            // tap landed and an empty container shrank behind them. A retired
+            // card should leave looking like a card.
+            val held = remember(reading.id, chapter) { mutableStateOf(card) }
+            if (card.state != CardState.setDown) held.value = card
+            // Setting a card down used to take it out of the composition on
+            // the frame the tap landed, which is a cut — and §9.1 has no cuts
+            // in it. §4.6's "it leaves without ceremony" is about there being
+            // no dialog and no confirmation, not about the card vanishing
+            // from under the finger that retired it: it shrinks away on the
+            // settle token, the same way a note that has been taken back
+            // does, and the continue control comes up to meet the rule.
+            AnimatedVisibility(
+                visible = card.state != CardState.setDown,
+                // Nothing on the way in: a card that is simply there when you
+                // reach the end of a chapter has not arrived, it was always
+                // waiting. Only the leaving is an event.
+                enter = EnterTransition.None,
+                exit = fadeOut(RibbonMotion.settle<Float>(reduceMotion)) +
+                    shrinkVertically(RibbonMotion.settle<IntSize>(reduceMotion)),
+                label = "the-card-set-down",
+            ) {
                 ReflectionCardView(
-                    card = card,
+                    card = held.value,
                     reading = reading,
                     room = room,
                     model = model,
@@ -1565,10 +1811,14 @@ fun PassageEnd(
             }
         }
 
+        // The app's forward motion — the one control that carries you out of
+        // a finished chapter and into the next — announced as a line of
+        // type, because it had a target and a tap and never said what it
+        // was. A39a's own finding, on the other end of the same page.
         Box(
             modifier = Modifier
                 .sizeIn(minWidth = 44.dp, minHeight = 44.dp)
-                .clickable(onClick = onContinue),
+                .clickable(role = Role.Button, onClick = onContinue),
             contentAlignment = Alignment.Center,
         ) {
             Text(
@@ -1675,3 +1925,38 @@ private fun Modifier.ribbonGlass(shape: Shape): Modifier = this
         ),
         shape = shape,
     )
+
+/**
+ * "Tell you when Ruth leaves a note?" — §6.1's exact question, asked once.
+ *
+ * Two answers and no third. "Not now" is the shape that makes a permission
+ * prompt feel like a negotiation, and it only exists in apps that intend to
+ * ask again; this one does not, so it is not offered.
+ *
+ * On "Tell me" the system dialog follows, which is the only way a permission
+ * can be requested on Android. On "Don't" it never appears — the person has
+ * answered Ribbon's question and Android's would be the same question again,
+ * in somebody else's words. Either way the app remembers that it asked.
+ *
+ * What happens after a refusal is nothing: no banner, no second ask, no dead
+ * control. S19 grows one line admitting the OS is silencing it, and that is
+ * the whole of the refusal path.
+ */
+@Composable
+private fun NotificationAsk(name: String, onAnswered: () -> Unit) {
+    val ask = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { _ ->
+        // The answer itself changes nothing here. Granted, the next arrival
+        // posts; refused, it does not — and either way the question is spent.
+        onAnswered()
+    }
+
+    RibbonConfirmDialog(question = Copy.tellYouWhen(name), onDismiss = onAnswered) {
+        ConfirmChoice(
+            title = Copy.TELL_ME,
+            onClick = { ask.launch(Manifest.permission.POST_NOTIFICATIONS) },
+        )
+        ConfirmChoice(title = Copy.DONT_TELL_ME, onClick = onAnswered)
+    }
+}

@@ -33,6 +33,7 @@ object Copy {
      */
     const val THATS_ME = "That's me"
     const val PORTRAIT_REASON = "They'll see your face when you're reading."
+
     const val ADD_A_PORTRAIT = "Add a portrait"
 
     /** The same control, said to somebody who already has a face behind it. */
@@ -57,23 +58,80 @@ object Copy {
     const val PICK_A_BOOK_CONTROL = "Pick a book"
     const val FIRST_RUN_HINT = "Notes go in the margin. Hold a verse to leave one."
 
-    // Walkthrough Tour (Duolingo-style feature walkthrough)
-    const val WALKTHROUGH_VISION_TITLE = "Read Scripture together."
-    const val WALKTHROUGH_VISION_BODY = "Ribbon is made for reading with one person or a few — a partner on the same couch, or a friend four time zones away."
+    /**
+     * The one time the app asks about notifications (§6.1).
+     *
+     * "Notifications: after the first note is left or found — never at
+     * launch. In context: *Tell you when Ruth leaves a note?*" — the build
+     * book gives this string, and the name in it is the whole reason it is
+     * allowed to be asked at all. A version with no name is a notification
+     * pre-prompt, which S17 forbids by name; this one is a question about a
+     * person, asked at the moment a note has just passed between two people.
+     *
+     * Asked once, whatever the answer. There is no "not now", because a
+     * question that comes back is worse than no question.
+     */
+    fun tellYouWhen(name: String) = "Tell you when ${firstName(name)} leaves a note?"
+
+    /** Its two answers. Verbs, like every other pair in the app. */
+    const val TELL_ME = "Tell me"
+    const val DONT_TELL_ME = "Don't"
+
+    // The tour (deviation A25 — S17 says "four questions, no tour", and the
+    // owner's call overruled it).
+    //
+    // The tour exists; its words are held to §10 like every other string in
+    // this file, and they were not. Four separate rules were being broken on
+    // four cards, on the fourth screen a person ever sees:
+    //
+    //   - **"streak" shipped, on screen.** It is the first entry on §10.2's
+    //     Never list and on the brief's §12, and this file's own header says
+    //     "Never used anywhere: streak" — which made the header false about
+    //     the file it heads. Naming the competitor's mechanic puts a streak
+    //     counter in the reader's head on the fourth screen of the product
+    //     that exists to refuse it.
+    //   - **A duration.** "0:42" on a mock voice note is a count attached to
+    //     reading (Law 2), on the one surface the law guards hardest, and
+    //     [PLAY_THE_VOICE_NOTE] twenty lines down says so in its own comment.
+    //     The real note draws a waveform and no timecode.
+    //   - **The product described by negation.** Three of the four bodies
+    //     said what Ribbon is not. §10.1 asks for the true small thing, and
+    //     §12 is explicit that grace is the interface being unbothered rather
+    //     than the interface reassuring you.
+    //   - **The wrong nouns.** A note is always *left*, never pinned, because
+    //     being found later is the beat (§11); "reflections" is the cards,
+    //     which are a different object; and a burning fire is not "an ember",
+    //     which is what you keep when a book is finished.
+    //
+    // Second person, one short sentence each, and the vocabulary §11 settled.
+    /**
+     * Not the tagline, and deliberately not a near-miss of it.
+     *
+     * This read "Read Scripture together." — the settled tagline (§10.4) with
+     * a word added — one screen after the mark moment has just shown the
+     * tagline itself. Either the first card's heading is the tagline or it is
+     * something else; a version of it with an extra word in it is the one
+     * thing it cannot be.
+     */
+    const val WALKTHROUGH_VISION_TITLE = "Read with someone."
+    const val WALKTHROUGH_VISION_BODY =
+        "Read with one person, or a few. On the same couch, or four time zones away."
     const val WALKTHROUGH_PRESENCE_TITLE = "See each other on the page."
-    const val WALKTHROUGH_PRESENCE_BODY = "A soft presence appears when someone is reading at the same time. Quiet companionship without noisy notifications."
+    const val WALKTHROUGH_PRESENCE_BODY =
+        "When someone else is reading, you see them beside you on the page."
     const val WALKTHROUGH_PRESENCE_SAMPLE = "Ruth is reading right now"
     const val WALKTHROUGH_NOTES_TITLE = "Notes left behind."
-    const val WALKTHROUGH_NOTES_BODY = "Pin written reflections or voice memos to specific verses, waiting silently for the other person to discover later."
-    const val WALKTHROUGH_NOTE_SAMPLE = "0:42 · Left this for you"
-    const val WALKTHROUGH_FIRE_TITLE = "A fire kept alive together."
-    const val WALKTHROUGH_FIRE_BODY = "No gamified streak counters or cold badge scores. Just a single warm ember your room keeps burning together."
+    const val WALKTHROUGH_NOTES_BODY =
+        "Leave a note at a verse, written or spoken. They find it when they get there."
+    const val WALKTHROUGH_NOTE_SAMPLE = "Left this for you"
+    const val WALKTHROUGH_FIRE_TITLE = "A fire you keep together."
+    const val WALKTHROUGH_FIRE_BODY =
+        "One book is one fire. It catches, burns, goes steady, and is banked on a quiet day."
     const val WALKTHROUGH_INTENT_TITLE = "Who will you read with?"
     const val WALKTHROUGH_INTENT_SPOUSE = "My spouse or partner"
     const val WALKTHROUGH_INTENT_FRIEND = "A close friend"
     const val WALKTHROUGH_INTENT_GROUP = "A small study or family"
     const val WALKTHROUGH_INTENT_SOLO = "Starting on my own first"
-    const val ALREADY_HAVE_ACCOUNT = "Already have an account? Sign in"
     const val CONTINUE_TOUR = "Continue"
     const val SKIP_TOUR = "Skip"
     const val GET_STARTED = "Get Started"
@@ -202,6 +260,25 @@ object Copy {
         return "$noun from $who, verse $verse" + if (unfound) ", not yet found" else ""
     }
 
+    /**
+     * A verse's two actions, for somebody who cannot make the gestures they
+     * sit on (§11 Motor: "every gesture has a tap equivalent").
+     *
+     * The whole of the reading interaction was raw pointer input on the text
+     * — a long-press-drag to lift a verse, a tap to open what is at it — and
+     * the per-verse accessibility nodes carried a label and nothing else. So
+     * the semantics tree exposed the verses as read-only strings and exposed
+     * no action at all for either gesture: leaving a highlight, a written
+     * note or a voice note all begin at that long press, and every one of
+     * them was closed. It also closed them to anybody who cannot hold a press
+     * for the platform timeout and then drag.
+     *
+     * Extending a range stays drag-only, which is honest: the toolbar acts on
+     * whatever is lifted, and one verse is the common case.
+     */
+    const val OPEN_WHATS_HERE = "open what's here"
+    const val LEAVE_SOMETHING_HERE = "leave something here"
+
     const val CLOSE_THE_BOOK = "Close the book"
     fun isWithYou(name: String) = "$name is with you"
     const val BACK_TO_WHERE_YOU_WERE = "back to where you were"
@@ -212,6 +289,29 @@ object Copy {
     /** The small closed shape at the edge, read aloud (§11): the state, and
      *  what it means, in the two short sentences the form itself would say. */
     const val READING_QUIETLY_SPOKEN = "Reading quietly. Only you can see you."
+
+    /**
+     * What opening the presence form does, for somebody who cannot make the
+     * gesture that opens it (§11 Motor).
+     *
+     * The lozenge carried a sentence and no action, and the sentence was on a
+     * merge root that took the focus for itself — so the node with the
+     * gestures on it was never landed on, and everything behind the form was
+     * closed: following the one person present, the panel itself, and the
+     * only route in the whole app to reading quietly.
+     */
+    const val WHOS_HERE = "who's here"
+
+    /**
+     * The speak control, announced as one thing.
+     *
+     * Its two custom actions sat on a node with no label and no merge, so —
+     * by the same rule — a screen reader never landed on it and neither
+     * action could be reached. The drawn line under the waveform says
+     * "Release to leave it", which is an instruction for a finger that is not
+     * down; this names the two things that can happen instead.
+     */
+    const val RECORDING_A_VOICE_NOTE = "Recording. Leave it, or take it back."
 
     // Presence, read aloud (§11). Law 2 holds here as it does for the fire:
     // a state and a name, never a count. Several people announce by author.
@@ -226,12 +326,30 @@ object Copy {
     /** Tap a portrait to follow — the action, spoken. */
     const val FOLLOW = "Follow"
 
+    /** Sending away something that would have gone on its own (§11: a
+     *  gesture the eye can see is a gesture a screen reader can hear). */
+    const val DISMISS = "dismiss"
+
+    // The two ends of a selection (S06), and the tap equivalents of dragging
+    // them (§11). Named for the mark rather than for the selection, because a
+    // "selection" is a thing a text editor has and this is a thing you are
+    // about to write on Scripture with.
+    const val WHERE_THE_MARK_STARTS = "Where the mark starts"
+    const val WHERE_THE_MARK_ENDS = "Where the mark ends"
+    const val A_VERSE_FURTHER_ON = "A verse further on"
+    const val A_VERSE_BACK = "A verse back"
+
     const val TRANSCRIPT_COMING = "Transcript coming"
     const val NO_TRANSCRIPT = "No transcript for this one."
     const val TRY_AGAIN = "Try again"
 
     /** The disclosure under a voice note: the transcript is there, folded. */
     const val TRANSCRIPT = "transcript"
+
+    /** What the disclosure does, as a click label. The word "transcript" on
+     *  its own names the thing and not the act (§11). */
+    const val SHOWS_THE_TRANSCRIPT = "show the transcript"
+    const val HIDES_THE_TRANSCRIPT = "hide the transcript"
 
     /** The waveform's screen-reader label (§11) — what happens, never how
      *  long it is. A duration is a count (S04). */
@@ -247,6 +365,18 @@ object Copy {
     const val SPEAK = "speak"
     const val TAKE_BACK = "take back"
 
+    /**
+     * The composer's field, for a screen reader (§11).
+     *
+     * S05 draws no label and no prompt over it — the verse's own reference
+     * sits above the field and the field is the rest of the card — so there
+     * is nothing on screen to borrow a name from and it is said here. It was
+     * the app's central writing surface and an unlabelled edit box, which is
+     * the defect A25 fixed across onboarding's three fields and A35a fixed on
+     * You without either of them reaching this one.
+     */
+    const val WHAT_YOU_WANT_TO_SAY = "What you want to say"
+
     /** The one control that leaves a written note (S05). Save is a single
      *  control; there is no draft state to name. */
     const val LEAVE_IT = "leave it"
@@ -261,8 +391,77 @@ object Copy {
     const val EDIT = "edit"
     const val REMOVE = "remove"
     const val NEW_NOTES_NEED_THE_ROOM = "New notes need the room started again."
-    const val INKS_FROM_WHEN_THE_ROOM_WAS_TWO =
-        "These keep their colors. They're from when the room was two."
+    /**
+     * S01's third waiting row — "notes left for you, cards open, **an ink to
+     * pick**" — which the room had never drawn.
+     *
+     * §6.7 is exactly this sentence: when a room becomes three, "the two
+     * originals get an invitation on the room screen to pick an ink. Not a
+     * blocking dialog; it waits." And the newcomer "picks from what's left",
+     * which is the same invitation seen from the other side — their
+     * membership arrives with no ink at all, so without this their marks fell
+     * back to a colour that might already be somebody else's.
+     *
+     * An invitation, not an instruction, and it says why it is here: the room
+     * is bigger than it was, and colour means a person now (§4.5).
+     */
+    const val PICK_AN_INK = "Colour is a person now. Pick your ink."
+
+
+    // The cards (S08/S09, §4.6)
+    //
+    // Every word on a reflection card used to be a literal inside
+    // `ReflectionCardView`, which is why the card is the one surface in the
+    // app that had never been through the copy system. Two of them were
+    // wrong the moment a room held three people, and one of them was
+    // "SET IT DOWN" typed in capitals — §09 sets small caps as a real face,
+    // and shouting a lowercase phrase at the type system is precisely what
+    // that rule exists to prevent.
+
+    /**
+     * The line under a sealed card, exactly as §4.6 sets it.
+     *
+     * Never "Ruth hasn't answered yet" and never "1 of 2 answered": naming
+     * the person who hasn't turns the card into an accusation, and counting
+     * the ones who have is Law 2 in the one place it is most tempting to
+     * break. It says only that the card is waiting, which is the feature.
+     */
+    const val CARD_OPENS_WHEN_EVERYONE_HAS_ANSWERED =
+        "This opens when everyone has answered."
+
+    /** Any member may retire a sealed card, for the room, at any time —
+     *  §4.6's pressure valve, so a card can wait forever without becoming a
+     *  debt. Lowercase, because [SmallCaps] sets the caps. */
+    const val SET_IT_DOWN = "set it down"
+
+    /** Your answer is yours until the moment the card opens (§4.6). */
+    const val EDIT_YOUR_ANSWER = "Edit your answer"
+
+    /** The control that keeps what you typed. A verb, like every other
+     *  control in the app, and never "Submit" or "Done". */
+    const val ANSWER = "Answer"
+
+    /** Backing out of an edit, leaving the answer you had already given. */
+    const val KEEP_WHAT_I_HAD = "Keep what I had"
+
+    /** The field itself, for a screen reader. S08 asks for an open field
+     *  with "no placeholder text beyond a single hairline", so there is no
+     *  visible prompt to borrow a label from and the label is said here. */
+    const val YOUR_ANSWER = "Your answer"
+
+    /** A sealed card, announced as one thing (§11): the question, then the
+     *  state it is in. Never who is missing, never how many. */
+    fun cardSealedSpoken(question: String) =
+        "$question. $CARD_OPENS_WHEN_EVERYONE_HAS_ANSWERED"
+
+    /** An open card, announced as one thing: the question, then that it is
+     *  open. The answers under it announce themselves, by author. */
+    fun cardOpenSpoken(question: String) = "$question. The card is open."
+
+    /** One answer on an open card, read aloud: whose it is, then what they
+     *  said. First names only (§10), and no time — a card is a moment, not
+     *  a thread, so there is nothing to timestamp. */
+    fun answerFrom(name: String, answer: String) = "$name answered. $answer"
 
     // The shelf and embers (S10/S11)
     const val START_ANOTHER = "Start another"
@@ -308,6 +507,56 @@ object Copy {
 
     fun aNoteAt(verse: String) = "Note at $verse"
     const val WHAT_YOU_LEFT = "What you left"
+
+    /**
+     * S12 with nothing in it.
+     *
+     * Impersonal on purpose. The head above the list reads "What Ruth left",
+     * and the moment that is shown over nothing it is a head naming the
+     * person who has not done the thing — which §10.1 forbids by name. So
+     * when there is nothing, there is no head and no tile either: a drawn
+     * container announcing an absence is §4.2's placeholder mistake. One
+     * line, on the bare ground, true of your own screen as well as theirs,
+     * which is why it needs no name.
+     *
+     * This is the first-run state of every person screen in the product
+     * (§6.1), and before this it was blank ground under a name.
+     */
+    const val NOTHING_LEFT_HERE_YET = "Nothing left in this room yet."
+
+    /**
+     * A note nobody has found yet, on S12 — the same clause §11 specifies for
+     * a gutter mark ("not yet found"), in the running-head voice.
+     *
+     * An unfound note shows its address and not its words, which is A22a's
+     * call and right: §6.3's whole beat is being found later, and a list that
+     * read every unfound note aloud would spend it before anybody opened the
+     * book. But an address alone is only "an invitation to go" if the row
+     * says it is one — without this, an unfound note and a voice note whose
+     * transcription failed render identically, and a screen reader hears a
+     * bare address either way.
+     */
+    const val NOT_YET_FOUND = "not yet found"
+
+    /**
+     * The ink line on S12, read aloud (§11).
+     *
+     * "Colour is never alone": a 6 dp dot cannot be the only signal of whose
+     * ink this is, and the name of a colour on its own — "Crimson", floating
+     * between a name and a list — says nothing at all. No possessive and no
+     * name in it, because the screen's own heading is already the person.
+     */
+    fun inkSpoken(yours: Boolean, ink: String) =
+        (if (yours) "Your ink" else "Their ink") + ", " + ink
+
+    /**
+     * Somebody the app has a membership for and no profile yet.
+     *
+     * A seat can be tapped before a profile has synced, and `person?.name ?:
+     * ""` rendered an empty heading over a head reading "What  left". A
+     * screen with no name on it reads as a failure rather than as a wait.
+     */
+    const val SOMEONE = "Someone"
 
     const val CHANGE_YOUR_INK = "Change your ink"
     const val LEAVE_THIS_ROOM = "Leave this room"
@@ -380,10 +629,32 @@ object Copy {
      *  inviter's people, not theirs. */
     const val ROOM_FULL_FOR_JOINER = "This room is full. Ask them to start another."
     const val INVITE_EXPIRED = "This invite has expired. Ask for a new one."
-    const val INVITE_NOT_FOUND = "We couldn't find this invite. Ask for a new one."
+    /**
+     * The app's one first-person-plural, removed.
+     *
+     * "We couldn't find this invite" was the only user-visible string in the
+     * tree containing we, our or us — and it stood on the dead end of the
+     * join thread, which is the screen S16 says must show "a person, not a
+     * product". "We" summons a support desk onto it. Every other S25 line in
+     * this file names the thing that failed rather than the company that
+     * failed it, and this one now matches its own sibling above.
+     */
+    const val INVITE_NOT_FOUND = "That invite isn't there any more. Ask for a new one."
     fun wantsToReadWithYou(name: String) = "$name wants to read with you."
     const val JOIN = "Join"
     const val SOMEONE_WANTS_TO_READ_WITH_YOU = "Someone wants to read with you."
+
+    /**
+     * Who this phone is about to join as (S16's last state: "signed in as
+     * someone else — offers to switch, does not silently join").
+     *
+     * Said only when there is somebody to name. A tap on Join used to seat
+     * whoever the phone happened to be signed in as without ever saying so,
+     * and the only route to another account was the sign-out control two taps
+     * deep in the menu.
+     */
+    fun joiningAs(name: String) = "You'll join as $name."
+    const val JOIN_AS_SOMEONE_ELSE = "Join as someone else"
 
     /**
      * The held beat while the invite is fetched (S16) — the wordmark, in the
@@ -527,7 +798,18 @@ object Copy {
      * thing that still works in front of them.
      */
     const val PASSKEY_DIDNT_WORK = "That passkey didn't work. The emailed code still does."
-    const val SIGN_IN_WITH_AUTH0 = "Continue with Auth0"
+    /**
+     * The hosted sign-in, named for what it does rather than for who runs it.
+     *
+     * "Continue with Auth0" was the one place in the product where a person
+     * reading Scripture with their partner was shown the name of a vendor.
+     * §12's voice is "an unbothered interface" and §10.1 has no room for an
+     * infrastructure brand on the control that opens the app; the identity
+     * provider is a decision this app made, not a thing the reader has an
+     * account with or has heard of. It is a browser opening, so the copy says
+     * that and nothing else.
+     */
+    const val SIGN_IN_IN_A_BROWSER = "Continue in a browser"
     const val AUTH0_DIDNT_WORK = "Signing in didn't finish. The emailed code still does."
     const val SEND_A_NEW_CODE = "Send a new code"
 
@@ -608,6 +890,21 @@ object Copy {
      */
     const val TEXT_LEDE = "How Scripture sets on the page. Yours, not the room's."
     const val NOTIFICATIONS_LEDE = "Every room asks for something different. These are per room."
+
+    /**
+     * What S19 says when Android is dropping everything on it.
+     *
+     * The four switches are the person's answer to Ribbon's question and stay
+     * exactly as they set them; this is the OS's answer to a different one,
+     * and it is said plainly and once. Greying the switches out would make
+     * Android's decision look like Ribbon's, which is Law 5 backwards.
+     *
+     * No "oops", no exclamation point, and no scolding: it names what is
+     * happening and where it is decided, and then stops (S25).
+     */
+    const val ANDROID_IS_NOT_PASSING_THESE_ON =
+        "Android isn't passing these on."
+    const val OPEN_ANDROIDS_SETTINGS = "open Android's settings"
     const val APPEARANCE_LEDE = "Ribbon's colours, or your phone's."
     /**
      * Not "and what it costs". The screen cannot say what it costs — §6.11
@@ -628,7 +925,14 @@ object Copy {
     // small thing about what the setting does, in the app's own voice —
     // never a feature description, never a benefit.
     const val NOTES_LEFT_FOR_YOU_SUB = "When they leave one at a verse."
-    const val CARDS_OPEN_SUB = "When you have both answered."
+
+    /**
+     * "Both" was wrong from three people up, and §2.3 says a room holds six.
+     * A card opens when *everyone* has answered (§4.6), which is also the
+     * word the card's own waiting line uses — so the switch and the card now
+     * describe the same event in the same word.
+     */
+    const val CARDS_OPEN_SUB = "When everyone has answered."
     const val WHEN_THEY_OPEN_THE_BOOK_SUB = "So you can read at the same time."
     const val THINKING_OF_YOU_SUB = "A touch on the shoulder. No words."
     const val TEXT_SIZE_SUB = "Scripture only. Everything else stays where it is."
@@ -767,6 +1071,21 @@ object Copy {
     const val SIGN_IN_CODE_WRONG = "That code didn't work. Try again, or send a new one."
     const val CARD_DECLINED = "The card was declined. Nothing changed in your room."
     fun bookNotDownloaded(book: String) = "$book isn't downloaded yet. It'll finish on Wi-Fi."
+    /**
+     * A licensed translation whose chapter could not be fetched (S25's "book
+     * won't download", §08's "name it, name what's intact, one action").
+     *
+     * The page used to draw the running head and 320 dp of nothing, with the
+     * fetch's failure swallowed by a `runCatching` and the effect keyed so it
+     * could never retry while the book was open. Offline, on NKJV, that is a
+     * blank page under a heading with no line and no way forward.
+     *
+     * The waiting state stays wordless on purpose — §08 forbids a loading
+     * indicator and a skeleton reads as fake text — so this appears only once
+     * the fetch has actually missed.
+     */
+    fun chapterWouldntCome(book: String) = "$book isn't on this phone yet."
+
     const val SERVER_UNREACHABLE = "Can't reach Ribbon right now."
     const val MIC_NEEDED = "Ribbon needs the microphone to record a note."
 
@@ -788,6 +1107,19 @@ object Copy {
     fun notifReading(name: String, book: String) = "$name is reading $book"
     fun notifThinkingOfYou(name: String) = name
     fun notifFinished(book: String) = "You finished $book together"
+
+    /**
+     * The channel a finished book posts on, as Android's own settings page
+     * names it (S19).
+     *
+     * The other four channels take their names from the four switches, so
+     * the OS and Ribbon say the same words about the same thing. This one has
+     * no switch to borrow from — S19 is explicit that it has none, because it
+     * fires a handful of times a year and is an invitation back rather than
+     * an absence notification — so it is named here, in the same voice: the
+     * event, not a feature.
+     */
+    const val A_BOOK_FINISHED = "A book finished"
 }
 
 /** First names only, everywhere a person is addressed in a line of copy. */

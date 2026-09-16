@@ -69,6 +69,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.selected
@@ -214,13 +215,6 @@ fun LeaveToolbar(
             modifier = Modifier
                 .height(TOOLBAR_HEIGHT)
                 .ribbonGlass(CircleShape)
-                // Eight swatches, a rule and two words are wider than a
-                // phone. SwiftUI compresses the row; here it scrolls, so
-                // the eighth ink stays reachable instead of being clipped
-                // off the end. Nothing else changes: at one swatch — the
-                // common case, a room of three or more — the row is
-                // narrower than the screen and never moves.
-                .horizontalScroll(rememberScrollState())
                 .padding(horizontal = 18.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -239,17 +233,47 @@ fun LeaveToolbar(
                     if (!roomPaused) onHighlight(mine)
                 }
             } else {
-                // The eight sit in touchable columns that include the gap
-                // between them, so the drawn 20 dp swatch keeps its
-                // spacing while the finger gets a column the full height
-                // of the bar to hit (§11 — a control only a stylus can hit
-                // is broken).
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                // **Only the inks scroll.**
+                //
+                // Eight swatches, a rule and two words are wider than a
+                // phone, and the whole bar used to scroll as one — so at
+                // eight inks the two verbs sat off the right-hand edge.
+                // `write` and `speak` are the reason the toolbar exists; the
+                // ink is the thing you can already do by holding, and the
+                // eight-across case is precisely a room of two, which is the
+                // shape of room this product is for. Putting them off-screen
+                // behind a scroll nobody is told about is the strongest
+                // version of §13's "the control that matters, hidden".
+                //
+                // The picture is what caught it: the swatches had just gone
+                // from 34 dp to 44 (below), which pushed the last of the
+                // width out, and the trade only looks like a trade in source.
+                // It is not one. The verbs are pinned and the inks take
+                // whatever is left, scrolling inside it — so at eight the
+                // eighth ink is a short slide away and both verbs are where
+                // they always are, and at one nothing moves at all.
+                Row(
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .horizontalScroll(rememberScrollState()),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    // The eight sit in touchable columns that include the gap
+                    // between them, so the drawn 20 dp swatch keeps its
+                    // spacing while the finger gets a column the full height
+                    // of the bar to hit (§11 — a control only a stylus can
+                    // hit is broken).
+                    //
+                    // That column was 34 dp across, ten under the floor §11
+                    // and deviation 12 set, and on the one case where the
+                    // columns touch — so a miss lands on the ink *next door*
+                    // rather than on nothing, and marking a verse in the
+                    // wrong person's colour is a worse failure than not
+                    // marking it.
                     Ink.entries.forEach { ink ->
                         InkSwatch(
                             ink = ink,
                             isSelected = !roomPaused && ink == model.lastUsedInk,
-                            targetWidth = SWATCH_DIAMETER + 14.dp,
                             modifier = Modifier.alpha(if (roomPaused) 0.35f else 1f),
                         ) {
                             if (!roomPaused) onHighlight(ink)
@@ -285,24 +309,29 @@ fun LeaveToolbar(
 }
 
 /**
- * One ink, 20 dp, ringed when it is the one that will be used.
+ * One ink, 20 dp drawn, ringed when it is the one that will be used, in a
+ * 44 dp target (§11, deviation 12). The drawn swatch and the target it sits
+ * in are deliberately different sizes: a 44 dp dot would be a button, and
+ * these are meant to read as ink.
  *
- * @param targetWidth the width of the touch target the drawn swatch sits in
- *   the middle of; the swatch itself is always [SWATCH_DIAMETER].
+ * The target used to be an argument, so that eight of them could be squeezed
+ * to 34; there is no caller left that wants anything but the floor.
  */
 @Composable
 fun InkSwatch(
     ink: Ink,
     isSelected: Boolean,
     modifier: Modifier = Modifier,
-    targetWidth: Dp = 44.dp,
     onClick: () -> Unit,
 ) {
     val color = ink.color
     Box(
         modifier = modifier
-            .sizeIn(minWidth = targetWidth, minHeight = TOOLBAR_HEIGHT)
-            .clickable(onClick = onClick)
+            .sizeIn(minWidth = SWATCH_TARGET, minHeight = TOOLBAR_HEIGHT)
+            // `selected` without a role leaves a screen reader saying an ink's
+            // name and nothing about it being a choice among eight, one of
+            // which is taken. RadioButton is what a one-of-many is.
+            .clickable(role = Role.RadioButton, onClick = onClick)
             .semantics {
                 contentDescription = Copy.inkNamed(ink.displayName)
                 selected = isSelected
@@ -391,6 +420,11 @@ fun WriteComposer(
             modifier = Modifier
                 .fillMaxWidth()
                 .focusRequester(focusRequester)
+                // S05 draws neither a label nor a prompt over this field, so
+                // there is nothing on screen to take a name from and it is
+                // said here. The app's central writing surface announced as
+                // an unlabelled edit box (§11).
+                .semantics { contentDescription = Copy.WHAT_YOU_WANT_TO_SAY }
                 // ⌘↩ leaves the note — the convention a hardware-keyboard
                 // iPad reader expects; ⌃↩ is the same convention on a
                 // keyboard attached to an Android tablet, and both are
@@ -413,7 +447,7 @@ fun WriteComposer(
             Box(
                 modifier = Modifier
                     .sizeIn(minWidth = 44.dp, minHeight = 44.dp)
-                    .clickable(onClick = onCancel),
+                    .clickable(role = Role.Button, onClick = onCancel),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
@@ -510,7 +544,16 @@ fun SpeakControl(
             // Every gesture has a tap equivalent (§11). The press-and-hold
             // is two outcomes, so it announces as two actions rather than
             // as an instruction to hold a finger somewhere.
-            .semantics {
+            //
+            // Merged, and with a sentence of its own — which it did not have.
+            // An unmerged node whose descendants carry content is never
+            // landed on (the rule `Hearth.kt` states for the fire), and this
+            // one's descendants include the drawn "Release to leave it", so
+            // the two actions existed only in source. The spoken line names
+            // what can happen rather than repeating an instruction for a
+            // finger that is not down.
+            .semantics(mergeDescendants = true) {
+                contentDescription = Copy.RECORDING_A_VOICE_NOTE
                 customActions = listOf(
                     CustomAccessibilityAction(Copy.LEAVE_IT) { release(); true },
                     CustomAccessibilityAction(Copy.TAKE_BACK) { throwAway(); true },
@@ -627,6 +670,9 @@ private val TOOLBAR_HEIGHT = 52.dp
 
 /** The drawn swatch. The touch target around it is larger (§11). */
 private val SWATCH_DIAMETER = 20.dp
+
+/** That target: the floor every control in the app keeps (deviation 12). */
+private val SWATCH_TARGET = 44.dp
 
 /** How many live peaks the waveform shows — the tail of the recording. */
 private const val LIVE_BARS = 80

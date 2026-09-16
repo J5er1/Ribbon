@@ -57,6 +57,7 @@ import app.readribbon.core.Reading
 import app.readribbon.core.RibbonClock
 import app.readribbon.core.Room
 import app.readribbon.core.VerseAddress
+import app.readribbon.design.BackChevron
 import app.readribbon.design.NoteMark
 import app.readribbon.design.Flows
 import app.readribbon.design.Palette
@@ -257,6 +258,7 @@ fun EmberRecordScreen(
     onOpenVerse: (VerseAddress) -> Unit,
     onReadAgain: (String) -> Unit,
     onOpenPerson: (personID: Uuid, roomID: Uuid) -> Unit,
+    onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val book = Bible.book(reading.bookID)
@@ -283,6 +285,26 @@ fun EmberRecordScreen(
             .fillMaxSize()
             .room(),
     ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            // The way back, drawn, and **outside the scroll**. This screen is
+            // a root destination and had no way out at all except the system
+            // gesture — §11's motor rule asks for a tap equivalent — and the
+            // person screen's own header names the other half of this defect:
+            // a chevron inside a scrolling column is a way back that scrolls
+            // off the top of the screen, which is barely better than none.
+            //
+            // Drawn here rather than through `RibbonScreen` because the ember
+            // and the book's name both flow in from the shelf (A22), and a
+            // collapsing bar would take the name out of that pair.
+            BackChevron(
+                onBack = onBack,
+                label = Copy.BACK,
+                modifier = Modifier.padding(
+                    start = 8.dp,
+                    top = WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding() + 8.dp,
+                ),
+            )
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -417,6 +439,7 @@ fun EmberRecordScreen(
                     // (§15 horizon).
                 }
             }
+        }
         }
     }
 }

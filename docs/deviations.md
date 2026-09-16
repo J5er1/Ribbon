@@ -1125,6 +1125,1058 @@ A32. **Three things the owner found by using it, and what each turned out to
       nothing is counted. No rooms joined, no books finished, no
       member-since, no badge. A face, a name, and one sentence.
 
+A33. **The cards took the pass the rest of the app had already had.**
+    `ReflectionCardView` was written before either design pass and neither
+    reached it, so it was the last surface in the app still built out of
+    the materials the app had abandoned: a hand-rolled 12 dp rectangle with
+    a hairline border where everything else is on the shape scale and the
+    paper grain (A23); four bare `clickable` lines of text, all of them well
+    under the 44 dp floor (deviation 12); every word a literal rather than a
+    line of `Copy`; and `"SET IT DOWN"` typed in capitals at a small-caps
+    face, which is the textTransform §09 forbids, said out loud.
+
+    Three of the repairs are not cosmetic.
+
+    **The turn was never a turn.** S09 asks for "a slow turn over 480 ms,
+    ease-out, no bounce", and §11 says that under reduce motion "the card
+    turn becomes a fade" — a sentence that only means anything if there is a
+    turn to reduce. There was only ever the fade, on both settings, from a
+    raw `tween(480)` that also made this the one animation in the app with
+    no reduce-motion path at all. The card turns now, on `RibbonMotion.open`
+    (which *is* §9.1's 480 ms ease-out), swapping its face at the moment it
+    is edge-on so neither side is ever read in a mirror; reduce motion snaps
+    the angle and leaves §11's cross-fade, exactly as written. The angle is
+    read inside the layer block, so the card turns without recomposing a
+    word of what is written on it.
+
+    **A half-typed answer was lost.** `answerDraft` was `remember`, and the
+    keyboard resizing the window is enough to dispose that composition. It
+    is `rememberSaveable` now. A card is a thing people think about before
+    they type, which is the whole point of the mechanic.
+
+    **The answers were set in the author's ink.** §S09 asks for "every
+    answer, each with its author's portrait and ink", and the ink was being
+    applied to the answer's *body* at 16 sp. The eight inks are cut for a
+    24 % highlight wash and for a name at 12 sp; §11 asks for each to be
+    verified for the text *under* the wash, and a paragraph of Moss on the
+    surface is the one place the palette does not clear. The portrait's ring
+    and the name carry whose it is — the settlement `NoteCard` already
+    reached — and the answer is ivory, because an answer is something to
+    read.
+
+    Two smaller calls worth writing down. S08's "an answer field, open, no
+    placeholder text beyond a single hairline" was first read as a *size*,
+    72 dp of field with a rule under it, and on the page that is a hole:
+    a question, a void, and a faint line a long way beneath it with nothing
+    saying the void is where you write. The field takes the height of what
+    is in it instead, one line when that is nothing, so the hairline comes up
+    to meet the question — a line to write on is an invitation, a box of
+    empty space is a gap in the page. And the `Answer` control is no longer
+    drawn greyed-out over an empty field, which is a control that says
+    exactly what happens and then does not do it (the defect S22's row was
+    rewritten to remove); it arrives with the first thing typed.
+
+    Setting a card down also used to take it out of the composition on the
+    frame the tap landed. §4.6's "it leaves without ceremony" is about the
+    absence of a dialog, not about the card vanishing from under the finger
+    that retired it, and §9.1 has no cuts in it; it shrinks away on the
+    settle token now, the way a note that has been taken back does.
+
+    What is deliberately unchanged: a card still cannot be un-answered. §4.6
+    gives the room one escape hatch and it is *set it down*, which retires
+    the card for everybody; taking your own answer back would leave a card
+    that can never open and nobody to say so, which is the debt the whole
+    mechanic exists to avoid.
+
+    One line of copy went with it. The notifications screen described the
+    cards opening as "When you have both answered", which was wrong from
+    three people up, and §2.3 holds six. It says "everyone" now, which is
+    also the word the card's own waiting line uses.
+
+    iOS carries every one of these defects in
+    `ios/Ribbon/Reading/ReflectionCardView.swift` and is untouched on
+    purpose: this pass is Android's, at the owner's direction. The copy
+    constants are the shared half and port straight across when iOS takes
+    its turn.
+
+A34. **Notifications exist.** S19 is the screen the build book calls "the
+    setting screen that decides whether people keep this app", and until now
+    it decided nothing: nothing in the Android build had ever posted a
+    notification. No channel, no `notify`, no small icon, no PendingIntent.
+    `Copy` held all six of §10.3's strings and exactly one of them was read
+    anywhere — as the text of an in-app waiting row. The four switches, the
+    two quiet-hours rows and `RoomNotificationPrefs` were a settings screen
+    for a feature that did not exist, which is deviation 15 in its most
+    literal form.
+
+    The whole of it is in `services/Notifications.kt`,
+    `services/RoomWatch.kt`, and a handful of seams elsewhere. Six calls
+    worth arguing with:
+
+    **Channels are per kind, and S19 says "per room, not global".** A
+    channel's importance belongs to the person and cannot be changed by the
+    app once created, so four channels times six rooms is up to twenty-four
+    rows in Android's settings for somebody to curate — and a room they
+    leave would strand dead ones there forever. So the *platform's* grouping
+    is by kind and Ribbon's own code does the per-room gating before a post
+    ever reaches the platform. §12.2's Law 5 is the authority: the platform
+    owns chrome, Ribbon owns content, and which rooms a person wants to hear
+    from is content. The five channels take their names from the four switch
+    titles verbatim plus "A book finished", so Android's settings page and
+    Ribbon's say the same words about the same thing.
+
+    **Law 2 leaks through the platform, not through our prose.** Every
+    channel is created `setShowBadge(false)` and nothing calls `setNumber` —
+    §13's "no red number badge on the app icon", in its Android form, refused
+    once at the channel rather than remembered at every post. And §10.3's
+    collapsed string ("Ruth left you a note", no verse) is *not* implemented
+    as a notification group: Android writes its own summary with "+2 more" in
+    it, which would be a count attached to reading, posted by the platform,
+    in the last place anybody would look for a Law 2 breach. Several notes
+    from one person in one room share an id and replace each other instead.
+
+    **The watermark, and why a new phone is quiet.** `merge` used to publish
+    one state and say nothing about what was new in it, so there was no event
+    to post from — which is most of why there were no notifications. It
+    returns an `Arrivals` now, diffed at the one moment both states are in
+    hand. The guard that matters is `AppState.notifiedThrough`: on the very
+    first merge on a device it is null, it is set to the newest row seen, and
+    *nothing* is reported. Without it, signing in on a new phone (§6.10)
+    would restore every room a person is in and post a notification for every
+    note in it — several hundred, in one breath. It advances on every merge
+    whether or not anything was posted, so a suppressed notification is not
+    re-offered by the next one.
+
+    **Asked in context, once.** §6.1: "after the first note is left or found
+    — never at launch. In context: *Tell you when Ruth leaves a note?*" That
+    is where it is asked and those are the words, with two answers and no
+    "not now" — the shape that only exists in apps that intend to ask again.
+    It is never raised in a room of one: there is no name to put in the
+    question and nothing to promise, and a nameless version of it is the
+    notification pre-prompt S17 forbids. `hasAskedAboutNotifications` keeps
+    the same contract as the margin hint and the fire's gesture, for the same
+    reason Android forces on us — `shouldShowRequestPermissionRationale`
+    cannot tell never-asked from refused-for-good, which `AudioNotes` already
+    had to work around for the microphone.
+
+    **Quiet hours are honoured, and the arithmetic is not the obvious
+    arithmetic.** The default window runs 10 p.m. to 6 a.m., so `start` is
+    *after* `end`: `minute >= start && minute < end` is false for every
+    minute of the default window and true for the whole of the day it exists
+    to leave alone. That is the bug inverted rather than missing — it would
+    have silenced 6:40 a.m. and 10:15 p.m., the two hours §1 says the app is
+    actually opened in, and let everything through at 3 a.m. `isQuietAt` is
+    written for the wrapping case and `QuietHoursTest` holds it, which is the
+    one part of this feature a unit test can reach. Equal ends mean *never*,
+    not a silent day. Inside quiet hours thinking-of-you is the one thing
+    that arrives, and even then only as a haptic and only when
+    `PowerManager.isInteractive` — S19's "as a haptic on an already-woken
+    device", read literally.
+
+    **What the background route honestly cannot carry.** There is no FCM and
+    no foreground service. A foreground service means a permanent "Ribbon is
+    connected" notification in the shade, which is chrome about the app's own
+    plumbing and the opposite of §1's room; push means a Google dependency
+    and a server-side sender, which would not be an Android-only change.
+    So a 15-minute `WorkManager` job pulls and posts. Anything with a row
+    behind it rides along — notes, cards, a finished book — up to fifteen
+    minutes late, which for a note that was *left to be found later* is not a
+    defect. Two things do not: "Ruth is reading Mark" is presence, socket-only
+    and ephemeral, and a fifteen-minute-old version of "so you can read at the
+    same time" is a lie, so it posts only while Ribbon is running; and
+    "thinking of you" is a client-to-client broadcast with no row anywhere, so
+    a tap sent to a closed phone is still lost. Fixing that needs a table on
+    the shared backend and is not an Android-only change — it is the next
+    piece of work on this feature, and it is written down here rather than
+    left to be discovered.
+
+    Two smaller things went in with it. A tapped notification now has
+    somewhere to land: `AppModel.pendingDestination`, honoured by the room's
+    stack, switching rooms first if it has to. It travels as extras on a
+    private action rather than on the `ribbon://` scheme, which is exported
+    and BROWSABLE — an invite token the model validates is one thing to let a
+    web page hand us, and *somewhere to go* is another. And `visibleRoomID`
+    lets a post stay quiet about something the room is already unfurling in
+    place under the fire, which is what §6.3's "a notification, or nothing at
+    all" means when the interface is already handling the beat well.
+
+    The look book earned its keep here (A24): starting the worker from
+    `Application.onCreate` took every screen in it down at once, because
+    `WorkManager.getInstance` throws when its `androidx.startup` initializer
+    has not run. That moved the call to where there is an account to watch
+    for, which is where it belonged anyway — a person who has never signed in
+    has nothing to pull, and waking their phone four times an hour to find
+    that out is a battery cost with no feature behind it.
+
+A35. **S12 joins the rest of the app, and says something when there is
+    nothing.** The person screen was the last one standing on its own page
+    furniture, and A22a is why: that pass gave it a head, tiles and a way
+    back *before* `RibbonScreen` existed, and nothing came back for it.
+
+    Two of the differences were defects rather than style. Its back chevron
+    lived **inside the scrolling content**, so a person with more than a
+    screenful of notes scrolled the only tap route back off the top of the
+    screen — §11's motor rule with the system gesture as the sole survivor.
+    And the name was a centred line rather than the screen's heading, so a
+    screen reader got **no heading node for the thing the screen is about**.
+    The rest followed: centre-aligned where every pushed screen is
+    start-aligned, a 24 dp measure against everyone else's `ScreenMargin`, a
+    hardcoded 60 dp spacer in place of the navigation-bar inset, and a list of
+    notes drawn as eight identically-rounded tiles rather than one group with
+    the group's own outer corners.
+
+    Nothing in S12 asked for any of it. Its anatomy is a portrait, a name, an
+    ink and a list, and a collapsing title holds all four.
+
+    **Two deliberate differences from the settings screens, kept.** S12
+    declines the lede: the one slot on the screen that invites a sentence
+    about a person is exactly where a join date or a "last seen" would arrive,
+    and S12's anatomy ends "nothing else". And its face sits on the bare
+    ground where S18's identity tile puts its face on paper — here the face is
+    the subject of the screen, there it is a control beside another control,
+    and a tile is what a row of controls is for.
+
+    **The empty screen now says something.** The notes block had no else
+    branch, so on the first day of a new room — the moment the product is
+    being judged — tapping the other person's face gave a portrait, a name,
+    and blank ground. It reads as a screen that failed to load. One
+    impersonal line stands there instead: *Nothing left in this room yet.* No
+    head, because the head reads "What Ruth left" and over nothing that is a
+    head naming the person who has not done the thing (§10.1); and no tile,
+    because a drawn container announcing an absence is §4.2's placeholder
+    mistake.
+
+    **An unfound note says it is waiting.** A22a's call — an unfound note
+    gives its address and not its words, because §6.3's beat is being found
+    later — is right, but an address alone is only "an invitation to go" if
+    the row says it is one. Without it an unfound note and a voice note whose
+    transcription failed rendered identically, and this was the one place in
+    the app a note's found state was spoken nowhere. It carries §11's own
+    clause now, in the running-head voice, and the spoken label ends with it.
+
+    Smaller things in the same pass: the ink line reads as *"Their ink,
+    Crimson"* rather than the bare word "Crimson" floating between a name and
+    a list (§11 — colour is never alone); "Change your ink" moved from the
+    foot of the page to directly under the ink it changes, because it used to
+    sit a screenful away and share a stack with "Leave this room", which made
+    changing a colour look like the same class of act as leaving; and a person
+    whose profile has not synced is "Someone" rather than an empty heading over
+    a head reading "What  left".
+
+    **`RibbonScreen` had a latent bug the empty screen found.**
+    `readableColumn` ends in `wrapContentSize`, so a page was only ever as
+    wide as its widest child — and a screen whose children all happen to be
+    narrow centred itself and everything on it. The settings screens never
+    showed it because a group of tiles fills the width; S12 with nothing left
+    in it did, and the tell was a portrait that sat on the margin with one
+    note and jumped to the middle with none. The content column fills its
+    measure now. A24 again: only a picture catches that.
+
+A35a. **The identity tile on You says what it is for, and the name it holds
+    is saved by every way out of it.** S18's name field committed in exactly
+    one place — the keyboard's Done key. Tapping the face beside it, tapping
+    anything that took focus, pressing back, closing the menu or pushing a
+    settings screen all threw the edit away with nothing said. S18 calls the
+    name "editable in place", and an in-place edit only one soft-keyboard key
+    can land is not one; it is also the most load-bearing field in the app,
+    since the name is the one thing S17 will not let a person skip and it is
+    what their partner sees on every seat and every note. It commits on the
+    IME action, on losing focus, and on disposal. An empty name reverts
+    silently — a person cannot delete their own name, and §10.1's unbothered
+    interface does not scold them for trying.
+
+    The field also had no label and no prompt, so cleared of its text it was
+    a bare caret and an unlabelled edit box to a screen reader — the one
+    typing surface in the app with neither, which is the class of defect A25
+    fixed across onboarding's three fields. It draws `Your name` behind the
+    caret, the way the room's own name field already did.
+
+    The third half of this entry was written and then withdrawn, and the
+    reason is worth keeping. The tile said nothing about itself while the
+    three rows beneath it each carried a sentence — A23 calls that the half
+    of its pass that mattered most — and neither of its two targets was drawn
+    as a control: the portrait's affordance existed only as a content
+    description, the name's only as a click label, both invisible on the
+    screen S18 calls the place your identity lives. So it gained a sentence
+    of its own, `IDENTITY_REASON`. A32's rebuild of You, which landed on
+    `main` while this branch was open, answers the same complaint in a better
+    shape — the small caps under the face saying the face is a control, and
+    one centred line saying where a name and a face are seen — so the tile's
+    own sentence would have been that line said twice. It is gone, and the
+    string with it: an unused constant in `Copy.kt` is the defect A39 is
+    about, and a merge is the usual way one gets there.
+
+A36. **Taking something back now takes it back.** The app has had "take
+    back", "remove" and "leave your notes behind?" since the beginning, and
+    under them the deletions reached the backend and stopped. Five defects,
+    which are one defect seen from five places.
+
+    **A taken-back note never left the other person's phone.** `merge` was
+    add-or-update for notes and add-only for highlights. Memberships are
+    pruned there ("departures propagate") and invites are pruned ("an invite
+    the backend no longer has must not go on being offered"); notes were not.
+    So `takeBack` deleted the row remotely and nudged the other device to
+    pull, the pull came back without it, the loop added nothing and removed
+    nothing, and the note sat on the other person's phone permanently. S04
+    says a taken-back note vanishes "with no tombstone", and deviation 10
+    already claimed take-backs propagate.
+
+    The prune has three guards and each one is load-bearing. `notesComplete`
+    exists because the notes select is wrapped in a `runCatching` that
+    returns an empty list on failure — pruning against that would delete
+    every note in the room the first time one request timed out, which is a
+    far worse bug than the one being fixed. Only readings the pull actually
+    covered are considered. And a pending note — composed offline, not yet
+    known to the backend (§4.4) — is never pruned. A pruned voice note takes
+    its local recording with it.
+
+    **Nothing was ever retried.** `takeBack` and `editWrittenNote` both
+    wrapped their remote call in `runCatching` and forgot the outcome, and
+    the only thing `refreshFromRemote` replayed was a rename. A take-back
+    made offline was applied locally, never sent, and undone by the next
+    successful pull. An offline edit was worse than lost: the merge takes
+    `body = row.body ?: local`, so the server's old words silently overwrote
+    the new ones. There are queues now, in the shape of `pendingRenamePushes`
+    — deletes, edits and new notes — replayed before every pull, and the
+    merge consults them: a pull that races a pending delete does not re-add
+    the row, and one that races a pending edit does not take the server's
+    body. An edit also carries §4.4's pending hairline now, which only a
+    *new* note ever did.
+
+    **"Take them back" on leaving a room was a local filter.** The rows
+    stayed in Postgres, the recordings stayed in the bucket, and every other
+    member's phone kept its copy — so the one answer §6.8 offers to somebody
+    who wants their words back did nothing except hide them from the person
+    who asked.
+
+    **A taken-back voice note left the recording on the server.** The
+    `notes` row went; the object at `voice-notes/<reading>/<note>.m4a` did
+    not, and could not — the bucket had a read policy and a write policy and
+    no delete policy at all, while the portraits bucket had gained one. So a
+    person recorded a thought, thought better of it, took it back, and a
+    recording of their voice stayed fetchable by everyone else in the room
+    forever. That is the one place in the product where undoing something
+    left the most personal version of it behind. New migration
+    `20260916120000_ribbon_take_back_the_recording.sql`, scoped to the
+    note's *author* rather than to the room — reading a note somebody left
+    you does not entitle you to erase their voice. The object is deleted
+    before the row, because the policy checks the row.
+
+    **Deleting your account ignored the question it had just asked.**
+    `deleteAccount(keepNotesBehind)` never read the parameter, and could not
+    have honoured it: `deleteAccountData` deleted the profiles row, and both
+    `notes.author_id` and `highlights.author_id` cascade from it, so *both*
+    answers erased every note and every highlight the person had ever left.
+    §6.8 says highlights "stay, always"; S11 needs a departed member's notes
+    to render normally, with their portrait, and nothing marking them as
+    gone. The profile is blanked rather than deleted now — name to the app's
+    own word for somebody it has no profile for, portrait path to null, the
+    portrait object deleted outright — so nothing personal survives and the
+    rows that hang off it stand. Then the answer decides: leave them behind
+    and nothing authored is touched, take them back and the notes go,
+    recordings and all. Highlights are never deleted on either path.
+
+    **This diverges from iOS on purpose, and it is the one entry here that a
+    reviewer should push back on if they disagree.** iOS still deletes the
+    profiles row and still cascades. The Android behaviour is what §6.8 and
+    S11 describe and the iOS behaviour is not, so the divergence is iOS's to
+    close rather than Android's to undo — but it is a difference in what
+    account deletion *means* on one backend, and it should not sit here
+    unnoticed. The new storage policy is additive and changes nothing for
+    iOS, which simply never calls it.
+
+    Two smaller ones in the same pass. An abandoned edit used to retarget the
+    next note: `editingNote` was cleared on save and on cancel but not by
+    `clearLift`, which is S05's own "dismissed by tapping anywhere in the
+    text" — so opening your note, starting an edit and tapping the Scripture
+    left it set, and the next verse you wrote at opened pre-filled with the
+    old note's words and overwrote *that* note on save, leaving nothing at
+    the verse you had picked. And the note menu offered "edit" on a voice
+    note, which opened the written composer, empty, over a recording; typing
+    into it set `body` on a note whose kind is still `voice`, which nothing
+    ever reads — the words went to the server and were never seen again by
+    anybody, including the person who wrote them. A recording is re-made the
+    way it was made.
+
+A37. **The invite path, end to end.** S15 says "the link is the whole
+    mechanism", and five things were wrong with the whole mechanism.
+
+    **A link minted while the network was down died.** `createInvite` fired
+    the backend registration into a coroutine, logged a failure, and forgot
+    it; nothing anywhere retried, and `pendingInvitePushes` is in memory, so
+    the next launch had no record of it at all. `merge`'s invite prune then
+    deleted the local invite *because* the backend did not have it — and the
+    link the sender had already pasted into a message thread resolved to
+    nothing, permanently, with nothing anywhere saying so. Two device-local
+    sets in `AppState` now, persisted: one for links this phone has not
+    managed to register, which the prune refuses to touch and which
+    `refreshFromRemote` re-pushes on every resume, and one for links that
+    actually left. No banner and no error line on the sheet — §6.10 is
+    explicit that the app working is not news, and self-healing is the honest
+    answer.
+
+    **"The invite is still out" was shown to people who had invited nobody.**
+    Both the onboarding step and the invite sheet mint a link the moment they
+    appear, and `hasLiveInvite` asked only whether one existed — so anyone who
+    had merely *seen* either screen was told, on the first morning of their
+    room, that an invite was outstanding, with a control to send it again.
+    Minting is not sending. `hasLiveInvite` requires that the link left this
+    phone, or that it came from somebody else's (whose sending is not ours to
+    see, and whose invite is the room's live link by definition). A chooser
+    the person then backs out of still counts: Android only reports the chosen
+    component through an `EXTRA_CHOSEN_COMPONENT` PendingIntent, and that
+    machinery buys less honesty than it costs.
+
+    **Opening the sheet pushed everything twice, including the portrait.**
+    `createInvite` registers the link itself; both call sites then called
+    `pushInvite` again on the next line, which re-read the sender's portrait
+    off disk and re-uploaded the JPEG, on every appearance, swallowing its own
+    failure more quietly than the first attempt did.
+
+    **A joiner whose session had gone stale hit a wall.** `withAuthRetry`
+    signs a person out when the refresh token is dead, and `joinRoom` throws
+    `NotSignedIn` outright when there is no account — and both landed in the
+    same dead end as an expired invite, whose only control is Close, shown to
+    somebody who had just been signed out by the screen refusing them. The
+    sign-in step is already in that file and already retries the join on
+    success; a missing account goes there now.
+
+    **The screen the book calls "the most important conversion surface in the
+    product" showed no face.** S16's anatomy is "who invited you, their
+    portrait, the room's name, and one control", and the file's own header
+    says "the screen shows a person, not a product" — and it drew a sentence,
+    a room name and a button. It draws the inviter's monogram now. **Not the
+    real photograph, and that is a backend limit rather than a design
+    choice**: the portraits bucket is readable only by co-members and a person
+    holding an invite is not one yet. Reaching the real face needs an edge
+    function that takes the token, validates it, and streams the portrait —
+    worth doing, and not an Android-only change. A monogram in the right
+    recess is a person; nothing at all is a form.
+
+    S16's last state also did not exist: "signed in as someone else (offers to
+    switch, does not silently join)". A tap on Join seated whoever the phone
+    happened to be signed in as, without ever saying who, and the only route
+    to another account was the sign-out control two taps deep in the menu. The
+    preview says who it will be and offers the other door.
+
+A37a. **The room has S01's third waiting row.** S01's anatomy has always read
+    "notes left for you, cards open, **an ink to pick**", and the third one
+    had never been drawn. §6.7 asks for it in so many words — when a room
+    becomes three, "the two originals get an invitation on the room screen to
+    pick an ink. Not a blocking dialog; it waits."
+
+    It is the newcomer's side of the same beat that made it urgent. A
+    first-time joiner's membership arrives with no ink at all — `restoreInk`
+    only restores one the backend already remembers — so in a room where ink
+    is identity (§4.5) every mark they made fell back to `?: Ink.clay`, which
+    may already be somebody else's colour, and the reading screen handed them
+    the whole free palette that only a room of two is supposed to have.
+
+    The row waits exactly as the book says: no dialog, no badge, nothing
+    blocking, and it goes the moment an ink is picked. Its mark is the one on
+    that screen that is about a colour and cannot use one.
+
+A38. **The cuts that were left.** §9.1 opens "everything breathes rather
+    than snaps", and A21 and A22 did most of the work of making that true —
+    but a sweep of every animation primitive in the tree found ten places
+    where something still changed on one frame, and three of them were the
+    loudest moments in the app.
+
+    **The Wave blinked out as the long-press toolbar slid in over it.** The
+    foot of the reading page draws three things into one bottom-aligned box:
+    the toolbar, on a careful `AnimatedVisibility`, and — in a bare `when` —
+    the composer, the running-head pill and the Wave. The instant a verse was
+    long-pressed the Wave and the pill stopped composing and the toolbar rose
+    over the hole they left. It is an `AnimatedContent` now, keyed on which
+    of the four things is showing rather than on the composer itself, so
+    typing does not restart the transition, and the leaving branch holds its
+    last address the way the toolbar's range already did.
+
+    **The fire changed state in one frame while the word under it took 400 ms
+    to say the same thing.** `TheFire` cross-fades the fire's *name* on the
+    settle token, under a comment arguing that "a word swapped on one frame
+    under a fire that took its time getting there reads as a correction" —
+    and the fire was not taking its time. It crosses now: two stacked passes
+    inside the one offscreen layer, so the additive blending still
+    accumulates in the fire's own buffer (A15), sharing time, scale, coal
+    depth and seed so nothing moves except the flame. Going offline eased
+    too, rather than stepping the fire 8 % darker and back on every flap of a
+    bad connection.
+
+    **The thinking-of-you ring cut at the exact moment the gesture
+    succeeded.** A hold let go of early eased its ink back over 150 ms; a
+    hold that completed ran `snapTo(0f)`. The gesture that failed left
+    gracefully and the gesture that worked was the one that cut, which is the
+    wrong way round and the one cut §9.1 would least forgive.
+
+    The rest, in one line each. A seat's entrance was written and could never
+    run — the transition state was seeded from the live roster, so on the
+    composition where a newcomer's seat first exists it starts and ends true;
+    it seeds from a snapshot now, the way the waiting rows already did, so
+    launch is still silent (§05) and an arrival is an event (§6.7). The
+    confirmation dialogs had no motion at all, and §6.8's two questions
+    arrived by tearing each other down — they are one dialog whose words
+    cross-fade now. The segmented control's pill slid on a spring while its
+    three labels changed colour on one frame, which is exactly the argument
+    its own comment makes against. The follow ring and the follow thread were
+    plain conditionals. The starter shelf and the shelf blinked in and out
+    while the hearth above them cross-faded. And the onboarding progress bar
+    was the last raw `tween` in the tree: it borrowed the settle token's
+    *duration* and nothing else, so with no easing argument it took Compose's
+    ease-in-out — the only thing in the app moving on a curve §9.1's table
+    does not contain — and never asked about reduce motion at all.
+
+    Two of the ten were introduced by this very pass, which is worth
+    recording: the card's set-down exit played over an empty box, because the
+    content re-read the retired card and hit its own guard; and the "Android
+    isn't passing these on" line called the settle token bare, so it was the
+    one thing on the screen still moving for somebody who had asked nothing
+    to. Both are the mistakes Motion.kt's header predicts — "it used to be
+    written by hand in every file that animated anything, and one of them had
+    forgotten to".
+
+A39. **The word "streak" was shipping, on screen.** It is the first entry
+    on §10.2's Never list and on the brief's §12, and `Copy.kt`'s own header
+    says "Never used anywhere: streak" — which made the header false about the
+    file it heads. It was in the fourth tour card: "No gamified streak
+    counters or cold badge scores." Naming the competitor's mechanic puts a
+    streak counter in the reader's head on the fourth screen of the product
+    that exists to refuse it.
+
+    The tour exists against S17's "four questions, no tour" by the owner's
+    call (A25), and its words were never held to §10 the way the rest of the
+    file is. Four rules were being broken on four cards: the Never-list word;
+    a duration ("0:42") on a mock voice note, which is a count attached to
+    reading on the one surface Law 2 guards hardest, twenty lines from a
+    comment in the same file saying exactly that; three of the four bodies
+    describing the product by *negation*, where §10.1 asks for the true small
+    thing and §12 says grace is the interface being unbothered rather than
+    reassuring; and the wrong nouns — a note is *left*, never pinned, because
+    being found later is the beat (§11); "reflections" is the cards, which are
+    a different object; and a burning fire is not "an ember", which is what
+    you keep when a book is finished. The section's own comment named
+    Duolingo as the model.
+
+    Also gone: the app's only first-person-plural. "We couldn't find this
+    invite" stood on the dead end of the join thread — the screen S16 says
+    must show "a person, not a product" — and "we" summons a support desk
+    onto it. Every other S25 line in the file names the thing that failed
+    rather than the company that failed it.
+
+    And §10.3's fourth notification now posts. "Ruth is reading Mark" had a
+    switch on S19, a channel in Android's settings and no call site anywhere.
+    It is the one of the six that cannot ride the background pull — presence
+    is ephemeral and socket-only, and a quarter-hour-old "so you can read at
+    the same time" is a lie — so it posts from the live roster, once per
+    arrival rather than per heartbeat, and only while Ribbon is running. That
+    limit is stated in `RoomWatch`'s header and in A34.
+
+A39a. **The gestures had no tap equivalents, on the app's central act.** §11
+    Motor is one sentence — "every gesture has a tap equivalent" — and four
+    places did not keep it.
+
+    **A verse.** The whole reading interaction is raw pointer input on the
+    text: a long-press-drag lifts a verse into the toolbar, a tap opens what
+    is at it. The text node is wiped and rebuilt as one accessibility node
+    per verse — and each carried a label and nothing else. So the semantics
+    tree exposed the verses as read-only strings and exposed no action at all
+    for either gesture, which closed leaving a highlight, leaving a written
+    note and leaving a voice note: everything §1 says the product is for.
+    It closed them to anybody who cannot hold a press for the platform
+    timeout and then drag, as well as to a screen reader. Both actions are on
+    the node now, the lift with its own haptic (§9.3). Extending a range
+    stays drag-only, which is honest — the toolbar acts on whatever is
+    lifted, and one verse is the common case.
+
+    **The presence lozenge** carried a sentence and no action, and the
+    sentence was on a merge root that takes the focus for itself, so the node
+    holding the gestures was never landed on — the exact mechanism
+    `Hearth.kt` documents for the fire and fixed there by merging. Following
+    the one person present, opening the panel, and "read quietly" — the only
+    route to reading quietly anywhere in the app — were all closed.
+
+    **The speak control's** two custom actions sat on an unmerged, unlabelled
+    node whose descendants carry text, so by the same rule they existed only
+    in source. It is a merge root now, and says what can happen rather than
+    repeating "Release to leave it", which is an instruction for a finger
+    that is not down.
+
+    **The ember record** had no drawn way out at all — a root destination
+    whose only exit was the system back gesture. It has a chevron now, drawn
+    rather than through `RibbonScreen`, because the ember and the book's name
+    both flow in from the shelf (A22) and a collapsing bar would take the
+    name out of that pair.
+
+    Two smaller ones: onboarding's back and sign-in controls were 36 dp —
+    eight under the floor deviation 12 sets — unlabelled, and had their
+    indication switched off, so they were undersized, silent and gave nothing
+    back under a finger. They are the app's own `BackChevron` and
+    `QuietControl` now, which is what they were hand-copies of. And three
+    screen-reader labels spoke a person's full name where every visible
+    surface says a first name — including the note card, whose label is the
+    *only* place its author is named, and the gutter mark, whose own doc
+    comment quotes §11's "Note from Ruth, verse 9, not yet found".
+
+A40. **The seams.** The states a polish pass is judged by, and the easiest
+    to leave half-made.
+
+    **A voice note left offline never reached anybody.** The written path was
+    queued and replayed on every foreground (A36); the voice path was left out
+    of both halves, so a note recorded on a train drew its pending hairline
+    (§4.4) and waited for a push that was never attempted again. Worse, the
+    replay loop pushed the row without the file — `RemoteSync.push` only
+    uploads audio when it is handed one — so even a queued voice note would
+    have arrived as a waveform on somebody else's phone with nothing behind
+    it. S25's "note failed to send" and §6.10's "notes queue with hairline
+    marks" both describe a queue; half of one existed.
+
+    **The background worker leaked a whole app every fifteen minutes.**
+    `AppModel` is a `ViewModel`, and one built outside a `ViewModelStore`
+    never has `onCleared` called — so A34's worker left an orphaned
+    `ConnectivityManager` callback (A26 says it "has to be unregistered"), a
+    live Realtime websocket with its own heartbeat and reconnect loop, and an
+    uncancelled scope behind it on every run, forever. It also ran a GitHub
+    update check each time. There is a `shutDown()` now, and
+    `load(forBackgroundPull = true)` skips the three launch-time side effects
+    a pull that exists to post a notification has no use for. A34's own note
+    says this route must stay cheap; it was not.
+
+    **A licensed translation offline was a blank page.** Every chapter of a
+    non-bundled edition draws its running head and then fetches — and
+    `ensureRemoteChapter` swallows every failure into a null, which the call
+    site dropped with `?.let`. The effect's keys never changed, so it could
+    never retry while the book was open, and nothing watched the network. All
+    three licensed editions are configured and selectable in S20 today, so
+    offline on NKJV was a heading over 320 dp of nothing with no line and no
+    way forward. It names what happened, offers the one action that helps
+    (§08), and re-keys on the connection so coming back online retries
+    without a tap. Waiting stays wordless, because §08 forbids the indicator
+    and a skeleton reads as fake text.
+
+    **Sign-in blamed the person for a network failure.** `verify()` caught
+    `Throwable` and said "That code didn't work" — to somebody whose phone had
+    simply lost its connection. `sendCode` twenty lines above already told the
+    two apart, and `SupabaseClient` reports an IOException as status 0, so
+    both the distinction and the string existed. It defaults to the
+    unreachable line now: an unknown failure is never a reason to accuse the
+    person (§12).
+
+    **A gradient glow behind the Wave, for the third time.** The first tour
+    card drew the mark on a 160 dp radial gradient — a gradient hero and a
+    glow behind the mark, two separate entries on §13's never-ship list and
+    the exact thing §7 says about the icon. A19 cut a light-wash under the
+    room's fire for this reason and A25 rebuilt the fourth tour card off a
+    gradient circle; this card was missed by both. The mark sits in a `well`
+    now, which is the honest way to make it read as held: a recess in the
+    page, rather than light coming from nowhere.
+
+A40a. **Two repairs that were themselves defects, and the queue that was
+    still missing.** An adversarial pass over this work found three things.
+
+    **The presence form's new semantics closed the panel it opened.** A39a
+    gave the lozenge the action §11 asks for by merging the Box the gestures
+    sit on — and that Box wraps the *expanded panel* as well. Compose's merge
+    swallows descendant merge roots, which is the rule `NoteCard` states in
+    this codebase, so with the panel open every control inside it — each
+    row's follow and thinking-of-you actions, and "read quietly" — collapsed
+    into one unactionable label. The merge is attached only while the form is
+    collapsed now; the open panel's children speak for themselves and
+    predictive back closes it.
+
+    **The ember record's new way back scrolled away.** A39a put a chevron on
+    the screen that had none, inside the scrolling column — which is verbatim
+    the defect A35 had just removed from S12, named in that entry's own
+    words. It is outside the scroll now.
+
+    Both are the same lesson twice: a repair copied from a fix is not the
+    fix, and the second half of each of those entries was the half that
+    mattered.
+
+    **Three offline mutations still had no queue.** A36 gave one to note
+    pushes, note deletes and highlight deletes; A37 gave one to invites; A40
+    gave one to voice notes. `addHighlight`, `markQuietDay` and — worst —
+    `answerCard` pushed once through a bare `runCatching` and were forgotten.
+    The card answer is the damaging one: `answerCard` decides whether a card
+    opens from *local* state, so an answer given offline leaves the card
+    sealed here and never reaches the backend, while the merge unions the
+    local answer straight back in on every pull — so the device goes on
+    believing it was recorded, nobody else ever sees it, and "This opens when
+    everyone has answered" never comes true. The one object in the app
+    explicitly blocked on everybody was the one whose answer had no queue. A
+    highlight (S06) and a marked quiet day (§4.7, an act of care performed in
+    public) were likewise invisible to the room for good.
+
+    Also: `WayInButton` — the control that opens the book, the loudest thing
+    in the app — never said `Role.Button`, so it announced as a line of text
+    while `QuietControl` and `BackChevron` both said it.
+
+A41. **The four cuts that were left, and the first of them is the product.**
+    A38 swept the app's animation primitives and fixed ten places still
+    changing on one frame. It found these four as well and did not fix them,
+    because the pass it belonged to had five named subjects and these were
+    not among them. They are the four, in the order they matter.
+
+    **Somebody else's highlight arrived on a single frame.** This is the
+    moment the whole product is for — the other person marks a verse and it
+    turns up under your eyes, on the page you are already reading — and it
+    happened the way a rendering glitch happens: a 24% wash simply *was*
+    there, in the periphery, with nothing to say it had just come. §9.1 opens
+    "everything breathes rather than blinks" and this was the blink, on the
+    one surface §13 will not allow a spinner, a toast or a badge on, so the
+    wash coming up *is* the whole notification.
+
+    Taking one back was the same in reverse, and a second person marking a
+    verse you had already marked stepped the colour straight to its deeper
+    multiply. All three are now one animation: the page holds the washes it
+    last settled on, and every wash eases from there to where it is now — up
+    from nothing, down to nothing, or across from the old colour to the new.
+    Deliberately not keyed to a clock, so a chapter you have just opened
+    draws its highlights already there rather than fading a page of them in
+    at you; an arrival is a thing that happens *while you are looking*, and
+    everything else is just the page. `arrive`, not `settle`, because §9.1
+    files presence appearing under the first and a highlight is somebody
+    being present at a verse.
+
+    The colour and alpha moved out of the draw and into composition to do it,
+    which is where they always belonged: nothing about "what colour is this
+    verse" needs the text layout. Only the rectangles do.
+
+    **A note mark reported both of its own state changes as cuts.** The mark
+    in the gutter exists to say two things, and said both on one frame.
+    *Found*: you open somebody's note, the breath stops and the opacity drops
+    — and because a breath is a moving value, where it dropped from depended
+    on where in the four seconds you happened to tap, so the same act looked
+    different every time. The breath is faded out now rather than switched
+    off. *Landed*: a note written offline draws hairline and becomes solid the
+    instant it reaches the server, which is the only sign this app gives that
+    what you wrote is now somewhere other than this phone (§4.4 forbids the
+    spinner, the toast and the retry button, and is right to). The ring
+    thickens inward into the filled dot over a settle instead.
+
+    The second one needed the mark redrawn as one shape: a filled dot is a
+    ring whose stroke has opened all the way to the middle, so both kinds and
+    both states are now ends of a single number rather than four pictures in a
+    `when`. That is the difference between something that can be animated and
+    something that can only be cross-faded.
+
+    **The presence panel's rows popped.** Somebody arriving while the panel is
+    open is the panel's entire subject, and it was the one thing on it that
+    happened between two frames: a row appeared, everything under it jumped by
+    its height, the panel changed size around them. Leaving was worse — a face
+    you were looking at was simply not there.
+
+    Each row opens and closes in its own space now. That needed a roster
+    rather than the list: a list you iterate cannot animate a departure,
+    because by the time you would animate it the departing person is already
+    not in it. `rememberRoster` keeps a leaver for exactly as long as the exit
+    lasts, in the place they were standing rather than at the end of the
+    queue, and forgets them after. Somebody back before their exit finishes is
+    simply here again.
+
+    **The account section swapped three layouts with no transition.** Tapping
+    "Sign in" replaced a control and a sentence with the whole inline form,
+    and signing out replaced the form with them again — the section changing
+    height under your thumb with nothing moving. What makes this one worth
+    writing down is that the update card *directly below it* is the same shape
+    and already carries the argument, in A-OTA's own words: "four cards ...
+    each appearing and vanishing on the frame its state changed". The fix had
+    been written, one section away, and not carried across. It is four named
+    phases and an `AnimatedContent` now, on the same tokens.
+
+A41a. **The rest of what the audit found: what the app does not say, and the
+    two things it says that it should not.** A39a fixed §11's "every gesture
+    has a tap equivalent" on the app's central act. Going back over the same
+    ground with the other half of §11 — *say what a thing is* — turned up
+    fifteen more, none of them hard, all of them invisible to anybody who can
+    see the screen.
+
+    **Five fields had no name.** A25 gave onboarding's three fields one shape,
+    one target and one prompt-beside-the-caret, and A35a did the same on You;
+    neither gave a field a *name*. Compose takes an accessible name from a
+    label, and all five of these draw their prompt as a sibling `Text` in the
+    decoration — so what a screen reader met was the word "Optional", or
+    "Search", or nothing at all, and then an unlabelled edit box it had to
+    guess the purpose of. The five: the note composer (S05 draws neither a
+    label nor a prompt over it, so there was nothing on screen to borrow
+    from — the app's central writing surface), the room name on the start
+    sheet, the book search, the room name on You, and onboarding's shared
+    `CentredTextField`, which is three fields including the one thing S17 will
+    not let anybody skip. Every prompt is now cleared from the tree and the
+    name is on the field, which is also one stop instead of two.
+
+    **Six controls had no role.** The next chapter — the control that carries
+    you out of a finished chapter and into the next one, the app's whole
+    forward motion — was a `Text` in a tappable `Box`, announced as a line of
+    type. So were the transcript disclosure (announced as the word
+    "transcript": the thing, never the act, and no way to know which way it
+    was pointing), the rows of a book search, "take back" in the composer, and
+    the tap that sends the highlight label away early — which meant the only
+    deliberate way to dismiss it did not exist unless you could see it. The
+    eight ink swatches said `selected` with no role at all, so a screen reader
+    named an ink and said nothing about it being one of eight with one taken;
+    they are `RadioButton`s, which is what a one-of-many is.
+
+    **Nothing in the app was a live region.** Two lines change because of
+    something the person just did, with nothing taking focus and nothing else
+    moving: the passkey result on You, and sign-in's only answer when it goes
+    wrong. §13 forbids the toast and the alert, correctly, which makes these
+    two lines the whole of what the app has to say — and it was saying them to
+    nobody. §11's "colour is never alone" has a twin: a result is never
+    silent. Both are `LiveRegionMode.Polite` now, and the passkey line only
+    while it is a result rather than the standing explanation.
+
+    **Two screens drew their own title and so had no heading.** Every pushed
+    screen gets one from `RibbonScreen`'s top bar (A35's finding on S12). The
+    chapter list and the finished chapter draw theirs by hand, so a screen
+    reader navigating by heading found nothing on either.
+
+    **The eight ink swatches were 34 dp across** — ten under the floor §11 and
+    deviation 12 set and the app keeps everywhere else, and specifically on
+    the eight-across case, where the columns touch, so a miss lands on the ink
+    *next door* rather than on nothing. Marking a verse in the wrong person's
+    colour is a worse failure than not marking it. They are 44 now. The
+    argument for 34 had been that eight at 44 are wider than a phone — which
+    is true, and is exactly why that row has scrolled since it was written:
+    the trade was never width against reach, it was width against a scroll
+    that was already there. `InkSwatch` lost the parameter with the last
+    caller that wanted anything but the floor.
+
+    **And two things that should not have been on screen at all.** The primary
+    sign-in control read *Continue with Auth0*: the one place in the product
+    where somebody about to read Scripture with their partner was shown the
+    name of a vendor. The identity provider is a decision this app made, not
+    something the reader has an account with or has heard of; §12's voice has
+    no room for an infrastructure brand on the control that opens the app. It
+    says what actually happens — a browser opens — and nothing else.
+    `INKS_FROM_WHEN_THE_ROOM_WAS_TWO` was the second string in `Copy.kt`
+    written and never read, which is the defect A39 is about; it is gone, and
+    so is `ScreenTitle`, a design-system component written for pushed screens,
+    superseded by `RibbonScreen`, and used by nothing. A design system with
+    dead parts in it is a design system people stop trusting to be the answer.
+
+A41b. **Highlighting, which nobody had ever looked at.** The reading surface
+    had one picture in the look book and it was a clean page: no wash, no
+    overlap, one note mark far down it. So the thing the product is *for* —
+    two people marking the same chapter — had never been seen, and it was
+    carrying four separate defects, three of them years old and one of them
+    mine, from ten minutes earlier. Every one of them was obvious in the
+    first picture. A24, again, and more expensively than usual.
+
+    **An overlap came out dimmer than one ink.** §4.5 says two inks on one
+    verse make a third colour, that the colours are never averaged, and that
+    the overlap is the point. The code multiplied the ink values — and
+    multiply is how two *pigments* combine on white paper, where each one
+    subtracts. Ribbon's page is unlit ground at `0x0B0B0A` and a wash on it is
+    translucent *light*. Multiplying two inks there makes a near-black
+    pigment, so: crimson alone reads at 3.2× the ground's luminance, teal at
+    4.0×, and the two together at **2.7×**. Raising the alpha — which the old
+    ramp did, by 14% per extra ink, in the name of deepening — made it worse,
+    because it moved the result further toward that near-black. Two people
+    marking the same verse punched a hole in the page.
+
+    They are screened now: `1 − (1−a)(1−b)`, multiply's mirror for light. It
+    is symmetric, so the wash does not depend on which ink the loop happened
+    to meet first — "we both marked this" is not an ordered fact — and
+    crimson and teal make a warm bronze that is neither and brighter than
+    both. Still one arithmetic fill rather than a `BlendMode` pass per ink,
+    for the reason the original comment gives: a blend mode composites
+    against what is already on the canvas, which here is the ground. The ramp
+    is +5% per ink capped at 36%, which is what now keeps §4.5's "never a
+    block of colour" true in a direction that climbs toward white: eight inks
+    screened are very nearly white, and at 36% Scripture still reads over
+    them at 5.3:1, against 8.7:1 for the two-person case the product is
+    actually about.
+
+    **It also departs from a line in the build book, which is why the numbers
+    are here.** §4.5 says in terms: "Overlapping highlights blend — multiply,
+    not stack". S06 says, of the same thing: "This is desirable and must
+    survive both themes — **check every one of the 28 pairs against the ground
+    before ship**." Those two instructions are in conflict on a dark ground,
+    and the second is the one that settles it, because it is a measurement
+    rather than a preference. Run for the first time, **all 28 pairs failed**:
+    every overlap came out no brighter than one ink alone, crimson over teal
+    at half the luminance of teal by itself. Under screen, none of the 28
+    fail. A check that has to be done by hand before every ship is a check
+    that gets done once, so it is `HighlightWashTest` now and runs on every
+    build — all 28 pairs, Scripture's contrast at every depth from one ink to
+    eight, and that an overlap is a third colour rather than one of its own
+    inks.
+
+    This is the one call in this pass worth overruling if the owner disagrees,
+    because it contradicts a sentence of the book rather than filling a gap in
+    it. iOS multiplies and is untouched; if this stands, it is the change iOS
+    takes next.
+
+    **A highlight on a wrapping verse drew one line and then slivers.**
+    `enclosingRects` asked `getHorizontalPosition` for both ends of every
+    line. That is right for an end *inside* a line and wrong for a line's own
+    end: at a soft wrap the offset already belongs to the line below, so it
+    answers with the next line's left margin, and on a hard break it lands on
+    the break. Every line a verse covered in full therefore got a right edge
+    out near the left margin, and `max(a, b)` collapsed the rect to a
+    hairline in the indent. On poetry, where lines are short and indented, a
+    highlight across four lines of the Psalms drew one line and three
+    slivers. The line's own right edge is the answer when the verse runs past
+    it; only a verse that *stops* part-way needs an offset.
+
+    **Every wash was a stack of boxes, and the boxes fought each other.** One
+    translucent rounded rectangle per line, which gave three faults at once.
+    The rectangles bleed past the glyph box, so consecutive lines overlapped
+    by twice the bleed and translucent over translucent is darker — a verse
+    over three lines drew two dark stripes through itself, at exactly the
+    places the eye crosses. Each rectangle was then nudged up or down by a
+    stable hash "so it reads as ink soaking into paper", but moving a whole
+    line box is not what soaking looks like, it is what a layout bug looks
+    like; the rows staggered and the stripes moved with them. And the corner
+    radius came from the same hash, so one line of a passage was rounder than
+    the next.
+
+    All three go away by unioning the line boxes into one path and filling it
+    once: seams cannot darken when there is one fill, the interior corners
+    vanish, and the shape that comes out is the shape of the words, stepping
+    in and out at the ends of lines — which is the irregularity that was being
+    simulated, and it is free. What is left of the hand is horizontal: the
+    end of each line's wash overshoots by about half a millimetre on a stable
+    hash, the way the end of a pen stroke does. Nothing vertical moves.
+
+    **And it was a slab.** Scripture is set on generous leading, so a line's
+    box is half again as tall as the letters standing in it; washing the whole
+    box made a multi-line highlight one unbroken block with the words floating
+    in the middle of it, which is a *selection*, not a mark. The wash hangs
+    off the baseline now — over the capitals, under the tails, and no further
+    — so it sits on the words the way a stroke does and the leading stays open
+    between one line and the next. Clamped to the line box at both ends, so a
+    tall capital or a long descender can never let one line's wash touch
+    another's.
+
+A41c. **The toolbar put its two verbs off the screen, and I did it.** A41a
+    brought the eight ink swatches up from 34 dp to the 44 the rest of the app
+    keeps. The whole bar scrolled as one, so the extra width pushed `write`
+    and `speak` past the right-hand edge — and the eight-across case is
+    precisely a room of two, which is the shape of room this product exists
+    for. The ink is the thing you can already do by holding a verse; the two
+    verbs are the reason the toolbar is there at all, and they were behind a
+    scroll nobody is told about.
+
+    Only the inks scroll now; the rule and the two words are pinned. At eight
+    inks the eighth is a short slide away and both verbs are where they always
+    are, and at one — a room of three or more — nothing moves at all. The
+    floor was never the thing to trade: the row has scrolled since it was
+    written, and the trade only looked like a trade in source.
+
+    Four screens joined the look book to catch this and the entries above: the
+    page in use, the toolbar, the shelf, and S16 — the screen the build book
+    calls the most important conversion surface in the product, which had
+    never been in a picture, which is how it kept a monogram where S16's
+    anatomy names a portrait until somebody read the source (A37).
+
+A41d. **A highlight you make yourself is drawn travelling.** A41b made the
+    wash arrive rather than blink, and that was right for a highlight turning
+    up from the other person's phone — it eases in where it lies, because
+    nothing travelled across *your* page when somebody else marked their own
+    copy, and drawing a stroke would be the app acting out something that did
+    not happen.
+
+    Your own is a different fact and deserved a different animation. It is
+    the one act on this surface that is entirely yours and the only one the
+    app can honestly show as the movement of a hand: you lifted a verse, you
+    chose an ink, and the mark is *made*. It ran as the same 320 ms fade as
+    everything else, so the most tactile moment in the product — §4.4 calls
+    marking a verse the app's central act — felt like a state change.
+
+    The wash is at full colour from the first frame and revealed along the
+    words instead, in reading order, line by line and left to right within a
+    line. Measured in ink laid down rather than in lines, so a verse of four
+    words and a verse of four lines take the same time and travel at visibly
+    different speeds, which is what a pen does. The clips are one per line and
+    disjoint, so the shape is never filled over itself and a half-drawn stroke
+    is exactly as dark as a finished one.
+
+    The last ten dp of it runs out into nothing rather than ending on a hard
+    vertical edge, because a hard edge travelling across Scripture is a *wipe
+    transition* — the one part of this the eye reads as a screen doing
+    something rather than as ink. `settle`, not `arrive`: a mark being made
+    takes the time a hand takes, and it is not the same clock as something
+    turning up.
+
+    Under reduce motion both of these are what §11 says they are — the wash
+    is simply there — because the tokens decide that in one place and neither
+    of these animations writes the branch out itself.
+
+    The look book holds the stroke half-way across, on a held clock. A still
+    frame is the only way to check that it reveals along the words rather
+    than wiping the block, and that is not a thing source can be read for.
+
+A41e. **A selection could not be adjusted, at all.** S06's *Extending* reads:
+    "Drag handles at both ends of the selection, snapping to verse boundaries
+    by default and to word boundaries when dragged slowly." There were no
+    handles. The one way to select more than a verse was to keep your finger
+    down after the long press and drag, and the moment it lifted the selection
+    was final.
+
+    Overshoot by a verse — which is easy, because the thing under your thumb is
+    the thing you cannot see — and there was no way back at all. Not a shorter
+    way back: none. You marked it wrongly, tapped it, removed it, and started
+    over, on the app's central act. That is the sort of gap that never shows up
+    in a screenshot and is the first thing anybody hits using it.
+
+    Two handles now, one at the first line of the first verse and one at the
+    last line of the last. Not the corners of the box the selection fits
+    inside: a verse that wraps is wider than its own last line, so a bounding
+    box puts the tail handle at the end of the widest line, which on a
+    selection ending mid-paragraph is somewhere in the middle of the *next*
+    verse. The look book caught that in the first picture of them.
+
+    They are 10 dp drawn in a 44 dp target (§11, deviation 12) and in the
+    accent, because they are the app's own furniture rather than anybody's
+    ink — §4.5 keeps chartreuse out of the eight and out of the reader's
+    hands, and this is the same reasoning that puts the caret in it.
+
+    Every drag has the tap equivalent §11 requires, as two custom actions on
+    each handle — *a verse further on*, *a verse back*. A handle you can only
+    drag is a handle that does not exist for half the people S06 was written
+    for, and the last pass (A39a) found exactly this defect on the gesture
+    that opens the toolbar in the first place.
+
+    **What is deliberately not here:** S06's second clause, word boundaries on
+    a slow drag. `VerseRange` holds a start verse and an end verse, so a
+    sub-verse highlight has nowhere to be stored — it is a change to the shared
+    model on both platforms and to the backend, not an Android drawing
+    question. Written down rather than half-built.
+
+A41f. **Your ink meeting theirs, which was drawn as theirs being wiped away.**
+    A41d made your own highlight travel across the words. On bare Scripture
+    that was the whole story; on a verse somebody else had already marked it
+    was wrong in a way that inverted the meaning of the act.
+
+    Only one wash is drawn per verse, and by the time the stroke started that
+    wash had already become the mixture of the two inks. So at the head of the
+    stroke, with nothing yet revealed, **their highlight was not on the page**
+    — it came back from the left as the blend. Marking a verse alongside
+    somebody, which is the one moment on this surface where the two of you are
+    demonstrably in the same place, read as their mark being erased and
+    replaced by yours.
+
+    Their ink stays where it is now and the pen mixes it as it passes: ahead of
+    the tip, their colour, untouched; behind it, the third colour the two inks
+    make; and at the tip the one crosses into the other over about ten dp,
+    which is what a wet stroke laid over a dry one does. The two regions are
+    separate clips, so the colours are never composited over one another and
+    the mixture stays the arithmetic one rather than one wash dimmed by
+    another. Nothing flashes, nothing overshoots, nothing glows, and nothing is
+    counted — §13 forbids all four and none of them is needed. It is the colour
+    arriving, which is the whole point of two people reading the same chapter.
+
+    **A race went with it.** What is already on the page was being read from
+    the arrival animation's own "previous" state, which turns over the moment
+    *that* animation ends — 320 ms against the stroke's 400 — so their colour
+    would have dropped out from in front of the pen for the last fifth of the
+    stroke. It is captured once, when the stroke starts, and held for its
+    length.
+
+    The look book holds the instant the pen touches down, because that is the
+    frame that was empty. The travelling part is `theStrokeTravelling`.
+
 ## Licensed translations (decided: API.Bible)
 
 Open question §16.8 is now part-decided: **NKJV plus two undecided

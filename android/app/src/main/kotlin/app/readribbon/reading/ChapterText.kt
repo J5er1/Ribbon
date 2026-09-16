@@ -1,8 +1,11 @@
 package app.readribbon.reading
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Box
@@ -14,24 +17,36 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.ParagraphStyle
 import androidx.compose.ui.text.Placeholder
@@ -51,8 +66,8 @@ import app.readribbon.app.Copy
 import app.readribbon.core.BlockStyle
 import app.readribbon.core.Ink
 import app.readribbon.core.ScriptureChapter
-import app.readribbon.design.LocalRoomColours
 import app.readribbon.design.LocalHaptics
+import app.readribbon.design.LocalRoomColours
 import app.readribbon.design.Palette
 import app.readribbon.design.RibbonMotion
 import app.readribbon.design.RibbonType
@@ -135,6 +150,23 @@ private val WASH_BLEED_X = 2.dp
 /** Vertical bleed. Less than the horizontal: ink spreads along a line. */
 private val WASH_BLEED_Y = 1.2.dp
 
+/** How far the end of a line's wash overshoots, one way or the other. */
+private val WASH_WOBBLE = 0.6.dp
+
+/** The wash's outer corners. Generous: a highlight is a gesture, not a box. */
+private val WASH_CORNER = 5.dp
+
+/** How far the wet end of a stroke runs out over, while it is travelling. */
+private val WASH_TIP = 10.dp
+
+/**
+ * How far the wash reaches from the baseline, as a fraction of the body size:
+ * over the capitals and under the tails, and no further. Everything above and
+ * below that is leading, which belongs to the page rather than to the mark.
+ */
+private const val WASH_ABOVE_BASELINE = 0.88f
+private const val WASH_BELOW_BASELINE = 0.28f
+
 /**
  * One chapter, set as a page.
  *
@@ -144,6 +176,12 @@ private val WASH_BLEED_Y = 1.2.dp
  *   result (§4.5).
  * @param liftedVerses verses currently lifted by a long-press (drawn raised,
  *   with a soft shadow).
+ * @param justMarked the verses you have this moment highlighted yourself, so
+ *   the wash is drawn travelling across them rather than appearing on them.
+ *   Null for everything else, including a highlight arriving from somebody
+ *   else's phone.
+ * @param onMarkDrawn the stroke has finished travelling and [justMarked] can
+ *   be let go of.
  * @param openNote an open note's carve-out: verse and the height to open
  *   beneath it.
  * @param onNoteSlot y offset (in this composable's coordinates) of the
@@ -156,6 +194,8 @@ fun ChapterText(
     theme: ReadingTheme,
     verseInks: Map<Int, List<Ink>>,
     liftedVerses: IntRange?,
+    justMarked: IntRange?,
+    onMarkDrawn: () -> Unit,
     openNote: OpenNote?,
     isFirstChapter: Boolean,
     showMarginHint: Boolean,
@@ -274,6 +314,11 @@ fun ChapterText(
         }
     }
 
+    // The washes, already eased to whatever they are part-way through
+    // becoming. Computed here rather than in the draw because none of it
+    // needs the layout: only the rectangles do.
+    val washes = rememberArrivingWashes(verseInks, justMarked, onMarkDrawn, reduceMotion)
+
     Box(
         modifier = modifier.padding(
             // iOS: textContainerInset = (0, gutterWidth + 8, 0, trailingMargin).
@@ -287,7 +332,7 @@ fun ChapterText(
                 .fillMaxWidth()
                 .drawBehind {
                     val result = layout ?: return@drawBehind
-                    drawWashes(result, page, verseInks, density)
+                    drawWashes(result, page, washes, theme.fontSize, density)
                 }
                 // The long-press threshold is the platform's own
                 // (`ViewConfiguration.longPressTimeout`, 500 ms) rather than
@@ -336,6 +381,62 @@ fun ChapterText(
             onTextLayout = { layout = it },
         )
 
+        // **The two handles S06 asks for.**
+        //
+        // "Extending — drag handles at both ends of the selection, snapping to
+        // verse boundaries." They did not exist. The only way to select more
+        // than one verse was to keep the finger down after the long press and
+        // drag; once it lifted, the selection was final. Overshoot by a verse
+        // — which is easy, because the thing under your thumb is the thing you
+        // cannot see — and the only way back was to mark it wrongly, tap it,
+        // and remove it. On the app's central act.
+        //
+        // They snap to verse boundaries and *only* to verse boundaries. S06's
+        // second clause, word boundaries on a slow drag, is not here and is
+        // not an oversight: `VerseRange` holds a start verse and an end verse,
+        // so a sub-verse highlight has nowhere to be stored. It is a change to
+        // the shared model on both platforms and the backend, not an Android
+        // drawing question. Written down in A41e rather than half-built.
+        val lifting = layout
+        if (liftedVerses != null && lifting != null) {
+            // The first line of the first verse and the last line of the last,
+            // not the corners of the box the selection fits inside. A verse
+            // that wraps is wider than its own last line, so a bounding box
+            // put the tail handle out at the end of the widest line — which,
+            // on a selection ending mid-paragraph, is somewhere in the middle
+            // of the *next* verse.
+            val head = page.verseRanges[liftedVerses.first]
+                ?.let { enclosingRects(lifting, it) }?.firstOrNull()
+            val tail = page.verseRanges[liftedVerses.last]
+                ?.let { enclosingRects(lifting, it) }?.lastOrNull()
+            if (head != null && tail != null) {
+                SelectionHandle(
+                    x = head.left,
+                    y = head.top,
+                    label = Copy.WHERE_THE_MARK_STARTS,
+                    density = density,
+                    onMoved = { point -> verseAt(point)?.let(currentDragTo) },
+                    onSettled = { currentDragEnded() },
+                    onStep = { forward ->
+                        val to = if (forward) liftedVerses.first + 1 else liftedVerses.first - 1
+                        if (page.verseText.containsKey(to)) currentDragTo(to)
+                    },
+                )
+                SelectionHandle(
+                    x = tail.right,
+                    y = tail.bottom,
+                    label = Copy.WHERE_THE_MARK_ENDS,
+                    density = density,
+                    onMoved = { point -> verseAt(point)?.let(currentDragTo) },
+                    onSettled = { currentDragEnded() },
+                    onStep = { forward ->
+                        val to = if (forward) liftedVerses.last + 1 else liftedVerses.last - 1
+                        if (page.verseText.containsKey(to)) currentDragTo(to)
+                    },
+                )
+            }
+        }
+
         // Verse-by-verse screen-reader navigation (§11): one element per
         // verse, so a swipe moves by verse — and the label obeys Law 2
         // ("Verse nine." then the words; never a position report).
@@ -354,7 +455,27 @@ fun ChapterText(
                             width = with(density) { bounds.width.toDp() },
                             height = with(density) { bounds.height.toDp() },
                         )
-                        .clearAndSetSemantics { contentDescription = label },
+                        // The two gestures the text carries, said out loud
+                        // (§11 Motor). These nodes used to carry a label and
+                        // nothing else, so the app's central act — leaving a
+                        // note at a verse — had a long-press-and-drag as its
+                        // only door. The lift plays its haptic here too, at
+                        // the moment the verse lifts, exactly as the drag's
+                        // own start does (§9.3).
+                        .clearAndSetSemantics {
+                            contentDescription = label
+                            onClick(label = Copy.OPEN_WHATS_HERE) {
+                                currentTap(verse)
+                                true
+                            }
+                            customActions = listOf(
+                                CustomAccessibilityAction(Copy.LEAVE_SOMETHING_HERE) {
+                                    haptics?.verseLifts()
+                                    currentLongPress(verse)
+                                    true
+                                },
+                            )
+                        },
                 )
             }
         }
@@ -366,79 +487,480 @@ private class GestureState {
     var lifted: Boolean = false
 }
 
-// MARK: - The washes
-
 /**
- * Highlight washes, drawn behind the glyphs: rounded, bleeding ~2 dp past
- * the glyph box, with slightly irregular edges so it reads as ink soaking
- * into paper rather than a filled rectangle.
+ * One end of a lifted selection: a small knob you can pull, in the accent —
+ * this is the app's own furniture rather than anybody's ink, and it is drawn
+ * in the same chartreuse as the caret for that reason (§4.5 keeps chartreuse
+ * out of the eight and out of the reader's hands).
  *
- * Overlaps arrive precomputed as multiplied colours, so two people marking
- * the same verse produces a third colour. The colours are never averaged —
- * the overlap is the point (§4.5).
+ * The knob is 10 dp and the target is 44 (§11, deviation 12), hung off the
+ * corner it marks so the drawn part sits on the text's edge while the part a
+ * thumb has to find is the size of a thumb.
  *
- * The multiply is arithmetic on the ink values, filled once, exactly as iOS
- * does it — deliberately not a `BlendMode.Multiply` pass per ink. A blend
- * mode multiplies against whatever is already on the canvas, and what is
- * already there is the unlit ground (0x0B0B0A); the overlap would come out
- * darker than a single wash and still carrying the first ink's hue, which is
- * the opposite of the third colour §4.5 asks for.
+ * Every drag has the tap equivalent §11 requires, as two custom actions on the
+ * handle itself — move this end on a verse, either way — because a handle you
+ * can only *drag* is a handle that does not exist for half the people S06 was
+ * written for.
  */
-private fun DrawScope.drawWashes(
-    layout: TextLayoutResult,
-    page: ChapterPage,
-    verseInks: Map<Int, List<Ink>>,
+@Composable
+private fun SelectionHandle(
+    x: Float,
+    y: Float,
+    label: String,
     density: Density,
+    onMoved: (Offset) -> Unit,
+    onSettled: () -> Unit,
+    onStep: (forward: Boolean) -> Unit,
 ) {
-    val bleedX = with(density) { WASH_BLEED_X.toPx() }
-    val bleedY = with(density) { WASH_BLEED_Y.toPx() }
-    val jitterUnit = with(density) { 0.2.dp.toPx() }
-    val radiusUnit = with(density) { 1.dp.toPx() }
+    val accent = Palette.accent
+    val target = with(density) { HANDLE_TARGET.toPx() }
+    val knob = with(density) { HANDLE_KNOB.toPx() }
+    // Where the finger last was, in the text's own coordinates, so a drag can
+    // be hit-tested against the page exactly as the long-press drag is.
+    var travel by remember(x, y) { mutableStateOf(Offset(x, y)) }
 
-    val washes = verseInks.entries
-        .mapNotNull { (verse, inks) ->
-            if (inks.isEmpty()) return@mapNotNull null
-            val range = page.verseRanges[verse] ?: return@mapNotNull null
-            range to inks
-        }
-        .sortedBy { it.first.first }
-
-    for ((range, inks) in washes) {
-        // 24% for one ink; overlapping inks deepen, capped so a verse never
-        // becomes a block of colour.
-        val alpha = min(0.45f, Palette.HIGHLIGHT_WASH + 0.14f * (inks.size - 1))
-        val rects = enclosingRects(layout, range)
-        if (rects.isEmpty()) continue
-        var multiplied = inks[0].color
-        for (other in inks.drop(1)) multiplied = multiply(multiplied, other.color)
-        val color: Color = multiplied.copy(alpha = alpha)
-        for (rect in rects) {
-            // Bleed past the glyph box; jitter by a stable hash so the
-            // edge is irregular but doesn't shimmer on redraw.
-            val h = (range.first * 31 + rect.top.toInt()) % 5 - 2
-            val dy = h * jitterUnit
-            val left = rect.left - bleedX
-            val top = rect.top - bleedY + dy
-            val right = rect.right + bleedX
-            val bottom = rect.bottom + bleedY + dy
-            drawRoundRect(
-                color = color,
-                topLeft = Offset(left, top),
-                size = Size(right - left, bottom - top),
-                cornerRadius = CornerRadius(
-                    x = (3f + abs(h)) * radiusUnit,
-                    y = 4f * radiusUnit,
-                ),
-            )
+    Box(
+        modifier = Modifier
+            // Centred on the corner it marks: the top-left of the first verse
+            // and the bottom-right of the last, which is where a hand expects
+            // the ends of a run of text to be held.
+            .offset {
+                IntOffset(
+                    (x - target / 2f).roundToInt(),
+                    (y - target / 2f).roundToInt(),
+                )
+            }
+            .size(HANDLE_TARGET)
+            .pointerInput(x, y) {
+                detectDragGestures(
+                    onDragStart = { travel = Offset(x, y) },
+                    onDragEnd = { onSettled() },
+                    onDragCancel = { onSettled() },
+                ) { change, delta ->
+                    change.consume()
+                    travel += delta
+                    onMoved(travel)
+                }
+            }
+            .semantics {
+                contentDescription = label
+                customActions = listOf(
+                    CustomAccessibilityAction(Copy.A_VERSE_FURTHER_ON) {
+                        onStep(true)
+                        true
+                    },
+                    CustomAccessibilityAction(Copy.A_VERSE_BACK) {
+                        onStep(false)
+                        true
+                    },
+                )
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(Modifier.size(HANDLE_TARGET)) {
+            drawCircle(color = accent, radius = knob / 2f)
         }
     }
 }
 
-/** Two inks, multiplied — the third colour an overlap makes (§4.5). */
-private fun multiply(a: Color, b: Color): Color = Color(
-    red = a.red * b.red,
-    green = a.green * b.green,
-    blue = a.blue * b.blue,
+/** The knob, and the target around it (§11, deviation 12). */
+private val HANDLE_KNOB = 10.dp
+private val HANDLE_TARGET = 44.dp
+
+// MARK: - The washes
+
+/**
+ * One verse's wash, as it is drawn this frame: the colour the inks on it
+ * make, how far up it is, and — when you are the one who just made it — how
+ * far along the words the stroke has got.
+ */
+@Immutable
+internal data class Wash(
+    val color: Color,
+    val alpha: Float,
+    /** How far along the words the pen has got. 1 when nothing is moving. */
+    val drawn: Float = 1f,
+    /**
+     * What is already on this verse, in front of the pen.
+     *
+     * Only ever set while a stroke of yours is travelling across somebody
+     * else's mark: ahead of the tip the verse still shows their ink, behind
+     * it the two have mixed. Null when you are marking bare words.
+     */
+    val beneath: Wash? = null,
+)
+
+/**
+ * The wash a set of inks settles at: 24% for one, deepening for each ink on
+ * top of it, capped so a verse never becomes a block of colour (§4.5).
+ *
+ * **The inks are screened, not multiplied, and that is the correction.**
+ *
+ * Multiply is how two pigments combine *on white paper*: each one subtracts,
+ * so the overlap is darker than either. Ribbon's page is not paper — it is
+ * unlit ground at 0x0B0B0A, and a wash on it is a translucent *light* laid
+ * over darkness. Multiplying two inks there produces a near-black pigment, so
+ * the overlap came out **dimmer than either ink on its own**: crimson alone
+ * sits at 3.2× the ground's luminance, teal at 4.0×, and the two together at
+ * 2.7×. §4.5 says an overlap *deepens* and that "the overlap is the point";
+ * what it actually did was punch a hole in the page where two people had both
+ * marked a verse — the single most meaningful thing that can happen on this
+ * surface, drawn as an absence. Raising the alpha, which the old ramp did,
+ * made it worse, because it moved the result further toward that near-black.
+ *
+ * Screen is multiply's mirror for light, and it is symmetric, so the wash does
+ * not depend on which ink the loop met first — the fact "these two people both
+ * marked this verse" is not an ordered one. Crimson and teal make a warm
+ * bronze that is neither of them and brighter than both, which is the third
+ * colour §4.5 asks for. Nothing is averaged.
+ *
+ * Still one arithmetic fill rather than a `BlendMode` pass per ink, and for
+ * the original reason: a blend mode composites against whatever is already on
+ * the canvas, which here is the ground itself.
+ *
+ * The ramp: +5% per extra ink, capped at 36%. The cap is what keeps §4.5's
+ * "never a block of colour" true now that the colours climb toward white
+ * rather than falling toward black — eight inks screened together are very
+ * nearly white, and at 36% Scripture still reads over it at 5.3:1, against
+ * 8.7:1 for the two-person case this product is actually about.
+ *
+ * This diverges from iOS, deliberately and knowingly: see deviations A41b.
+ *
+ * `internal` rather than private because S06 ends "check every one of the 28
+ * pairs against the ground before ship", and a check that has to be performed
+ * by hand before every ship is a check that gets performed once. It is
+ * `HighlightWashTest` now.
+ */
+internal fun washFor(inks: List<Ink>): Wash {
+    var mixed = inks[0].color
+    for (other in inks.drop(1)) mixed = screen(mixed, other.color)
+    return Wash(mixed, min(WASH_CAP, Palette.HIGHLIGHT_WASH + WASH_STEP * (inks.size - 1)))
+}
+
+/** How much each ink past the first deepens the wash, and how far it can go. */
+private const val WASH_STEP = 0.05f
+private const val WASH_CAP = 0.36f
+
+/**
+ * Somebody else's highlight, arriving.
+ *
+ * This is the moment the product is for — the other person marks a verse and
+ * it turns up under your eyes on the page you are already reading — and until
+ * now it was the one change in the app that happened on a single frame. A 24%
+ * wash simply *was there*, in the periphery, with nothing to say it had just
+ * come; §9.1 opens "everything breathes rather than blinks" and this was the
+ * blink. Taking one back was the same in reverse, and a second person marking
+ * a verse you had already marked stepped the colour to its deeper multiply
+ * with a cut.
+ *
+ * All three are the same animation: the page holds what it last settled on,
+ * and every wash eases from there to where it is now. A new wash comes up
+ * from nothing, one taken back goes down to nothing, and a deepening one
+ * crosses from the old colour to the new. Nothing is keyed to a clock, so a
+ * chapter you have just opened draws its highlights already there rather than
+ * fading a page of them in at you.
+ *
+ * `arrive`, not `settle` — §9.1 files presence appearing under the first, and
+ * a highlight is somebody being present at a verse.
+ */
+@Composable
+private fun rememberArrivingWashes(
+    verseInks: Map<Int, List<Ink>>,
+    justMarked: IntRange?,
+    onMarkDrawn: () -> Unit,
+    still: Boolean,
+): Map<Int, Wash> {
+    val settled = remember(verseInks) {
+        verseInks.mapNotNull { (verse, inks) ->
+            if (inks.isEmpty()) null else verse to washFor(inks)
+        }.toMap()
+    }
+
+    // What the page is coming *from*. Seeded with the first set it is given,
+    // so opening a chapter is not an arrival: those highlights were already
+    // there before you turned to the page.
+    var from by remember { mutableStateOf(settled) }
+    val travel = remember { Animatable(1f) }
+
+    LaunchedEffect(settled) {
+        if (from == settled) return@LaunchedEffect
+        travel.snapTo(0f)
+        travel.animateTo(1f, RibbonMotion.arrive(still))
+        from = settled
+    }
+
+    // Your own stroke, travelling. It runs on its own clock because it is a
+    // different length from the arrival above — a mark being *made* takes the
+    // time a hand takes, and a mark that has turned up takes the time
+    // anything else takes to arrive.
+    val stroke = remember { Animatable(1f) }
+    val markDrawn by rememberUpdatedState(onMarkDrawn)
+
+    // What the page showed before this mark went on, held for the length of
+    // the stroke.
+    //
+    // Deliberately captured here rather than read from `from` at draw time.
+    // `from` belongs to the arrival above and turns over the moment *that*
+    // animation ends — 320 ms against this one's 400 — so a pen crossing
+    // somebody else's mark would have lost their colour out from in front of
+    // it for the last fifth of the stroke, which is the one moment it is
+    // there to show.
+    var under by remember { mutableStateOf<Map<Int, Wash>>(emptyMap()) }
+    LaunchedEffect(justMarked) {
+        if (justMarked == null) return@LaunchedEffect
+        under = from
+        stroke.snapTo(0f)
+        stroke.animateTo(1f, RibbonMotion.settle(still))
+        under = emptyMap()
+        markDrawn()
+    }
+
+    val t = travel.value
+    val pen = stroke.value
+    val striking = if (pen < 1f) justMarked else null
+    if (t >= 1f && striking == null) return settled
+
+    val drawn = LinkedHashMap<Int, Wash>(settled.size + from.size)
+    for ((verse, now) in settled) {
+        // A verse you are marking right now is at full colour from the first
+        // frame and is revealed along its length instead: the ink is not
+        // getting darker, the pen is moving.
+        if (striking != null && verse in striking) {
+            // **Your ink meeting theirs.**
+            //
+            // Marking a verse somebody else has already marked is the one
+            // moment on this surface where the two of you are demonstrably
+            // in the same place, and it was drawn as their highlight
+            // *disappearing*: the stroke revealed the new combined colour
+            // from the left, and ahead of the tip there was nothing at all,
+            // because only one wash is drawn per verse and it had already
+            // become the mixture.
+            //
+            // Their ink stays where it is and the pen mixes it as it passes.
+            // Ahead of the tip, their colour; behind it, the third colour the
+            // two inks make; and at the tip the one crosses into the other
+            // over about ten dp, which is what happens when a wet stroke is
+            // laid over a dry one. Nothing flashes, nothing overshoots, and
+            // nothing is counted — it is just the colour arriving, and it is
+            // the whole point of two people reading the same chapter.
+            drawn[verse] = now.copy(drawn = pen, beneath = under[verse])
+            continue
+        }
+        val was = from[verse]
+        drawn[verse] = if (was == null) {
+            now.copy(alpha = now.alpha * t)
+        } else {
+            Wash(lerp(was.color, now.color, t), was.alpha + (now.alpha - was.alpha) * t)
+        }
+    }
+    // Taken back: down to nothing rather than gone between two frames.
+    for ((verse, was) in from) {
+        if (verse !in settled) drawn[verse] = was.copy(alpha = was.alpha * (1f - t))
+    }
+    return drawn
+}
+
+/**
+ * Highlight washes, drawn behind the glyphs.
+ *
+ * **One mark, filled once.** Every wash used to be drawn a line at a time:
+ * one translucent rounded rectangle per line the verse touched. Three things
+ * came of that, and together they are why a highlight never looked like a
+ * highlight.
+ *
+ * *A dark band at every line break.* The rectangles bleed past the glyph box
+ * top and bottom, so consecutive lines overlapped by twice the bleed — and
+ * translucent over translucent is darker. A verse running over three lines
+ * drew two horizontal stripes through itself, at exactly the places the eye
+ * travels across.
+ *
+ * *Lines that did not line up.* Each rectangle was nudged up or down by a
+ * stable hash, to read as "ink soaking into paper". Moving the whole line
+ * box is not what soaking looks like; it is what a layout bug looks like.
+ * The rows staggered, and the dark bands moved with them.
+ *
+ * *A different shape per line.* The corner radius came from the same hash, so
+ * one line of a passage was rounder than the next.
+ *
+ * All three go away by unioning the line boxes into a single path and filling
+ * that once. The seams cannot darken because there is only one fill; the
+ * outer corners round and the interior ones vanish; and the shape that comes
+ * out is the shape of the words, stepping in and out at the ends of lines —
+ * which is the irregularity that was being simulated, and it is free.
+ *
+ * What is left of the hand-made quality is horizontal: the right-hand edge of
+ * each line wobbles by a fraction of a millimetre on a stable hash, the way
+ * the end of a pen stroke does. Nothing vertical moves, ever.
+ *
+ * The colours arrive already made — see [rememberArrivingWashes]. What is
+ * left here is the one part that needs the layout: which rectangles a verse
+ * encloses.
+ */
+private fun DrawScope.drawWashes(
+    layout: TextLayoutResult,
+    page: ChapterPage,
+    washes: Map<Int, Wash>,
+    bodySize: Float,
+    density: Density,
+) {
+    val bleedX = with(density) { WASH_BLEED_X.toPx() }
+    val bleedY = with(density) { WASH_BLEED_Y.toPx() }
+    val wobbleUnit = with(density) { WASH_WOBBLE.toPx() }
+    val radius = with(density) { WASH_CORNER.toPx() }
+
+    // Scripture is set on generous leading, so a line's *box* is about half
+    // again as tall as the letters standing in it. Washing the whole box made
+    // a three-line highlight one unbroken slab of colour with the words
+    // floating in the middle of it — closer to a selection than to a mark.
+    // The wash is hung off the baseline instead, at the height of the letters
+    // plus room for their tails, so it sits on the words the way a stroke
+    // does and the leading stays open between one line and the next.
+    val feather = with(density) { WASH_TIP.toPx() }
+    val bodyPx = with(density) { bodySize.sp.toPx() }
+    val aboveBaseline = bodyPx * WASH_ABOVE_BASELINE
+    val belowBaseline = bodyPx * WASH_BELOW_BASELINE
+
+    val ordered = washes.entries
+        .mapNotNull { (verse, wash) ->
+            if (wash.alpha <= 0f) return@mapNotNull null
+            val range = page.verseRanges[verse] ?: return@mapNotNull null
+            range to wash
+        }
+        .sortedBy { it.first.first }
+
+    for ((range, wash) in ordered) {
+        val rects = enclosingRects(layout, range)
+        if (rects.isEmpty()) continue
+
+        // Each line's band, and the single shape they make together.
+        val bands = ArrayList<WashRect>(rects.size)
+        var union: Path? = null
+        rects.forEachIndexed { index, rect ->
+            // The pen lifting: a stable hash, so it does not shimmer on
+            // redraw, and horizontal only.
+            val wobble = ((range.first * 31 + index * 7) % 3 - 1) * wobbleUnit
+            // Never outside the line's own box: a tall capital or a long
+            // descender must not let one line's wash touch the next.
+            val band = WashRect(
+                left = rect.left - bleedX,
+                top = max(rect.top, rect.baseline - aboveBaseline) - bleedY,
+                right = rect.right + bleedX + wobble,
+                bottom = min(rect.bottom, rect.baseline + belowBaseline) + bleedY,
+                baseline = rect.baseline,
+            )
+            bands += band
+            val piece = Path().apply {
+                addRoundRect(
+                    RoundRect(
+                        left = band.left,
+                        top = band.top,
+                        right = band.right,
+                        bottom = band.bottom,
+                        cornerRadius = CornerRadius(radius, radius),
+                    ),
+                )
+            }
+            val current = union
+            union = if (current == null) {
+                piece
+            } else {
+                Path().apply { op(current, piece, PathOperation.Union) }
+            }
+        }
+        val shape = union ?: continue
+        val color = wash.color.copy(alpha = wash.alpha)
+
+        if (wash.drawn >= 1f) {
+            drawPath(shape, color)
+            continue
+        }
+
+        // **The pen travelling.** A highlight you are making yourself is
+        // revealed along the words in reading order — line by line, and left
+        // to right within a line — rather than fading up where it lies. It is
+        // the one act on this surface that is entirely yours, and the only
+        // one the app can honestly show as a movement of a hand: an arriving
+        // highlight gets the fade above, because nothing travelled across
+        // *your* page when somebody else marked their own.
+        //
+        // The clips are one per line and disjoint, so the shape is never
+        // filled over itself and a half-drawn stroke is exactly as dark as a
+        // finished one. Measured in ink laid down rather than in lines, so a
+        // verse of four words and a verse of four lines take the same time
+        // and travel at visibly different speeds, which is what a pen does.
+        // What the page already showed here: somebody else's mark, which the
+        // pen is about to mix rather than replace. Transparent when the words
+        // were bare.
+        val ahead = wash.beneath
+            ?.let { it.color.copy(alpha = it.alpha) }
+            ?: color.copy(alpha = 0f)
+
+        var left = bands.sumOf { (it.right - it.left).toDouble() }.toFloat() * wash.drawn
+        for (band in bands) {
+            val width = band.right - band.left
+            val reach = (min(width, max(0f, left))).coerceAtLeast(0f)
+            left -= reach
+
+            // In front of the tip: their ink, exactly as it was. Drawn first
+            // and clipped away from everything behind, so the two colours are
+            // never composited over one another and the mixture is the
+            // arithmetic one rather than one wash dimmed by another.
+            if (reach < width && ahead.alpha > 0f) {
+                clipRect(
+                    left = band.left + reach,
+                    top = band.top,
+                    right = band.right,
+                    bottom = band.bottom,
+                ) {
+                    drawPath(shape, ahead)
+                }
+            }
+            if (reach <= 0f) continue
+
+            clipRect(
+                left = band.left,
+                top = band.top,
+                right = band.left + reach,
+                bottom = band.bottom,
+            ) {
+                // Behind the tip, the ink is simply down.
+                if (left > 0f || reach >= width) {
+                    drawPath(shape, color)
+                } else {
+                    // The tip itself: the last few millimetres cross from what
+                    // is already there into what the two inks make — or run
+                    // out into nothing, on bare words. A hard vertical edge
+                    // travelling across Scripture is a wipe transition, and it
+                    // is the one part of this the eye reads as a screen doing
+                    // something rather than as ink.
+                    val tip = min(feather, reach)
+                    val solid = (reach - tip) / reach
+                    drawPath(
+                        shape,
+                        Brush.horizontalGradient(
+                            solid to color,
+                            1f to ahead,
+                            startX = band.left,
+                            endX = band.left + reach,
+                        ),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Two inks screened — the third colour an overlap makes (§4.5).
+ *
+ * `1 - (1-a)(1-b)`: multiply's mirror. Where multiply asks how much light two
+ * pigments both let through, this asks how much two lights together add up
+ * to, which is what two translucent washes on an unlit page are.
+ */
+private fun screen(a: Color, b: Color): Color = Color(
+    red = 1f - (1f - a.red) * (1f - b.red),
+    green = 1f - (1f - a.green) * (1f - b.green),
+    blue = 1f - (1f - a.blue) * (1f - b.blue),
     alpha = 1f,
 )
 
@@ -460,16 +982,45 @@ private fun enclosingRects(
     val lastLine = layout.getLineForOffset(end - 1)
     val result = mutableListOf<WashRect>()
     for (line in firstLine..lastLine) {
-        val lineStart = max(start, layout.getLineStart(line))
-        val lineEnd = min(end, layout.getLineEnd(line, visibleEnd = true))
+        val visibleStart = layout.getLineStart(line)
+        val visibleEnd = layout.getLineEnd(line, visibleEnd = true)
+        val lineStart = max(start, visibleStart)
+        val lineEnd = min(end, visibleEnd)
         if (lineEnd <= lineStart) continue
-        val a = layout.getHorizontalPosition(lineStart, usePrimaryDirection = true)
-        val b = layout.getHorizontalPosition(lineEnd, usePrimaryDirection = true)
+
+        // The left edge is the first glyph the verse owns on this line, which
+        // is an offset question and always was. The right edge is not.
+        //
+        // `getHorizontalPosition` at a line's *own* end offset does not
+        // answer with that line's right edge: at a soft wrap the offset
+        // already belongs to the line below, so it comes back as the next
+        // line's left margin, and on a hard break it lands on the break. So
+        // every line a verse covered in full got a right edge somewhere out
+        // near the left margin, and `max(a, b)` then collapsed the whole
+        // rect to a hairline sitting in the indent.
+        //
+        // It went unseen because it only shows on a verse that *wraps*, and
+        // a wrapping verse has to be highlighted to show anything at all —
+        // which is a state the look book had no picture of until now. On
+        // poetry, where the lines are short and indented, a highlight across
+        // four lines drew one line and three slivers.
+        //
+        // When the verse runs past this line, the line's own right edge is
+        // the answer; only when the verse *stops* part-way along does an
+        // offset come into it.
+        val left = layout.getHorizontalPosition(lineStart, usePrimaryDirection = true)
+        val right = if (lineEnd >= visibleEnd) {
+            layout.getLineRight(line)
+        } else {
+            layout.getHorizontalPosition(lineEnd, usePrimaryDirection = true)
+        }
+        if (right <= left) continue
         result += WashRect(
-            left = min(a, b),
+            left = min(left, right),
             top = layout.getLineTop(line),
-            right = max(a, b),
+            right = max(left, right),
             bottom = layout.getLineBottom(line),
+            baseline = layout.getLineBaseline(line),
         )
     }
     return result
@@ -480,6 +1031,7 @@ private data class WashRect(
     val top: Float,
     val right: Float,
     val bottom: Float,
+    val baseline: Float,
 ) {
     val width: Float get() = right - left
     val height: Float get() = bottom - top
@@ -519,6 +1071,7 @@ private class ChapterPage(
             top = rects.minOf { it.top },
             right = rects.maxOf { it.right },
             bottom = rects.maxOf { it.bottom },
+            baseline = rects.first().baseline,
         )
     }
 
