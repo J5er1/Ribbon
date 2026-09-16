@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -197,13 +196,18 @@ fun NoteCard(
             )
             DropdownMenuItem(
                 // SwiftUI's destructive role, which has no Compose
-                // equivalent: the scheme's error colour is the palette's
-                // deep flame, which is the one warm red the room owns.
+                // equivalent. The palette's deep flame, read directly: the
+                // fixed scheme used to set Material's `error` role to it, and
+                // a wallpaper's scheme does not set `error` at all, so under
+                // Material You this fell through to Material's own #F2B8B5.
+                // §S25 is explicit that the product produces no error surface
+                // in its own colour — the one warm red the room owns is the
+                // fire's, and the fire never follows the wallpaper.
                 text = {
                     Text(
                         Copy.TAKE_BACK,
                         style = RibbonType.ui(16f),
-                        color = MaterialTheme.colorScheme.error,
+                        color = Palette.flameDeep,
                     )
                 },
                 onClick = { menuShown = false; onTakeBack() },

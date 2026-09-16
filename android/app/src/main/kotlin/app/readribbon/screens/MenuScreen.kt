@@ -51,7 +51,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -101,13 +103,27 @@ import app.readribbon.app.AppModel
 import app.readribbon.app.Copy
 import app.readribbon.core.Bible
 import app.readribbon.core.Room
-import app.readribbon.design.HairlineRule
+import app.readribbon.design.Chevron
+import app.readribbon.design.BackChevron
+import app.readribbon.design.Flows
+import app.readribbon.design.LocalAppearance
+import app.readribbon.design.LocalFlowLayer
 import app.readribbon.design.Palette
 import app.readribbon.design.PortraitView
 import app.readribbon.design.QuietControl
 import app.readribbon.design.RibbonMotion
 import app.readribbon.design.RibbonType
+import app.readribbon.design.RibbonShape
+import app.readribbon.design.SectionLabel
+import app.readribbon.design.Setting
+import app.readribbon.design.SettingsGroup
 import app.readribbon.design.SmallCaps
+import app.readribbon.design.flows
+import app.readribbon.design.flowsAsWords
+import app.readribbon.design.grain
+import app.readribbon.design.paper
+import app.readribbon.design.pressable
+import app.readribbon.design.pressablePaper
 import app.readribbon.design.peeled
 import app.readribbon.design.readableColumn
 import app.readribbon.design.rememberBackPeel
@@ -174,6 +190,7 @@ private object MenuRoute {
     const val ROOT = "menu"
     const val TEXT = "text"
     const val NOTIFICATIONS = "notifications"
+    const val APPEARANCE = "appearance"
     const val DOWNLOADS = "downloads"
     const val PLAN = "plan"
     const val JOIN_WITH_INVITE = "join-with-invite"
@@ -351,27 +368,54 @@ fun MenuScreen(
                 popEnterTransition = { fadeIn(push) },
                 popExitTransition = { ExitTransition.None },
             ) {
-                MenuRoot(
-                    model = model,
-                    entry = entry,
-                    onOpen = { route -> navController.navigate(route) },
-                    onDismiss = { close() },
-                    onSwitch = onSwitch,
-                    onStartRoom = { showNewRoom = true },
-                    onInvite = { room -> inviting = InviteTarget(room = room, isNew = false) },
-                )
+                // The root is a layer like its five siblings, and it is the
+                // one that holds the *leaving* half of every settings-title
+                // flow. Without this its rows bound themselves to the menu's
+                // own outer scope, which stays visible for as long as the
+                // menu is open — so both halves of the key were live and
+                // neither was going anywhere.
+                CompositionLocalProvider(LocalFlowLayer provides this) {
+                    MenuRoot(
+                        model = model,
+                        entry = entry,
+                        onOpen = { route -> navController.navigate(route) },
+                        onDismiss = { close() },
+                        onSwitch = onSwitch,
+                        onStartRoom = { showNewRoom = true },
+                        onInvite = { room -> inviting = InviteTarget(room = room, isNew = false) },
+                    )
+                }
             }
             composable(MenuRoute.TEXT) {
-                TextSettingsScreen(model = model, onBack = { navController.popBackStack() })
+                // Same shared-transition scope as the room's stack, a new
+                // layer: the words of the row that was tapped become the
+                // heading of the screen it opened (design/Flow.kt).
+                CompositionLocalProvider(LocalFlowLayer provides this) {
+                    TextSettingsScreen(model = model, onBack = { navController.popBackStack() })
+                }
             }
             composable(MenuRoute.NOTIFICATIONS) {
-                NotificationSettingsScreen(model = model, onBack = { navController.popBackStack() })
+                CompositionLocalProvider(LocalFlowLayer provides this) {
+                    NotificationSettingsScreen(
+                        model = model,
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+            }
+            composable(MenuRoute.APPEARANCE) {
+                CompositionLocalProvider(LocalFlowLayer provides this) {
+                    AppearanceScreen(onBack = { navController.popBackStack() })
+                }
             }
             composable(MenuRoute.DOWNLOADS) {
-                DownloadsScreen(model = model, onBack = { navController.popBackStack() })
+                CompositionLocalProvider(LocalFlowLayer provides this) {
+                    DownloadsScreen(model = model, onBack = { navController.popBackStack() })
+                }
             }
             composable(MenuRoute.PLAN) {
-                PlanScreen(model = model, onBack = { navController.popBackStack() })
+                CompositionLocalProvider(LocalFlowLayer provides this) {
+                    PlanScreen(model = model, onBack = { navController.popBackStack() })
+                }
             }
             composable(MenuRoute.JOIN_WITH_INVITE) {
                 JoinWithInviteScreen(
@@ -525,6 +569,10 @@ private fun MenuRoot(
                 // Rooms (S14).
                 Column {
                     SectionHead(Copy.ROOMS)
+                    // A seam of grained ground between tiles rather than a
+                    // rule between lines — the divider every group in the app
+                    // now uses.
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     model.state.rooms.forEach { room ->
                         key(room.id) {
                             MenuRoomRow(
@@ -545,8 +593,12 @@ private fun MenuRoot(
                             )
                         }
                     }
-                    Column(Modifier.padding(top = 6.dp)) {
-                        MenuRow(Copy.START_A_ROOM_CONTROL, onStartRoom)
+                    }
+                    Column(
+                        modifier = Modifier.padding(top = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        MenuRow(Copy.START_A_ROOM_CONTROL, onClick = onStartRoom)
                         // A join goes through the backend and cannot happen
                         // without one. No dead control (§6.1) — the same rule
                         // the account keeps two sections down.
@@ -575,7 +627,10 @@ private fun MenuRoot(
                             // The link resolves through the backend, so
                             // without one there is nothing to hand out and no
                             // row for it.
-                            MenuRow(Copy.INVITE_SOMEONE) { onInvite(room) }
+                            MenuRow(
+                                title = Copy.INVITE_SOMEONE,
+                                subtitle = Copy.INVITE_SEND,
+                            ) { onInvite(room) }
                         }
                         RoomControls(model = model, room = room, onLeft = onDismiss)
                     }
@@ -586,13 +641,55 @@ private fun MenuRoot(
                     Modifier.onGloballyPositioned { coordinates ->
                         youOffset = coordinates.positionInParent().y.roundToInt()
                     },
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     SectionHead(Copy.YOU)
                     YouIdentityRow(model = model)
-                    MenuRow(Copy.TEXT_AND_TRANSLATION) { onOpen(MenuRoute.TEXT) }
-                    MenuRow(Copy.NOTIFICATIONS) { onOpen(MenuRoute.NOTIFICATIONS) }
-                    MenuRow(Copy.DOWNLOADS) { onOpen(MenuRoute.DOWNLOADS) }
-                    MenuRow(Copy.PLAN) { onOpen(MenuRoute.PLAN) }
+                    // Five doors in one group, each saying what is behind it.
+                    // A row that reads only "Downloads" makes you open it to
+                    // find out what it is; a row that says what is actually
+                    // on the phone has answered already.
+                    SettingsGroup(count = 5) {
+                        Setting(
+                            title = Copy.TEXT_AND_TRANSLATION,
+                            subtitle = Copy.TEXT_SUB,
+                            onClick = { onOpen(MenuRoute.TEXT) },
+                            modifier = Modifier.flowsAsWords(Flows.settingsTitle(Flows.TEXT)),
+                        )
+                        Setting(
+                            title = Copy.NOTIFICATIONS,
+                            subtitle = Copy.NOTIFICATIONS_SUB,
+                            onClick = { onOpen(MenuRoute.NOTIFICATIONS) },
+                            modifier = Modifier.flowsAsWords(Flows.settingsTitle(Flows.NOTIFICATIONS)),
+                        )
+                        Setting(
+                            title = Copy.APPEARANCE,
+                            // The state *is* the subtitle here, rather than a
+                            // sentence about the screen with the state
+                            // squeezed in beside it: "From your wallpaper"
+                            // says both what the row is about and where it
+                            // currently stands, in four words.
+                            subtitle = if (LocalAppearance.current.wallpaperColour) {
+                                Copy.FROM_YOUR_WALLPAPER
+                            } else {
+                                Copy.RIBBONS_OWN
+                            },
+                            onClick = { onOpen(MenuRoute.APPEARANCE) },
+                            modifier = Modifier.flowsAsWords(Flows.settingsTitle(Flows.APPEARANCE)),
+                        )
+                        Setting(
+                            title = Copy.DOWNLOADS,
+                            subtitle = Copy.downloadsSub(LocalContext.current),
+                            onClick = { onOpen(MenuRoute.DOWNLOADS) },
+                            modifier = Modifier.flowsAsWords(Flows.settingsTitle(Flows.DOWNLOADS)),
+                        )
+                        Setting(
+                            title = Copy.PLAN,
+                            subtitle = Copy.PLAN_SUB,
+                            onClick = { onOpen(MenuRoute.PLAN) },
+                            modifier = Modifier.flowsAsWords(Flows.settingsTitle(Flows.PLAN)),
+                        )
+                    }
                 }
 
                 // The account (§6.10).
@@ -682,8 +779,14 @@ private fun MenuRoot(
 // MARK: Section furniture
 
 /**
- * A section's head: small caps, a hairline under it, and — for the room you
- * are in — the room's own name beside it, so "This room" is never a question.
+ * A section's head — and, for the room you are in, the room's own name beside
+ * it, so "This room" is never a question.
+ *
+ * The hairline under it has gone. Four ruled lines down one screen is the
+ * church-bulletin energy §13 forbids in its most literal form, and the edge
+ * of the tile below now does the dividing. [SectionLabel] is the same head
+ * the settings screens use, so the menu and the five screens it pushes are
+ * plainly one place.
  */
 @Composable
 private fun SectionHead(
@@ -691,39 +794,44 @@ private fun SectionHead(
     modifier: Modifier = Modifier,
     detail: String? = null,
 ) {
-    Column(
-        modifier = modifier.padding(bottom = 6.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            // A head is drawn as a head and has to be announced as one: the
-            // headings rotor is how a screen reader skims a menu, and
-            // without this the sections are four unlabelled piles again
-            // (§11).
-            modifier = Modifier.semantics(mergeDescendants = true) { heading() },
-        ) {
-            SmallCaps(title, size = 12f, color = Palette.text.copy(alpha = 0.75f))
-            if (detail != null) SmallCaps(detail, size = 12f)
-        }
-        HairlineRule()
-    }
+    SectionLabel(title = title, detail = detail, modifier = modifier)
 }
 
 /**
- * One row of the menu: a thing you go to, or a thing you do. Ivory, 17 sp,
- * and never shorter than a finger (§11, deviation 12).
+ * One row of the menu: a thing you go to, or a thing you do.
+ *
+ * A tile now, like everything else you can press in this app — surface,
+ * grain, a large corner, and a press that gives under the finger. The bare
+ * 17 sp line on a black ground it used to be is what made the menu read as a
+ * list of words rather than as a set of doors.
  */
 @Composable
-private fun MenuRow(title: String, onClick: () -> Unit) {
-    Box(
+private fun MenuRow(
+    title: String,
+    subtitle: String? = null,
+    // Last, so the trailing-lambda form binds the click handler rather than
+    // the subtitle — the same trap QuietControl's own signature names.
+    onClick: () -> Unit,
+) {
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .sizeIn(minHeight = MinTarget)
-            .clickable(role = Role.Button, onClick = onClick),
-        contentAlignment = Alignment.CenterStart,
+            .sizeIn(minHeight = 58.dp)
+            .pressablePaper(RibbonShape.rowShape, onClick = onClick)
+            .padding(horizontal = 18.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(text = title, style = RibbonType.ui(17f), color = Palette.text)
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            Text(text = title, style = RibbonType.ui(17f), color = Palette.text)
+            if (subtitle != null) {
+                Text(text = subtitle, style = RibbonType.ui(13f), color = Palette.muted)
+            }
+        }
+        Chevron()
     }
 }
 
@@ -747,22 +855,24 @@ private fun MenuRoomRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(role = Role.Button, onClick = onClick)
-            // The chartreuse hairline is the only drawn sign of which room
-            // you are in, and colour is never the only signal (§11), so the
-            // same fact is carried in the row's state for a screen reader —
-            // which announces it as selected, and says no number about it.
+            .sizeIn(minHeight = 64.dp)
+            .pressablePaper(RibbonShape.rowShape, role = Role.Button, onClick = onClick)
+            // The chartreuse mark is the only drawn sign of which room you
+            // are in, and colour is never the only signal (§11), so the same
+            // fact is carried in the row's state for a screen reader — which
+            // announces it as selected, and says no number about it.
             .semantics { selected = isCurrent }
-            .sizeIn(minHeight = MinTarget)
-            .padding(vertical = 8.dp),
+            .padding(end = 16.dp, top = 10.dp, bottom = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
             Modifier
+                .padding(start = 8.dp)
                 .width(MarkWidth)
                 .height(MarkHeight)
-                .background(if (isCurrent) Palette.chartreuse else Color.Transparent),
+                .clip(RoundedCornerShape(MarkWidth / 2))
+                .background(if (isCurrent) Palette.accent else Color.Transparent),
         )
 
         Column(
@@ -857,13 +967,17 @@ private fun YouIdentityRow(model: AppModel) {
     }
 
     Row(
-        modifier = Modifier.padding(vertical = 6.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .paper(RibbonShape.groupShape)
+            .padding(horizontal = 18.dp, vertical = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
             modifier = Modifier
                 .sizeIn(minWidth = MinTarget, minHeight = MinTarget)
+                .clip(CircleShape)
                 .clickable(role = Role.Button) {
                     portraitPicker.launch(
                         PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
@@ -982,7 +1096,7 @@ private fun RoomControls(
 
     val reduceMotion = rememberReduceMotion()
 
-    Column {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         // The row becomes the field, in place — the same cross-fade your own
         // name gets one section up, for the same reason.
         AnimatedContent(
@@ -1389,7 +1503,11 @@ private fun JoinWithInviteScreen(
         Box(Modifier.fillMaxSize().room())
 
         Column(Modifier.fillMaxSize().padding(top = statusBar, bottom = bottomBar)) {
-            BackControl(onBack = onBack)
+            BackChevron(
+                onBack = onBack,
+                label = Copy.BACK,
+                modifier = Modifier.padding(start = Margin - 12.dp, top = 8.dp),
+            )
 
             Column(
                 modifier = Modifier

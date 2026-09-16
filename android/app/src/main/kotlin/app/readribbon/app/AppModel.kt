@@ -52,6 +52,7 @@ import app.readribbon.data.LocalStore
 import app.readribbon.data.RoomNotificationPrefs
 import app.readribbon.data.ScriptureStore
 import app.readribbon.design.Haptics
+import app.readribbon.services.Connectivity
 import app.readribbon.services.LocalPresenceService
 import app.readribbon.services.PresenceEvent
 import app.readribbon.services.PresenceService
@@ -132,6 +133,20 @@ class AppModel(
     private val appContext: Context = context.applicationContext
 
     /**
+     * Whether there is a network — read by the fire, and by nothing else.
+     *
+     * S01's offline room dims its fire by about 8% and says nothing at all;
+     * see [Connectivity] for why there is no banner and never will be. It
+     * lives on the model rather than in a composition local because the
+     * callback it registers has to be unregistered, and the model is the one
+     * thing on this screen with a lifetime.
+     */
+    private val connectivity = Connectivity(appContext)
+
+    /** True when the room can reach the people in it. */
+    val isOnline: Boolean get() = connectivity.online
+
+    /**
      * `neverEqualPolicy` rather than the default structural one, and this is
      * load-bearing: `Handiwork` is a struct in Swift and a mutable class in
      * the Kotlin core, so feeding a fire changes an object that both the old
@@ -188,6 +203,17 @@ class AppModel(
                 }
             }
         }
+    }
+
+    /**
+     * The one thing this model registers with the system, unregistered.
+     *
+     * A `NetworkCallback` outlives the object that made it unless it is
+     * handed back, and a leaked one keeps waking a process that has no
+     * screen.
+     */
+    override fun onCleared() {
+        connectivity.stop()
     }
 
     // MARK: - The room's live line (§4.2)
@@ -470,6 +496,25 @@ class AppModel(
     }
 
     fun isFull(room: Room): Boolean = members(room).size >= Room.capacity
+
+    /** Is a link to this room live — actually handed out, and not expired? */
+    fun hasLiveInvite(room: Room, now: Instant = Clock.System.now()): Boolean =
+        state.invites.any { it.roomID == room.id && it.expiresAt > now }
+
+    /**
+     * Is somebody still expected in this room?
+     *
+     * A room of one always is — its first invite is the whole point of it —
+     * and a larger room only when a link is actually live. The room's own
+     * open seat reads this: a seat drawn for nobody is an empty state
+     * dressed as an object, and a couple who have no intention of being
+     * three should not be shown a chair nobody was asked to sit in.
+     */
+    fun somebodyIsExpected(room: Room, now: Instant = Clock.System.now()): Boolean {
+        if (room.isPaused || isFull(room)) return false
+        if (members(room).size <= 1) return true
+        return hasLiveInvite(room, now)
+    }
 
     /**
      * Rooms whose rename hasn't landed remotely — merge() must not let a
@@ -1138,6 +1183,21 @@ class AppModel(
 
     fun markMarginHintSeen() {
         state = state.copy(hasSeenMarginHint = true)
+        persist()
+    }
+
+    /**
+     * Has the fire ever been pulled on this phone?
+     *
+     * The room's hearth offers its gesture until it has, and then never
+     * again (§6.1).
+     */
+    val hasPulledTheFire: Boolean get() = state.hasPulledTheFire
+
+    /** It has now. Called only from the drag itself, never from the tap. */
+    fun markFirePulled() {
+        if (state.hasPulledTheFire) return
+        state = state.copy(hasPulledTheFire = true)
         persist()
     }
 
