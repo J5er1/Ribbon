@@ -112,18 +112,23 @@ fun NoteCard(
     }
 
     // .contextMenu — long-press anywhere on the card, your own note only.
-    // The same two actions are published as accessibility actions, so a
-    // screen reader reaches them without holding a press (§11: every gesture
-    // has an equivalent that is not a gesture).
-    val menuActions =
-        if (isMine) {
-            listOf(
-                CustomAccessibilityAction(Copy.EDIT) { onEdit(); true },
-                CustomAccessibilityAction(Copy.TAKE_BACK) { onTakeBack(); true },
-            )
-        } else {
-            emptyList()
-        }
+    // The same actions are published as accessibility actions, so a screen
+    // reader reaches them without holding a press (§11: every gesture has an
+    // equivalent that is not a gesture).
+    //
+    // Edit is only offered on a written note, and it used not to be. A voice
+    // note has no body — it is a waveform and a transcript (§4.4) — so "edit"
+    // opened the *written* composer, empty, over a recording; typing into it
+    // and keeping it set `body` on a note whose kind is still `voice`, which
+    // `NoteCard` never reads. The words went to the server and were never
+    // seen again by anybody, including the person who wrote them. A recording
+    // is re-made the way it was made: take it back and speak again, which is
+    // the press-and-hold S05 already describes.
+    val canEdit = isMine && note.kind == NoteKind.written
+    val menuActions = buildList {
+        if (canEdit) add(CustomAccessibilityAction(Copy.EDIT) { onEdit(); true })
+        if (isMine) add(CustomAccessibilityAction(Copy.TAKE_BACK) { onTakeBack(); true })
+    }
 
     Box(modifier) {
         Column(
@@ -190,10 +195,12 @@ fun NoteCard(
         }
 
         DropdownMenu(expanded = menuShown, onDismissRequest = { menuShown = false }) {
-            DropdownMenuItem(
-                text = { Text(Copy.EDIT, style = RibbonType.ui(16f), color = Palette.text) },
-                onClick = { menuShown = false; onEdit() },
-            )
+            if (canEdit) {
+                DropdownMenuItem(
+                    text = { Text(Copy.EDIT, style = RibbonType.ui(16f), color = Palette.text) },
+                    onClick = { menuShown = false; onEdit() },
+                )
+            }
             DropdownMenuItem(
                 // SwiftUI's destructive role, which has no Compose
                 // equivalent. The palette's deep flame, read directly: the

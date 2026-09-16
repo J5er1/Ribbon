@@ -1352,6 +1352,98 @@ A34a. **The identity tile on You says what it is for, and the name it holds
     as a content description and the name's only as a click label, both
     invisible on the screen S18 calls the place your identity lives.
 
+A35. **Taking something back now takes it back.** The app has had "take
+    back", "remove" and "leave your notes behind?" since the beginning, and
+    under them the deletions reached the backend and stopped. Five defects,
+    which are one defect seen from five places.
+
+    **A taken-back note never left the other person's phone.** `merge` was
+    add-or-update for notes and add-only for highlights. Memberships are
+    pruned there ("departures propagate") and invites are pruned ("an invite
+    the backend no longer has must not go on being offered"); notes were not.
+    So `takeBack` deleted the row remotely and nudged the other device to
+    pull, the pull came back without it, the loop added nothing and removed
+    nothing, and the note sat on the other person's phone permanently. S04
+    says a taken-back note vanishes "with no tombstone", and deviation 10
+    already claimed take-backs propagate.
+
+    The prune has three guards and each one is load-bearing. `notesComplete`
+    exists because the notes select is wrapped in a `runCatching` that
+    returns an empty list on failure — pruning against that would delete
+    every note in the room the first time one request timed out, which is a
+    far worse bug than the one being fixed. Only readings the pull actually
+    covered are considered. And a pending note — composed offline, not yet
+    known to the backend (§4.4) — is never pruned. A pruned voice note takes
+    its local recording with it.
+
+    **Nothing was ever retried.** `takeBack` and `editWrittenNote` both
+    wrapped their remote call in `runCatching` and forgot the outcome, and
+    the only thing `refreshFromRemote` replayed was a rename. A take-back
+    made offline was applied locally, never sent, and undone by the next
+    successful pull. An offline edit was worse than lost: the merge takes
+    `body = row.body ?: local`, so the server's old words silently overwrote
+    the new ones. There are queues now, in the shape of `pendingRenamePushes`
+    — deletes, edits and new notes — replayed before every pull, and the
+    merge consults them: a pull that races a pending delete does not re-add
+    the row, and one that races a pending edit does not take the server's
+    body. An edit also carries §4.4's pending hairline now, which only a
+    *new* note ever did.
+
+    **"Take them back" on leaving a room was a local filter.** The rows
+    stayed in Postgres, the recordings stayed in the bucket, and every other
+    member's phone kept its copy — so the one answer §6.8 offers to somebody
+    who wants their words back did nothing except hide them from the person
+    who asked.
+
+    **A taken-back voice note left the recording on the server.** The
+    `notes` row went; the object at `voice-notes/<reading>/<note>.m4a` did
+    not, and could not — the bucket had a read policy and a write policy and
+    no delete policy at all, while the portraits bucket had gained one. So a
+    person recorded a thought, thought better of it, took it back, and a
+    recording of their voice stayed fetchable by everyone else in the room
+    forever. That is the one place in the product where undoing something
+    left the most personal version of it behind. New migration
+    `20260916120000_ribbon_take_back_the_recording.sql`, scoped to the
+    note's *author* rather than to the room — reading a note somebody left
+    you does not entitle you to erase their voice. The object is deleted
+    before the row, because the policy checks the row.
+
+    **Deleting your account ignored the question it had just asked.**
+    `deleteAccount(keepNotesBehind)` never read the parameter, and could not
+    have honoured it: `deleteAccountData` deleted the profiles row, and both
+    `notes.author_id` and `highlights.author_id` cascade from it, so *both*
+    answers erased every note and every highlight the person had ever left.
+    §6.8 says highlights "stay, always"; S11 needs a departed member's notes
+    to render normally, with their portrait, and nothing marking them as
+    gone. The profile is blanked rather than deleted now — name to the app's
+    own word for somebody it has no profile for, portrait path to null, the
+    portrait object deleted outright — so nothing personal survives and the
+    rows that hang off it stand. Then the answer decides: leave them behind
+    and nothing authored is touched, take them back and the notes go,
+    recordings and all. Highlights are never deleted on either path.
+
+    **This diverges from iOS on purpose, and it is the one entry here that a
+    reviewer should push back on if they disagree.** iOS still deletes the
+    profiles row and still cascades. The Android behaviour is what §6.8 and
+    S11 describe and the iOS behaviour is not, so the divergence is iOS's to
+    close rather than Android's to undo — but it is a difference in what
+    account deletion *means* on one backend, and it should not sit here
+    unnoticed. The new storage policy is additive and changes nothing for
+    iOS, which simply never calls it.
+
+    Two smaller ones in the same pass. An abandoned edit used to retarget the
+    next note: `editingNote` was cleared on save and on cancel but not by
+    `clearLift`, which is S05's own "dismissed by tapping anywhere in the
+    text" — so opening your note, starting an edit and tapping the Scripture
+    left it set, and the next verse you wrote at opened pre-filled with the
+    old note's words and overwrote *that* note on save, leaving nothing at
+    the verse you had picked. And the note menu offered "edit" on a voice
+    note, which opened the written composer, empty, over a recording; typing
+    into it set `body` on a note whose kind is still `voice`, which nothing
+    ever reads — the words went to the server and were never seen again by
+    anybody, including the person who wrote them. A recording is re-made the
+    way it was made.
+
 ## Licensed translations (decided: API.Bible)
 
 Open question §16.8 is now part-decided: **NKJV plus two undecided

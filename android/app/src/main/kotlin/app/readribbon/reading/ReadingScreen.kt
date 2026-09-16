@@ -477,6 +477,16 @@ fun ReadingScreen(
         lifted = null
         liftedChapter = null
         composer = null
+        // The note being edited goes with the composer it was being edited
+        // in, and it never used to. This is S05's own dismiss route — "the
+        // toolbar is dismissed by tapping anywhere in the text" calls exactly
+        // this — so opening your note, starting an edit and then tapping the
+        // Scripture left `editingNote` set with nothing on screen holding it.
+        // The next verse you long-pressed and wrote at opened the composer
+        // pre-filled with the *old* note's words, and saving overwrote that
+        // note's body while leaving nothing at all at the verse you had
+        // picked. An abandoned edit has to be abandoned.
+        editingNote = null
     }
 
     fun beginLift(chapter: Int, verse: Int) {
@@ -851,10 +861,24 @@ fun ReadingScreen(
                     model.addHighlight(range, ink, reading)
                     clearLift()
                 },
-                onWrite = { address -> composer = ComposerState.Write(address) },
-                onSpeak = { address -> composer = ComposerState.Speak(address) },
+                // Said outright at both entry points as well, rather than
+                // relying on `clearLift` having been called first: a composer
+                // opened from the toolbar is a *new* note, and the one way
+                // this defect gets back in is somebody adding a third route
+                // in that does not go through the dismiss.
+                onWrite = { address ->
+                    editingNote = null
+                    composer = ComposerState.Write(address)
+                },
+                onSpeak = { address ->
+                    editingNote = null
+                    composer = ComposerState.Speak(address)
+                },
                 onSaveWritten = { address, body ->
-                    val note = editingNote
+                    // Belt to the brace above: an edit only counts as one if
+                    // it is still about the verse the note lives at. Anything
+                    // else is a new note, wherever `editingNote` came from.
+                    val note = editingNote?.takeIf { it.verse == address }
                     if (note != null) {
                         model.editWrittenNote(note, body)
                     } else {

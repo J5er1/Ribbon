@@ -286,6 +286,23 @@ class SupabaseClient(
         data object Missing : PortraitFetch
     }
 
+    /**
+     * The recording behind a taken-back voice note (S04).
+     *
+     * Its sibling `deletePortrait` has existed since the portraits bucket
+     * got its delete policy; this one had no policy to call until
+     * `voice_notes_delete`, so taking back a voice note deleted the local
+     * file and the row and left the recording on the server, fetchable by
+     * everyone else in the room, forever.
+     */
+    suspend fun deleteAudio(readingID: Uuid, noteID: Uuid) {
+        request(
+            method = "DELETE",
+            url = url("storage/v1/object/voice-notes/$readingID/$noteID.m4a"),
+            authenticated = true,
+        )
+    }
+
     suspend fun deletePortrait(personID: Uuid) {
         request(
             method = "DELETE",

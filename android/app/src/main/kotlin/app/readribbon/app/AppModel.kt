@@ -605,6 +605,46 @@ class AppModel(
      */
     private val pendingRenamePushes: MutableSet<Uuid> = mutableSetOf()
 
+    /**
+     * Notes taken back whose delete hasn't landed, and notes edited whose
+     * push hasn't.
+     *
+     * The same shape as [pendingRenamePushes], and they exist for a defect
+     * that was worse than the rename's. `takeBack` and `editWrittenNote` both
+     * wrapped their remote call in `runCatching` and forgot the outcome, and
+     * nothing anywhere retried either — the one thing `refreshFromRemote`
+     * replayed was a rename. So a take-back made offline was applied here and
+     * never sent, the row stayed in Postgres, and the next successful pull
+     * put the note back on the phone of the person who had just taken it
+     * back. An edit made offline was worse than lost: the merge takes
+     * `body = row.body ?: local`, so the server's old words silently
+     * overwrote the new ones with nothing on screen to say so.
+     *
+     * Both are consulted by the merge as well as replayed by the refresh: a
+     * pull that races a pending delete must not re-add the row, and a pull
+     * that races a pending edit must not take the server's body.
+     *
+     * In-memory, like the rename queue: a relaunch before the push lands
+     * re-exposes the edge. Accepted for the same reason — the alternative is
+     * a durable outbox, which is the sync engine's job and not this pass's.
+     */
+    private val pendingNoteDeletes: MutableSet<Uuid> = mutableSetOf()
+
+    /**
+     * What a queued delete needs to know besides the id: the reading the
+     * recording lives under, and whether there is one.
+     *
+     * The note is gone from state the moment it is taken back, so by the time
+     * a replay runs there is nothing left to read its kind off — and a replay
+     * that dropped the recording would leave the one thing S04 most means by
+     * "no tombstone" sitting in the bucket.
+     */
+    private val pendingNoteDeleteShapes: MutableMap<Uuid, Pair<Uuid, Boolean>> = mutableMapOf()
+    private val pendingNotePushes: MutableSet<Uuid> = mutableSetOf()
+
+    /** The same, for a highlight removed while the request could not land. */
+    private val pendingHighlightDeletes: MutableSet<Uuid> = mutableSetOf()
+
     /** Naming a room after the fact (S15's naming half, reachable later). */
     fun renameRoom(room: Room, name: String?) {
         val i = state.rooms.indexOfFirst { it.id == room.id }
@@ -634,6 +674,18 @@ class AppModel(
         val me = state.me ?: return
         val readingIDs = state.readings.filter { it.roomID == room.id }.map { it.id }.toSet()
         var next = state
+        // Held before the local filter, because they are what has to be
+        // deleted *remotely* and in a moment they will not be in state to
+        // find. "Take them back" used to be a local filter and nothing else:
+        // the rows stayed in Postgres, the recordings stayed in the bucket,
+        // and every other member's phone kept its copy — so the one answer
+        // §6.8 offers to somebody who wants their words back did nothing
+        // except hide them from the person who asked.
+        val mine = if (keepNotesBehind) {
+            emptyList()
+        } else {
+            state.notes.filter { readingIDs.contains(it.readingID) && it.authorID == me.id }
+        }
         if (!keepNotesBehind) {
             next = next.copy(notes = next.notes.filterNot {
                 readingIDs.contains(it.readingID) && it.authorID == me.id
@@ -653,8 +705,32 @@ class AppModel(
         if (remote != null && remote.isSignedIn) {
             val roomID = room.id
             val personID = me.id
+            // Queued the same way a single take-back is, so a delete that
+            // cannot land right now is replayed on the next refresh rather
+            // than forgotten.
+            mine.forEach {
+                pendingNoteDeletes.add(it.id)
+                pendingNoteDeleteShapes[it.id] = it.readingID to (it.kind == NoteKind.voice)
+            }
             viewModelScope.launch {
-                // The nudge goes first, and it has to: once the membership
+                // The notes go before the membership. `notes_delete` keys on
+                // the author alone, so it does not need the membership — but
+                // the room's own policies do, and leaving first would take
+                // away the standing to do anything else here.
+                for (note in mine) {
+                    val gone = runCatching {
+                        remote.deleteNote(
+                            id = note.id,
+                            readingID = note.readingID,
+                            voice = note.kind == NoteKind.voice,
+                        )
+                    }
+                    if (gone.isSuccess) {
+                        pendingNoteDeletes.remove(note.id)
+                        pendingNoteDeleteShapes.remove(note.id)
+                    }
+                }
+                // The nudge goes next, and it has to: once the membership
                 // row is gone the channel's own policy refuses this device,
                 // and the room would hear nothing at all. The others pull a
                 // beat later, by which time the delete has landed — and their
@@ -1008,9 +1084,18 @@ class AppModel(
         persist()
         val remote = this.remote
         if (remote != null && remote.isSignedIn) {
+            // Queued as well as pushed. A note composed offline drew its
+            // pending hairline (§4.4) and then waited for a push that was
+            // never attempted again — the refresh replayed a rename and
+            // nothing else — so it stayed a hairline until the app was
+            // restarted, and the person it was left for never got it.
+            pendingNotePushes.add(note.id)
             pushing {
                 runCatching { remote.push(note = note) }
-                    .onSuccess { markNoteSent(note.id) }
+                    .onSuccess {
+                        pendingNotePushes.remove(note.id)
+                        markNoteSent(note.id)
+                    }
             }
         }
         return note
@@ -1127,8 +1212,24 @@ class AppModel(
         persist()
         val remote = this.remote
         if (remote != null && remote.isSignedIn) {
+            // Remembered until it lands. Without this a delete that failed —
+            // offline, a dropped request — was forgotten on the spot and the
+            // next pull put the note back.
+            pendingNoteDeletes.add(note.id)
+            pendingNoteDeleteShapes[note.id] =
+                note.readingID to (note.kind == NoteKind.voice)
             pushing {
-                runCatching { remote.deleteNote(id = note.id) }
+                val gone = runCatching {
+                    remote.deleteNote(
+                        id = note.id,
+                        readingID = note.readingID,
+                        voice = note.kind == NoteKind.voice,
+                    )
+                }
+                if (gone.isSuccess) {
+                    pendingNoteDeletes.remove(note.id)
+                    pendingNoteDeleteShapes.remove(note.id)
+                }
             }
         }
     }
@@ -1138,14 +1239,22 @@ class AppModel(
         val index = state.notes.indexOfFirst { it.id == note.id }
         if (index < 0) return
         val notes = state.notes.toMutableList()
-        notes[index] = notes[index].copy(body = body)
+        // §4.4's pending mark: an edit that has not landed is drawn as a
+        // hairline outline in the margin, exactly as a note composed offline
+        // is. It never was before — only a *new* note was ever pending — so
+        // an edit made on a train looked identical to one the room had.
+        notes[index] = notes[index].copy(body = body, isPending = true)
         state = state.copy(notes = notes)
         persist()
         val remote = this.remote
         if (remote != null && remote.isSignedIn) {
             val updated = notes[index]
+            pendingNotePushes.add(updated.id)
             pushing {
-                runCatching { remote.push(note = updated) }
+                if (runCatching { remote.push(note = updated) }.isSuccess) {
+                    pendingNotePushes.remove(updated.id)
+                    markNoteSent(updated.id)
+                }
             }
         }
     }
@@ -1191,8 +1300,11 @@ class AppModel(
         persist()
         val remote = this.remote
         if (remote != null && remote.isSignedIn) {
+            pendingHighlightDeletes.add(highlight.id)
             pushing {
-                runCatching { remote.deleteHighlight(id = highlight.id) }
+                if (runCatching { remote.deleteHighlight(id = highlight.id) }.isSuccess) {
+                    pendingHighlightDeletes.remove(highlight.id)
+                }
             }
         }
     }
@@ -1413,22 +1525,49 @@ class AppModel(
      * exists; locally both paths clear this device.
      */
     fun deleteAccount(keepNotesBehind: Boolean) {
-        // The backend forgets the person: deleting the profile cascades
-        // memberships, invites, fuel, quiet days and positions; shared
-        // rooms and their content stay for the people still in them.
-        // (Notes aren't remote yet, so the keep/take answer is local-only
-        // until the full sync engine; the bare auth user — an email and
-        // nothing else — needs a service-role function and rides along
-        // then too.)
+        // §6.8's question, finally asked of something.
         //
-        // Swift writes `_ = keepNotesBehind` to silence its unused-value
-        // warning; Kotlin needs no such line, and the parameter stays in the
-        // signature because the question is asked at the call site today and
-        // the answer travels the moment notes are remote.
+        // What used to be here read `keepNotesBehind` nowhere at all — its
+        // comment said "notes aren't remote yet, so the keep/take answer is
+        // local-only", which stopped being true when deviation 10 put notes
+        // on the wire. Worse, the answer could not have been honoured either
+        // way: `deleteAccountData` deleted the profiles row, and both
+        // `notes.author_id` and `highlights.author_id` cascade from it, so
+        // *both* answers erased every note and every highlight the person had
+        // ever left. §6.8 is explicit that highlights "stay, always", and
+        // S11 needs a departed member's notes to render normally with their
+        // portrait.
+        //
+        // So the profile is blanked rather than deleted (see
+        // `RemoteSync.forgetProfile`), which leaves the rows that hang off it
+        // standing, and the answer decides what happens to the notes:
+        //
+        //  - leave them behind — the default, because they were left for the
+        //    other person — and nothing authored is touched;
+        //  - take them back, and the notes go, recordings and all.
+        //
+        // Highlights are never deleted on either path. A highlight is a mark
+        // on a shared page rather than a possession, which is the same
+        // reason leaving a room does not take them.
+        val me = state.me
         val remote = this.remote
+        val mine = if (keepNotesBehind || me == null) {
+            emptyList()
+        } else {
+            state.notes.filter { it.authorID == me.id }
+        }
         if (remote != null && remote.isSignedIn) {
             viewModelScope.launch {
-                remote.deleteAccountData()
+                for (note in mine) {
+                    runCatching {
+                        remote.deleteNote(
+                            id = note.id,
+                            readingID = note.readingID,
+                            voice = note.kind == NoteKind.voice,
+                        )
+                    }
+                }
+                remote.forgetProfile(neutralName = Copy.SOMEONE)
                 remote.signOut()
             }
         }
@@ -1706,11 +1845,44 @@ class AppModel(
     suspend fun refreshFromRemote(): Arrivals {
         val remote = this.remote ?: return Arrivals.none
         if (!remote.isSignedIn) return Arrivals.none
-        // An unpushed rename goes first, so the pull can't revert it.
+        // Everything this device meant to say goes before the pull that would
+        // otherwise contradict it. A rename, a take-back, an edit, a removed
+        // highlight — the rename was the only one of the four that was ever
+        // replayed, and the other three were the ones that lost data.
         for (roomID in pendingRenamePushes.toList()) {
             val room = state.rooms.firstOrNull { it.id == roomID }
             if (room != null && runCatching { remote.push(room = room) }.isSuccess) {
                 pendingRenamePushes.remove(roomID)
+            }
+        }
+        for (noteID in pendingNoteDeletes.toList()) {
+            val shape = pendingNoteDeleteShapes[noteID]
+            val gone = runCatching {
+                remote.deleteNote(
+                    id = noteID,
+                    readingID = shape?.first,
+                    voice = shape?.second ?: false,
+                )
+            }
+            if (gone.isSuccess) {
+                pendingNoteDeletes.remove(noteID)
+                pendingNoteDeleteShapes.remove(noteID)
+            }
+        }
+        for (noteID in pendingNotePushes.toList()) {
+            val note = state.notes.firstOrNull { it.id == noteID } ?: run {
+                // Taken back after the edit: there is nothing to push.
+                pendingNotePushes.remove(noteID)
+                return@run null
+            }
+            if (note != null && runCatching { remote.push(note = note) }.isSuccess) {
+                pendingNotePushes.remove(noteID)
+                markNoteSent(noteID)
+            }
+        }
+        for (highlightID in pendingHighlightDeletes.toList()) {
+            if (runCatching { remote.deleteHighlight(id = highlightID) }.isSuccess) {
+                pendingHighlightDeletes.remove(highlightID)
             }
         }
         val graph = runCatching { remote.pullRooms() }.getOrNull() ?: return Arrivals.none
@@ -2127,15 +2299,25 @@ class AppModel(
             val transcriptState = row.transcriptState?.let { raw ->
                 TranscriptState.entries.firstOrNull { it.name == raw }
             }
+            // A note this device has taken back and not yet managed to
+            // delete must not be handed back to it by the pull that raced the
+            // delete. Without this the take-back looked like it had worked
+            // and the note reappeared a moment later.
+            if (pendingNoteDeletes.contains(row.id)) continue
             val i = notes.indexOfFirst { it.id == row.id }
             if (i >= 0) {
+                // An edit this device has made and not yet pushed keeps its
+                // own words. `body = row.body ?: local` took the server's old
+                // body over the new one, silently, which is the one failure
+                // on this path that loses something a person wrote.
+                val mine = pendingNotePushes.contains(row.id)
                 notes[i] = notes[i].copy(
-                    body = row.body ?: notes[i].body,
+                    body = if (mine) notes[i].body else row.body ?: notes[i].body,
                     waveform = row.waveform ?: notes[i].waveform,
                     transcript = row.transcript ?: notes[i].transcript,
                     transcriptState = transcriptState ?: notes[i].transcriptState,
                     audioPath = row.audioPath ?: notes[i].audioPath,
-                    isPending = false
+                    isPending = mine,
                 )
             } else {
                 val note = Note(
@@ -2172,6 +2354,53 @@ class AppModel(
                 notes[i] = notes[i].copy(foundBy = notes[i].foundBy + row.personId)
             }
         }
+        // **The prune.** Memberships are pruned above ("departures
+        // propagate") and invites are pruned below, and notes were not — so a
+        // note the backend no longer holds stayed on the phone forever. Both
+        // `takeBack` and `removeHighlight` delete the row remotely and nudge
+        // the other device to pull immediately; the pull came back without
+        // the row, this loop added nothing, removed nothing, and the note the
+        // author had taken back sat on the other person's phone permanently.
+        // S04 is explicit that a taken-back note vanishes "with no
+        // tombstone", and docs/deviations.md:94 already claimed take-backs
+        // propagate. They reached the backend and stopped there.
+        //
+        // Three guards, and each of them is load-bearing:
+        //
+        //  - `notesComplete`, because the notes select is wrapped in a
+        //    `runCatching` that returns an empty list on failure. Pruning
+        //    against that would delete every note in the room the first time
+        //    one request timed out.
+        //  - only readings the pull actually covered, because a graph is
+        //    scoped to the rooms this account is in and a reading it never
+        //    asked about has nothing to say about its notes.
+        //  - never a pending one, which is a note composed offline that the
+        //    backend has not been told about yet (§4.4).
+        if (graph.notesComplete) {
+            val pulledReadings = graph.readings.map { it.id }.toSet()
+            val pulledNotes = graph.notes.map { it.id }.toSet()
+            val gone = notes.filter { note ->
+                note.readingID in pulledReadings &&
+                    note.id !in pulledNotes &&
+                    !note.isPending &&
+                    note.id !in pendingNotePushes
+            }
+            if (gone.isNotEmpty()) {
+                notes.removeAll(gone.toSet())
+                // A voice note that has gone takes its recording with it. The
+                // author's own device already does this in `takeBack`; this
+                // is the same for everybody else's, and without it the room
+                // keeps the audio of a note nobody can see.
+                val paths = gone.mapNotNull { it.audioPath }
+                if (paths.isNotEmpty()) {
+                    viewModelScope.launch {
+                        withContext(Dispatchers.IO) {
+                            paths.forEach { runCatching { store.audioFile(it).delete() } }
+                        }
+                    }
+                }
+            }
+        }
         next = next.copy(notes = notes)
 
         // Highlights
@@ -2195,6 +2424,18 @@ class AppModel(
                         createdAt = row.createdAt
                     )
                 )
+            }
+        }
+        // The same prune, for the same reason: S06's "remove if it's yours"
+        // removed it from the author's phone and from Postgres and from
+        // nowhere else.
+        if (graph.highlightsComplete) {
+            val pulledReadings = graph.readings.map { it.id }.toSet()
+            val pulledHighlights = graph.highlights.map { it.id }.toSet()
+            highlights.removeAll { highlight ->
+                highlight.readingID in pulledReadings &&
+                    highlight.id !in pulledHighlights &&
+                    highlight.id !in pendingHighlightDeletes
             }
         }
         next = next.copy(highlights = highlights)
