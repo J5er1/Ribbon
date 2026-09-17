@@ -128,6 +128,33 @@ class RemoteSync(
     // MARK: Passkeys (§6.10)
 
     /**
+     * Whether this project has passkeys switched on. Null until asked.
+     *
+     * Not a constant and not a guess. §6.10 says "a passkey where available,
+     * an emailed code otherwise", and *available* was being read as "the
+     * platform has `CredentialManager`", which every phone does. It is a
+     * project setting, and on this project it is off — so the control was
+     * offered to everybody, raised the system's own sheet, and answered
+     * "that passkey didn't work" every time. See [SupabaseClient.authSettings].
+     */
+    var passkeysEnabled: Boolean? = null
+        private set
+
+    /**
+     * Ask the project what it has switched on, once per launch.
+     *
+     * Failures are silent and leave the answer null, which reads as *not yet
+     * known* rather than as no: an offline launch should not decide that
+     * passkeys are unavailable for the rest of the session, and a control
+     * that is simply absent until the app can say otherwise is the honest
+     * shape of not knowing.
+     */
+    suspend fun learnWhatAuthOffers() {
+        if (passkeysEnabled != null) return
+        passkeysEnabled = runCatching { client.authSettings().passkeysEnabled }.getOrNull()
+    }
+
+    /**
      * Register a passkey for the account that is already signed in.
      *
      * @param context an Activity context — the system sheet needs a window.

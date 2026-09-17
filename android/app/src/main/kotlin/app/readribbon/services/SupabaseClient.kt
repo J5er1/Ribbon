@@ -359,6 +359,44 @@ class SupabaseClient(
         return next
     }
 
+    /**
+     * The public half of a project's auth configuration.
+     *
+     * One field is read, because one field is needed. `ignoreUnknownKeys` and
+     * the snake-case naming strategy do the rest, so this does not have to
+     * track a shape that is not ours (`external`, `disable_signup`,
+     * `saml_enabled`, and the rest).
+     */
+    @Serializable
+    data class AuthSettings(val passkeysEnabled: Boolean = false)
+
+    /**
+     * What this project's auth actually has switched on.
+     *
+     * Unauthenticated and public — it is what a browser client reads before
+     * it decides which buttons to draw, and it is the answer to a question
+     * the app had been guessing at.
+     *
+     * **Why this exists.** "Add a passkey" was offered to everybody signed in,
+     * on the reasoning that a passkey is a platform capability and the
+     * platform has one. It is not: it is a project setting, and on this
+     * project it is off. `auth/v1/passkeys/registration/options` answers
+     * `{"code":404,"error_code":"passkey_disabled"}` — measured, not
+     * inferred — so the control could be tapped, would raise the system
+     * sheet's worth of expectation, and then say "that passkey didn't work"
+     * every single time. Which is the owner's *"the passkey area has never
+     * worked"*, and it never could have.
+     *
+     * Asking rather than assuming also means the day the switch is flipped in
+     * the dashboard the control appears on its own, with no app release.
+     */
+    suspend fun authSettings(): AuthSettings {
+        val body = request(
+            method = "GET", url = url("auth/v1/settings"),
+            authenticated = false, headers = mapOf("apikey" to key))
+        return json.decodeFromString(body)
+    }
+
     private suspend fun passkeyChallenge(
         path: String,
         authenticated: Boolean,

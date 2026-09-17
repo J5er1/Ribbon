@@ -75,6 +75,8 @@ import app.readribbon.screens.RoomScreen
 import app.readribbon.screens.ShelfView
 import app.readribbon.screens.TextSettingsScreen
 import app.readribbon.services.LocalPresenceService
+import app.readribbon.services.RemoteSync
+import app.readribbon.services.SessionStore
 import java.io.File
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.hours
@@ -571,6 +573,41 @@ class LookBookTest {
                 .compress(Bitmap.CompressFormat.PNG, 100, it)
         }
         compose.mainClock.autoAdvance = true
+    }
+
+    /**
+     * You, with an account to sign into (A48).
+     *
+     * `menu-you` above is the same screen with no backend configured, where
+     * the account section draws *nothing* — which is the fix for the heading
+     * that used to sit over an empty gap. This is the other half: the section
+     * as somebody who has not signed in yet actually meets it, in the same
+     * tile language as the three groups above it rather than as a loose
+     * underlined word and a floating sentence.
+     *
+     * A signed-*in* shot is not here, and deliberately. `RemoteSync` only
+     * becomes signed in by signing in — `userID` and `email` are its own to
+     * set — and prising those open so a test could pretend otherwise would be
+     * production code that exists for a photograph. `AppModel.remote` is
+     * `internal` instead of private, which is one visibility step for one
+     * reader inside the same module, and is the whole of the seam.
+     */
+    @Test fun theAccountSection() {
+        val open = reading("MRK", FireScale.medium)
+        val m = model(
+            AppState(
+                me = me,
+                people = mapOf(me.id to me),
+                rooms = listOf(room),
+                memberships = listOf(membership(me, Ink.teal)),
+                readings = listOf(open),
+                currentRoomID = room.id,
+            ),
+        )
+        m.remote = RemoteSync(SessionStore(ApplicationProvider.getApplicationContext()))
+        shoot("menu-you-account") {
+            MenuScreen(model = m, entry = MenuEntry.YOU, onDismiss = {}, onSwitch = {})
+        }
     }
 
     /** The menu's other door: the room, its people and the rooms you are in. */

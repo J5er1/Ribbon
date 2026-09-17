@@ -2636,6 +2636,87 @@ A47. **The settings screen never stopped laying itself out.** Owner: *"when
     the look book now photographs the middle of the transition as well as its
     ends, with the menu mounted the way `RibbonRoot` actually mounts it.
 
+A48. **The passkey was never broken, and Your account was never designed.**
+    Two of the owner's findings on one screen.
+
+    **"The passkey area has never worked."** It could not have. The client
+    code is correct — options in, ceremony, response back, exactly as GoTrue
+    documents it — and the project has passkeys switched off:
+
+        POST /auth/v1/passkeys/registration/options
+        → 404 {"error_code":"passkey_disabled","msg":"Passkeys are disabled"}
+
+    and the project's own public settings say so plainly:
+    `GET /auth/v1/settings` → `"passkeys_enabled": false`. Measured against
+    the real backend, not inferred.
+
+    The defect that is the app's is what it did with that. `passkeysAvailable`
+    was `remote != null` — a guess that a passkey is a *platform* capability,
+    which every phone has. It is a *project* setting. So "Add a passkey" was
+    offered to everybody signed in, raised the system's own credential sheet's
+    worth of expectation, and answered "That passkey didn't work" every single
+    time. §6.10 says "a passkey where available"; the app was never asking
+    what was available.
+
+    It asks now, once a launch, and the answer decides whether the control
+    exists. A failure to ask leaves it null, which reads as *not yet known*
+    rather than as no — an offline launch should not decide the question for
+    the rest of the session — and a control that is absent until the app can
+    say otherwise is the honest shape of not knowing. The day the switch is
+    flipped in the dashboard the row appears on its own, with no release.
+
+    **What the owner still has to do**, because no code can: turn Passkeys on
+    for the project (Authentication → Sign In / Providers), and serve
+    `readribbon.app/.well-known/assetlinks.json` naming this package and the
+    SHA-256 of the *release* signing certificate — `web/build.mjs` already
+    emits it from `RIBBON_ANDROID_CERT_SHA256`. Passkeys.kt's header has
+    carried those two requirements since it was written. The owner's own
+    suggestion, Auth0, is already wired (`signInWithAuth0`, Universal Login)
+    and is the other route to the same place if the tenant is easier to turn
+    on than the project; nothing here forecloses it.
+
+    **"The Your Account section in the settings and the profile area isn't
+    designed very well."** Both true, and for two different reasons.
+
+    *The account* was the one section on You built out of loose parts — an
+    address in small caps, two underlined words, a floating sentence — while
+    Text, Appearance and Downloads directly above it were grouped rows with a
+    title and a subtitle each. It did not look unfinished by accident: it was
+    the only part of the screen that had never been given the rest of the
+    screen's language. It is tiles now, in the same group, with the reason as
+    the group's footnote and the passkey row between the address and the way
+    out. `Delete account` stays quiet and stays outside the group, with air
+    above it: §6.8's one destructive act does not get a tile, because a tile
+    is an invitation.
+
+    And **the heading no longer draws itself over nothing.** With no backend
+    configured the section used to render its label and then an empty gap,
+    with "Delete account" hanging underneath offering to delete an account
+    that cannot exist. The section returns before any of that now — label,
+    gap and control together — so there is nothing rather than a hole.
+
+    *The profile* was a centred island: an 88 dp circle in the middle of the
+    screen, a small-caps line under it, the name under that, a sentence under
+    that — four things stacked on an axis nothing else on You uses, above
+    three sections all flush with the margin, under a heading that is also
+    flush with it. That is most of what reads as undesigned: not the pieces,
+    the axis. The face still opens the screen and is still the largest thing
+    on it; it stands beside the name now rather than above it, which is also
+    how a person appears everywhere else in this app — a seat at the hearth, a
+    row in the rooms sheet, the head of their own screen.
+
+    The small-caps "Add a portrait" went with it. Beside the name rather than
+    under the circle it was labelling a control that is plainly a face you can
+    touch, and it was already cleared from the screen reader because the
+    portrait carries the action. The sentence that stays does both jobs, and
+    says "Tap to add one" only while there is no face.
+
+    **`AppModel.remote` is `internal` rather than private**, for one reader:
+    the look book, which is in this module and is the only way this section
+    can be photographed at all. `RemoteSync` is not opened up — a signed-*in*
+    shot would need `userID` and `email` prised open, and that would be
+    production code existing for a photograph.
+
 ## Licensed translations (decided: API.Bible)
 
 Open question §16.8 is now part-decided: **NKJV plus two undecided
