@@ -23,6 +23,9 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.decodeFromJsonElement
+import kotlinx.serialization.json.jsonObject
 import java.io.File
 import kotlin.time.Clock
 import kotlin.time.Instant
@@ -235,14 +238,101 @@ class LocalStore(context: Context) {
     suspend fun load(): AppState = lock.withLock {
         withContext(Dispatchers.IO) {
             if (!stateFile.exists()) return@withContext AppState()
-            runCatching { json.decodeFromString<AppState>(stateFile.readText()) }
-                .getOrElse {
-                    // A state file we cannot read is a state file we do not
-                    // trust. Starting empty loses local-only work, which is
-                    // bad; carrying a half-decoded graph forward is worse,
-                    // because every later write would persist the damage.
-                    AppState()
-                }
+            val text = runCatching { stateFile.readText() }.getOrNull()
+                ?: return@withContext AppState()
+            runCatching { json.decodeFromString<AppState>(text) }
+                .getOrElse { salvage(text) }
+        }
+    }
+
+    /**
+     * What to keep from a state file that will not decode.
+     *
+     * A state file we cannot read is a state file we do not trust: carrying a
+     * half-decoded graph forward is worse than starting empty, because every
+     * later write would persist the damage. That much was already true. What
+     * was wrong was *starting empty and then saving over it*, which threw
+     * away the only part of this file that nothing else in the world has a
+     * copy of.
+     *
+     * **Almost everything here is a cache.** Rooms, readings, notes,
+     * highlights, cards, ribbons and people all live on the backend and come
+     * back on the next sync, which is why a total reset does not look like a
+     * disaster: the app fills back in and nothing appears to be missing. The
+     * settings do not come back, because they are only ever written here. So
+     * a decode failure presented as exactly one symptom — *"preferences do not
+     * stay between updates of the app"*, which is how the owner reported it —
+     * and the far larger reset underneath it was invisible.
+     *
+     * So the fields that cannot be re-fetched are pulled out one at a time,
+     * each in its own `runCatching`, so one unreadable field cannot take the
+     * rest with it. This is deliberately not a `@Serializable` sub-class: the
+     * point is to decode as little as possible and to keep decoding after a
+     * failure, and a nested object gives up on both.
+     *
+     * The unreadable file is kept rather than overwritten, so that whatever
+     * broke it can still be looked at afterwards — see [keepTheUnreadableFile].
+     */
+    private fun salvage(text: String): AppState {
+        keepTheUnreadableFile()
+        val fields = runCatching { json.parseToJsonElement(text).jsonObject }.getOrNull()
+            ?: return AppState()
+
+        fun <T> saved(name: String, fallback: T, read: (JsonElement) -> T): T {
+            val raw = fields[name] ?: return fallback
+            return runCatching { read(raw) }.getOrDefault(fallback)
+        }
+
+        return AppState(
+            // Eyes, sleep, and which rooms may wake the phone. None of it is
+            // anywhere else.
+            settings = saved("settings", AppSettings()) { json.decodeFromJsonElement(it) },
+            // The three "asked once" flags (§6.1). Losing one is not a
+            // disaster, it is a hint or a permission prompt coming back — but
+            // a hint that comes back is the thing §6.1 is against.
+            hasSeenMarginHint = saved("hasSeenMarginHint", false) {
+                json.decodeFromJsonElement(it)
+            },
+            hasPulledTheFire = saved("hasPulledTheFire", false) {
+                json.decodeFromJsonElement(it)
+            },
+            hasAskedAboutNotifications = saved("hasAskedAboutNotifications", false) {
+                json.decodeFromJsonElement(it)
+            },
+            // An invite that never reached the backend exists only here, and
+            // its link may already be in somebody's message thread (A37).
+            invitesNotYetPushed = saved("invitesNotYetPushed", emptySet()) {
+                json.decodeFromJsonElement(it)
+            },
+            invitesHandedOut = saved("invitesHandedOut", emptySet()) {
+                json.decodeFromJsonElement(it)
+            },
+            // Deliberately not salvaged: `notifiedThrough`. Null means this
+            // device has never merged, which makes the next merge silent
+            // (S19) — and after a reset that is exactly right, because
+            // everything is about to arrive at once.
+        )
+    }
+
+    /**
+     * Moves an unreadable state file aside instead of letting the next save
+     * write over it.
+     *
+     * One copy, replaced each time, at `state.json.unreadable`. It is the only
+     * evidence of what actually happened, and the next `save()` is moments
+     * away and would otherwise destroy it — which is why the old behaviour
+     * could never be diagnosed after the fact.
+     *
+     * A rename rather than a copy where the filesystem allows one, so this
+     * cannot itself fail for want of space on a phone that has run out of it.
+     */
+    private fun keepTheUnreadableFile() {
+        runCatching {
+            val kept = File(base, "state.json.unreadable")
+            if (kept.exists()) kept.delete()
+            if (!stateFile.renameTo(kept)) {
+                stateFile.copyTo(kept, overwrite = true)
+            }
         }
     }
 

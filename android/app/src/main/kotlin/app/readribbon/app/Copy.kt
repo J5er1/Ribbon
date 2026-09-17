@@ -739,8 +739,17 @@ object Copy {
     const val THIS_PHONE = "This phone"
     const val YOUR_ACCOUNT = "Your account"
 
-    /** Under the face, saying where it is seen. Never "profile photo". */
+    /** Beside the face, saying where it is seen. Never "profile photo". */
     const val YOUR_FACE_REASON = "Your name and face are what the room sees."
+
+    /**
+     * The same sentence when there is no face yet, which is the one moment it
+     * should also be an invitation. One line doing both jobs, because the
+     * small-caps label that used to do the second one sat under a circle that
+     * is now plainly a face you can touch (A48).
+     */
+    const val ADD_A_PORTRAIT_REASON =
+        "Your name and face are what the room sees. Tap to add one."
 
     const val TAP_TO_CHANGE = "Tap to change"
 

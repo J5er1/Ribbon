@@ -62,6 +62,7 @@ import app.readribbon.core.Reading
 import app.readribbon.services.Destination
 import app.readribbon.core.Room
 import app.readribbon.core.VerseAddress
+import app.readribbon.design.LaunchMark
 import app.readribbon.design.LocalFlowLayer
 import app.readribbon.design.LocalFlowRoot
 import app.readribbon.design.Palette
@@ -170,16 +171,12 @@ internal class RootHolder : ViewModel() {
  *   handed down as a stream. A link that arrives while the app is open sets
  *   `pendingInvite` and nothing else — the join rides over whatever the
  *   person is doing and never switches the room underneath them.
- * @param onReady the state is in and the room is about to draw. MainActivity
- *   holds the unlit launch ground until this is called; there is nothing to
- *   show in the meantime and nothing that would be honest to show.
  */
 @Composable
 fun RibbonRoot(
     links: Flow<Uri>,
     destinations: Flow<Destination> = emptyFlow(),
     modifier: Modifier = Modifier,
-    onReady: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val holder: RootHolder = viewModel()
@@ -193,6 +190,15 @@ fun RibbonRoot(
 
     /** The same, for a notification tapped while the app was cold (S19). */
     var bufferedDestination by remember { mutableStateOf<Destination?>(null) }
+
+    /**
+     * Whether the launch mark has finished and gone (A45).
+     *
+     * `remember` and not `rememberSaveable`: a rotation does not relaunch the
+     * app, and a mark that came back for one would be a mark that came back
+     * for no reason. It survives recomposition, which is all it has to do.
+     */
+    var marked by remember { mutableStateOf(false) }
 
     // An invite link, tapped. Swift's `.onOpenURL`, with the same two cases:
     // hand it straight over, or hold it for the model that is still loading.
@@ -231,7 +237,6 @@ fun RibbonRoot(
             }
             holder.model = loaded
         }
-        onReady()
     }
 
     // The room renders from local state instantly; the backend catches up
@@ -277,6 +282,17 @@ fun RibbonRoot(
             Box(Modifier.fillMaxSize().room())
         } else {
             RootContent(model)
+        }
+
+        // The launch mark, over the top of all of it, until the room can be
+        // drawn *and* the ribbon has finished coming down (A45).
+        //
+        // Last in the Box, so it is last in the draw order and covers the one
+        // frame where the system's launch window is torn down. It clears its
+        // own semantics, so while it is up there is nothing beneath it for a
+        // screen reader to walk into.
+        if (!marked) {
+            LaunchMark(ready = model != null, onDone = { marked = true })
         }
     }
 }

@@ -123,6 +123,7 @@ import app.readribbon.design.RibbonShape
 import app.readribbon.design.RibbonType
 import app.readribbon.design.SectionLabel
 import app.readribbon.design.Setting
+import app.readribbon.design.SettingValue
 import app.readribbon.design.SettingsGroup
 import app.readribbon.design.SmallCaps
 import app.readribbon.design.flows
@@ -721,16 +722,10 @@ private fun YouMenu(
             )
         }
 
-        Air(SectionGap)
-
-        // The account (§6.10).
-        SectionLabel(Copy.YOUR_ACCOUNT)
-        Air(10.dp)
-        AccountControls(model = model)
-        QuietControl(
-            title = Copy.DELETE_ACCOUNT,
-            modifier = Modifier.offset(x = QuietControlInset),
-        ) { confirmDelete = true }
+        // The account (§6.10). It draws its own heading, because there are
+        // builds where it draws nothing at all and a heading over nothing is
+        // worse than no heading — see [AccountSection].
+        AccountSection(model = model, onDelete = { confirmDelete = true })
 
         Air(SectionGap)
         UpdateSection(model = model)
@@ -1049,10 +1044,22 @@ private fun YouIdentity(model: AppModel) {
         }
     }
 
-    Column(
+    // **Left, like the rest of the screen.** This was a centred island: an
+    // 88 dp circle in the middle, a small-caps line under it, the name under
+    // that and a sentence under that — four things stacked on an axis nothing
+    // else on You uses, above three sections that are all flush with the
+    // margin. The heading above it is left too. That is most of what "the
+    // profile area isn't designed very well" is: not the pieces, the axis.
+    //
+    // The face still opens the screen and is still the largest thing on it —
+    // the reasoning that put it here is untouched — it simply stands beside
+    // the name rather than above it, which is also how a person appears
+    // everywhere else in this app: a seat at the hearth, a row in the rooms
+    // sheet, the head of their own screen.
+    Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
             modifier = Modifier
@@ -1087,20 +1094,10 @@ private fun YouIdentity(model: AppModel) {
             )
         }
 
-        // The face's own label. Small caps because that is what a quiet
-        // control looks like in this app, and cleared from the screen reader
-        // because the portrait above it already carries the action — two
-        // stops saying the same thing is the accessibility defect §11 keeps
-        // catching.
-        SmallCaps(
-            text = if (hasFace) Copy.TAP_TO_CHANGE else Copy.ADD_A_PORTRAIT,
-            size = 11f,
-            color = Palette.muted,
-            modifier = Modifier.clearAndSetSemantics {},
-        )
-
-        Air(2.dp)
-
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
         // Your name becomes the field it is edited in, in the same place, at
         // the same size. Two identical lines of type trading places on one
         // frame reads as a flinch; a cross-fade reads as the one becoming the
@@ -1125,10 +1122,7 @@ private fun YouIdentity(model: AppModel) {
                     value = name,
                     onValueChange = { name = it },
                     singleLine = true,
-                    textStyle = RibbonType.display(26f).copy(
-                        color = Palette.text,
-                        textAlign = TextAlign.Center,
-                    ),
+                    textStyle = RibbonType.display(26f).copy(color = Palette.text),
                     cursorBrush = SolidColor(Palette.accent),
                     keyboardOptions = KeyboardOptions(
                         capitalization = KeyboardCapitalization.Words,
@@ -1175,28 +1169,40 @@ private fun YouIdentity(model: AppModel) {
                             name = model.me?.name ?: ""
                             editingName = true
                         },
-                    contentAlignment = Alignment.Center,
+                    // Start, now that the block runs along the screen's own
+                    // axis: a name centred in the space left over beside a
+                    // portrait lands in a different place for every length of
+                    // name, which is the one thing worse than being centred.
+                    contentAlignment = Alignment.CenterStart,
                 ) {
                     Text(
                         text = model.me?.name ?: "",
                         style = RibbonType.display(26f),
                         color = Palette.text,
-                        textAlign = TextAlign.Center,
                     )
                 }
             }
         }
 
-        // Why any of it is asked for, said once. The room is the only place
-        // either is ever seen, and saying so is what makes a portrait feel
-        // like a courtesy rather than a profile field.
+        // The face's own label, and why any of it is asked for, in one line
+        // rather than two.
+        //
+        // It used to be both: a small-caps "Add a portrait" under the circle
+        // *and* a sentence under the name saying the room is the only place
+        // either is ever seen. Beside each other rather than stacked, the
+        // small-caps line is the one that has to go — it labelled a control
+        // that is now plainly a face you can touch, and it was cleared from
+        // the screen reader anyway because the portrait already carried the
+        // action. The sentence stays, because it is the part that makes a
+        // portrait read as a courtesy rather than as a profile field, and it
+        // takes the tap as its own label so §11's tap-equivalent survives the
+        // line it used to live on.
         Text(
-            text = Copy.YOUR_FACE_REASON,
+            text = if (hasFace) Copy.YOUR_FACE_REASON else Copy.ADD_A_PORTRAIT_REASON,
             style = RibbonType.ui(14f),
             color = Palette.muted,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth(),
         )
+        }
     }
 }
 
@@ -1322,7 +1328,7 @@ private fun RoomControls(
  * not a nag — one quiet line, and the reason stated plainly.
  */
 @Composable
-private fun AccountControls(model: AppModel) {
+private fun AccountSection(model: AppModel, onDelete: () -> Unit) {
     // Saveable: a code already emailed must still be being waited for after
     // a push and a pop.
     var signingIn by rememberSaveable { mutableStateOf(false) }
@@ -1331,6 +1337,14 @@ private fun AccountControls(model: AppModel) {
     val reduceMotion = rememberReduceMotion()
     val scope = rememberCoroutineScope()
     val activity = LocalActivity.current
+
+    // Nothing at all, heading included. This is a build with no backend
+    // configured, and the section used to draw its heading anyway: "Your
+    // account" over a gap, with "Delete account" hanging under it offering to
+    // delete an account that cannot exist. A heading over nothing is the
+    // clearest kind of design defect and it was on the screen the owner said
+    // was not designed well.
+    if (model.remote == null) return
 
     fun addPasskey() {
         val host = activity ?: return
@@ -1348,21 +1362,28 @@ private fun AccountControls(model: AppModel) {
         }
     }
 
-    // Four states in one place, and until now they traded places on a single
-    // frame: tapping Sign in replaced a control and a sentence with the whole
-    // inline form, and signing out replaced the form with them again — the
-    // section changing height under your thumb with nothing moving. The
-    // update card directly below this one is the same shape and already says
-    // why it was rebuilt ("four cards ... each appearing and vanishing on the
-    // frame its state changed"); this is the last place on You still doing
-    // it. What it says cross-fades, and the section grows or shrinks to fit
-    // rather than jumping.
+    // Three states, and until now they traded places on a single frame:
+    // tapping Sign in replaced a control and a sentence with the whole inline
+    // form, and signing out replaced the form with them again — the section
+    // changing height under your thumb with nothing moving. What it says
+    // cross-fades, and the section grows or shrinks to fit.
+    //
+    // The heading sits *outside* the cross-fade. It is the one thing here
+    // that does not change between the states, and a heading that fades out
+    // and back in while the rows beneath it change is a heading drawing
+    // attention to itself for no reason.
     val phase = when {
         model.isSignedIn -> AccountPhase.signedIn
-        model.remote == null -> AccountPhase.noAccounts
         signingIn -> AccountPhase.signingIn
         else -> AccountPhase.signedOut
     }
+
+    // The gap above the section is the section's own, so that a build with no
+    // backend loses the space along with everything else rather than leaving
+    // a hole where the account used to be.
+    Air(SectionGap)
+    SectionLabel(Copy.YOUR_ACCOUNT)
+    Air(10.dp)
 
     AnimatedContent(
         targetState = phase,
@@ -1376,45 +1397,52 @@ private fun AccountControls(model: AppModel) {
         },
         label = "your-account",
     ) { shown ->
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         when (shown) {
+            // **Tiles, like everything else on this screen.** The account was
+            // the one section built out of loose quiet controls and bare
+            // lines of type — an address in small caps, then two underlined
+            // words, then a sentence — while Text, Appearance and Downloads
+            // directly above it were all grouped rows with a title and a
+            // subtitle. It did not look unfinished by accident; it was the
+            // only part of You that had never been given the rest of the
+            // screen's language.
             AccountPhase.signedIn -> {
-                model.accountEmail?.let { address -> SmallCaps(address, size = 12f) }
-                // §6.10 wants a passkey where there is one. Offered here, on
-                // the account, because that is what it belongs to — and only
-                // ever added to the emailed code, never in place of it.
-                if (model.passkeysAvailable && activity != null) {
-                    QuietControl(
-                        title = Copy.ADD_A_PASSKEY,
-                        modifier = Modifier.offset(x = QuietControlInset),
-                    ) { addPasskey() }
-                    // The one line on this screen that changes because of
-                    // something the person just did, with nothing taking
-                    // focus and nothing else moving — so a screen reader was
-                    // told neither that the passkey was added nor that it had
-                    // failed. §11's rule that colour is never alone has a
-                    // twin: a result is never silent.
-                    Text(
-                        text = passkeyLine ?: Copy.PASSKEY_REASON,
-                        style = RibbonType.ui(13f),
-                        color = Palette.muted,
-                        modifier = Modifier.semantics {
-                            if (passkeyLine != null) liveRegion = LiveRegionMode.Polite
+                val passkey = model.passkeysAvailable && activity != null
+                SettingsGroup(
+                    count = if (passkey) 3 else 2,
+                    // Only after something has been attempted. The reason a
+                    // passkey is worth having is the row's own subtitle; a
+                    // footnote saying it again would be the screen explaining
+                    // itself twice.
+                    footnote = passkeyLine,
+                ) {
+                    SettingValue(
+                        title = model.accountEmail ?: Copy.YOUR_EMAIL,
+                        subtitle = Copy.ACCOUNT_REASON,
+                    )
+                    if (passkey) {
+                        Setting(
+                            title = Copy.ADD_A_PASSKEY,
+                            subtitle = Copy.PASSKEY_REASON,
+                            // Nothing is pushed: the system's own sheet comes
+                            // up over this screen, so a chevron would be
+                            // promising a place to go.
+                            chevron = false,
+                            onClick = { addPasskey() },
+                        )
+                    }
+                    Setting(
+                        title = Copy.SIGN_OUT,
+                        chevron = false,
+                        onClick = {
+                            signingIn = false
+                            // Signing out must finish whatever happens to
+                            // this screen.
+                            model.viewModelScope.launch { model.signOutRemote() }
                         },
                     )
                 }
-                QuietControl(
-                    title = Copy.SIGN_OUT,
-                    modifier = Modifier.offset(x = QuietControlInset),
-                ) {
-                    signingIn = false
-                    // Signing out must finish whatever happens to this screen.
-                    model.viewModelScope.launch { model.signOutRemote() }
-                }
             }
-
-            // Remote is not configured in this build; no dead control.
-            AccountPhase.noAccounts -> Unit
 
             AccountPhase.signingIn -> SignInInline(
                 model = model,
@@ -1422,24 +1450,39 @@ private fun AccountControls(model: AppModel) {
                 onCancel = { signingIn = false },
             )
 
-            AccountPhase.signedOut -> {
-                QuietControl(
+            AccountPhase.signedOut -> SettingsGroup(
+                count = 1,
+                footnote = Copy.ACCOUNT_REASON,
+            ) {
+                Setting(
                     title = Copy.SIGN_IN,
-                    modifier = Modifier.offset(x = QuietControlInset),
-                ) { signingIn = true }
-                Text(
-                    text = Copy.ACCOUNT_REASON,
-                    style = RibbonType.ui(13f),
-                    color = Palette.muted,
+                    chevron = false,
+                    onClick = { signingIn = true },
                 )
             }
         }
     }
-    }
+
+    // Quiet, and kept quiet: §6.8's one destructive act does not get a tile,
+    // because a tile is an invitation. Air above it so it is not read as the
+    // last row of the group it is not part of.
+    Air(18.dp)
+    QuietControl(
+        title = Copy.DELETE_ACCOUNT,
+        modifier = Modifier.offset(x = QuietControlInset),
+        onClick = onDelete,
+    )
 }
 
-/** What the account section is showing. One of four, and it eases between them. */
-private enum class AccountPhase { signedIn, signingIn, signedOut, noAccounts }
+/**
+ * What the account section is showing. One of three, and it eases between
+ * them.
+ *
+ * There used to be a fourth, `noAccounts`, which drew nothing — under a
+ * heading that drew itself anyway. [AccountSection] returns before any of
+ * this now, so the case has no state to be in.
+ */
+private enum class AccountPhase { signedIn, signingIn, signedOut }
 
 /**
  * The update card (§A-OTA): one card, four things it can say.

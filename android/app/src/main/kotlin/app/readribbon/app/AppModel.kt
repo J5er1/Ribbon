@@ -170,7 +170,11 @@ class AppModel(
      * nothing blocks reading.
      */
     var remote: RemoteSync? by mutableStateOf(null)
-        private set
+        // `internal` rather than `private` for exactly one reader: the look
+        // book, which is in this module and is the only way the account
+        // section on You can be photographed at all. Nothing outside this
+        // module can reach it, and `load` is still the only writer that ships.
+        internal set
 
     /** Set by an opened invite link; RootView and onboarding watch it. */
     var pendingInvite: PendingInvite? by mutableStateOf(null)
@@ -1919,7 +1923,35 @@ class AppModel(
      * Unlike iOS there is no OS floor to test — CredentialManager is a
      * library, and it is present from this build's minSdk up.
      */
-    val passkeysAvailable: Boolean get() = remote != null
+    /**
+     * Whether to offer a passkey at all.
+     *
+     * The project's own answer, not the platform's — see
+     * [app.readribbon.services.RemoteSync.passkeysEnabled]. False until the
+     * project has said yes, which covers both "not asked yet" and "asked
+     * while offline": a control that might not work is worse than one that is
+     * not there, and one that appears a second later when the answer arrives
+     * is better than one that was lying for a second.
+     *
+     * Snapshot state rather than a pass-through getter, because the answer
+     * arrives after the screen has drawn and nothing else would repaint it.
+     */
+    var passkeysAvailable: Boolean by mutableStateOf(false)
+        private set
+
+    /**
+     * Ask the project what its auth offers, once.
+     *
+     * On the model's own scope: it outlives whatever screen happens to be up,
+     * and the answer is about the account rather than about a view.
+     */
+    fun learnWhatAuthOffers() {
+        val remote = this.remote ?: return
+        viewModelScope.launch {
+            remote.learnWhatAuthOffers()
+            passkeysAvailable = remote.passkeysEnabled == true
+        }
+    }
     val auth0Available: Boolean get() = remote != null && app.readribbon.data.Auth0Config.isConfigured
 
     /**
@@ -3064,6 +3096,10 @@ class AppModel(
             if (forBackgroundPull) return model
             model.loadPortraits()
             model.checkForUpdates()
+            // What the account can actually be signed into with (A48). Asked
+            // once a launch, and it decides whether the passkey control on
+            // You exists at all.
+            model.learnWhatAuthOffers()
             model.openRoomChannel()
             // Watch for what arrives while the app is closed (S19), but only
             // for somebody there is an account to watch on behalf of: a

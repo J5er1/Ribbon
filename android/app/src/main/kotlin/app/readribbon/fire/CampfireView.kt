@@ -21,7 +21,6 @@ import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.nativePaint
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -310,18 +309,30 @@ object FirePainter {
     /**
      * Smooths a polyline into quad curves through segment midpoints —
      * short segments in, one continuous organic edge out.
+     *
+     * The polyline arrives as two coordinate arrays and a count rather than a
+     * `List<Offset>`, which is not a style preference. `Offset` is a value
+     * class over a packed `Long`, so it costs nothing on its own — but a
+     * `List<Offset>` cannot hold a value class unboxed, and every point put
+     * in one is an object. This is called for every tongue of every flame
+     * layer and every coal in the bed, thirty times a second, and it was
+     * boxing on the order of four hundred points a frame: about fourteen
+     * thousand short-lived objects a second, all of it on the thread that is
+     * also meant to be tracking a finger. Two reused `FloatArray`s box
+     * nothing and the arithmetic below is unchanged, so the picture is
+     * identical.
      */
-    private fun addSmoothSpine(path: Path, points: List<Offset>) {
-        if (points.size <= 2) {
-            points.lastOrNull()?.let { path.lineTo(it.x, it.y) }
+    private fun addSmoothSpine(path: Path, xs: FloatArray, ys: FloatArray, count: Int) {
+        if (count <= 2) {
+            if (count > 0) path.lineTo(xs[count - 1], ys[count - 1])
             return
         }
-        for (i in 1 until points.size - 1) {
-            val midX = (points[i].x + points[i + 1].x) / 2
-            val midY = (points[i].y + points[i + 1].y) / 2
-            path.quadraticTo(points[i].x, points[i].y, midX, midY)
+        for (i in 1 until count - 1) {
+            val midX = (xs[i] + xs[i + 1]) / 2
+            val midY = (ys[i] + ys[i + 1]) / 2
+            path.quadraticTo(xs[i], ys[i], midX, midY)
         }
-        path.lineTo(points[points.size - 1].x, points[points.size - 1].y)
+        path.lineTo(xs[count - 1], ys[count - 1])
     }
 
     /**
@@ -337,8 +348,14 @@ object FirePainter {
         sway: Double,
     ): Path {
         val segments = 8
-        val left = ArrayList<Offset>(segments + 1)
-        val right = ArrayList<Offset>(segments + 1)
+        // The outline is the left edge read upward and then the right edge
+        // read back down with its topmost point dropped (the two edges meet
+        // at the tip), which is 2·segments + 1 points. Both edges are written
+        // straight into their final places in one pass — the left edge
+        // forward from 0, the right edge backward from the end — so there are
+        // no intermediate lists to build, reverse and concatenate.
+        val xs = spineXs
+        val ys = spineYs
         val travel = time * 0.55 * tempo
         for (j in 0..segments) {
             val u = j.toDouble() / segments
@@ -350,25 +367,19 @@ object FirePainter {
             val mid = baseX + sway * planted +
                 bend * agitation * planted * halfWidth * 0.5
             val reach = halfWidth * profile
-            val y = baseY - height * u
-            left.add(
-                Offset(
-                    (mid - reach * (1 + 0.38 * agitation * planted * squeezeL)).toFloat(),
-                    y.toFloat(),
-                ),
-            )
-            right.add(
-                Offset(
-                    (mid + reach * (1 + 0.38 * agitation * planted * squeezeR)).toFloat(),
-                    y.toFloat(),
-                ),
-            )
+            val y = (baseY - height * u).toFloat()
+            xs[j] = (mid - reach * (1 + 0.38 * agitation * planted * squeezeL)).toFloat()
+            ys[j] = y
+            if (j < segments) {
+                xs[2 * segments - j] =
+                    (mid + reach * (1 + 0.38 * agitation * planted * squeezeR)).toFloat()
+                ys[2 * segments - j] = y
+            }
         }
-        val outline = ArrayList<Offset>(left)
-        outline.addAll(right.dropLast(1).asReversed())
-        val path = Path()
-        path.moveTo(outline[0].x, outline[0].y)
-        addSmoothSpine(path, outline)
+        val path = tongueScratch
+        path.reset()
+        path.moveTo(xs[0], ys[0])
+        addSmoothSpine(path, xs, ys, 2 * segments + 1)
         path.close()
         return path
     }
@@ -379,27 +390,29 @@ object FirePainter {
      */
     private fun lumpPath(centerX: Double, centerY: Double, radius: Double, seed: Double): Path {
         val vertices = 6
-        val pts = ArrayList<Offset>(vertices)
+        // The coal's own buffer rather than the tongues': a lump is built and
+        // drawn inside the bed's loop, and the tongues are built later, but
+        // sharing one buffer across two shapes is the kind of saving that
+        // turns into a bug the moment the order of the drawing changes.
+        val xs = lumpXs
+        val ys = lumpYs
         for (v in 0 until vertices) {
             val angle = v.toDouble() / vertices * 2 * PI
             val rx = radius * (0.72 + 0.56 * hash(seed + v * 3.77))
             val ry = radius * 0.62 * (0.72 + 0.56 * hash(seed + v * 9.13))
-            pts.add(
-                Offset(
-                    (centerX + cos(angle) * rx).toFloat(),
-                    (centerY + sin(angle) * ry).toFloat(),
-                ),
-            )
+            xs[v] = (centerX + cos(angle) * rx).toFloat()
+            ys[v] = (centerY + sin(angle) * ry).toFloat()
         }
-        val path = Path()
-        val firstMidX = (pts[vertices - 1].x + pts[0].x) / 2
-        val firstMidY = (pts[vertices - 1].y + pts[0].y) / 2
+        val path = lumpScratch
+        path.reset()
+        val firstMidX = (xs[vertices - 1] + xs[0]) / 2
+        val firstMidY = (ys[vertices - 1] + ys[0]) / 2
         path.moveTo(firstMidX, firstMidY)
         for (v in 0 until vertices) {
-            val next = pts[(v + 1) % vertices]
+            val next = (v + 1) % vertices
             path.quadraticTo(
-                pts[v].x, pts[v].y,
-                (pts[v].x + next.x) / 2, (pts[v].y + next.y) / 2,
+                xs[v], ys[v],
+                (xs[v] + xs[next]) / 2, (ys[v] + ys[next]) / 2,
             )
         }
         path.close()
@@ -414,8 +427,7 @@ object FirePainter {
      * likewise unused in the body and kept for signature parity: the book's
      * scale reaches the drawing through the height of the frame it is given,
      * never as a number the painter reads.
-     */
-    /**
+     *
      * @param opacity how much of this pass to composite, for the cross-fade
      *   between two fire states. Applied as one layer over the whole pass
      *   rather than to each draw inside it: the fire is built out of additive
@@ -436,9 +448,12 @@ object FirePainter {
             return
         }
         val canvas = into.drawContext.canvas
+        // Kept rather than made: a cross lasts the settle token, which is
+        // twelve frames of a fresh native Paint for something whose only
+        // varying property is its alpha.
         canvas.saveLayer(
             Rect(Offset.Zero, into.size),
-            Paint().apply { alpha = opacity },
+            crossFadePaint.apply { alpha = opacity },
         )
         paint(into, time, state, scale, coalDepth)
         canvas.restore()
@@ -574,7 +589,8 @@ object FirePainter {
                 val angle = hash(fk * 4.71 + 6.6) * PI
                 val dx = cos(angle) * len
                 val dy = sin(angle) * len * 0.3   // the bed is seen at an angle
-                val fissure = Path()
+                val fissure = fissureScratch
+                fissure.reset()
                 fissure.moveTo((x0 - dx / 2).toFloat(), (y0 - dy / 2).toFloat())
                 fissure.quadraticTo(
                     (x0 + dy * 0.8).toFloat(), (y0 - dx * 0.15).toFloat(),
@@ -818,6 +834,19 @@ object FirePainter {
             // peak. The book title sits right below the fire, so this must
             // never read as smoke or distortion — only a suggestion that the
             // air up there is warm. Room-size fires only.
+            //
+            // A radial gradient rather than a flat fill behind a blur, which
+            // is the same picture arrived at for a fraction of the cost. A
+            // mask-filter blur is not a cheap operation: Skia renders the
+            // shape's coverage to an offscreen mask, blurs that, and draws
+            // through it, so every blurred path is its own small render pass.
+            // At 30 Hz the fire was asking for five of them a frame — three
+            // sheath tongues and these two wisps — and these two were paying
+            // for it to soften the rim of an oval that is 3.5% opaque at its
+            // brightest. A gradient that reaches zero at the edge has no rim
+            // to soften; it is what a blurred flat oval is trying to look
+            // like. The flat middle is kept out to 0.55 so the wisp still has
+            // body rather than becoming a point of light.
             if (detailed && h >= 120 * pt) {
                 val crest = tongues.maxOfOrNull { it.height } ?: 0.5
                 for (i in 0 until 2) {
@@ -832,8 +861,13 @@ object FirePainter {
                         ovalPath(
                             rectOf(x = wx - ww / 2, y = wy - wh / 2, width = ww, height = wh),
                         ),
-                        SolidColor(Palette.flameDeep.opacity(fade)),
-                        blurPx = (3 * pt).toFloat(),
+                        Brush.radialGradient(
+                            0.0f to Palette.flameDeep.opacity(fade),
+                            0.55f to Palette.flameDeep.opacity(fade),
+                            1.0f to Palette.flameDeep.opacity(0.0),
+                            center = Offset(wx.toFloat(), wy.toFloat()),
+                            radius = (ww / 2).toFloat(),
+                        ),
                     )
                 }
             }
@@ -864,8 +898,52 @@ private fun Color.opacity(a: Double): Color = copy(alpha = a.toFloat().coerceIn(
 private fun rectOf(x: Double, y: Double, width: Double, height: Double): Rect =
     Rect(x.toFloat(), y.toFloat(), (x + width).toFloat(), (y + height).toFloat())
 
+/**
+ * The scratch the fire draws through — the paths, and the coordinate buffers
+ * the paths are built out of.
+ *
+ * Every shape here used to be a fresh `Path`, which is a native object with a
+ * native allocation behind it, built inside the draw and thrown away at the
+ * end of it: eleven coals, seven fissures, two ovals and a tongue per flame
+ * layer, thirty times a second, for as long as a fire is on the screen. Each
+ * one is built and then immediately drawn, and `drawPath` copies what it
+ * needs into the display list, so one path per *kind* of shape serves every
+ * frame — four objects for the life of the process instead of a few hundred a
+ * second.
+ *
+ * Four rather than one because nothing guarantees an oval is not wanted while
+ * a tongue is still being built, and a shared scratch would then be asked to
+ * be two shapes at once.
+ *
+ * The float buffers are the same saving one level down: see [addSmoothSpine]
+ * for what a `List<Offset>` costs per point.
+ *
+ * Single-threaded by construction, the same reasoning as [SoftPaints]:
+ * Compose draws on one thread, and every shape here is built and drawn before
+ * anything else can ask for the buffer. Two fires on one screen are drawn one
+ * after the other, not at once.
+ */
+private val ovalScratch = Path()
+private val tongueScratch = Path()
+private val lumpScratch = Path()
+private val fissureScratch = Path()
+
+/** A tongue's outline: 2·8 + 1 points, the two edges meeting at the tip. */
+private val spineXs = FloatArray(17)
+private val spineYs = FloatArray(17)
+
+/** A coal's six vertices. */
+private val lumpXs = FloatArray(6)
+private val lumpYs = FloatArray(6)
+
+/** The layer paint the state cross-fade composites through. */
+private val crossFadePaint = Paint()
+
 /** `Path(ellipseIn:)`. */
-private fun ovalPath(rect: Rect): Path = Path().apply { addOval(rect) }
+private fun ovalPath(rect: Rect): Path = ovalScratch.apply {
+    reset()
+    addOval(rect)
+}
 
 /**
  * Fills [path] additively — the `.plusLighter` of the Swift — optionally
@@ -887,9 +965,39 @@ private fun DrawScope.fillAdditive(path: Path, brush: Brush, blurPx: Float = 0f)
         drawPath(path = path, brush = brush, blendMode = BlendMode.Plus)
         return
     }
-    val paint = Paint()
+    val paint = SoftPaints.at(blurPx)
     brush.applyTo(size, paint, 1f)
-    paint.blendMode = BlendMode.Plus
-    paint.nativePaint.maskFilter = BlurMaskFilter(blurPx, BlurMaskFilter.Blur.NORMAL)
     drawIntoCanvas { it.drawPath(path, paint) }
+}
+
+/**
+ * The paints the softened passes use, kept rather than made.
+ *
+ * A `Paint` and a `BlurMaskFilter` are both native objects, and this made a
+ * fresh pair on **every blurred draw of every frame** — five a frame before
+ * the hot air stopped needing one, three after, at the 30 Hz this redraws
+ * at, for as long as a fire is on the screen. Each one also has to be
+ * finalised. The fire is the one thing in the app that is always moving, so
+ * that cost is always being paid, and it is paid on the CPU.
+ *
+ * There is only one radius left and it is fixed at a given density, so this
+ * is a one-entry map that fills once and is then only read. It is written as
+ * a map anyway because the radius is a parameter of [fillAdditive] and a
+ * second caller with a second radius should get a second paint rather than
+ * silently reuse the first one's blur. The paint is handed back for the
+ * brush to be applied to, which is the one property that genuinely differs
+ * per draw; blend mode and mask filter are set once when the paint is made.
+ *
+ * Single-threaded by construction: Compose draws on one thread, and every
+ * caller applies its brush and draws before anyone else can ask for a paint.
+ */
+private object SoftPaints {
+    private val byRadius = HashMap<Float, Paint>(4)
+
+    fun at(blurPx: Float): Paint = byRadius.getOrPut(blurPx) {
+        Paint().apply {
+            blendMode = BlendMode.Plus
+            nativePaint.maskFilter = BlurMaskFilter(blurPx, BlurMaskFilter.Blur.NORMAL)
+        }
+    }
 }

@@ -1,10 +1,12 @@
 package app.readribbon.look
 
 import android.graphics.Bitmap
+import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
@@ -46,6 +48,9 @@ import app.readribbon.core.VerseRange
 import app.readribbon.data.AppState
 import app.readribbon.data.LocalStore
 import app.readribbon.design.Appearance
+import app.readribbon.design.LAUNCH_MARK_MS
+import app.readribbon.design.LaunchMark
+import app.readribbon.design.LocalFlowRoot
 import app.readribbon.design.RibbonMotion
 import app.readribbon.design.RibbonTheme
 import app.readribbon.design.rememberBookSheet
@@ -70,6 +75,8 @@ import app.readribbon.screens.RoomScreen
 import app.readribbon.screens.ShelfView
 import app.readribbon.screens.TextSettingsScreen
 import app.readribbon.services.LocalPresenceService
+import app.readribbon.services.RemoteSync
+import app.readribbon.services.SessionStore
 import java.io.File
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.hours
@@ -503,6 +510,106 @@ class LookBookTest {
         }
     }
 
+    /**
+     * You → Appearance, caught in the middle (A47).
+     *
+     * Owner: *"when you're in your profile, going from Appearance, for
+     * example, tapping works very well. Actually, not fully. There's a ton of
+     * glitches and stuff."*
+     *
+     * Nothing in this book could see it. `menu-you` above draws `MenuScreen`
+     * on its own, with no `SharedTransitionLayout` around it — so
+     * `LocalFlowRoot` is null, `flowsAsWords` degrades to `this`, and the
+     * settings-title flow that this transition is *made of* has never been
+     * photographed. What was being checked was the two ends, which were fine;
+     * the middle is where the complaint is.
+     *
+     * So this one wraps the menu the way `RibbonRoot` does, taps the row, and
+     * stops the clock part of the way through.
+     */
+    @Test fun theSettingsFlow() {
+        val open = reading("MRK", FireScale.medium)
+        val m = model(
+            AppState(
+                me = me,
+                people = mapOf(me.id to me),
+                rooms = listOf(room),
+                memberships = listOf(membership(me, Ink.teal)),
+                readings = listOf(open),
+                currentRoomID = room.id,
+            ),
+        )
+        val appearance = Appearance(ApplicationProvider.getApplicationContext())
+        appearance.wallpaperColour = false
+        compose.setContent {
+            RibbonTheme(appearance = appearance) {
+                SharedTransitionLayout(Modifier.fillMaxSize()) {
+                    CompositionLocalProvider(LocalFlowRoot provides this) {
+                        MenuScreen(
+                            model = m,
+                            entry = MenuEntry.YOU,
+                            onDismiss = {},
+                            onSwitch = {},
+                        )
+                    }
+                }
+            }
+        }
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithText(Copy.APPEARANCE).performClick()
+        compose.mainClock.advanceTimeByFrame()
+        compose.mainClock.advanceTimeByFrame()
+        // A third of the way through the push, which is where a title that is
+        // travelling would be visibly travelling.
+        compose.mainClock.advanceTimeBy(RibbonMotion.SETTLE_MS / 3L)
+        File(out, "settings-flow-going.png").outputStream().use {
+            compose.onRoot().captureToImage().asAndroidBitmap()
+                .compress(Bitmap.CompressFormat.PNG, 100, it)
+        }
+        compose.mainClock.advanceTimeBy(RibbonMotion.SETTLE_MS * 2L)
+        File(out, "settings-flow-landed.png").outputStream().use {
+            compose.onRoot().captureToImage().asAndroidBitmap()
+                .compress(Bitmap.CompressFormat.PNG, 100, it)
+        }
+        compose.mainClock.autoAdvance = true
+    }
+
+    /**
+     * You, with an account to sign into (A48).
+     *
+     * `menu-you` above is the same screen with no backend configured, where
+     * the account section draws *nothing* — which is the fix for the heading
+     * that used to sit over an empty gap. This is the other half: the section
+     * as somebody who has not signed in yet actually meets it, in the same
+     * tile language as the three groups above it rather than as a loose
+     * underlined word and a floating sentence.
+     *
+     * A signed-*in* shot is not here, and deliberately. `RemoteSync` only
+     * becomes signed in by signing in — `userID` and `email` are its own to
+     * set — and prising those open so a test could pretend otherwise would be
+     * production code that exists for a photograph. `AppModel.remote` is
+     * `internal` instead of private, which is one visibility step for one
+     * reader inside the same module, and is the whole of the seam.
+     */
+    @Test fun theAccountSection() {
+        val open = reading("MRK", FireScale.medium)
+        val m = model(
+            AppState(
+                me = me,
+                people = mapOf(me.id to me),
+                rooms = listOf(room),
+                memberships = listOf(membership(me, Ink.teal)),
+                readings = listOf(open),
+                currentRoomID = room.id,
+            ),
+        )
+        m.remote = RemoteSync(SessionStore(ApplicationProvider.getApplicationContext()))
+        shoot("menu-you-account") {
+            MenuScreen(model = m, entry = MenuEntry.YOU, onDismiss = {}, onSwitch = {})
+        }
+    }
+
     /** The menu's other door: the room, its people and the rooms you are in. */
     @Test fun theRoomMenu() {
         val open = reading("MRK", FireScale.medium)
@@ -569,6 +676,40 @@ class LookBookTest {
      * This inflates the real `splash_wave` and draws it with the unfurl fully
      * open, which is the frame the animation ends on.
      */
+    /**
+     * The launch mark, mid-unfurl and at rest (A45).
+     *
+     * The mark is a composable now rather than an `AnimatedVectorDrawable` in
+     * the launch theme, which is what makes it possible to photograph at all:
+     * a system splash is drawn by the system, in another process, and nothing
+     * in this book could ever see it. The clock is stopped so the ribbon can
+     * be caught part of the way down — the frame the owner reported never
+     * seeing.
+     */
+    @Test fun theLaunchMarkComingDown() {
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            RibbonTheme {
+                // `ready = false`: the store has not loaded, which is the
+                // state the mark exists for and the one that holds it still.
+                LaunchMark(ready = false, onDone = {})
+            }
+        }
+        compose.mainClock.advanceTimeByFrame()
+        compose.mainClock.advanceTimeBy(160L)
+        File(out, "launch-mark-coming-down.png").outputStream().use {
+            compose.onRoot().captureToImage().asAndroidBitmap()
+                .compress(Bitmap.CompressFormat.PNG, 100, it)
+        }
+        // And where it lands, which is also what reduce motion shows at once.
+        compose.mainClock.advanceTimeBy(LAUNCH_MARK_MS.toLong())
+        File(out, "launch-mark-at-rest.png").outputStream().use {
+            compose.onRoot().captureToImage().asAndroidBitmap()
+                .compress(Bitmap.CompressFormat.PNG, 100, it)
+        }
+        compose.mainClock.autoAdvance = true
+    }
+
     @Test fun theLaunchMark() {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val drawable = checkNotNull(context.getDrawable(R.drawable.splash_wave)) {
@@ -596,43 +737,40 @@ class LookBookTest {
     /**
      * The launch mark actually animates.
      *
-     * The static test above proves the mark draws; it would pass just as
-     * happily on a drawable whose animation never runs, which is exactly the
-     * bug that shipped — an `animated-vector` whose target names do not match
-     * its vector, or whose property is not animatable, is not an error. It is
-     * a still picture, and nothing anywhere says so.
+     * The shot above proves the mark *draws*; it would pass just as happily
+     * on a mark whose animation never runs, which is exactly what the owner
+     * reported. So this one asserts two frames 160 ms apart are different
+     * pictures — that the ribbon is on its way down rather than simply there.
      *
-     * So this drives the real `AnimatedVectorDrawable` and asserts the first
-     * frame and a later one are different pictures.
+     * This used to drive the `AnimatedVectorDrawable` in the launch theme and
+     * it passed, every time, which is the reason A45 moved the mark into the
+     * app rather than trying to fix a drawable that was never broken: the
+     * animation ran here and did not run on the phone, and a system splash is
+     * drawn by the system, in another process, where nothing can reach it.
+     * Here the mark is the app's own, so what this test drives is what the
+     * phone runs.
      */
     @Test fun theLaunchMarkMoves() {
-        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
-        val avd = checkNotNull(context.getDrawable(R.drawable.splash_wave_animated)) {
-            "splash_wave_animated did not inflate"
-        }
-        check(avd is android.graphics.drawable.Animatable) {
-            "splash_wave_animated is not animatable: ${'$'}{avd::class.java.name}"
-        }
-        val side = 432
+        compose.mainClock.autoAdvance = false
+        compose.setContent { RibbonTheme { LaunchMark(ready = false, onDone = {}) } }
+        compose.mainClock.advanceTimeByFrame()
+
         fun frame(): IntArray {
-            val bitmap = Bitmap.createBitmap(side, side, Bitmap.Config.ARGB_8888)
-            val canvas = android.graphics.Canvas(bitmap)
-            canvas.drawColor(android.graphics.Color.parseColor("#0B0B0A"))
-            avd.setBounds(0, 0, side, side)
-            avd.draw(canvas)
-            val pixels = IntArray(side * side)
-            bitmap.getPixels(pixels, 0, side, 0, 0, side, side)
+            val image = compose.onRoot().captureToImage().asAndroidBitmap()
+            val pixels = IntArray(image.width * image.height)
+            image.getPixels(pixels, 0, image.width, 0, 0, image.width, image.height)
             return pixels
         }
 
-        (avd as android.graphics.drawable.Animatable).start()
         val first = frame()
-        // Past the unfurl's own 440 ms, so the clip has opened.
-        org.robolectric.shadows.ShadowLooper.idleMainLooper(600, java.util.concurrent.TimeUnit.MILLISECONDS)
+        compose.mainClock.advanceTimeBy(160L)
         val later = frame()
+        compose.mainClock.autoAdvance = true
 
+        val ground = android.graphics.Color.parseColor("#FF0B0B0A")
+        check(later.any { it != ground }) { "the launch mark drew nothing but ground" }
         check(!first.contentEquals(later)) {
-            "the launch mark drew the same picture 600 ms apart — the animation is not running"
+            "the launch mark drew the same picture 160 ms apart — it is not coming down"
         }
     }
 

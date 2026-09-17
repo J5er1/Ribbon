@@ -2319,6 +2319,404 @@ A42. **A room reads one version.** Owner's call, and the first entry in this
     version travel in one row and a second marker would have been two half
     locks on one door.
 
+A43. **The pull-up was a frame behind the finger.** Owner, on a Pixel 9 Pro
+    XL: *"the performance of swiping up on the fire is not very good"* — and
+    then, when asked nothing: *"so it's not exactly a low-end Samsung."* That
+    second sentence is the finding. A phone like that does not struggle to
+    move a rectangle, so the gesture was not expensive; it was late.
+
+    **The cause.** `BookSheet` kept its one number in an `Animatable`, and
+    `Animatable.snapTo` is a suspend function — it has to be, it takes the
+    animation mutex. So the drag was written the only way that shape allows:
+
+        internal fun drag(delta: Float) {
+            val next = (pull.value + delta / travel).coerceIn(0f, 1f)
+            scope.launch { pull.snapTo(next) }
+        }
+
+    `scope` is a `rememberCoroutineScope`, whose dispatcher is
+    `AndroidUiDispatcher`. That dispatcher does not run a block where it was
+    launched: it queues it and runs it at the next message-loop turn or the
+    next choreographer frame, whichever comes first. A pointer event is
+    delivered *inside* a frame, before that frame's draw — so the position
+    landed after the frame it belonged to had already been drawn, and the book
+    was one whole frame behind the thumb. Every frame, for the length of the
+    pull. On a 120 Hz screen that is eight milliseconds that are never made
+    up, plus a coroutine allocated and a mutex taken for each of the hundred
+    or more touch samples a second the panel reports.
+
+    A lag that is *constant* is exactly the kind that reads as bad
+    performance rather than as lag: nothing drops, nothing hitches, the book
+    is simply never quite where the finger is.
+
+    **The fix.** The pull is a plain `mutableFloatStateOf` now, written
+    synchronously from the pointer handler, and the settle is a top-level
+    `animate` in a `Job` the sheet holds. Everything that reads `progress`
+    already did so inside a `graphicsLayer` or a draw, so a drag invalidates
+    drawing and nothing else — unchanged, and that part was right.
+
+    What the animation mutex was quietly doing has to be done by hand: a new
+    drag has to take the book off a settle that is still running. `engage()`
+    and `drag()` both cancel the settle, and every path into a drag calls
+    `engage()` first, so the second cancel is belt and braces. The callbacks
+    still belong to the movement that actually finished, because a cancelled
+    coroutine never reaches the line after `animate`.
+
+    **The fire, while it was open.** The one thing in the app that is always
+    moving redraws at 30 Hz (§4.1), and every frame it allocated: a native
+    `Path` per coal, per fissure, per tongue, per oval; a native `Paint` and
+    `BlurMaskFilter` per blurred draw; and — the largest of them — a boxed
+    `Offset` per point of every outline, because a `List<Offset>` cannot hold
+    a value class unboxed. That last one was on the order of four hundred
+    objects a frame, fourteen thousand a second, on the thread that is also
+    meant to be tracking a finger.
+
+    All of it is kept scratch now: four paths, two pairs of `FloatArray`, a
+    paint per blur radius, one layer paint for the state cross-fade. The
+    arithmetic is untouched, so the picture is untouched.
+
+    Shared mutable scratch has exactly one failure mode and it is a bad one,
+    so `FireScratchTest` asserts the property that rules it out: **drawing is
+    a function of its arguments** — same arguments, same picture, whatever was
+    drawn before. The look book cannot test this, because the fire's breath
+    seed is `Random.nextDouble()` by design and no two runs draw the same
+    frame. Checked against a deliberately broken `reset()`.
+
+    **One blur pass out of five was buying nothing.** A mask-filter blur is
+    not a cheap draw: Skia renders the shape's coverage to an offscreen mask,
+    blurs it, and draws through it, so each blurred path is its own small
+    render pass. Five a frame — three sheath tongues and the two hot-air wisps
+    — of which the wisps were softening the rim of an oval that is 3.5%
+    opaque at its brightest. They are radial gradients now, which is what a
+    blurred flat oval is trying to look like, and have no rim to soften.
+
+    **What is left, and deliberately not done blind.** The sheath's three
+    blurs remain, and the honest fix for them is the one SwiftUI uses and the
+    code's own comment wishes for: record the sheath into a `GraphicsLayer`,
+    hang a hardware `BlurEffect` on it and composite once, instead of blurring
+    three paths separately. It is available at minSdk 33. It is not done here
+    because it changes how the sheath *blends* — the fire accumulates
+    additively inside one offscreen buffer, and a separate layer composites
+    over that rather than adding into it — and that is a change to the one
+    object on the home screen, made against a renderer no test in this repo
+    executes. The same goes for the full-screen `alpha` in `peeled`, which
+    forces a screen-sized offscreen buffer for every frame of an opening.
+    Both want a profiler and a phone, in that order, and the owner has the
+    phone. The two fixes above want neither.
+
+A44. **"Preferences do not stay between updates of the app."** Owner's
+    report. What follows is what was found, including the part that was not
+    found, because a fix shipped under a cause nobody established is a guess
+    wearing a commit message.
+
+    **What was ruled out.** `filesDir` and `SharedPreferences` both survive an
+    ordinary update; nothing in the app writes state before reading it
+    (`AppModel.load` reads the store before it builds the model); there is one
+    `LocalStore` in the process; the backup rules exclude only the sealed
+    session blob. The leading theory was that a schema change had made an old
+    `state.json` undecodable — `load()` answered a decode failure with a fresh
+    `AppState()`, and the next `save()` a moment later wrote over the evidence,
+    which is silent, total and looks exactly like "my settings went".
+    `StateSurvivesAnUpdateTest` was written to prove it and **disproved it**:
+    a hand-written file from before notifications, phrases and a room's
+    version decodes with its settings intact, because every field added since
+    launch carries a default.
+
+    **No code-level cause was established.** The most likely remaining
+    explanation is an install that wipes app data — a signing key that does
+    not match the installed one forces an uninstall first, and an
+    uninstall-reinstall takes `filesDir` with it. No code can prevent that,
+    and saying so is more useful than shipping a change that pretends to.
+
+    **What was fixed anyway, because it is wrong on its own terms.** The
+    asymmetry in `state.json` is the interesting part: rooms, readings, notes,
+    highlights, cards and people are all *caches* of the backend and come back
+    on the next sync. The settings are the only thing in that file that
+    nothing else in the world has a copy of. So a total reset does not look
+    like a disaster — the app fills back in, nothing appears missing, and the
+    single visible casualty is the settings. That is why this could happen
+    more than once and be reported as a small thing.
+
+    A decode failure now salvages what cannot be re-fetched instead of
+    starting empty: the settings, the three §6.1 "asked once" flags, and both
+    invite sets (an invite that never reached the backend exists only here,
+    and A37's link may already be in somebody's message thread). Each field is
+    read out of the raw JSON on its own, so one unreadable field cannot take
+    the rest with it. `notifiedThrough` is deliberately *not* salvaged: null
+    makes the next merge silent (S19), which after a reset is exactly right,
+    because everything is about to arrive at once.
+
+    And the broken file is kept at `state.json.unreadable` rather than
+    overwritten. One copy, replaced each time. If this recurs there will
+    finally be something to look at, which is the part that was missing the
+    first time.
+
+    **What would actually cover a wiped install**, and is not done here: the
+    settings are a fact about a *person*, not a device, and `profiles` already
+    carries one such fact (`translation`). A `profiles.settings` blob would
+    make text size, spacing, red letter, quiet hours and the per-room
+    notification switches follow the account onto a new phone, which is the
+    only thing that survives `filesDir` being deleted. It is a migration and a
+    sync path, and the owner's standing instruction for this pass is UI and UX
+    first — *"we will wire everything later"* — so it is named here rather than
+    taken.
+
+A45. **The launch mark is the app's to draw, not the system's.** Owner:
+    *"the splash screen with the Ribbon being animated doesn't work. It just
+    kind of shows it and then fades to it."* Which is a mark that appears
+    whole and then fades — the unfurl never running.
+
+    **The drawable was not the problem, and that was established before
+    anything was changed.** `theLaunchMarkMoves` already drove the real
+    `AnimatedVectorDrawable`, started it, and asserted two frames 600 ms apart
+    were different pictures. It passed. Inflated and drawn frame by frame, the
+    clip band closed to nothing and opened again over the unfurl's 440 ms, so
+    the vector, both animators and both target names were correct all along.
+
+    What could not be established is why the platform declined to play it on
+    that phone, and that is the finding. **The system splash is drawn by the
+    system, from the app's theme, in another process, before the app exists.**
+    There is nothing in it to see, to log, to test or to fix from here, and
+    nothing that says the next phone behaves the same. A28 put the mark there
+    on the reasoning that Android 12 shows a splash whether or not you ask, so
+    the only choice is whose mark it carries. That reasoning still holds for
+    the *ground*. It does not hold for anything that has to move.
+
+    So `design/LaunchMark.kt` draws the mark on the app's own first frame:
+    the same `splash_wave` vector, the same 440 ms unfurl and 1.04→1.0 settle,
+    on the Compose clock, under `rememberReduceMotion()` like everything else
+    (§11), and photographed in the look book part-way down and at rest — which
+    a system window could never be.
+
+    **What it costs, plainly.** The launch window now carries the unlit ground
+    and nothing else, so on a cold start there is the ground alone for as long
+    as the process takes to come up, where before there was a static mark.
+    That is the trade: briefly only the ground and then a ribbon that comes
+    down, against a mark that appears whole and never moves. The owner's
+    report is that the second reads as broken.
+
+    It does not *add* time, and §05 is about time. The old build held the
+    splash open until the store had loaded **plus a 480 ms floor**
+    (`MARK_FLOOR_MS`) so a warm launch could not cut the unfurl to three
+    frames — and the unfurl was the thing that never ran, so that floor was
+    480 ms of holding a still picture. Nothing holds the window now; it lasts
+    until the app's first frame, which is the library's default. The mark's
+    animation runs *while* the store comes off disk instead of after the
+    window has already been held for it. The mark leaves when the room can be
+    drawn **and** the ribbon has landed, whichever is later: leaving on the
+    first alone cuts the animation, leaving on the second alone holds a room
+    that was ready half a second ago.
+
+    **`splash_ground.xml` is an empty vector, deliberately.** Naming no icon
+    hands the slot back to the launcher icon on a plate, which is the one
+    thing A28 set out to avoid. An empty vector is the only way to tell the
+    platform "the ground, and leave the mark to us".
+
+    `splash_wave_animated.xml` and its two animators are deleted rather than
+    left unreferenced. They worked; nothing calls them; A39 is about exactly
+    that.
+
+A46. **The hearth's two directions, and a way out that could not be pulled.**
+    Two of the owner's findings, which turned out to be the same finding.
+
+    **The Wave.** *"The Ribbon icon at the bottom of the screen looks like
+    there's some sort of interaction happening, but it doesn't work very
+    well."* It worked exactly as written, and what was written could not be
+    performed. `RibbonMotion.OPEN_COMMIT` is a fifth of `OPEN_TRAVEL`, which
+    on a tall phone is about ninety dp of finger — a comfortable pull *upward
+    from the fire*, which sits in the middle of the room. From the Wave, which
+    sits at the foot of the page with the navigation bar under it, there is
+    nowhere near ninety dp of glass left to drag through. So the distance test
+    could never pass and only the flick could: the way out worked if you threw
+    it and did nothing if you pulled it. The page following the finger and then
+    springing back is the interaction being seen.
+
+    The lesson in one line: **a threshold has to be measured against the
+    screen the hand actually has.** `release` takes its commit as a parameter
+    now. The fire keeps the fifth; the Wave gets forty-four dp — one touch
+    target, deliberately short, because somebody who has taken hold of the
+    thing labelled "close the book" and pulled it has already said what they
+    want, and a handle that argues about how far is a handle that is in the
+    way.
+
+    The Wave also stopped eating the other direction. It was `draggable`,
+    which claims a vertical gesture in *both* directions once slop is passed,
+    and an upward drag on it had nowhere to go — the book is already fully
+    open and `drag` clamps — so the gesture was swallowed to move nothing.
+    A control that eats a drag and does nothing with it is the worst of both:
+    not inert, and not working. It is hand-written now and claims downward
+    only, exactly as the fire's handle already declined a downward one.
+
+    **The fire, downward.** *"Dragging down from the fire should do something
+    ... it should be in-depth room settings when you drag down from the fire
+    rather than up."* It now opens the room's own screen — the one the room's
+    name at the top-left has always opened.
+
+    The reason it did nothing before is good and is kept: `opensTheBook`'s own
+    comment records that `draggable` claimed both directions, so a thumb put
+    on the fire and swiped down to scroll the room moved nothing at all while
+    quietly building a whole reading screen and tearing it down again. So the
+    downward pull is only taken **when the room is at the top of its scroll**,
+    where a downward drag has nowhere else to go. Below that it is the
+    scroll's, as before.
+
+    The hearth leans with the finger — a square-root falloff onto a
+    twenty-eight dp cap, so the first millimetre answers almost one to one and
+    the last centimetre barely moves it. That is resistance, not travel: the
+    hearth is not going anywhere. Without it this would be another gesture
+    that appears to do nothing until it suddenly does, which is the complaint
+    this entry started from.
+
+    **The bug this nearly shipped with.** `opensTheRoom` shares a node with
+    `opensTheBook`, and `onClick` is *one slot* in a node's semantics — a
+    second one replaces the first rather than joining it. The app's front door
+    would have quietly stopped working for a screen reader. The room's tap
+    equivalent is a `CustomAccessibilityAction`, which sits beside the book's.
+    `HearthGesturesTest` asserts both are there, along with each direction's
+    threshold and the scroll's priority; none of it is visible in a
+    screenshot, which is why it had never been caught.
+
+    **On "dragged up".** The report says the way out of Scripture *"should be
+    able to be dragged up to go back to the home screen"*. Down is what is
+    built, and deliberately: the book rises from the bottom of the room to
+    open (A20), so sending it back down is the same gesture in reverse, and
+    one number drives both. The reading here is that the direction was never
+    the complaint — the drag was simply impossible to complete, which is the
+    defect above. If it still wants inverting on the phone it is one
+    comparison.
+
+A47. **The settings screen never stopped laying itself out.** Owner: *"when
+    you're in your profile, going from Appearance, for example, tapping works
+    very well. Actually, not fully. There's a ton of glitches and stuff."*
+
+    It was not a transition that looked wrong. **Compose never went idle.**
+
+    `LargeTopAppBar` has two titles, not one: a collapsed one in its top row
+    and an expanded one in its bottom row, cross-faded as you scroll. It
+    builds both out of the same `title` lambda, so every modifier on that
+    `Text` was applied to **two live nodes**. For a colour or a font that is
+    harmless. For the shared element that flows a settings row's words up into
+    the heading (A20's `flowsAsWords`) it is not: two halves of one key, on
+    one screen, with neither of them leaving, and a `RemeasureToBounds` bounds
+    animation between them that has no fixed point to settle on. The screen
+    went on recomposing and remeasuring for as long as it was given.
+
+    Measured, not inferred. Opening Appearance from You inside the flow spins
+    until the test harness gives up at sixty seconds; the identical navigation
+    with `LocalFlowRoot` absent settles at once; removing the shared modifier
+    from the bar's title settles at once. `scaleToBounds` in place of
+    `RemeasureToBounds` does **not** fix it, which is what says the resize
+    mode was never the problem — the duplicate key was.
+
+    **Why it had never been caught.** No test in this repo had ever put
+    `MenuScreen` inside a `SharedTransitionLayout`. The look book draws it on
+    its own, so `LocalFlowRoot` was null, `flowsAsWords` degraded to `this` —
+    which it does by design, so previews and tests can draw a screen outside a
+    flow — and the transition that the complaint is about had never once run
+    under test. Both *ends* of it were photographed and both were always
+    right. A frame cannot show a layout pass that does not end.
+
+    **The fix: the heading leaves the bar.** `TwoRowsTopAppBar` takes an
+    `expanded` flag and would have solved this in one line; it is `internal`
+    in material3, and nothing public exposes the distinction. So the bar keeps
+    what only a bar can do — the way back, pinned and always reachable — and
+    the heading moves into the page, directly above the lede, which already
+    lives there for the reason `RibbonScreen` had already written down: it is
+    content, and it scrolls away like content. One node, one key, nothing to
+    disambiguate.
+
+    What that costs: the heading no longer collapses into a small bar title on
+    scroll. It scrolls away instead. On screens this short that is a fair
+    trade for a screen that finishes drawing, and it aligns the heading with
+    the margin the rest of the page uses, which the bar's own start padding
+    never did.
+
+    `SettingsFlowSettlesTest` asserts the thing that was false — that the app
+    becomes idle after opening a settings screen, and after coming back — and
+    the look book now photographs the middle of the transition as well as its
+    ends, with the menu mounted the way `RibbonRoot` actually mounts it.
+
+A48. **The passkey was never broken, and Your account was never designed.**
+    Two of the owner's findings on one screen.
+
+    **"The passkey area has never worked."** It could not have. The client
+    code is correct — options in, ceremony, response back, exactly as GoTrue
+    documents it — and the project has passkeys switched off:
+
+        POST /auth/v1/passkeys/registration/options
+        → 404 {"error_code":"passkey_disabled","msg":"Passkeys are disabled"}
+
+    and the project's own public settings say so plainly:
+    `GET /auth/v1/settings` → `"passkeys_enabled": false`. Measured against
+    the real backend, not inferred.
+
+    The defect that is the app's is what it did with that. `passkeysAvailable`
+    was `remote != null` — a guess that a passkey is a *platform* capability,
+    which every phone has. It is a *project* setting. So "Add a passkey" was
+    offered to everybody signed in, raised the system's own credential sheet's
+    worth of expectation, and answered "That passkey didn't work" every single
+    time. §6.10 says "a passkey where available"; the app was never asking
+    what was available.
+
+    It asks now, once a launch, and the answer decides whether the control
+    exists. A failure to ask leaves it null, which reads as *not yet known*
+    rather than as no — an offline launch should not decide the question for
+    the rest of the session — and a control that is absent until the app can
+    say otherwise is the honest shape of not knowing. The day the switch is
+    flipped in the dashboard the row appears on its own, with no release.
+
+    **What the owner still has to do**, because no code can: turn Passkeys on
+    for the project (Authentication → Sign In / Providers), and serve
+    `readribbon.app/.well-known/assetlinks.json` naming this package and the
+    SHA-256 of the *release* signing certificate — `web/build.mjs` already
+    emits it from `RIBBON_ANDROID_CERT_SHA256`. Passkeys.kt's header has
+    carried those two requirements since it was written. The owner's own
+    suggestion, Auth0, is already wired (`signInWithAuth0`, Universal Login)
+    and is the other route to the same place if the tenant is easier to turn
+    on than the project; nothing here forecloses it.
+
+    **"The Your Account section in the settings and the profile area isn't
+    designed very well."** Both true, and for two different reasons.
+
+    *The account* was the one section on You built out of loose parts — an
+    address in small caps, two underlined words, a floating sentence — while
+    Text, Appearance and Downloads directly above it were grouped rows with a
+    title and a subtitle each. It did not look unfinished by accident: it was
+    the only part of the screen that had never been given the rest of the
+    screen's language. It is tiles now, in the same group, with the reason as
+    the group's footnote and the passkey row between the address and the way
+    out. `Delete account` stays quiet and stays outside the group, with air
+    above it: §6.8's one destructive act does not get a tile, because a tile
+    is an invitation.
+
+    And **the heading no longer draws itself over nothing.** With no backend
+    configured the section used to render its label and then an empty gap,
+    with "Delete account" hanging underneath offering to delete an account
+    that cannot exist. The section returns before any of that now — label,
+    gap and control together — so there is nothing rather than a hole.
+
+    *The profile* was a centred island: an 88 dp circle in the middle of the
+    screen, a small-caps line under it, the name under that, a sentence under
+    that — four things stacked on an axis nothing else on You uses, above
+    three sections all flush with the margin, under a heading that is also
+    flush with it. That is most of what reads as undesigned: not the pieces,
+    the axis. The face still opens the screen and is still the largest thing
+    on it; it stands beside the name now rather than above it, which is also
+    how a person appears everywhere else in this app — a seat at the hearth, a
+    row in the rooms sheet, the head of their own screen.
+
+    The small-caps "Add a portrait" went with it. Beside the name rather than
+    under the circle it was labelling a control that is plainly a face you can
+    touch, and it was already cleared from the screen reader because the
+    portrait carries the action. The sentence that stays does both jobs, and
+    says "Tap to add one" only while there is no face.
+
+    **`AppModel.remote` is `internal` rather than private**, for one reader:
+    the look book, which is in this module and is the only way this section
+    can be photographed at all. `RemoteSync` is not opened up — a signed-*in*
+    shot would need `userID` and `email` prised open, and that would be
+    production code existing for a photograph.
+
 ## Licensed translations (decided: API.Bible)
 
 Open question §16.8 is now part-decided: **NKJV plus two undecided
