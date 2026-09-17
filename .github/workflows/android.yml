@@ -58,6 +58,20 @@ jobs:
         working-directory: android
         run: ./gradlew :app:assembleDebug
 
+      # Built to prove it still links, not to be installed: this APK is
+      # unsigned and goes nowhere. Release is the only configuration that runs
+      # R8 and resource shrinking, and `proguardFiles` had named a
+      # `proguard-rules.pro` that did not exist — so `:app:assembleRelease`
+      # failed at `minifyReleaseWithR8` for as long as that line had been
+      # there, and nothing here ever ran it. The app could not be built for
+      # release at all and CI was green (A49).
+      #
+      # It also catches what only R8 catches: a keep rule a library stopped
+      # shipping, a reflective lookup the shrinker removes.
+      - name: Assemble the release build
+        working-directory: android
+        run: ./gradlew :app:assembleRelease
+
       - name: Lint
         working-directory: android
         run: ./gradlew :app:lintDebug
@@ -85,10 +99,22 @@ jobs:
       # It installs as app.readribbon.debug, so it will not collide with
       # anything from Play later.
       #
-      # It is a debug build signed with the runner's throwaway debug key —
-      # fine for installing by hand, useless for distribution, and a new
-      # key each run, so an update over a previous download will ask to
-      # uninstall first.
+      # It is a debug build, signed with `android/app/debug.keystore` — the
+      # one committed in this repository, not a throwaway the runner makes.
+      # That is deliberate and load-bearing: the fingerprint is therefore
+      # fixed, which is what lets `assetlinks.json` name it, and an update
+      # over a previous download installs cleanly instead of demanding an
+      # uninstall.
+      #
+      # The two costs are worth stating where somebody will read them. The
+      # private key is public, so anybody can produce a signature that
+      # matches this one (see web/build.mjs and A49). And a build installed
+      # from Android Studio is signed with *that machine's* debug key
+      # instead, so swapping between the two is a signature change: the
+      # install is refused until the old one is uninstalled, which takes the
+      # app's data — every local setting — with it. A44 could not find a
+      # code-level cause for settings lost "between updates"; this is the
+      # mechanism it was looking for.
       - name: Keep the APK, so it can be installed on a phone
         uses: actions/upload-artifact@v4
         with:

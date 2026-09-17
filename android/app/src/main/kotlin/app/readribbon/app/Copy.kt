@@ -807,8 +807,31 @@ object Copy {
     /**
      * S25's shape: name what happened, name what didn't, and leave the one
      * thing that still works in front of them.
+     *
+     * This one is for *signing in* with a passkey, where the emailed code
+     * genuinely is the other way through the same door.
      */
     const val PASSKEY_DIDNT_WORK = "That passkey didn't work. The emailed code still does."
+
+    /**
+     * And this one is for *adding* a passkey on You, where the sign-in
+     * sentence above is wrong twice over: nothing was being signed into, so
+     * "that passkey" names a thing that was never made, and "the emailed code
+     * still does" offers a way in to somebody who is already in.
+     *
+     * **It asserts only what is known, which took two goes.** The first
+     * attempt said "Nothing changed, and you are still signed in", and both
+     * halves of that can be false. The credential is made on the
+     * authenticator *before* the verify call goes out, so a failure on the
+     * second leg leaves a passkey on the phone — something changed. And both
+     * legs now go through `withAuthRetry`, which signs the person out when a
+     * refresh is refused — so the line could be read aloud to somebody it had
+     * just signed out, over a screen still showing their email address.
+     *
+     * What is true in every case is that it did not finish, and that trying
+     * again is safe.
+     */
+    const val PASSKEY_WASNT_ADDED = "Adding the passkey didn't finish. You can try again."
     /**
      * The hosted sign-in, named for what it does rather than for who runs it.
      *

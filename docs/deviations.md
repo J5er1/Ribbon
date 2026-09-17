@@ -2717,6 +2717,165 @@ A48. **The passkey was never broken, and Your account was never designed.**
     shot would need `userID` and `email` prised open, and that would be
     production code existing for a photograph.
 
+A49. **The passkey, once the switch was on.** A48 found why passkeys had never
+    worked — the project had them off — and the owner turned them on. An
+    end-to-end audit of the path that was now live found two things that would
+    have kept it broken anyway, and two more that were nothing to do with
+    passkeys at all.
+
+    **"Use a passkey" was unreachable.** The guard read
+    `if (model.passkeysAvailable && !model.auth0Available && activity != null)`,
+    and `auth0Available` is `remote != null && Auth0Config.isConfigured` — this
+    build ships a real Auth0 domain and client id, so `!auth0Available` was
+    **false on every device**. The control was never once composed, and
+    `AppModel.signInWithPasskey` had no reachable caller anywhere in the app. A
+    person could add a passkey and then had no way at all to sign in with one.
+
+    A passkey and a hosted login are not alternatives to each other, which is
+    what that condition assumed. The passkey is the way back in on a phone that
+    already knows you; the browser is the way in on one that does not. Both
+    stand, with the emailed code behind them.
+
+    **"Add a passkey" could not succeed for an Auth0 session.** Signing in
+    through Auth0 stores the *Auth0 ID token* as the session's access token.
+    That is right for PostgREST, where third-party auth is exactly what the
+    token is for, and useless for `auth/v1/passkeys`, which is GoTrue's own:
+    GoTrue verifies the bearer against its own signing key and resolves the
+    subject to a row in `auth.users`, and an Auth0 token satisfies neither. So
+    the register call could not succeed, no system sheet ever appeared, and the
+    app answered "That passkey didn't work" — having never asked the person
+    anything at all. Auth0 is the *first* way in this build offers, so this was
+    the common case rather than the corner.
+
+    `RemoteSync.signedInWithAuth0` mirrors which kind of session is held, kept
+    true through every path that changes one and restored from the stored
+    session on relaunch; `AppModel.canAddAPasskey` is what the row is drawn on.
+    A control that cannot work is not drawn — the same rule A48 applied to the
+    project setting, applied one level further in.
+
+    **`PasskeyIsReachableTest` exists because nothing else could have caught
+    either.** Both compile, both lint, and neither appears in a look book shot,
+    because the frame a shot captures is one where the control is correctly
+    absent. The only way to see it is to satisfy the condition the control
+    claims to want and then look for the control. It fails when the old guard
+    is restored — checked, not assumed. `AppModel.passkeysAvailable` has an
+    `internal` setter for it, one visibility step for one reader in the same
+    module.
+
+    **Two things that were not about passkeys.**
+
+    *The release build could not be produced.* `proguardFiles` names a
+    `proguard-rules.pro` that did not exist, so `:app:assembleRelease` failed at
+    `minifyReleaseWithR8` with "Supplied proguard configuration does not exist",
+    and had done for as long as that line had been there. CI builds debug, so
+    nothing ever ran it: the app could not be built for release and CI was
+    green. The file exists now, and `:app:assembleRelease` is in the workflow,
+    which is the only durable fix — release is the only configuration that runs
+    R8, so it is the only one that catches a keep rule a library stopped
+    shipping.
+
+    *And `assetlinks.json` was handing the release package the committed debug
+    key.* `web/build.mjs` read `const releaseCerts = [DEBUG_KEYSTORE_SHA256]`,
+    with the real fingerprint merely pushed on after it. Both relations are
+    delegated there and one of them is `common.get_login_creds` — so the site
+    was telling Android that an app calling itself `app.readribbon` and signed
+    with a key whose private half is in this repository may be handed this
+    domain's saved credentials and passkeys. The release entry is the release
+    key's alone now, and is omitted entirely rather than written with an empty
+    fingerprint list when there is no release key to name: an entry matching no
+    certificate is not a safer entry, it is a malformed one, and a verifier
+    that choked on it would take the debug entry down with it.
+
+    **What is still the owner's, and it is bigger than it looked.** The Android
+    WebAuthn origin (`android:apk-key-hash:…`, derived from the signing
+    certificate) has to be in the project's Relying Party Origins, because an
+    Android ceremony's collected client data carries that rather than an https
+    origin — without it the server rejects a credential the person has already
+    authenticated for.
+
+    The origin that works today is the **debug** key's, and an adversarial
+    re-read of this change's own diff found why that is not a developer detail.
+    `web/vercel.json` redirects `/apk` to a GitHub release of
+    `app-debug.apk`, and the in-app updater points at the same file: **the
+    debug build is the distribution channel.** So the app everybody runs is
+    signed with `android/app/debug.keystore`, whose private half is committed
+    in this repository — and the `app.readribbon.debug` entry in
+    `assetlinks.json` delegates `common.get_login_creds` to it. This domain's
+    saved passkeys are trusted to a key anyone can download.
+
+    The first draft of this entry's own comment said the opposite — "a debug
+    build is a thing a developer sideloads onto their own phone; a release
+    build is what other people install" — which is what made the asymmetric
+    fix look complete. Removing the delegation would close the hole and take
+    passkeys away from every real user in the same stroke, which is not a call
+    a build script gets to make, so it is a switch
+    (`RIBBON_DEBUG_LOGIN_CREDS`) whose default is today's behaviour and whose
+    warning names the actual remedy: **sign the distributed APK with a key that
+    is not in the repository.** Everything else here is downstream of that one
+    thing.
+
+    **And it may be the answer A44 could not find.** A44 looked for why
+    settings vanish "between updates of the app" and concluded the likeliest
+    cause was an install that wipes data, without being able to name the
+    mechanism. Here it is: a build installed from Android Studio is signed with
+    *that machine's* debug key, and the downloaded APK with the committed one.
+    Swapping between them is a signature change, so the install is refused
+    until the old app is uninstalled — and an uninstall takes `filesDir` with
+    it. The CI comment that should have said so claimed the runner used "a
+    throwaway debug key ... a new key each run", which is not true and is
+    corrected here.
+
+    **What the adversarial re-read of this diff caught, besides the above.**
+    Four things, all of them mine.
+
+    `learnWhatAuthOffers` wrote its answer unconditionally, and this change
+    gave it a second caller — so a signed-out cold launch fires both before
+    either lands, and a first request that succeeded followed by a second that
+    failed wrote **null** over the `true` that had already arrived, taking the
+    passkey control back off the screen. Answering is a one-way door now: a
+    failure never overwrites an answer.
+
+    The new failure line said "Nothing changed, and you are still signed in",
+    and this change is what made both halves capable of being false. The
+    credential is made on the authenticator *before* the verify call goes out,
+    so losing the second leg leaves a passkey on the phone — something
+    changed. And both legs now go through `withAuthRetry`, which signs the
+    person out when a refresh is refused — so that sentence could be read
+    aloud to somebody it had just signed out, over a screen still showing
+    their email. It says only what is true in every case: it did not finish,
+    and trying again is safe.
+
+    **The live region announced nothing**, which is the most instructive of
+    the four: a live region reports a *change to a node that already exists*,
+    and it was hung on a `Text` that is composed for the first time at the
+    moment there is something to say. A node that has just been created has no
+    previous content to have changed from. It sits on a container that outlives
+    the transition now, and `AnnouncedFootnoteTest` asserts the thing that
+    matters and that no screenshot shows — that the region is already on the
+    screen while there is still nothing to announce.
+
+    And the first draft of `proguard-rules.pro` added two keeps for
+    kotlinx.serialization with a justification that was not true of this app.
+    Reading the merged configuration R8 actually ran settled it: the AGP
+    default already keeps `InnerClasses` and the runtime annotations, and
+    kotlinx.serialization ships its own rules. They are gone; what is left is
+    the one line nothing else in that file supplies.
+
+    **Smaller, in the same pass.** Both authenticated legs of registration go
+    through `withAuthRetry` like every other authenticated call — losing the
+    second leg to an expired token strands a credential on the authenticator
+    that the account has never heard of. Both ceremonies launch on the model's
+    scope rather than the composition's, because a rotation behind the system
+    sheet used to do the same thing. `AppModel.registerPasskey` throws where it
+    used to `return`, so a tap that did nothing stopped reporting "This phone
+    can sign you in now." The failure line on You is its own sentence, because
+    "the emailed code still does" offers a way in to somebody already in.
+    `learnWhatAuthOffers` is asked again on resume, so one offline launch no
+    longer removes the control for the life of the process. And the result line
+    is announced again (`SettingsGroup(footnoteAnnounces = true)`) — A48 turned
+    that section into tiles and dropped the `liveRegion` it used to carry,
+    which was a regression this pass introduced and this pass undoes.
+
 ## Licensed translations (decided: API.Bible)
 
 Open question §16.8 is now part-decided: **NKJV plus two undecided

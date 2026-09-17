@@ -31,6 +31,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewModelScope
 import app.readribbon.app.AppModel
 import app.readribbon.app.Copy
 import app.readribbon.design.Palette
@@ -118,7 +119,13 @@ fun SignInInline(
         if (busy) return
         busy = true
         errorLine = null
-        scope.launch {
+        // The model's scope, not the composition's, for the same reason
+        // `addPasskey` uses it: this ceremony raises the system's own sheet,
+        // and everything after it — adopting the account, restoring the
+        // person, the first pull and push — has to finish. A rotation behind
+        // the sheet would otherwise cancel the coroutine somewhere in the
+        // middle of that and leave a signed-in session the app never adopted.
+        model.viewModelScope.launch {
             try {
                 model.signInWithPasskey(host)
                 onSignedIn()
@@ -232,7 +239,23 @@ fun SignInInline(
                                 )
                             }
                         }
-                        if (model.passkeysAvailable && !model.auth0Available && activity != null) {
+                        // **No `!model.auth0Available` here, and that was the
+                        // whole of it.** `auth0Available` is
+                        // `remote != null && Auth0Config.isConfigured`, and
+                        // this build ships a real Auth0 domain and client id —
+                        // so the condition was false on every device, the
+                        // control was never composed, and `signInWithPasskey`
+                        // had no reachable caller anywhere in the app. A
+                        // person could add a passkey and then had no way on
+                        // earth to sign in with one (A49).
+                        //
+                        // A passkey and a hosted login are not alternatives to
+                        // each other: the passkey is the way back in on a
+                        // phone that already knows you, and the browser is the
+                        // way in on one that does not. Both stand, with the
+                        // emailed code behind them, which is the order §6.10
+                        // asks for — offered, never imposed.
+                        if (model.passkeysAvailable && activity != null) {
                             QuietControl(
                                 title = Copy.USE_A_PASSKEY,
                                 onClick = { signInWithPasskey() },
