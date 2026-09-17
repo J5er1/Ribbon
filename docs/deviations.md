@@ -2404,6 +2404,63 @@ A43. **The pull-up was a frame behind the finger.** Owner, on a Pixel 9 Pro
     Both want a profiler and a phone, in that order, and the owner has the
     phone. The two fixes above want neither.
 
+A44. **"Preferences do not stay between updates of the app."** Owner's
+    report. What follows is what was found, including the part that was not
+    found, because a fix shipped under a cause nobody established is a guess
+    wearing a commit message.
+
+    **What was ruled out.** `filesDir` and `SharedPreferences` both survive an
+    ordinary update; nothing in the app writes state before reading it
+    (`AppModel.load` reads the store before it builds the model); there is one
+    `LocalStore` in the process; the backup rules exclude only the sealed
+    session blob. The leading theory was that a schema change had made an old
+    `state.json` undecodable — `load()` answered a decode failure with a fresh
+    `AppState()`, and the next `save()` a moment later wrote over the evidence,
+    which is silent, total and looks exactly like "my settings went".
+    `StateSurvivesAnUpdateTest` was written to prove it and **disproved it**:
+    a hand-written file from before notifications, phrases and a room's
+    version decodes with its settings intact, because every field added since
+    launch carries a default.
+
+    **No code-level cause was established.** The most likely remaining
+    explanation is an install that wipes app data — a signing key that does
+    not match the installed one forces an uninstall first, and an
+    uninstall-reinstall takes `filesDir` with it. No code can prevent that,
+    and saying so is more useful than shipping a change that pretends to.
+
+    **What was fixed anyway, because it is wrong on its own terms.** The
+    asymmetry in `state.json` is the interesting part: rooms, readings, notes,
+    highlights, cards and people are all *caches* of the backend and come back
+    on the next sync. The settings are the only thing in that file that
+    nothing else in the world has a copy of. So a total reset does not look
+    like a disaster — the app fills back in, nothing appears missing, and the
+    single visible casualty is the settings. That is why this could happen
+    more than once and be reported as a small thing.
+
+    A decode failure now salvages what cannot be re-fetched instead of
+    starting empty: the settings, the three §6.1 "asked once" flags, and both
+    invite sets (an invite that never reached the backend exists only here,
+    and A37's link may already be in somebody's message thread). Each field is
+    read out of the raw JSON on its own, so one unreadable field cannot take
+    the rest with it. `notifiedThrough` is deliberately *not* salvaged: null
+    makes the next merge silent (S19), which after a reset is exactly right,
+    because everything is about to arrive at once.
+
+    And the broken file is kept at `state.json.unreadable` rather than
+    overwritten. One copy, replaced each time. If this recurs there will
+    finally be something to look at, which is the part that was missing the
+    first time.
+
+    **What would actually cover a wiped install**, and is not done here: the
+    settings are a fact about a *person*, not a device, and `profiles` already
+    carries one such fact (`translation`). A `profiles.settings` blob would
+    make text size, spacing, red letter, quiet hours and the per-room
+    notification switches follow the account onto a new phone, which is the
+    only thing that survives `filesDir` being deleted. It is a migration and a
+    sync path, and the owner's standing instruction for this pass is UI and UX
+    first — *"we will wire everything later"* — so it is named here rather than
+    taken.
+
 ## Licensed translations (decided: API.Bible)
 
 Open question §16.8 is now part-decided: **NKJV plus two undecided
