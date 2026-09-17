@@ -175,7 +175,17 @@ class RemoteSync(
      */
     suspend fun learnWhatAuthOffers() {
         if (passkeysEnabled != null) return
-        passkeysEnabled = runCatching { client.authSettings().passkeysEnabled }.getOrNull()
+        // Sticky: a failure never writes over an answer. This assigned the
+        // `getOrNull()` unconditionally, and there are two callers now — the
+        // launch and every resume — so a signed-out cold start fires both
+        // before either has landed. If the first request succeeded and the
+        // second lost the network, the second wrote **null** over the `true`
+        // that had already arrived and the passkey control vanished off the
+        // sign-in screen. Answering is a one-way door: not-yet-known can
+        // become an answer, an answer cannot become not-yet-known.
+        val answer = runCatching { client.authSettings().passkeysEnabled }.getOrNull()
+            ?: return
+        passkeysEnabled = answer
     }
 
     /**

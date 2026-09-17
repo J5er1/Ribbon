@@ -2786,16 +2786,80 @@ A49. **The passkey, once the switch was on.** A48 found why passkeys had never
     certificate is not a safer entry, it is a malformed one, and a verifier
     that choked on it would take the debug entry down with it.
 
-    **What is still the owner's.** The Android WebAuthn origin
-    (`android:apk-key-hash:…`, derived from the signing certificate) has to be
-    in the project's Relying Party Origins, because an Android ceremony's
-    collected client data carries that rather than an https origin — without it
-    the server rejects a credential the person has already authenticated for.
-    And the origin that works today is the *debug* key's, which is published
-    here: exercising passkeys against the production relying party with it is
-    fine for now and should not be the end state. The right one is a release
-    signing key, its fingerprint in `RIBBON_ANDROID_CERT_SHA256`, and its own
-    apk-key-hash among the origins.
+    **What is still the owner's, and it is bigger than it looked.** The Android
+    WebAuthn origin (`android:apk-key-hash:…`, derived from the signing
+    certificate) has to be in the project's Relying Party Origins, because an
+    Android ceremony's collected client data carries that rather than an https
+    origin — without it the server rejects a credential the person has already
+    authenticated for.
+
+    The origin that works today is the **debug** key's, and an adversarial
+    re-read of this change's own diff found why that is not a developer detail.
+    `web/vercel.json` redirects `/apk` to a GitHub release of
+    `app-debug.apk`, and the in-app updater points at the same file: **the
+    debug build is the distribution channel.** So the app everybody runs is
+    signed with `android/app/debug.keystore`, whose private half is committed
+    in this repository — and the `app.readribbon.debug` entry in
+    `assetlinks.json` delegates `common.get_login_creds` to it. This domain's
+    saved passkeys are trusted to a key anyone can download.
+
+    The first draft of this entry's own comment said the opposite — "a debug
+    build is a thing a developer sideloads onto their own phone; a release
+    build is what other people install" — which is what made the asymmetric
+    fix look complete. Removing the delegation would close the hole and take
+    passkeys away from every real user in the same stroke, which is not a call
+    a build script gets to make, so it is a switch
+    (`RIBBON_DEBUG_LOGIN_CREDS`) whose default is today's behaviour and whose
+    warning names the actual remedy: **sign the distributed APK with a key that
+    is not in the repository.** Everything else here is downstream of that one
+    thing.
+
+    **And it may be the answer A44 could not find.** A44 looked for why
+    settings vanish "between updates of the app" and concluded the likeliest
+    cause was an install that wipes data, without being able to name the
+    mechanism. Here it is: a build installed from Android Studio is signed with
+    *that machine's* debug key, and the downloaded APK with the committed one.
+    Swapping between them is a signature change, so the install is refused
+    until the old app is uninstalled — and an uninstall takes `filesDir` with
+    it. The CI comment that should have said so claimed the runner used "a
+    throwaway debug key ... a new key each run", which is not true and is
+    corrected here.
+
+    **What the adversarial re-read of this diff caught, besides the above.**
+    Four things, all of them mine.
+
+    `learnWhatAuthOffers` wrote its answer unconditionally, and this change
+    gave it a second caller — so a signed-out cold launch fires both before
+    either lands, and a first request that succeeded followed by a second that
+    failed wrote **null** over the `true` that had already arrived, taking the
+    passkey control back off the screen. Answering is a one-way door now: a
+    failure never overwrites an answer.
+
+    The new failure line said "Nothing changed, and you are still signed in",
+    and this change is what made both halves capable of being false. The
+    credential is made on the authenticator *before* the verify call goes out,
+    so losing the second leg leaves a passkey on the phone — something
+    changed. And both legs now go through `withAuthRetry`, which signs the
+    person out when a refresh is refused — so that sentence could be read
+    aloud to somebody it had just signed out, over a screen still showing
+    their email. It says only what is true in every case: it did not finish,
+    and trying again is safe.
+
+    **The live region announced nothing**, which is the most instructive of
+    the four: a live region reports a *change to a node that already exists*,
+    and it was hung on a `Text` that is composed for the first time at the
+    moment there is something to say. A node that has just been created has no
+    previous content to have changed from. It sits on a container that outlives
+    the transition now, and `AnnouncedFootnoteTest` asserts the thing that
+    matters and that no screenshot shows — that the region is already on the
+    screen while there is still nothing to announce.
+
+    And the first draft of `proguard-rules.pro` added two keeps for
+    kotlinx.serialization with a justification that was not true of this app.
+    Reading the merged configuration R8 actually ran settled it: the AGP
+    default already keeps `InnerClasses` and the runtime annotations, and
+    kotlinx.serialization ships its own rules. They are gone; what is left is
+    the one line nothing else in that file supplies.
 
     **Smaller, in the same pass.** Both authenticated legs of registration go
     through `withAuthRetry` like every other authenticated call — losing the

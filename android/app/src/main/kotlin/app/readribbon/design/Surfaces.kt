@@ -50,6 +50,7 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -306,17 +307,37 @@ fun SettingsGroup(
         ) {
             scope.content()
         }
-        if (footnote != null) {
-            Text(
-                text = footnote,
-                style = RibbonType.ui(13f),
-                color = Palette.muted,
+        // **The live region is on a box that is always there, not on the
+        // words.** A live region announces when an existing node's *content
+        // changes*; a node composed for the first time has nothing to have
+        // changed from, and `if (footnote != null)` is exactly that — the
+        // result line does not exist until there is a result, so hanging the
+        // region on the `Text` announced nothing at all. A container that
+        // outlives the transition does have a content change to report.
+        //
+        // Only when it is asked for: a standing footnote is prose, not a
+        // result, and every other group keeps exactly the layout it had.
+        val words: @Composable () -> Unit = {
+            if (footnote != null) {
+                Text(
+                    text = footnote,
+                    style = RibbonType.ui(13f),
+                    color = Palette.muted,
+                    modifier = Modifier.padding(start = TextInset, end = TextInset, top = 12.dp),
+                )
+            }
+        }
+        if (footnoteAnnounces) {
+            Box(
+                // An empty Box measures to nothing, so the group is the same
+                // height it was until there is something to say.
                 modifier = Modifier
-                    .padding(start = TextInset, end = TextInset, top = 12.dp)
-                    .semantics {
-                        if (footnoteAnnounces) liveRegion = LiveRegionMode.Polite
-                    },
+                    .testTag(ANNOUNCED_FOOTNOTE)
+                    .semantics { liveRegion = LiveRegionMode.Polite },
+                content = { words() },
             )
+        } else {
+            words()
         }
     }
 }
@@ -927,6 +948,13 @@ fun RibbonScreen(
         }
     }
 }
+
+/**
+ * The announcing footnote's node, so a test can assert it is *there before
+ * there is anything to announce* — which is the whole of what makes a live
+ * region work, and is invisible in any screenshot.
+ */
+const val ANNOUNCED_FOOTNOTE = "announced-footnote"
 
 /** The side margin every pushed screen keeps. */
 val ScreenMargin = 20.dp

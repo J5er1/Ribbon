@@ -302,14 +302,28 @@ const DEBUG_KEYSTORE_SHA256 =
 // read `const releaseCerts = [DEBUG_KEYSTORE_SHA256]`, with the real
 // fingerprint merely pushed on after it — so `app.readribbon`, the package a
 // release installs as, named the committed debug key among the certificates
-// it trusts. Both relations are delegated here, and one of them is
+// it trusts. Both relations are delegated, and one of them is
 // `common.get_login_creds`: the site was telling Android that an app calling
 // itself `app.readribbon` and signed with a key anyone can download from this
-// repository may be handed this domain's saved credentials and passkeys.
+// repository may be handed this domain's saved credentials and passkeys. That
+// package has never shipped, so an impostor claiming it collided with nothing
+// on anybody's phone. It is gone.
 //
-// The two entries are deliberately no longer symmetrical. A debug build is a
-// thing a developer sideloads onto their own phone; a release build is what
-// other people install, and it trusts one key.
+// **The debug entry is the harder half, and it is still open.** The first
+// draft of this comment said "a debug build is a thing a developer sideloads
+// onto their own phone; a release build is what other people install", and
+// that is false in this repository: `vercel.json` redirects `/apk` to a
+// GitHub release of `app-debug.apk`, and the in-app updater points at the
+// same file. **The debug build is the distribution channel.** So the app
+// everybody actually runs is signed with `android/app/debug.keystore`, whose
+// private half is committed here — and `get_login_creds` on that entry means
+// this domain's passkeys are delegated to a key anybody can download.
+//
+// Removing the delegation would close that and take passkeys away from every
+// real user at the same time, which is not a call this file gets to make on
+// its own. So it is a switch with the current behaviour as its default, and
+// a warning that says what the actual remedy is: sign the distributed APK
+// with a key that is not in the repository. See deviation A49.
 const releaseCert = process.env.RIBBON_ANDROID_CERT_SHA256;
 if (!releaseCert) {
   console.warn(
@@ -324,17 +338,25 @@ if (!releaseCert) {
   );
 }
 
-const RELATIONS = [
-  "delegate_permission/common.handle_all_urls",
-  "delegate_permission/common.get_login_creds",
-];
+const CREDENTIALS = "delegate_permission/common.get_login_creds";
+const LINKS = "delegate_permission/common.handle_all_urls";
+
+// Default on, because off would silently break passkeys for everybody using
+// the download. Set RIBBON_DEBUG_LOGIN_CREDS=0 the day the distributed build
+// stops being debug-signed.
+const debugMayHoldCredentials = process.env.RIBBON_DEBUG_LOGIN_CREDS !== "0";
+if (debugMayHoldCredentials) {
+  console.warn(
+    "assetlinks.json delegates get_login_creds to app.readribbon.debug, which is signed with the committed debug keystore — this domain's saved passkeys are trusted to a key anyone can download from the repository. It is on because the /apk download is that build. Sign the distributed APK with a real key, then set RIBBON_DEBUG_LOGIN_CREDS=0.",
+  );
+}
 
 writeFileSync(
   join(dist, ".well-known", "assetlinks.json"),
   JSON.stringify(
     [
       {
-        relation: RELATIONS,
+        relation: debugMayHoldCredentials ? [LINKS, CREDENTIALS] : [LINKS],
         target: {
           namespace: "android_app",
           package_name: "app.readribbon.debug",
@@ -348,7 +370,7 @@ writeFileSync(
       ...(releaseCert
         ? [
             {
-              relation: RELATIONS,
+              relation: [LINKS, CREDENTIALS],
               target: {
                 namespace: "android_app",
                 package_name: "app.readribbon",
