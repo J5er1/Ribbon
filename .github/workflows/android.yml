@@ -58,6 +58,19 @@ jobs:
         working-directory: android
         run: ./gradlew :app:assembleDebug
 
+      # And the one people would actually install. This is not redundant with
+      # the debug assemble above: release is the only configuration that runs
+      # R8, and `proguardFiles` had named a `proguard-rules.pro` that did not
+      # exist — so `:app:assembleRelease` failed at `minifyReleaseWithR8` for
+      # as long as that line had been there, and nothing here ever ran it. The
+      # app could not be built for release at all and CI was green (A49).
+      #
+      # It also catches what only R8 catches: a keep rule a library stopped
+      # shipping, a reflective lookup the shrinker removes.
+      - name: Assemble the release build
+        working-directory: android
+        run: ./gradlew :app:assembleRelease
+
       - name: Lint
         working-directory: android
         run: ./gradlew :app:lintDebug

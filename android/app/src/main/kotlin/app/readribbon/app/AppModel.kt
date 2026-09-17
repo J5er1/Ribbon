@@ -1844,6 +1844,21 @@ class AppModel(
     val isSignedIn: Boolean get() = remote?.isSignedIn ?: false
     val accountEmail: String? get() = remote?.email
 
+    /**
+     * Whether a passkey can be added to the account in hand.
+     *
+     * Two conditions, and the second is the one that was missing. The project
+     * has to have passkeys switched on ([passkeysAvailable]), **and** the
+     * session has to be one GoTrue itself issued. Signing in through Auth0
+     * stores the Auth0 ID token as the access token, and the passkey
+     * endpoints are GoTrue's own — see
+     * [app.readribbon.services.RemoteSync.signedInWithAuth0] for why that can
+     * never work. Auth0 is the first way in this build offers, so this was
+     * the common case, not the corner (A49).
+     */
+    val canAddAPasskey: Boolean
+        get() = passkeysAvailable && isSignedIn && remote?.signedInWithAuth0 == false
+
     suspend fun sendSignInCode(email: String) {
         val remote = this.remote ?: throw SupabaseError.NotSignedIn
         remote.sendCode(to = email)
@@ -1937,7 +1952,12 @@ class AppModel(
      * arrives after the screen has drawn and nothing else would repaint it.
      */
     var passkeysAvailable: Boolean by mutableStateOf(false)
-        private set
+        // `internal` rather than `private` for one reader: the test that
+        // asserts "Use a passkey" is actually reachable. That control shipped
+        // behind a condition which was false on every device, so it was never
+        // once composed — and nothing but a test that turns this on and looks
+        // for it can catch that class of defect (A49).
+        internal set
 
     /**
      * Ask the project what its auth offers, once.
@@ -1960,8 +1980,13 @@ class AppModel(
      * @param context an Activity context — the system sheet needs a window.
      */
     suspend fun registerPasskey(context: Context) {
-        val remote = this.remote ?: return
-        if (!remote.isSignedIn) return
+        // Throwing rather than returning, and the difference is what the
+        // person is told. These used to `return`, so the caller's `try`
+        // succeeded, and a tap that did nothing whatsoever answered "This
+        // phone can sign you in now." — the app claiming a passkey exists
+        // that does not. [signInWithPasskey] has always thrown here.
+        val remote = this.remote ?: throw SupabaseError.NotSignedIn
+        if (!remote.isSignedIn) throw SupabaseError.NotSignedIn
         remote.registerPasskey(context)
     }
 

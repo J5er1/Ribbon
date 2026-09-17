@@ -291,46 +291,72 @@ writeFileSync(
 );
 
 // Android App Links & Passkeys handshake (§12.2).
-// Debug builds are signed with android/app/debug.keystore (committed in repo),
-// whose SHA-256 fingerprint is:
-// E0:04:0C:C5:A4:80:D8:B3:09:6A:9E:46:5B:C8:80:F5:52:C1:66:DE:40:B6:01:95:6E:27:C7:CD:E1:55:FE:CD
-// Debug builds install as `app.readribbon.debug`; release builds as `app.readribbon`.
-// Both package names and certificates are included so Android App Links verify on both
-// preview/debug installs and release builds.
+//
+// Debug builds install as `app.readribbon.debug` and are signed with
+// android/app/debug.keystore, which is committed in this repository — so its
+// private half is public, and so is its fingerprint:
 const DEBUG_KEYSTORE_SHA256 =
   "E0:04:0C:C5:A4:80:D8:B3:09:6A:9E:46:5B:C8:80:F5:52:C1:66:DE:40:B6:01:95:6E:27:C7:CD:E1:55:FE:CD";
 
-const releaseCerts = [DEBUG_KEYSTORE_SHA256];
-if (process.env.RIBBON_ANDROID_CERT_SHA256) {
-  releaseCerts.push(process.env.RIBBON_ANDROID_CERT_SHA256);
+// **The release entry is the release key's alone, and that is a fix.** This
+// read `const releaseCerts = [DEBUG_KEYSTORE_SHA256]`, with the real
+// fingerprint merely pushed on after it — so `app.readribbon`, the package a
+// release installs as, named the committed debug key among the certificates
+// it trusts. Both relations are delegated here, and one of them is
+// `common.get_login_creds`: the site was telling Android that an app calling
+// itself `app.readribbon` and signed with a key anyone can download from this
+// repository may be handed this domain's saved credentials and passkeys.
+//
+// The two entries are deliberately no longer symmetrical. A debug build is a
+// thing a developer sideloads onto their own phone; a release build is what
+// other people install, and it trusts one key.
+const releaseCert = process.env.RIBBON_ANDROID_CERT_SHA256;
+if (!releaseCert) {
+  console.warn(
+    "RIBBON_ANDROID_CERT_SHA256 is not set — assetlinks.json names no release certificate, so App Links and passkeys will not verify for release builds. Set it to the SHA-256 of the certificate Play App Signing actually signs with (Play Console → Setup → App integrity), not the upload key.",
+  );
+} else if (!/^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){31}$/.test(releaseCert)) {
+  // A malformed value fails the deploy rather than shipping a file that looks
+  // right and verifies nothing: a fingerprint that is one character wrong is
+  // indistinguishable, from the outside, from one that is missing.
+  throw new Error(
+    `RIBBON_ANDROID_CERT_SHA256 is not a SHA-256 fingerprint: ${releaseCert}`,
+  );
 }
+
+const RELATIONS = [
+  "delegate_permission/common.handle_all_urls",
+  "delegate_permission/common.get_login_creds",
+];
 
 writeFileSync(
   join(dist, ".well-known", "assetlinks.json"),
   JSON.stringify(
     [
       {
-        relation: [
-          "delegate_permission/common.handle_all_urls",
-          "delegate_permission/common.get_login_creds",
-        ],
+        relation: RELATIONS,
         target: {
           namespace: "android_app",
           package_name: "app.readribbon.debug",
           sha256_cert_fingerprints: [DEBUG_KEYSTORE_SHA256],
         },
       },
-      {
-        relation: [
-          "delegate_permission/common.handle_all_urls",
-          "delegate_permission/common.get_login_creds",
-        ],
-        target: {
-          namespace: "android_app",
-          package_name: "app.readribbon",
-          sha256_cert_fingerprints: releaseCerts,
-        },
-      },
+      // Omitted entirely rather than written with an empty fingerprint list
+      // when there is no release key to name. An entry that matches no
+      // certificate is not a safer entry, it is a malformed one, and a
+      // verifier that chokes on it would take the debug entry down with it.
+      ...(releaseCert
+        ? [
+            {
+              relation: RELATIONS,
+              target: {
+                namespace: "android_app",
+                package_name: "app.readribbon",
+                sha256_cert_fingerprints: [releaseCert.toUpperCase()],
+              },
+            },
+          ]
+        : []),
     ],
     null,
     2,

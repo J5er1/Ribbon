@@ -807,8 +807,20 @@ object Copy {
     /**
      * S25's shape: name what happened, name what didn't, and leave the one
      * thing that still works in front of them.
+     *
+     * This one is for *signing in* with a passkey, where the emailed code
+     * genuinely is the other way through the same door.
      */
     const val PASSKEY_DIDNT_WORK = "That passkey didn't work. The emailed code still does."
+
+    /**
+     * And this one is for *adding* a passkey on You, where the other sentence
+     * was wrong twice over: nothing was being signed into, so "that passkey"
+     * names a thing that was never made, and "the emailed code still does"
+     * offers a way in to somebody who is already in. What a person needs to
+     * know here is that nothing changed and nothing is broken.
+     */
+    const val PASSKEY_WASNT_ADDED = "That didn't work. Nothing changed, and you are still signed in."
     /**
      * The hosted sign-in, named for what it does rather than for who runs it.
      *

@@ -1349,7 +1349,18 @@ private fun AccountSection(model: AppModel, onDelete: () -> Unit) {
     fun addPasskey() {
         val host = activity ?: return
         passkeyLine = null
-        scope.launch {
+        // The model's scope, not the composition's. A ceremony launched from
+        // `rememberCoroutineScope` dies with the screen — and a rotation, a
+        // pushed settings screen or the menu being closed all kill this
+        // screen. The credential is made on the authenticator *before* the
+        // verify call goes out, so a cancellation in that window leaves a
+        // passkey on the phone that the account has never heard of, offered
+        // at every future sign-in and refused every time. The ceremony has to
+        // outlive the screen that started it.
+        //
+        // The line it writes afterwards may land on a composition that has
+        // gone, which costs nothing: the work that mattered finished.
+        model.viewModelScope.launch {
             passkeyLine = try {
                 model.registerPasskey(host)
                 Copy.PASSKEY_ADDED
@@ -1357,7 +1368,7 @@ private fun AccountSection(model: AppModel, onDelete: () -> Unit) {
                 // Dismissed the sheet. Nothing happened, and nothing is said.
                 null
             } catch (_: Throwable) {
-                Copy.PASSKEY_DIDNT_WORK
+                Copy.PASSKEY_WASNT_ADDED
             }
         }
     }
@@ -1407,7 +1418,13 @@ private fun AccountSection(model: AppModel, onDelete: () -> Unit) {
             // only part of You that had never been given the rest of the
             // screen's language.
             AccountPhase.signedIn -> {
-                val passkey = model.passkeysAvailable && activity != null
+                // `canAddAPasskey`, not `passkeysAvailable`: the project
+                // having passkeys on is only half of it, and the other half
+                // is which kind of session this is. See A49 — an Auth0
+                // session cannot register one, and Auth0 is the first way in
+                // this build offers, so the row used to be drawn for most
+                // people and fail for all of them.
+                val passkey = model.canAddAPasskey && activity != null
                 SettingsGroup(
                     count = if (passkey) 3 else 2,
                     // Only after something has been attempted. The reason a
@@ -1415,6 +1432,14 @@ private fun AccountSection(model: AppModel, onDelete: () -> Unit) {
                     // footnote saying it again would be the screen explaining
                     // itself twice.
                     footnote = passkeyLine,
+                    // And it is announced when it appears. This line is the
+                    // only thing on You that changes because of something the
+                    // person just did, with nothing taking focus and nothing
+                    // else moving — so without this a screen reader is told
+                    // neither that the passkey was added nor that it was not.
+                    // §11's rule that colour is never alone has a twin: a
+                    // result is never silent.
+                    footnoteAnnounces = true,
                 ) {
                     SettingValue(
                         title = model.accountEmail ?: Copy.YOUR_EMAIL,

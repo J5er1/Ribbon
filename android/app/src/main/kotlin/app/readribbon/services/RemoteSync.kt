@@ -122,6 +122,7 @@ class RemoteSync(
         withContext(Dispatchers.IO) { sessions.save(session) }
         userID = session.user.id
         this.email = session.user.email ?: email
+        signedInWithAuth0 = false
         return session.user.id
     }
 
@@ -138,6 +139,29 @@ class RemoteSync(
      * "that passkey didn't work" every time. See [SupabaseClient.authSettings].
      */
     var passkeysEnabled: Boolean? = null
+        private set
+
+    /**
+     * Whether the session in hand was issued by Auth0 rather than by GoTrue.
+     *
+     * Mirrored from [SupabaseClient.SupabaseSession.isAuth0] for the same
+     * reason [userID] and [email] are mirrored: the UI has to decide what to
+     * draw without suspending.
+     *
+     * **It decides whether a passkey can be added at all.** Signing in through
+     * Auth0 stores the *Auth0 ID token* as the session's access token — which
+     * is right for PostgREST, where third-party auth is exactly what that
+     * token is for — but the `auth/v1/passkeys` endpoints are GoTrue's own,
+     * and GoTrue
+     * authenticates the bearer against its own signing key and resolves the
+     * `sub` to a row in `auth.users`. An Auth0 token satisfies neither: the
+     * signature is not GoTrue's and the subject is `auth0|…`. So the register
+     * call cannot succeed for an Auth0 session, no system sheet ever appears,
+     * and the app used to answer "That passkey didn't work" — having never
+     * asked anything of the person at all. A control that cannot work is not
+     * drawn (A49).
+     */
+    var signedInWithAuth0: Boolean = false
         private set
 
     /**
@@ -160,10 +184,23 @@ class RemoteSync(
      * @param context an Activity context — the system sheet needs a window.
      */
     suspend fun registerPasskey(context: Context) {
-        val challenge = client.passkeyRegistrationOptions()
+        // `withAuthRetry`, like every other authenticated call here. Both legs
+        // of this bear a token, and an access token that expired while the
+        // person was reading the screen turned the whole ceremony into "that
+        // passkey didn't work" — after the system sheet, after the fingerprint.
+        // Worse on the second leg: the credential exists on the authenticator
+        // by then, and losing the verify leaves it stranded there, offered at
+        // every future sign-in for an account that has never heard of it.
+        //
+        // Re-POSTing the same `{challenge_id, credential}` after a refresh is
+        // safe: the challenge is consumed inside the verify that authenticates,
+        // so a call that 401ed consumed nothing.
+        val challenge = withAuthRetry { client.passkeyRegistrationOptions() }
         val credential = Passkeys(context).register(context, challenge.optionsJson)
-        client.verifyPasskeyRegistration(
-            challengeID = challenge.challengeID, credentialJson = credential)
+        withAuthRetry {
+            client.verifyPasskeyRegistration(
+                challengeID = challenge.challengeID, credentialJson = credential)
+        }
     }
 
     /**
@@ -178,6 +215,7 @@ class RemoteSync(
         withContext(Dispatchers.IO) { sessions.save(session) }
         userID = session.user.id
         email = session.user.email
+        signedInWithAuth0 = false
         return session.user.id
     }
 
@@ -200,6 +238,7 @@ class RemoteSync(
         withContext(Dispatchers.IO) { sessions.save(session) }
         userID = session.user.id
         this.email = session.user.email ?: email
+        signedInWithAuth0 = true
         return session.user.id
     }
 
@@ -208,6 +247,7 @@ class RemoteSync(
         withContext(Dispatchers.IO) { sessions.clear() }
         userID = null
         email = null
+        signedInWithAuth0 = false
     }
 
     /**
@@ -1079,6 +1119,10 @@ class RemoteSync(
                 sync.client.restore(session)
                 sync.userID = session.user.id
                 sync.email = session.user.email
+                // A relaunch has to remember which kind of session it holds,
+                // or the first screen after it would offer a passkey the
+                // account cannot take.
+                sync.signedInWithAuth0 = session.isAuth0
             }
             return sync
         }

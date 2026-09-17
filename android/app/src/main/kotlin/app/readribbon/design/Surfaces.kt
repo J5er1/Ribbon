@@ -50,9 +50,11 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -283,6 +285,16 @@ fun SettingsGroup(
     title: String? = null,
     detail: String? = null,
     footnote: String? = null,
+    /**
+     * Whether the footnote is the *result* of something the person just did,
+     * rather than a standing note about the group.
+     *
+     * A result that appears with nothing taking focus and nothing else moving
+     * is a result a screen reader never hears. Opt-in rather than automatic,
+     * because most footnotes here are standing prose and announcing those on
+     * every recomposition would be noise (§11).
+     */
+    footnoteAnnounces: Boolean = false,
     content: @Composable GroupScope.() -> Unit,
 ) {
     val scope = remember(count) { GroupScope(count) }
@@ -299,7 +311,11 @@ fun SettingsGroup(
                 text = footnote,
                 style = RibbonType.ui(13f),
                 color = Palette.muted,
-                modifier = Modifier.padding(start = TextInset, end = TextInset, top = 12.dp),
+                modifier = Modifier
+                    .padding(start = TextInset, end = TextInset, top = 12.dp)
+                    .semantics {
+                        if (footnoteAnnounces) liveRegion = LiveRegionMode.Polite
+                    },
             )
         }
     }

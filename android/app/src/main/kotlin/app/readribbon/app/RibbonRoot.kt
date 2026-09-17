@@ -252,6 +252,14 @@ fun RibbonRoot(
         LaunchedEffect(model, lifecycle) {
             lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 model.refreshFromRemote()
+                // Asked again, because the first ask can fail. A launch with
+                // no network leaves the answer unknown, and unknown draws no
+                // passkey control — which is right for that moment and wrong
+                // for the rest of the process, since nothing else would ever
+                // ask again. It is idempotent and free once answered
+                // (`RemoteSync.learnWhatAuthOffers` returns at once), so only
+                // a launch that actually failed pays for this.
+                model.learnWhatAuthOffers()
                 // What the person is actually looking at, as opposed to
                 // which room is selected. Set here and cleared in the same
                 // `finally` as the socket, so a process that went away can
