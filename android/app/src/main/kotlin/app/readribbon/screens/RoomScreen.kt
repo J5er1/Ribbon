@@ -90,12 +90,14 @@ import app.readribbon.design.SmallCaps
 import app.readribbon.design.WayInButton
 import app.readribbon.design.flows
 import app.readribbon.design.opensTheBook
+import app.readribbon.design.opensTheRoom
 import app.readribbon.design.paper
 import app.readribbon.design.pressable
 import app.readribbon.design.pressablePaper
 import app.readribbon.design.readableColumn
 import app.readribbon.design.rememberReduceMotion
 import app.readribbon.design.grain
+import app.readribbon.design.rememberRoomPull
 import app.readribbon.design.room
 import app.readribbon.fire.CampfireGlyph
 import app.readribbon.fire.CampfireView
@@ -253,12 +255,18 @@ fun RoomScreen(
             // under the system bars and only the content clears them.
             .room(),
     ) {
+        // Hoisted, because the fire's downward pull has to know whether the
+        // room still has somewhere to scroll (design/Hearth.kt's
+        // `opensTheRoom`). At the top there is nothing above to reach and the
+        // gesture is free; anywhere else it belongs to the scroll.
+        val roomScroll = rememberScrollState()
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 // No scroll indicators: Compose draws none, which is what
                 // `.scrollIndicators(.hidden)` asks for.
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(roomScroll),
         ) {
             Column(
                 modifier = Modifier
@@ -288,6 +296,8 @@ fun RoomScreen(
                     onPickABook = { showChooser = true },
                     onOpenPerson = onOpenPerson,
                     onInvite = { showInviteShare = true },
+                    onOpenRooms = onOpenRooms,
+                    atTopOfTheRoom = { roomScroll.value == 0 },
                     modifier = Modifier.padding(horizontal = GUTTER, vertical = 22.dp),
                 )
 
@@ -602,6 +612,10 @@ private fun Hearth(
     onPickABook: () -> Unit,
     onOpenPerson: (personID: Uuid, roomID: Uuid) -> Unit,
     onInvite: () -> Unit,
+    /** The fire's other direction (A46): down opens the room itself. */
+    onOpenRooms: () -> Unit,
+    /** Whether a downward drag on the fire is the fire's to take. */
+    atTopOfTheRoom: () -> Boolean,
     modifier: Modifier = Modifier,
 ) {
     val reduceMotion = rememberReduceMotion()
@@ -700,6 +714,8 @@ private fun Hearth(
                         onBeginOpening = onBeginOpening,
                         onAbandonOpening = onAbandonOpening,
                         onOpened = { onOpenReading(current, null) },
+                        onOpenRooms = onOpenRooms,
+                        atTopOfTheRoom = atTopOfTheRoom,
                     )
                 } else {
                     UnlitHearth(
@@ -744,14 +760,29 @@ private fun TheFire(
     onBeginOpening: (Reading) -> Unit,
     onAbandonOpening: () -> Unit,
     onOpened: () -> Unit,
+    onOpenRooms: () -> Unit,
+    atTopOfTheRoom: () -> Boolean,
 ) {
     val reduceMotion = rememberReduceMotion()
     val state = model.fireState(reading)
     val book = Bible.book(reading.bookID) ?: return
+    val roomPull = rememberRoomPull()
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            // Pulled down, the hearth leans and the room's own screen opens
+            // (A46). Read inside the layer block, so a finger on the fire
+            // recomposes nothing.
+            .graphicsLayer { translationY = roomPull.offset }
+            .opensTheRoom(
+                pull = roomPull,
+                label = Copy.OPEN_YOUR_ROOMS,
+                // The scroll comes first. At the top of the room a downward
+                // drag has nowhere else to go; below it, it is the room's.
+                enabled = atTopOfTheRoom,
+                onOpened = onOpenRooms,
+            )
             // The handle is the whole hearth, not the flame.
             //
             // It used to be the fire's own canvas alone, which on a short

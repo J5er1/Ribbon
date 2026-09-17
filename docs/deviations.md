@@ -2516,6 +2516,75 @@ A45. **The launch mark is the app's to draw, not the system's.** Owner:
     left unreferenced. They worked; nothing calls them; A39 is about exactly
     that.
 
+A46. **The hearth's two directions, and a way out that could not be pulled.**
+    Two of the owner's findings, which turned out to be the same finding.
+
+    **The Wave.** *"The Ribbon icon at the bottom of the screen looks like
+    there's some sort of interaction happening, but it doesn't work very
+    well."* It worked exactly as written, and what was written could not be
+    performed. `RibbonMotion.OPEN_COMMIT` is a fifth of `OPEN_TRAVEL`, which
+    on a tall phone is about ninety dp of finger — a comfortable pull *upward
+    from the fire*, which sits in the middle of the room. From the Wave, which
+    sits at the foot of the page with the navigation bar under it, there is
+    nowhere near ninety dp of glass left to drag through. So the distance test
+    could never pass and only the flick could: the way out worked if you threw
+    it and did nothing if you pulled it. The page following the finger and then
+    springing back is the interaction being seen.
+
+    A47's lesson in one line: **a threshold has to be measured against the
+    screen the hand actually has.** `release` takes its commit as a parameter
+    now. The fire keeps the fifth; the Wave gets forty-four dp — one touch
+    target, deliberately short, because somebody who has taken hold of the
+    thing labelled "close the book" and pulled it has already said what they
+    want, and a handle that argues about how far is a handle that is in the
+    way.
+
+    The Wave also stopped eating the other direction. It was `draggable`,
+    which claims a vertical gesture in *both* directions once slop is passed,
+    and an upward drag on it had nowhere to go — the book is already fully
+    open and `drag` clamps — so the gesture was swallowed to move nothing.
+    A control that eats a drag and does nothing with it is the worst of both:
+    not inert, and not working. It is hand-written now and claims downward
+    only, exactly as the fire's handle already declined a downward one.
+
+    **The fire, downward.** *"Dragging down from the fire should do something
+    ... it should be in-depth room settings when you drag down from the fire
+    rather than up."* It now opens the room's own screen — the one the room's
+    name at the top-left has always opened.
+
+    The reason it did nothing before is good and is kept: `opensTheBook`'s own
+    comment records that `draggable` claimed both directions, so a thumb put
+    on the fire and swiped down to scroll the room moved nothing at all while
+    quietly building a whole reading screen and tearing it down again. So the
+    downward pull is only taken **when the room is at the top of its scroll**,
+    where a downward drag has nowhere else to go. Below that it is the
+    scroll's, as before.
+
+    The hearth leans with the finger — a square-root falloff onto a
+    twenty-eight dp cap, so the first millimetre answers almost one to one and
+    the last centimetre barely moves it. That is resistance, not travel: the
+    hearth is not going anywhere. Without it this would be another gesture
+    that appears to do nothing until it suddenly does, which is the complaint
+    this entry started from.
+
+    **The bug this nearly shipped with.** `opensTheRoom` shares a node with
+    `opensTheBook`, and `onClick` is *one slot* in a node's semantics — a
+    second one replaces the first rather than joining it. The app's front door
+    would have quietly stopped working for a screen reader. The room's tap
+    equivalent is a `CustomAccessibilityAction`, which sits beside the book's.
+    `HearthGesturesTest` asserts both are there, along with each direction's
+    threshold and the scroll's priority; none of it is visible in a
+    screenshot, which is why it had never been caught.
+
+    **On "dragged up".** The report says the way out of Scripture *"should be
+    able to be dragged up to go back to the home screen"*. Down is what is
+    built, and deliberately: the book rises from the bottom of the room to
+    open (A20), so sending it back down is the same gesture in reverse, and
+    one number drives both. The reading here is that the direction was never
+    the complaint — the drag was simply impossible to complete, which is the
+    defect above. If it still wants inverting on the phone it is one
+    comparison.
+
 ## Licensed translations (decided: API.Bible)
 
 Open question §16.8 is now part-decided: **NKJV plus two undecided

@@ -1,12 +1,9 @@
 package app.readribbon.design
 
 import androidx.compose.animation.core.animate
-import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitVerticalTouchSlopOrCancellation
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.gestures.verticalDrag
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
@@ -21,10 +18,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -200,18 +201,31 @@ class BookSheet internal constructor(
      * speed the finger let it go at (see the spring section of
      * [RibbonMotion]).
      */
-    internal fun release(velocity: Float, onOpened: () -> Unit, onClosed: () -> Unit) {
+    internal fun release(
+        velocity: Float,
+        onOpened: () -> Unit,
+        onClosed: () -> Unit,
+        /**
+         * How far this particular hand has to have moved the book, as a
+         * fraction of [travel].
+         *
+         * A parameter rather than the constant, because the two handles do
+         * not have the same amount of screen to work in and never did. See
+         * [closesTheBook] for what that cost the way out.
+         */
+        commit: Float = RibbonMotion.OPEN_COMMIT,
+    ) {
         val moved = position - grabbed
         val opening = when {
             // Intent first: a flick says the person knows the gesture, and
-            // making them drag the whole third anyway is the app not
+            // making them drag the whole distance anyway is the app not
             // believing them.
             velocity > RibbonMotion.OPEN_FLING -> true
             velocity < -RibbonMotion.OPEN_FLING -> false
-            // Then distance, measured from where the hand took hold — so a
-            // third of the way is a third of the way in both directions.
-            moved >= RibbonMotion.OPEN_COMMIT -> true
-            moved <= -RibbonMotion.OPEN_COMMIT -> false
+            // Then distance, measured from where the hand took hold — so the
+            // threshold is the same threshold in both directions.
+            moved >= commit -> true
+            moved <= -commit -> false
             // Not far enough either way: back where it came from.
             else -> grabbed >= 0.5f
         }
@@ -371,25 +385,243 @@ fun Modifier.opensTheBook(
 }
 
 /**
+ * How far the Wave has to be pulled down before letting go closes the book.
+ *
+ * **An absolute distance, and that is the whole fix.** [RibbonMotion.OPEN_COMMIT]
+ * is a fifth of [RibbonMotion.OPEN_TRAVEL], which on a tall phone is about
+ * ninety dp of finger. That is a comfortable pull *upward from the fire*,
+ * which sits in the middle of the room. It is not a pull that exists at all
+ * from the Wave, which sits at the foot of the page with the navigation bar
+ * under it: there is nowhere near ninety dp of glass below it to drag
+ * through. So the distance test could never pass, only the flick could, and
+ * the way out worked if you threw it and did nothing if you pulled it.
+ *
+ * The owner's report — *"the Ribbon icon at the bottom of the screen looks
+ * like there's some sort of interaction happening, but it doesn't work very
+ * well"* — is that exactly: the page moves with the finger, which is the
+ * interaction being seen, and then springs back, because the threshold was
+ * measured against a screen this handle has no access to.
+ *
+ * Forty-four dp is one touch target, and it is deliberately short: this is a
+ * handle. Somebody who has taken hold of the thing labelled "close the book"
+ * and pulled it has said what they want, and a handle that argues about how
+ * far is a handle that is in the way.
+ */
+private val HANDLE_COMMIT = 44.dp
+
+/**
  * This element is the handle that pulls the book closed: the Wave, at the
  * foot of the book.
  *
- * Downward drag closes. Unlike the opening handle this one does not own its
- * own tap — the Wave has been a tappable way out since S02 was written, and
- * that tap stays exactly where it was.
+ * Downward drag closes, the page following the finger, and letting go past
+ * [HANDLE_COMMIT] — or flicking — finishes it.
+ *
+ * **Only downward.** This was `draggable`, which claims a vertical gesture in
+ * *both* directions once slop is passed, and an upward drag on the Wave has
+ * nowhere to go: the book is already fully open, [BookSheet.drag] clamps, and
+ * the gesture was swallowed to move nothing at all. A control that eats a
+ * drag and does nothing with it is the worst of both — it is not inert, and
+ * it is not working. So an upward drag is never consumed here and falls
+ * through, exactly as the fire's handle already declines a downward one.
+ *
+ * Unlike the opening handle this one does not own its own tap — the Wave has
+ * been a tappable way out since S02 was written, and that tap stays exactly
+ * where it was.
  */
 @Composable
 fun Modifier.closesTheBook(
     sheet: BookSheet,
     onClosed: () -> Unit,
 ): Modifier {
-    val state = rememberDraggableState { delta -> sheet.drag(-delta) }
-    return this.draggable(
-        state = state,
-        orientation = Orientation.Vertical,
-        onDragStarted = { sheet.engage() },
-        onDragStopped = { velocity ->
-            sheet.release(-velocity, onOpened = {}, onClosed = onClosed)
-        },
-    )
+    val closed by rememberUpdatedState(onClosed)
+    val commitPx = with(LocalDensity.current) { HANDLE_COMMIT.toPx() }
+
+    return this.pointerInput(sheet) {
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            val velocity = VelocityTracker()
+            velocity.addPosition(down.uptimeMillis, down.position)
+
+            var ours = false
+            val past = awaitVerticalTouchSlopOrCancellation(down.id) { change, over ->
+                if (over > 0f) {
+                    ours = true
+                    change.consume()
+                }
+            }
+            if (!ours || past == null) return@awaitEachGesture
+
+            sheet.engage()
+            velocity.addPosition(past.uptimeMillis, past.position)
+            sheet.drag(-past.positionChange().y)
+
+            verticalDrag(past.id) { change ->
+                velocity.addPosition(change.uptimeMillis, change.position)
+                sheet.drag(-change.positionChange().y)
+                change.consume()
+            }
+
+            sheet.release(
+                velocity = -velocity.calculateVelocity().y,
+                onOpened = {},
+                onClosed = closed,
+                // The travel is the screen's; the commit is this handle's.
+                commit = if (sheet.travel > 0f) commitPx / sheet.travel else 1f,
+            )
+        }
+    }
+}
+
+// MARK: The other direction
+//
+// Owner: *"dragging down from the fire should do something. Maybe that should
+// open profiles or settings. I think settings would be best, or the room
+// settings. It should be in-depth room settings when you drag down from the
+// fire rather than up."*
+//
+// The hearth already answers an upward pull with the book. A downward one was
+// deliberately never consumed — `opensTheBook` says so in its own comment,
+// because `draggable` claims both directions and a thumb put on the fire and
+// swiped down to scroll the room moved nothing at all while quietly building
+// a whole reading screen. That decision stands: **this only takes the gesture
+// when the room has nothing left to scroll up into.** At the top of the room
+// a downward drag has nowhere to go and is free; anywhere else it is the
+// scroll's, exactly as before.
+//
+// Symmetry is the point of putting it here rather than on a button. Up is the
+// book — the thing this room is for. Down is the room itself — who is in it,
+// what it is called, what it reads. One object, two directions, and neither
+// of them a menu you have to go and find.
+
+/**
+ * How far the fire has to be pulled down before letting go opens the room.
+ *
+ * An absolute distance for the same reason [HANDLE_COMMIT] is one, and a
+ * longer one: this gesture starts from the middle of the screen with the
+ * whole lower half to travel through, and it must not fire on the flick of a
+ * thumb that meant to scroll.
+ */
+private val ROOM_COMMIT = 96.dp
+
+/**
+ * How far the hearth actually sinks, at most.
+ *
+ * Far less than the pull itself. The hearth is not going anywhere — it comes
+ * back — so this is resistance, the feel of a thing on a spring rather than a
+ * thing being moved, and it is what stops the gesture being another invisible
+ * one. §9.1 forbids overshoot, not resistance.
+ */
+private val ROOM_SINK = 28.dp
+
+/**
+ * How far the fire has been pulled down, for the hearth to lean on.
+ *
+ * The same shape as [BookSheet] and for the same reasons: a plain value
+ * written synchronously from the pointer handler, read inside a layer block,
+ * and a [Job] for the settle so a new drag can take it off one already
+ * running. See [BookSheet.position] for why this is not an `Animatable`.
+ */
+@Stable
+class RoomPull internal constructor(private val scope: CoroutineScope) {
+
+    private var sunk by mutableFloatStateOf(0f)
+    private var settling: Job? = null
+
+    /** Pixels the hearth is down by. Read inside a layer block, never as state. */
+    val offset: Float get() = sunk
+
+    internal fun sink(to: Float) {
+        settling?.cancel()
+        sunk = to
+    }
+
+    internal fun letGo(still: Boolean) {
+        settling?.cancel()
+        settling = scope.launch {
+            animate(
+                initialValue = sunk,
+                targetValue = 0f,
+                animationSpec = RibbonMotion.handled(still),
+            ) { value, _ -> sunk = value }
+        }
+    }
+}
+
+@Composable
+fun rememberRoomPull(): RoomPull {
+    val scope = rememberCoroutineScope()
+    return remember(scope) { RoomPull(scope) }
+}
+
+/**
+ * This element is the handle that pulls the room open: the fire again, the
+ * other way.
+ *
+ * @param enabled whether the gesture is this element's to take. The room's
+ *   scroll comes first — see the note above.
+ * @param label what a screen reader is told the tap equivalent does (§11).
+ *   The tap lives on the same node as the book's, as a second custom action,
+ *   because a gesture without one is not shippable.
+ */
+@Composable
+fun Modifier.opensTheRoom(
+    pull: RoomPull,
+    label: String,
+    enabled: () -> Boolean,
+    onOpened: () -> Unit,
+): Modifier {
+    val opened by rememberUpdatedState(onOpened)
+    val takeable by rememberUpdatedState(enabled)
+    val still = rememberReduceMotion()
+    val commitPx = with(LocalDensity.current) { ROOM_COMMIT.toPx() }
+    val sinkPx = with(LocalDensity.current) { ROOM_SINK.toPx() }
+
+    return this
+        .pointerInput(pull) {
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false)
+                if (!takeable()) return@awaitEachGesture
+
+                var ours = false
+                val past = awaitVerticalTouchSlopOrCancellation(down.id) { change, over ->
+                    if (over > 0f) {
+                        ours = true
+                        change.consume()
+                    }
+                }
+                if (!ours || past == null) return@awaitEachGesture
+
+                var pulled = past.positionChange().y
+                // A square-root falloff rather than a fraction: the first
+                // millimetre moves the hearth almost as far as the finger, so
+                // the gesture answers at once, and the last centimetre barely
+                // moves it at all, so the cap is arrived at rather than hit.
+                fun resist(d: Float): Float =
+                    sinkPx * kotlin.math.sqrt((d / commitPx).coerceIn(0f, 1f))
+
+                pull.sink(resist(pulled))
+                verticalDrag(past.id) { change ->
+                    pulled += change.positionChange().y
+                    pull.sink(resist(pulled))
+                    change.consume()
+                }
+
+                pull.letGo(still)
+                if (pulled >= commitPx) opened()
+            }
+        }
+        // §11's tap equivalent, as a **custom action** and not a second
+        // `onClick`. `onClick` is one slot in a node's semantics, and this
+        // modifier shares its node with `opensTheBook`, which already fills
+        // it with the book — a second one does not sit beside the first, it
+        // takes its place, and the app's front door would have quietly
+        // stopped working for a screen reader.
+        //
+        // The visible equivalent is the room's name at the top of the screen,
+        // which has opened this same screen since S01 was written. That is
+        // also why the gesture gets no hint of its own (§6.1): it is a
+        // shortcut to something already on the screen, not the only way in.
+        .semantics {
+            customActions = listOf(CustomAccessibilityAction(label) { opened(); true })
+        }
 }
