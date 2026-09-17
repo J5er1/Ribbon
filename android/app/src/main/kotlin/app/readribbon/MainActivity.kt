@@ -7,7 +7,6 @@ import android.content.pm.ActivityInfo
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
-import android.os.SystemClock
 import android.view.animation.DecelerateInterpolator
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -39,17 +38,6 @@ import kotlin.uuid.Uuid
  */
 private const val TABLET_SMALLEST_WIDTH_DP = 600
 
-/**
- * The shortest the mark is allowed to be on screen, in milliseconds.
- *
- * Not a duration — a floor. The splash is held by the store loading and
- * nothing else; this only stops a warm launch cutting the unfurl off after
- * three frames, which reads as a glitch rather than as a mark. Set just
- * above the unfurl's own 440 ms (`animator/splash_unfurl.xml`) so the ribbon
- * always finishes coming down.
- */
-private const val MARK_FLOOR_MS = 480L
-
 class MainActivity : ComponentActivity() {
 
     /**
@@ -79,36 +67,31 @@ class MainActivity : ComponentActivity() {
     private val destinations = Channel<Destination>(Channel.UNLIMITED)
     private val destinationStream = destinations.receiveAsFlow()
 
-    /** Set once the store is loaded; until then the launch ground holds. */
-    private var ready = false
-
     override fun onCreate(savedInstanceState: Bundle?) {
-        // The Wave, unfurling on the unlit ground, and then the room.
+        // The unlit ground, and then the app.
         //
         // §05 says there is no splash screen. That rule survives here because
         // nothing is inserted: Android 12 and later show a system splash on
         // every cold start whether an app asks for one or not, so the only
-        // real choice is whether it carries our mark or the launcher icon on
-        // a plate. Owner's call (deviation A28) — it carries the mark.
+        // real choice is whether it carries something of ours or the launcher
+        // icon on a plate. It carries the ground (A28, and A45 for why the
+        // mark is no longer in it).
         //
-        // What §05 is actually protecting is the *time*: "nothing may be
-        // inserted between opening the app and reading". So the splash is
-        // held by the store coming off disk, exactly as before, and the floor
-        // below is the one concession — the mark's unfurl is 440 ms and a
-        // fast warm launch would otherwise show three frames of a ribbon and
-        // cut. A mark that flickers is worse than no mark. It is a floor, not
-        // a duration: on the cold start that actually needs the time, the
-        // store is slower than this and the floor costs nothing at all.
+        // **Nothing holds this window open any more.** It used to be kept up
+        // until the store had loaded, plus a 480 ms floor so a warm launch
+        // could not cut the mark's unfurl to three frames — and the unfurl
+        // was the thing that did not run. The mark is `design/LaunchMark.kt`
+        // now, on the app's own first frame, so the window's job is to be the
+        // ground until there is a frame to replace it, which is exactly what
+        // the library does by default: it holds until the content view draws.
+        // The mark's animation then happens *while* the store comes off disk
+        // rather than after the window has already been held for it, which is
+        // what §05 is actually protecting — the time.
         val splash = installSplashScreen()
-        val launchedAt = SystemClock.uptimeMillis()
-        splash.setKeepOnScreenCondition {
-            !ready || SystemClock.uptimeMillis() - launchedAt < MARK_FLOOR_MS
-        }
-        // Handed over rather than cut. The mark does not fly anywhere — §13's
-        // never-ship list is largely a list of logo animations — it simply
-        // stops being there, over the same fade the app uses for anything
-        // arriving (§9.1's arrive token, 240 ms), onto the room that has
-        // already drawn underneath.
+        // Handed over rather than cut. Both sides of this are the same black
+        // — `@color/unlit` in the window, `Brand.ground` in the frame
+        // underneath — so the fade is a formality that covers the one frame
+        // where the window is torn down, not a transition anybody sees.
         splash.setOnExitAnimationListener { screen ->
             screen.view.animate()
                 .alpha(0f)
@@ -143,7 +126,6 @@ class MainActivity : ComponentActivity() {
                 RibbonRoot(
                     links = linkStream,
                     destinations = destinationStream,
-                    onReady = { ready = true },
                 )
             }
         }

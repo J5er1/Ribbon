@@ -26,23 +26,42 @@
          "welcome back". The mark and the ground, and then the room. -->
     <style name="Theme.Ribbon.Splash" parent="Theme.SplashScreen">
         <!-- **The `android:` prefix is the whole thing.** These were the
-             androidx compat attributes and the mark never animated, because
-             on API 31 and later the *platform* draws the splash from its own
-             `android:windowSplashScreen*` attributes and never reads the
-             library's. The compat ones only do anything below 31, and this
-             app's minSdk is 33 — so every device on earth was falling
-             through to the system default: the launcher icon on a plate,
-             with the animated vector sitting in the APK unused.
+             androidx compat attributes and the platform never read them: on
+             API 31 and later the *platform* draws the splash from its own
+             `android:windowSplashScreen*` attributes, and the compat ones
+             only do anything below 31. minSdk is 33, so every device on
+             earth was falling through to the system default — the launcher
+             icon on a plate.
 
              Because minSdk is already past 31 these live here rather than in
              a values-v31 folder; there is no device that would read a
              pre-31 variant. -->
         <item name="android:windowSplashScreenBackground">@color/unlit</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_wave_animated</item>
-        <!-- The system caps this at one second and treats it as a hint. The
-             real length of the splash is how long the store takes to come off
-             disk; this only tells the platform how long the drawable wants. -->
-        <item name="android:windowSplashScreenAnimationDuration">600</item>
+        <!-- **The ground, and the mark is the app's.**
+
+             This was `@drawable/splash_wave_animated`, and on the owner's
+             Pixel 9 Pro XL it did not animate: the mark appeared whole and
+             then faded to the room. That drawable was checked first —
+             inflated, started, drawn frame by frame — and it was correct, so
+             what could not be established is why the platform declined to
+             play it. The splash is drawn by the system, from this theme, in
+             another process, before the app exists: there is nothing here to
+             see, test or fix. The drawable and its two animators are deleted
+             rather than left unreferenced.
+
+             So the launch window carries the ground alone and
+             `design/LaunchMark.kt` draws the mark on the app's first frame,
+             where the unfurl runs on the same clock as everything else in
+             the product and under the same reduce-motion token (§11).
+
+             An empty vector rather than no value at all, because naming
+             nothing hands the slot back to the launcher icon on a plate. -->
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_ground</item>
+        <!-- Nothing in the launch window animates now, so there is no
+             duration to declare. Left at zero rather than removed: the
+             platform reads this attribute whether or not it is set, and a
+             value that says "no animation" is clearer than a default. -->
+        <item name="android:windowSplashScreenAnimationDuration">0</item>
         <!-- No icon background: the mark is a shape on a ground, and a
              circular plate behind it would be an app icon rather than a mark.
              Without one the icon is not masked.

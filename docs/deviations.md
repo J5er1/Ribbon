@@ -2461,6 +2461,61 @@ A44. **"Preferences do not stay between updates of the app."** Owner's
     first — *"we will wire everything later"* — so it is named here rather than
     taken.
 
+A45. **The launch mark is the app's to draw, not the system's.** Owner:
+    *"the splash screen with the Ribbon being animated doesn't work. It just
+    kind of shows it and then fades to it."* Which is a mark that appears
+    whole and then fades — the unfurl never running.
+
+    **The drawable was not the problem, and that was established before
+    anything was changed.** `theLaunchMarkMoves` already drove the real
+    `AnimatedVectorDrawable`, started it, and asserted two frames 600 ms apart
+    were different pictures. It passed. Inflated and drawn frame by frame, the
+    clip band closed to nothing and opened again over the unfurl's 440 ms, so
+    the vector, both animators and both target names were correct all along.
+
+    What could not be established is why the platform declined to play it on
+    that phone, and that is the finding. **The system splash is drawn by the
+    system, from the app's theme, in another process, before the app exists.**
+    There is nothing in it to see, to log, to test or to fix from here, and
+    nothing that says the next phone behaves the same. A28 put the mark there
+    on the reasoning that Android 12 shows a splash whether or not you ask, so
+    the only choice is whose mark it carries. That reasoning still holds for
+    the *ground*. It does not hold for anything that has to move.
+
+    So `design/LaunchMark.kt` draws the mark on the app's own first frame:
+    the same `splash_wave` vector, the same 440 ms unfurl and 1.04→1.0 settle,
+    on the Compose clock, under `rememberReduceMotion()` like everything else
+    (§11), and photographed in the look book part-way down and at rest — which
+    a system window could never be.
+
+    **What it costs, plainly.** The launch window now carries the unlit ground
+    and nothing else, so on a cold start there is the ground alone for as long
+    as the process takes to come up, where before there was a static mark.
+    That is the trade: briefly only the ground and then a ribbon that comes
+    down, against a mark that appears whole and never moves. The owner's
+    report is that the second reads as broken.
+
+    It does not *add* time, and §05 is about time. The old build held the
+    splash open until the store had loaded **plus a 480 ms floor**
+    (`MARK_FLOOR_MS`) so a warm launch could not cut the unfurl to three
+    frames — and the unfurl was the thing that never ran, so that floor was
+    480 ms of holding a still picture. Nothing holds the window now; it lasts
+    until the app's first frame, which is the library's default. The mark's
+    animation runs *while* the store comes off disk instead of after the
+    window has already been held for it. The mark leaves when the room can be
+    drawn **and** the ribbon has landed, whichever is later: leaving on the
+    first alone cuts the animation, leaving on the second alone holds a room
+    that was ready half a second ago.
+
+    **`splash_ground.xml` is an empty vector, deliberately.** Naming no icon
+    hands the slot back to the launcher icon on a plate, which is the one
+    thing A28 set out to avoid. An empty vector is the only way to tell the
+    platform "the ground, and leave the mark to us".
+
+    `splash_wave_animated.xml` and its two animators are deleted rather than
+    left unreferenced. They worked; nothing calls them; A39 is about exactly
+    that.
+
 ## Licensed translations (decided: API.Bible)
 
 Open question §16.8 is now part-decided: **NKJV plus two undecided

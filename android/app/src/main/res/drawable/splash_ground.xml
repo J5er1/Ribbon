@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The launch window's icon: the unlit ground and nothing on it.
+
+     This is not an oversight and it is not a placeholder. Android 12 and
+     later draw a splash on every cold start whether an app asks for one or
+     not, from the launching activity's theme, in the system process, before
+     the app exists — and if no icon is named the platform falls back to the
+     launcher icon on a plate, which is the one thing A28 set out to avoid.
+     Naming an empty vector is the only way to say "the ground, please, and
+     leave the mark to us".
+
+     Why to us: the mark is `design/LaunchMark.kt` now, on the app's first
+     frame, because the animated version of it in the launch theme did not
+     play on the owner's phone and a system-drawn window is not something
+     this app can see, test or fix. The drawable itself was checked and was
+     never the problem.
+
+     The viewport matches `splash_wave.xml` so the two are interchangeable in
+     the theme, which matters the one time it is worth being able to swap
+     them back. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:pathData="M0,0 Z" android:fillColor="#00000000" />
+</vector>
