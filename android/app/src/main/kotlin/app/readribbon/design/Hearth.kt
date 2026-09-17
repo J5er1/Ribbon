@@ -1,7 +1,6 @@
 package app.readribbon.design
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.AnimationVector1D
+import androidx.compose.animation.core.animate
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -27,6 +26,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 // The book, opened by hand.
@@ -76,8 +76,47 @@ class BookSheet internal constructor(
     private val still: () -> Boolean,
 ) {
 
-    /** 0 closed, 1 open. Never outside that. */
-    internal val pull: Animatable<Float, AnimationVector1D> = Animatable(0f)
+    /**
+     * 0 closed, 1 open. Never outside that.
+     *
+     * A plain piece of snapshot state rather than an `Animatable`, and that is
+     * the difference between the gesture tracking a finger and the gesture
+     * lagging it.
+     *
+     * `Animatable.snapTo` is a suspend function — it has to be, it takes the
+     * animation mutex — so a drag written on top of one has to say
+     * `scope.launch { pull.snapTo(next) }` for every pointer event. That
+     * scope's dispatcher is `AndroidUiDispatcher`, which does not run the
+     * block where it was launched: it queues it and runs it at the next
+     * message-loop turn or the next choreographer frame. A pointer event is
+     * itself delivered inside a frame, so the position landed **after** that
+     * frame had already drawn, and the book was a whole frame behind the
+     * thumb — every frame, for the length of the pull. On a 120 Hz screen
+     * that is eight milliseconds of lag that is never made up, plus a
+     * coroutine allocated and a mutex taken for each of the hundred-odd touch
+     * samples a second the panel reports.
+     *
+     * The owner reported the pull-up gesture performing badly on a Pixel 9
+     * Pro XL, which is not a phone that should struggle to move a rectangle.
+     * It was not struggling; it was being told a frame late.
+     *
+     * Written directly, the drag is one snapshot write inside the frame that
+     * is about to draw, so the book is where the finger is. Everything that
+     * reads [progress] does so inside a `graphicsLayer` or a draw, so the
+     * write invalidates drawing and nothing else — no recomposition, exactly
+     * as before.
+     */
+    private var position by mutableFloatStateOf(0f)
+
+    /**
+     * The settle in flight, so a new drag can take the book off it.
+     *
+     * This is what the animation mutex used to do. `Animatable` cancels
+     * whatever is animating it when something else snaps it, which is the one
+     * thing that made the `launch` above defensible; with a plain value the
+     * cancelling has to be explicit, and [engage] and [drag] both do it.
+     */
+    private var settling: Job? = null
 
     /**
      * The travel one full pull is worth, in pixels — how far a finger has to
@@ -97,7 +136,7 @@ class BookSheet internal constructor(
         private set
 
     /** Where the book is. Read inside a layer block, never as state. */
-    val progress: Float get() = pull.value
+    val progress: Float get() = position
 
     /**
      * The book is open, rather than on its way somewhere.
@@ -133,14 +172,23 @@ class BookSheet internal constructor(
      * book so there is something to pull.
      */
     internal fun engage() {
-        grabbed = pull.value
+        settling?.cancel()
+        grabbed = position
         engaged = true
     }
 
-    /** Move by [delta] pixels of pull — positive opens. */
+    /**
+     * Move by [delta] pixels of pull — positive opens.
+     *
+     * Synchronous, and called straight from the pointer handler: see
+     * [position] for why that matters. The cancel is belt and braces — every
+     * path into a drag calls [engage] first — but a settle still running under
+     * a finger would fight it for the value, and a no-op cancel on a finished
+     * job costs nothing next to the alternative.
+     */
     internal fun drag(delta: Float) {
-        val next = (pull.value + delta / travel).coerceIn(0f, 1f)
-        scope.launch { pull.snapTo(next) }
+        settling?.cancel()
+        position = (position + delta / travel).coerceIn(0f, 1f)
     }
 
     /**
@@ -153,7 +201,7 @@ class BookSheet internal constructor(
      * [RibbonMotion]).
      */
     internal fun release(velocity: Float, onOpened: () -> Unit, onClosed: () -> Unit) {
-        val moved = pull.value - grabbed
+        val moved = position - grabbed
         val opening = when {
             // Intent first: a flick says the person knows the gesture, and
             // making them drag the whole third anyway is the app not
@@ -183,7 +231,8 @@ class BookSheet internal constructor(
     fun reset() {
         engaged = false
         committed = false
-        scope.launch { pull.snapTo(0f) }
+        settling?.cancel()
+        position = 0f
     }
 
     private fun settle(
@@ -196,16 +245,18 @@ class BookSheet internal constructor(
         // should stop saying you are in the book the moment the book starts
         // leaving, not four hundred milliseconds later.
         if (!open) committed = false
-        scope.launch {
-            // Interrupted by another drag or another settle, `animateTo`
-            // throws through the mutator mutex and this coroutine ends —
-            // which is what should happen. The callbacks below belong to the
-            // movement that actually finished.
-            pull.animateTo(
+        settling?.cancel()
+        settling = scope.launch {
+            // Interrupted by another drag or another settle, this coroutine is
+            // cancelled at its next frame and ends inside `animate` — which is
+            // what should happen. The callbacks below belong to the movement
+            // that actually finished.
+            animate(
+                initialValue = position,
                 targetValue = if (open) 1f else 0f,
-                animationSpec = RibbonMotion.cover(still()),
                 initialVelocity = initialVelocity,
-            )
+                animationSpec = RibbonMotion.cover(still()),
+            ) { value, _ -> position = value }
             if (open) {
                 committed = true
                 onOpened()

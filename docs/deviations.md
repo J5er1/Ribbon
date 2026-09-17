@@ -2319,6 +2319,91 @@ A42. **A room reads one version.** Owner's call, and the first entry in this
     version travel in one row and a second marker would have been two half
     locks on one door.
 
+A43. **The pull-up was a frame behind the finger.** Owner, on a Pixel 9 Pro
+    XL: *"the performance of swiping up on the fire is not very good"* — and
+    then, when asked nothing: *"so it's not exactly a low-end Samsung."* That
+    second sentence is the finding. A phone like that does not struggle to
+    move a rectangle, so the gesture was not expensive; it was late.
+
+    **The cause.** `BookSheet` kept its one number in an `Animatable`, and
+    `Animatable.snapTo` is a suspend function — it has to be, it takes the
+    animation mutex. So the drag was written the only way that shape allows:
+
+        internal fun drag(delta: Float) {
+            val next = (pull.value + delta / travel).coerceIn(0f, 1f)
+            scope.launch { pull.snapTo(next) }
+        }
+
+    `scope` is a `rememberCoroutineScope`, whose dispatcher is
+    `AndroidUiDispatcher`. That dispatcher does not run a block where it was
+    launched: it queues it and runs it at the next message-loop turn or the
+    next choreographer frame, whichever comes first. A pointer event is
+    delivered *inside* a frame, before that frame's draw — so the position
+    landed after the frame it belonged to had already been drawn, and the book
+    was one whole frame behind the thumb. Every frame, for the length of the
+    pull. On a 120 Hz screen that is eight milliseconds that are never made
+    up, plus a coroutine allocated and a mutex taken for each of the hundred
+    or more touch samples a second the panel reports.
+
+    A lag that is *constant* is exactly the kind that reads as bad
+    performance rather than as lag: nothing drops, nothing hitches, the book
+    is simply never quite where the finger is.
+
+    **The fix.** The pull is a plain `mutableFloatStateOf` now, written
+    synchronously from the pointer handler, and the settle is a top-level
+    `animate` in a `Job` the sheet holds. Everything that reads `progress`
+    already did so inside a `graphicsLayer` or a draw, so a drag invalidates
+    drawing and nothing else — unchanged, and that part was right.
+
+    What the animation mutex was quietly doing has to be done by hand: a new
+    drag has to take the book off a settle that is still running. `engage()`
+    and `drag()` both cancel the settle, and every path into a drag calls
+    `engage()` first, so the second cancel is belt and braces. The callbacks
+    still belong to the movement that actually finished, because a cancelled
+    coroutine never reaches the line after `animate`.
+
+    **The fire, while it was open.** The one thing in the app that is always
+    moving redraws at 30 Hz (§4.1), and every frame it allocated: a native
+    `Path` per coal, per fissure, per tongue, per oval; a native `Paint` and
+    `BlurMaskFilter` per blurred draw; and — the largest of them — a boxed
+    `Offset` per point of every outline, because a `List<Offset>` cannot hold
+    a value class unboxed. That last one was on the order of four hundred
+    objects a frame, fourteen thousand a second, on the thread that is also
+    meant to be tracking a finger.
+
+    All of it is kept scratch now: four paths, two pairs of `FloatArray`, a
+    paint per blur radius, one layer paint for the state cross-fade. The
+    arithmetic is untouched, so the picture is untouched.
+
+    Shared mutable scratch has exactly one failure mode and it is a bad one,
+    so `FireScratchTest` asserts the property that rules it out: **drawing is
+    a function of its arguments** — same arguments, same picture, whatever was
+    drawn before. The look book cannot test this, because the fire's breath
+    seed is `Random.nextDouble()` by design and no two runs draw the same
+    frame. Checked against a deliberately broken `reset()`.
+
+    **One blur pass out of five was buying nothing.** A mask-filter blur is
+    not a cheap draw: Skia renders the shape's coverage to an offscreen mask,
+    blurs it, and draws through it, so each blurred path is its own small
+    render pass. Five a frame — three sheath tongues and the two hot-air wisps
+    — of which the wisps were softening the rim of an oval that is 3.5%
+    opaque at its brightest. They are radial gradients now, which is what a
+    blurred flat oval is trying to look like, and have no rim to soften.
+
+    **What is left, and deliberately not done blind.** The sheath's three
+    blurs remain, and the honest fix for them is the one SwiftUI uses and the
+    code's own comment wishes for: record the sheath into a `GraphicsLayer`,
+    hang a hardware `BlurEffect` on it and composite once, instead of blurring
+    three paths separately. It is available at minSdk 33. It is not done here
+    because it changes how the sheath *blends* — the fire accumulates
+    additively inside one offscreen buffer, and a separate layer composites
+    over that rather than adding into it — and that is a change to the one
+    object on the home screen, made against a renderer no test in this repo
+    executes. The same goes for the full-screen `alpha` in `peeled`, which
+    forces a screen-sized offscreen buffer for every frame of an opening.
+    Both want a profiler and a phone, in that order, and the owner has the
+    phone. The two fixes above want neither.
+
 ## Licensed translations (decided: API.Bible)
 
 Open question §16.8 is now part-decided: **NKJV plus two undecided
