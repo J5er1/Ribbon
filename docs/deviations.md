@@ -2531,7 +2531,7 @@ A46. **The hearth's two directions, and a way out that could not be pulled.**
     it and did nothing if you pulled it. The page following the finger and then
     springing back is the interaction being seen.
 
-    A47's lesson in one line: **a threshold has to be measured against the
+    The lesson in one line: **a threshold has to be measured against the
     screen the hand actually has.** `release` takes its commit as a parameter
     now. The fire keeps the fifth; the Wave gets forty-four dp — one touch
     target, deliberately short, because somebody who has taken hold of the
@@ -2584,6 +2584,57 @@ A46. **The hearth's two directions, and a way out that could not be pulled.**
     the complaint — the drag was simply impossible to complete, which is the
     defect above. If it still wants inverting on the phone it is one
     comparison.
+
+A47. **The settings screen never stopped laying itself out.** Owner: *"when
+    you're in your profile, going from Appearance, for example, tapping works
+    very well. Actually, not fully. There's a ton of glitches and stuff."*
+
+    It was not a transition that looked wrong. **Compose never went idle.**
+
+    `LargeTopAppBar` has two titles, not one: a collapsed one in its top row
+    and an expanded one in its bottom row, cross-faded as you scroll. It
+    builds both out of the same `title` lambda, so every modifier on that
+    `Text` was applied to **two live nodes**. For a colour or a font that is
+    harmless. For the shared element that flows a settings row's words up into
+    the heading (A20's `flowsAsWords`) it is not: two halves of one key, on
+    one screen, with neither of them leaving, and a `RemeasureToBounds` bounds
+    animation between them that has no fixed point to settle on. The screen
+    went on recomposing and remeasuring for as long as it was given.
+
+    Measured, not inferred. Opening Appearance from You inside the flow spins
+    until the test harness gives up at sixty seconds; the identical navigation
+    with `LocalFlowRoot` absent settles at once; removing the shared modifier
+    from the bar's title settles at once. `scaleToBounds` in place of
+    `RemeasureToBounds` does **not** fix it, which is what says the resize
+    mode was never the problem — the duplicate key was.
+
+    **Why it had never been caught.** No test in this repo had ever put
+    `MenuScreen` inside a `SharedTransitionLayout`. The look book draws it on
+    its own, so `LocalFlowRoot` was null, `flowsAsWords` degraded to `this` —
+    which it does by design, so previews and tests can draw a screen outside a
+    flow — and the transition that the complaint is about had never once run
+    under test. Both *ends* of it were photographed and both were always
+    right. A frame cannot show a layout pass that does not end.
+
+    **The fix: the heading leaves the bar.** `TwoRowsTopAppBar` takes an
+    `expanded` flag and would have solved this in one line; it is `internal`
+    in material3, and nothing public exposes the distinction. So the bar keeps
+    what only a bar can do — the way back, pinned and always reachable — and
+    the heading moves into the page, directly above the lede, which already
+    lives there for the reason `RibbonScreen` had already written down: it is
+    content, and it scrolls away like content. One node, one key, nothing to
+    disambiguate.
+
+    What that costs: the heading no longer collapses into a small bar title on
+    scroll. It scrolls away instead. On screens this short that is a fair
+    trade for a screen that finishes drawing, and it aligns the heading with
+    the margin the rest of the page uses, which the bar's own start padding
+    never did.
+
+    `SettingsFlowSettlesTest` asserts the thing that was false — that the app
+    becomes idle after opening a settings screen, and after coming back — and
+    the look book now photographs the middle of the transition as well as its
+    ends, with the menu mounted the way `RibbonRoot` actually mounts it.
 
 ## Licensed translations (decided: API.Bible)
 

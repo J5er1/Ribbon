@@ -1,10 +1,12 @@
 package app.readribbon.look
 
 import android.graphics.Bitmap
+import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
@@ -48,6 +50,7 @@ import app.readribbon.data.LocalStore
 import app.readribbon.design.Appearance
 import app.readribbon.design.LAUNCH_MARK_MS
 import app.readribbon.design.LaunchMark
+import app.readribbon.design.LocalFlowRoot
 import app.readribbon.design.RibbonMotion
 import app.readribbon.design.RibbonTheme
 import app.readribbon.design.rememberBookSheet
@@ -503,6 +506,71 @@ class LookBookTest {
         shoot("menu-you") {
             MenuScreen(model = m, entry = MenuEntry.YOU, onDismiss = {}, onSwitch = {})
         }
+    }
+
+    /**
+     * You → Appearance, caught in the middle (A47).
+     *
+     * Owner: *"when you're in your profile, going from Appearance, for
+     * example, tapping works very well. Actually, not fully. There's a ton of
+     * glitches and stuff."*
+     *
+     * Nothing in this book could see it. `menu-you` above draws `MenuScreen`
+     * on its own, with no `SharedTransitionLayout` around it — so
+     * `LocalFlowRoot` is null, `flowsAsWords` degrades to `this`, and the
+     * settings-title flow that this transition is *made of* has never been
+     * photographed. What was being checked was the two ends, which were fine;
+     * the middle is where the complaint is.
+     *
+     * So this one wraps the menu the way `RibbonRoot` does, taps the row, and
+     * stops the clock part of the way through.
+     */
+    @Test fun theSettingsFlow() {
+        val open = reading("MRK", FireScale.medium)
+        val m = model(
+            AppState(
+                me = me,
+                people = mapOf(me.id to me),
+                rooms = listOf(room),
+                memberships = listOf(membership(me, Ink.teal)),
+                readings = listOf(open),
+                currentRoomID = room.id,
+            ),
+        )
+        val appearance = Appearance(ApplicationProvider.getApplicationContext())
+        appearance.wallpaperColour = false
+        compose.setContent {
+            RibbonTheme(appearance = appearance) {
+                SharedTransitionLayout(Modifier.fillMaxSize()) {
+                    CompositionLocalProvider(LocalFlowRoot provides this) {
+                        MenuScreen(
+                            model = m,
+                            entry = MenuEntry.YOU,
+                            onDismiss = {},
+                            onSwitch = {},
+                        )
+                    }
+                }
+            }
+        }
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithText(Copy.APPEARANCE).performClick()
+        compose.mainClock.advanceTimeByFrame()
+        compose.mainClock.advanceTimeByFrame()
+        // A third of the way through the push, which is where a title that is
+        // travelling would be visibly travelling.
+        compose.mainClock.advanceTimeBy(RibbonMotion.SETTLE_MS / 3L)
+        File(out, "settings-flow-going.png").outputStream().use {
+            compose.onRoot().captureToImage().asAndroidBitmap()
+                .compress(Bitmap.CompressFormat.PNG, 100, it)
+        }
+        compose.mainClock.advanceTimeBy(RibbonMotion.SETTLE_MS * 2L)
+        File(out, "settings-flow-landed.png").outputStream().use {
+            compose.onRoot().captureToImage().asAndroidBitmap()
+                .compress(Bitmap.CompressFormat.PNG, 100, it)
+        }
+        compose.mainClock.autoAdvance = true
     }
 
     /** The menu's other door: the room, its people and the rooms you are in. */

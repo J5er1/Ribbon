@@ -34,6 +34,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
@@ -783,8 +784,9 @@ fun Air(height: Dp) {
  * where it scrolls away like the content it is.
  *
  * @param titleModifier carries the shared element that flows a settings row's
- *   words up into this heading (`Flows.settingsTitle`). It belongs on the
- *   `Text`, not on the bar, or the whole bar would try to travel.
+ *   words up into this heading (`Flows.settingsTitle`). It belongs on the one
+ *   `Text` that draws the heading — see the note at the bar below for what it
+ *   cost when there were two of them.
  * @param onBack null on a root that is closed rather than popped.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -800,7 +802,6 @@ fun RibbonScreen(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val room = LocalRoomColours.current
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val bottomBar = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -809,26 +810,42 @@ fun RibbonScreen(
         // scroll that hid itself would take the screen with it.
         Box(Modifier.matchParentSize().room())
         Scaffold(
-            modifier = Modifier
-                .fillMaxSize()
-                .nestedScroll(scrollBehavior.nestedScrollConnection),
+            modifier = Modifier.fillMaxSize(),
             // The ground is already painted behind; a container colour here
             // would put an opaque slab over the grain.
             containerColor = Color.Transparent,
             contentColor = room.text,
             topBar = {
-                LargeTopAppBar(
-                    title = {
-                        Text(
-                            text = title,
-                            // Literata, not Material's own face. The bar is
-                            // Material's behaviour; the words are Ribbon's.
-                            style = RibbonType.display(30f),
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = titleModifier.semantics { heading() },
-                        )
-                    },
+                // **The heading is not in the bar, and that is the fix for
+                // A47.** This was a `LargeTopAppBar`, which has two titles
+                // rather than one — a collapsed one in its top row and an
+                // expanded one in its bottom row, cross-faded on scroll —
+                // and builds both out of the same `title` lambda. Every
+                // modifier on that `Text` was therefore applied to two live
+                // nodes.
+                //
+                // For a colour or a font that is harmless. For the shared
+                // element that flows a settings row's words into this heading
+                // it is not: two halves of one key, on one screen, neither of
+                // them leaving, with a bounds animation between them that has
+                // no fixed point to settle on. **Compose then never goes
+                // idle.** Measured rather than inferred — opening Appearance
+                // from You inside the flow spins for as long as it is given,
+                // and the same navigation with `LocalFlowRoot` absent settles
+                // at once. Which is the owner's *"there's a ton of glitches
+                // and stuff"* going from the profile into Appearance: not a
+                // transition that looked wrong, a screen that never stopped
+                // laying itself out.
+                //
+                // `TwoRowsTopAppBar` takes an `expanded` flag and would have
+                // solved it in one line; it is `internal` in material3. So the
+                // bar keeps what only a bar can do — the way back, pinned and
+                // always reachable — and the heading moves into the page,
+                // where the lede already lives for the reason stated above: it
+                // is content, and it scrolls away like content. One node, one
+                // key, nothing to disambiguate.
+                TopAppBar(
+                    title = {},
                     navigationIcon = {
                         if (onBack != null) BackChevron(onBack = onBack, label = backLabel)
                     },
@@ -840,7 +857,6 @@ fun RibbonScreen(
                         titleContentColor = room.text,
                         actionIconContentColor = room.text,
                     ),
-                    scrollBehavior = scrollBehavior,
                 )
             },
         ) { bars ->
@@ -868,6 +884,19 @@ fun RibbonScreen(
                         .padding(horizontal = ScreenMargin)
                         .padding(bottom = bottomBar + 44.dp),
                 ) {
+                    Text(
+                        text = title,
+                        // Literata, not Material's own face. The bar was
+                        // Material's behaviour; the words have always been
+                        // Ribbon's, and now so is the layout.
+                        style = RibbonType.display(30f),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        color = room.text,
+                        modifier = titleModifier
+                            .padding(bottom = if (lede != null) 10.dp else 22.dp)
+                            .semantics { heading() },
+                    )
                     if (lede != null) {
                         Text(
                             text = lede,
