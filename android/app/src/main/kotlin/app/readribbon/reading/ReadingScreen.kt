@@ -332,13 +332,34 @@ fun ReadingScreen(
      */
     var presenceInset by remember { mutableStateOf(0.dp) }
 
+    /**
+     * The page is in play: a finger is on it, or the pull has committed.
+     *
+     * The page is now built beneath the room before anybody touches anything
+     * (A51), so "composed" no longer means "being opened" and a few things
+     * had to be told the difference. Anything that *says* something to the
+     * room, or fetches, waits for this; anything that merely sets type does
+     * not, which is the whole point of building it early.
+     */
+    val astir = sheet.engaged || sheet.committed
+
     // Keyed on `sheet.committed` as well, and that is load-bearing: the page
-    // is composed from the first millimetre of the pull that raises it, and
-    // announcing yourself into the book because a thumb brushed the fire and
-    // thought better of it would put "Jonathan is reading Mark" in front of
-    // the whole room for a gesture that never happened.
+    // exists before the pull that raises it, and announcing yourself into the
+    // book because a thumb brushed the fire and thought better of it would
+    // put "Jonathan is reading Mark" in front of the whole room for a gesture
+    // that never happened.
     LaunchedEffect(room.id, model.me?.id, model.readingQuietly, sheet.committed) {
-        if (!sheet.committed) return@LaunchedEffect
+        if (!sheet.committed) {
+            // Leaving the book used to be a disposal, and the withdrawal below
+            // hung off `onDispose`. The page now outlives the reading of it —
+            // it goes back to standing by rather than being thrown away — so
+            // closing the book has to withdraw here instead, or you would go
+            // on being "in Mark" to the whole room after putting it down.
+            // `withdraw` is idempotent, so the standby page's own first pass
+            // through here costs a no-op.
+            model.presence.withdraw()
+            return@LaunchedEffect
+        }
         if (!model.readingQuietly && model.me != null) {
             // The channel is the room's and is already open; this is the
             // book's half — saying you are in it (§4.2).
@@ -623,6 +644,18 @@ fun ReadingScreen(
     }
 
     fun trackReading(chapter: Int, frame: Rect) {
+        // Nothing here may happen to a page nobody has touched (A51). This is
+        // driven by *layout*, and the page is now laid out beneath the room
+        // before the pull — so without this gate the standby page's very first
+        // measure would save a reading position, announce "Jonathan is reading
+        // Mark" to the whole room, and **feed the fire**, for a book still
+        // shut. The last of those is the worst: a fire reports a state, and the
+        // state would have been a lie.
+        //
+        // Nothing is lost by waiting. `readingChapter` already starts at your
+        // saved position, so the running head at the foot is right before this
+        // ever runs.
+        if (!astir) return
         // The chapter whose top has crossed the upper third is where you
         // are.
         val threshold = viewportHeight * 0.3f
@@ -789,11 +822,23 @@ fun ReadingScreen(
     // Opening, in two halves, because the page is raised before it is
     // entered. Where it opens is settled at once — the page has to rise
     // already showing the right chapter, not jump to it once it lands.
-    LaunchedEffect(Unit) {
+    //
+    // Keyed on `openAt` rather than `Unit`, and that is load-bearing now the
+    // page is built before anybody asks for it (A51): a standby page is
+    // composed with no target and settles on your own position, and the
+    // target for a tapped notification or a quoted verse arrives *after* it.
+    // Under `Unit` that target was never read and the page opened in the
+    // wrong place. Compared against where the list already is rather than
+    // against chapter 1, because a pre-positioned page can be asked to go
+    // back to the first chapter as well as forward.
+    LaunchedEffect(openAt) {
         val position = openAt ?: model.myPosition(reading)
-        if (position.chapter > 1) {
+        val index = itemIndexOfChapter(position.chapter)
+        val settled = listState.firstVisibleItemIndex == index &&
+            listState.firstVisibleItemScrollOffset == 0
+        if (!settled) {
             programmaticScrollUntil = Clock.System.now() + PROGRAMMATIC_SCROLL_GRACE
-            listState.scrollToItem(itemIndexOfChapter(position.chapter))
+            listState.scrollToItem(index)
         }
     }
 
@@ -812,8 +857,13 @@ fun ReadingScreen(
             // `.keyboardShortcut(.cancelAction)` does on iOS — and on the
             // devices that route Escape to the back gesture instead, the
             // predictive-back handler above catches it.
+            //
+            // `astir` guards it because the page is now here before the book
+            // is open (A51): without that, Escape pressed in the room would
+            // reach a shut book's close path, latch `closing`, and swallow the
+            // key from whatever should have had it.
             .onPreviewKeyEvent { event ->
-                if (event.key == Key.Escape && event.type == KeyEventType.KeyUp) {
+                if (astir && event.key == Key.Escape && event.type == KeyEventType.KeyUp) {
                     close()
                     true
                 } else {
@@ -875,6 +925,7 @@ fun ReadingScreen(
                                 ?.takeIf { it.chapter == n && it.bookID == reading.bookID },
                             onMarkDrawn = { justMarked = null },
                             measureInset = presenceInset,
+                            astir = astir,
                             onRemoteChapter = { remoteChapters[n] = it },
                             onLayout = { chapterLayouts[n] = it },
                             onNoteSlot = { noteSlotY[n] = it },
@@ -935,6 +986,13 @@ fun ReadingScreen(
                 }
             }
 
+            // Composed on standby as well, and `astir` passed in rather than
+            // wrapped around it. The form owns the reading measure's trailing
+            // inset, which the chapter's own width is set from — so composing
+            // it on the first millimetre of the pull would re-measure the
+            // chapter on the one frame A51 exists to clear. What it must not
+            // do while the book is shut is *say* anything, and that is the
+            // one thing `astir` holds back (A51).
             if (!room.isPaused) {
                 PresenceForm(
                     model = model,
@@ -942,6 +1000,7 @@ fun ReadingScreen(
                     onFollow = ::follow,
                     modifier = Modifier.align(Alignment.CenterEnd),
                     measure = Measure.reading,
+                    astir = astir,
                     onMeasureInset = { presenceInset = it },
                 )
             }
@@ -1116,6 +1175,12 @@ private fun ChapterSection(
     justMarked: VerseRange?,
     onMarkDrawn: () -> Unit,
     measureInset: Dp,
+    /**
+     * The page is in play rather than merely standing by measured beneath the
+     * room (A51). A licensed chapter is fetched over the network, and a page
+     * nobody has touched has no business doing that.
+     */
+    astir: Boolean,
     onRemoteChapter: (ScriptureChapter) -> Unit,
     onLayout: (ChapterLayout) -> Unit,
     onNoteSlot: (Dp) -> Unit,
@@ -1299,8 +1364,11 @@ private fun ChapterSection(
             }
         }
         // Keyed on the network as well, so a connection coming back retries
-        // without anybody having to tap anything.
-        LaunchedEffect(n, licensed, attempt, model.isOnline) {
+        // without anybody having to tap anything — and on `astir`, so the
+        // fetch starts on the first millimetre of the pull, exactly as it did
+        // when that was also the moment this page first existed.
+        LaunchedEffect(n, licensed, attempt, model.isOnline, astir) {
+            if (!astir) return@LaunchedEffect
             val address = VerseAddress(bookID = reading.bookID, chapter = n, verse = 1)
             val chapter = model.scripture.ensureRemoteChapter(context, address, licensed)
             if (chapter != null) {

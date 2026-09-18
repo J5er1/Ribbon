@@ -2927,6 +2927,101 @@ A50. **The first frame of the pull was reading a book off the disk.** Owner,
     picture — the room's cards stop being opaque over their own ground. The
     buffer stays.
 
+A51. **The page is now built before the pull, not by it.** A50 named its own
+    tell: if the first pull after a fresh launch came out clean and every pull
+    was still rough, what remained was the page's first *layout*. It was, so
+    this is that fix.
+
+    **Measured first, and the split is the whole story.** Setting a
+    thirty-verse chapter, on a desktop JVM under Robolectric:
+
+    - building the chapter's `AnnotatedString` — `buildChapterPage`:
+      **26.7 ms** the first time and **0.45–1.04 ms** after, so its first hit
+      is JIT and it is otherwise free;
+    - Compose measuring that string: **30–67 ms, every single time**;
+    - and the first chapter in a process: **about 1.1 s** all in on this
+      machine, which is the typeface load and the JIT and Skia's caches, all
+      paid once.
+
+    So the cost was never the reading and it is not the string either — it is
+    setting a whole chapter of Literata. That cannot be made cheap here: the
+    chapter is deliberately one `AnnotatedString` in one `BasicText`, because
+    the washes, the note's carve and verse hit-testing all read one
+    `TextLayoutResult` (see the head of `ChapterText.kt`), so it cannot be
+    measured a visible line at a time. And a text measure cannot leave the
+    main thread. Caching the built string off-thread — the obvious echo of
+    A50 — would buy about a millisecond of the sixty.
+
+    So it is done **early** instead of quickly. `beginOpening` fires on the
+    first millimetre of the pull and used to be the first moment any of
+    Scripture existed; its own docstring already said *"compose the book under
+    the room so a pull has something to raise"*, which was the right idea one
+    millimetre too late. The room now arrives, and once it has — delayed by
+    `ARRIVE_MS` so the cost lands in the quiet *after* the arrival rather than
+    during it, since moving a hitch from one animation onto another is not a
+    fix — the book the fire would raise is built underneath it, wholly off the
+    bottom of the screen at `progress == 0`. By the time a thumb touches the
+    fire the chapter is measured and the pull is a translation of a layer that
+    already exists. It is the same reading, so it is the same `key`: the page
+    that stood by is the page that rises, and closing the book puts it back on
+    standby rather than throwing it away.
+
+    **Which made "composed" and "being opened" two different things for the
+    first time, and five things had been relying on them being one.** Four were
+    found by reading the screen and reviewing the diff; one by a test that
+    failed:
+
+    - **`trackReading` is driven by layout**, and a standby page lays out. Its
+      first measure would have saved a reading position, announced *"Jonathan
+      is reading Mark"* to the whole room, and **fed the fire** — for a book
+      still shut. The last is the worst: a fire reports a state (Law 2) and the
+      state would have been a lie. This is the one the test caught, which is
+      the argument for having written it. Gated on the page being *astir* — a
+      finger on it, or the pull committed. Nothing is lost by waiting, because
+      `readingChapter` already starts at the saved position, so the running
+      head is right before it ever runs.
+    - **Withdrawing from the book hung off disposal.** `onDispose { withdraw() }`
+      was how the room stopped hearing you were in Mark, and the page is no
+      longer disposed when the book closes. Moved to the un-commit, where it
+      belongs; `withdraw` is idempotent, so a standby page's own pass through
+      costs a no-op.
+    - **The presence form spends a one-time announcement.** *"Ruth is with
+      you"* is said once, four seconds after somebody arrives behind you, and
+      then never again for that person. A standby page left running would have
+      spent it while the book was shut. The **first attempt at this was wrong
+      and is worth recording**: the form was wrapped in the gate, which would
+      have composed it on the first millimetre of the pull — and the form owns
+      the reading measure's trailing inset, which `readingMeasure` turns into
+      `padding(end = inset)` on the chapter itself. That is a width change, so
+      it would have re-measured the chapter on the one frame this entry exists
+      to clear, undoing the fix by way of fixing something else. The gate is
+      passed *into* the form instead, and holds back only the saying of it.
+    - **A licensed chapter is fetched over the network**, and a page nobody has
+      touched has no business doing that. Gated on *astir*, which is the first
+      millimetre of the pull — exactly the moment it fetched from before, when
+      that was also the moment the page first existed. Note that a licensed
+      chapter therefore gets no pre-measure: there is nothing to set until the
+      fetch lands. Bundled translations — which is all of them today — get it.
+    - **Escape closed a book that was not open.** The page carries
+      `onPreviewKeyEvent` for the hardware `Esc` that iOS gets from
+      `.keyboardShortcut(.cancelAction)`. With the page present before the book
+      is, Escape pressed in the room reached a shut book's close path, latched
+      `closing` — which is only released by a *commit*, so it stayed latched —
+      and swallowed the key from whatever should have had it. Gated on *astir*.
+
+    **And the opening scroll had to be rekeyed.** It was `LaunchedEffect(Unit)`
+    — sound when the page was born at the instant it was asked for. A standby
+    page is composed with no target and settles on your own position, and the
+    target for a tapped notification or a quoted verse arrives *after* it, so
+    under `Unit` that target was never read and the page opened in the wrong
+    place. Keyed on `openAt` now, and comparing against where the list already
+    is rather than against chapter 1, because a pre-positioned page can be
+    asked to go back to the first chapter as well as forward.
+
+    **What it costs**: one screen's composition and one chapter's text layout
+    held for as long as the reader is in a room. That is the trade, and it is
+    the right way round — the memory is idle, the milliseconds were not.
+
 ## Licensed translations (decided: API.Bible)
 
 Open question §16.8 is now part-decided: **NKJV plus two undecided
