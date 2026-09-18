@@ -177,6 +177,13 @@ private val THINKING_HOLD_MS = RibbonMotion.INK_FILL_MS.toLong()
  *   dialog (§4.2).
  * @param measure the reading measure the caller is setting its text at. The
  *   panel is capped to the space outside it.
+ * @param astir whether the page this is on is in play, or is merely standing
+ *   by measured beneath the room (A51). *"Ruth is with you"* is said once and
+ *   then never again for that person, so on a page nobody has touched the one
+ *   saying of it must not be spent. The form itself stays composed either way:
+ *   it holds the reading measure's trailing inset, and composing it on the
+ *   first millimetre of the pull would put work back on the very frame A51
+ *   exists to clear.
  * @param onMeasureInset how much room the panel needs on the trailing side
  *   beyond the space outside the measure — 0 while the form is closed, and
  *   0 on a screen wide enough to hold the panel beside the text. The
@@ -193,6 +200,7 @@ fun PresenceForm(
     onFollow: (PresentPerson) -> Unit,
     modifier: Modifier = Modifier,
     measure: Dp = Measure.reading,
+    astir: Boolean = true,
     onMeasureInset: (Dp) -> Unit = {},
 ) {
     val people = model.presentPeople
@@ -304,14 +312,14 @@ fun PresenceForm(
                 // "Ruth is with you" is said once, four seconds after they
                 // arrive behind you, and then rests. It is never said again
                 // for the same person, and it is never a number.
-                if (follower != null) {
+                if (follower != null && astir) {
                     LaunchedEffect(follower.id) {
                         delay(4.seconds)
                         if (follower.id !in announcedFollowers) announcedFollowers.add(follower.id)
                     }
                 }
                 val announcing = follower?.takeIf {
-                    !expanded && it.id !in announcedFollowers
+                    astir && !expanded && it.id !in announcedFollowers
                 }
                 AnimatedVisibility(
                     visible = announcing != null,

@@ -48,6 +48,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.awaitCancellation
@@ -413,6 +414,36 @@ private fun RoomStack(model: AppModel, room: Room) {
     val settle: FiniteAnimationSpec<Float> = RibbonMotion.settle(reduceMotion)
     val slide: FiniteAnimationSpec<IntOffset> = RibbonMotion.settle(reduceMotion)
 
+    /**
+     * Whether the book may be built beneath the room yet (A51).
+     *
+     * `beginOpening` used to be the first moment any of Scripture existed,
+     * and it fires on the first millimetre of the pull — so the frame the
+     * finger started moving was the frame that laid out a whole chapter of
+     * Literata. Measured: building the `AnnotatedString` is about a
+     * millisecond, but Compose measuring the chapter is **30–67 ms** every
+     * time, and the very first one in a process pays the typeface load and
+     * the JIT on top of that. It is one `BasicText` for the whole chapter by
+     * design — the washes, the note's carve and verse hit-testing all read
+     * one `TextLayoutResult` — so it cannot be measured a visible line at a
+     * time, and a text measure cannot leave the main thread.
+     *
+     * So it is done early instead of quickly: the room arrives, and once it
+     * has, the book is quietly built underneath it, fully off the bottom of
+     * the screen at `progress == 0`. By the time a thumb touches the fire the
+     * chapter is already measured and the pull is a translation of a layer
+     * that exists.
+     *
+     * Delayed by [RibbonMotion.ARRIVE_MS] so the cost lands in the quiet
+     * *after* the room has arrived rather than during its arrival — moving a
+     * hitch from one animation onto another would not be a fix.
+     */
+    var mayBuildTheBook by remember(room.id) { mutableStateOf(false) }
+    LaunchedEffect(room.id) {
+        delay(RibbonMotion.ARRIVE_MS.toLong())
+        mayBuildTheBook = true
+    }
+
     /** Compose the book under the room so a pull has something to raise. */
     fun beginOpening(reading: Reading) {
         openTarget = null
@@ -712,17 +743,22 @@ private fun RoomStack(model: AppModel, room: Room) {
             // taken in reverse order of registration, so the reading's own
             // predictive back — which peels the book off the room — wins over
             // the NavHost's for as long as the book is open.
-            openReading?.let { book ->
+            // Either the book that is open, or — before anybody has touched
+            // anything — the one the fire would raise, standing by measured
+            // (A51). They are the same reading, so `key` is the same key and
+            // the page that was built on standby is the page that rises: it
+            // is not rebuilt, and closing the book does not throw it away.
+            (openReading ?: model.openReading(room).takeIf { mayBuildTheBook })?.let { book ->
                 key(book.id) {
                     Box(
                         Modifier
                             .fillMaxSize()
                             // The offset is read inside the layer block, so a
                             // finger dragging the page never recomposes a
-                            // word of Scripture. At rest it costs nothing at
-                            // all, because at rest there is no page: the
-                            // layer only exists once `beginOpening` or
-                            // `openBook` has put a reading here.
+                            // word of Scripture. At rest the page is here and
+                            // measured but wholly off the bottom of the
+                            // screen, which is what makes the first frame of
+                            // the pull cost nothing (A51).
                             .graphicsLayer {
                                 translationY = (1f - sheet.progress) * size.height
                             },
