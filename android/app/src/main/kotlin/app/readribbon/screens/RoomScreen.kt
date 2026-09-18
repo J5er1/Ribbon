@@ -102,7 +102,9 @@ import app.readribbon.design.room
 import app.readribbon.fire.CampfireGlyph
 import app.readribbon.fire.CampfireView
 import app.readribbon.services.PresentPerson
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Clock
@@ -240,6 +242,39 @@ fun RoomScreen(
             onChooserHandled()
             showChooser = true
         }
+    }
+
+    // The book's words, read off the disk *before* anybody reaches for the
+    // fire (A50).
+    //
+    // `ReadingScreen` gets them from `remember { model.scripture.book(...) }`,
+    // and on a cold cache that call opens a JSON file out of the APK's assets
+    // and parses the whole book — synchronously, inside a composition. That
+    // composition happens at the *first millimetre of the pull*, because
+    // taking hold of the fire is what puts the page in the tree. So the one
+    // frame the gesture has to nail is the frame that stalls.
+    //
+    // Measured on a desktop JVM, which is the optimistic end of it: Mark is
+    // about 100 KB and Psalms 400 KB, and the first parse in a process pays
+    // the serializer's warm-up on top — 67 ms and 81 ms respectively, against
+    // 0.02 ms once the book is in the cache. A phone is several times slower
+    // than that. Either way it is frames, at the moment somebody is watching
+    // most closely, and the owner's report after the last pass — better, "but
+    // not perfect" — is the shape of exactly this: the drag itself is smooth
+    // and its first frame is not.
+    //
+    // The room has known which book is open since it drew. `ScriptureStore`'s
+    // cache is a `ConcurrentHashMap` and a parsed book is immutable, so
+    // warming it from the IO dispatcher is safe and the later call on the main
+    // thread becomes a map lookup. Keyed on the book and the translation, so a
+    // room switch or a version change warms the new one; cancelled with the
+    // screen, because a book nobody is looking at any more is not worth the
+    // read.
+    val openBookID = reading?.bookID
+    val roomTranslation = model.words(room, reading)
+    LaunchedEffect(openBookID, roomTranslation) {
+        val bookID = openBookID ?: return@LaunchedEffect
+        withContext(Dispatchers.IO) { model.scripture.book(bookID, roomTranslation) }
     }
 
     // One branch for reduce motion, taken inside the token (§11), for the two

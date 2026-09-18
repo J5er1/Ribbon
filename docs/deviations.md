@@ -2876,6 +2876,57 @@ A49. **The passkey, once the switch was on.** A48 found why passkeys had never
     that section into tiles and dropped the `liveRegion` it used to carry,
     which was a regression this pass introduced and this pass undoes.
 
+A50. **The first frame of the pull was reading a book off the disk.** Owner,
+    after A43: the room-to-Scripture transition is better *"but not perfect"*.
+    A43 fixed the drag — the one-frame input lag and the fire's per-frame
+    allocations — and left the *first* frame of it untouched, because nothing
+    had looked at what happens there.
+
+    What happens there is that the page is composed. Taking hold of the fire
+    calls `beginOpening`, which puts a `Reading` into `openReading`, which
+    composes `ReadingScreen` for the first time — and near the top of it:
+
+        val bookText = remember(reading.bookID, translation) {
+            model.scripture.book(reading.bookID, translation)
+        }
+
+    `ScriptureStore.book` on a cold cache opens a JSON file out of the APK's
+    assets and parses the whole book. Synchronously. Inside a composition. On
+    the frame the finger starts moving.
+
+    **Measured rather than assumed**, on a desktop JVM, which is the
+    optimistic end of it: Mark is about 100 KB and Psalms 400 KB, and the
+    first parse in a process pays the serializer's warm-up on top — 67 ms and
+    81 ms against 0.02 ms once the book is cached. A phone's runtime is
+    several times slower. Either way it is frames, at the moment somebody is
+    watching most closely, and it is the shape of the complaint exactly: the
+    drag is smooth and its first frame is not.
+
+    The room has known which book is open since it drew, so it warms the cache
+    from the IO dispatcher while nobody is touching anything. The cache is a
+    `ConcurrentHashMap` and a parsed book is immutable, so the later call on
+    the main thread becomes a map lookup. It is keyed on the book and the
+    translation, so a room switch or a version change warms the new one, and
+    cancelled with the screen.
+
+    **The tell, if it is still not perfect**: this only bites on a *cold*
+    cache. If the first pull after a fresh launch is now clean and later ones
+    always were, this was it. If every pull is still rough, the remaining cost
+    is the page's first *layout* — measuring a chapter of type — and that is a
+    different fix.
+
+    **And the cheap fix for the peel is not free**, which is worth recording
+    so nobody tries it twice. The room recedes behind the rising book under
+    `peeled`, which sets `alpha` on a full-screen layer — and alpha below 1 on
+    a node with overlapping content makes HWUI allocate a screen-sized
+    offscreen buffer for every frame of the gesture. `CompositingStrategy`
+    `ModulateAlpha` avoids the buffer by applying alpha per draw operation
+    instead, which is the textbook answer. Rendered both ways at the halfway
+    point and compared: **84% of pixels differ, median channel delta 29 out of
+    255, maximum 185.** That is not a compositing detail, it is a different
+    picture — the room's cards stop being opaque over their own ground. The
+    buffer stays.
+
 ## Licensed translations (decided: API.Bible)
 
 Open question §16.8 is now part-decided: **NKJV plus two undecided
