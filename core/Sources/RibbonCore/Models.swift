@@ -44,12 +44,30 @@ public struct Room: Codable, Hashable, Identifiable, Sendable {
     /// Subscription lapsed → the room is paused: presence off, new notes
     /// off. Reading and everything already left stays, forever (§2.5).
     public var isPaused: Bool
+    /// The version this room reads. One per room, not one per person
+    /// (ledger A42): a highlight is a mark on a shared page, and two people
+    /// reading two versions have two pages. A person still carries a
+    /// `translation` for the room they start next.
+    public var translation: TranslationID
 
-    public init(id: UUID = UUID(), name: String? = nil, createdAt: Date, isPaused: Bool = false) {
+    public init(id: UUID = UUID(), name: String? = nil, createdAt: Date, isPaused: Bool = false, translation: TranslationID = .bsb) {
         self.id = id
         self.name = name
         self.createdAt = createdAt
         self.isPaused = isPaused
+        self.translation = translation
+    }
+
+    enum CodingKeys: String, CodingKey { case id, name, createdAt, isPaused, translation }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        name = try c.decodeIfPresent(String.self, forKey: .name)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        isPaused = try c.decodeIfPresent(Bool.self, forKey: .isPaused) ?? false
+        // A room saved before rooms had a version reads the default.
+        translation = try c.decodeIfPresent(TranslationID.self, forKey: .translation) ?? .bsb
     }
 }
 
@@ -84,14 +102,32 @@ public struct Reading: Codable, Hashable, Identifiable, Sendable {
     /// The campfire. `handiwork` is the general mechanic (§2.8) — the code
     /// says handiwork everywhere and fire only in the campfire's own module.
     public var handiwork: Handiwork
+    /// The version this book was read in. An open reading follows its room;
+    /// a finished one keeps the version it was finished in, so an ember on
+    /// the shelf still opens to the words that were read (A42).
+    public var translation: TranslationID
 
-    public init(id: UUID = UUID(), roomID: UUID, bookID: String, startedAt: Date, finishedAt: Date? = nil, handiwork: Handiwork) {
+    public init(id: UUID = UUID(), roomID: UUID, bookID: String, startedAt: Date, finishedAt: Date? = nil, handiwork: Handiwork, translation: TranslationID = .bsb) {
         self.id = id
         self.roomID = roomID
         self.bookID = bookID
         self.startedAt = startedAt
         self.finishedAt = finishedAt
         self.handiwork = handiwork
+        self.translation = translation
+    }
+
+    enum CodingKeys: String, CodingKey { case id, roomID, bookID, startedAt, finishedAt, handiwork, translation }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        roomID = try c.decode(UUID.self, forKey: .roomID)
+        bookID = try c.decode(String.self, forKey: .bookID)
+        startedAt = try c.decode(Date.self, forKey: .startedAt)
+        finishedAt = try c.decodeIfPresent(Date.self, forKey: .finishedAt)
+        handiwork = try c.decode(Handiwork.self, forKey: .handiwork)
+        translation = try c.decodeIfPresent(TranslationID.self, forKey: .translation) ?? .bsb
     }
 
     public var isFinished: Bool { finishedAt != nil }
@@ -374,5 +410,35 @@ public struct ReadingPosition: Codable, Hashable, Sendable {
         self.chapter = chapter
         self.verse = verse
         self.updatedAt = updatedAt
+    }
+}
+
+/// The ribbon: where the room left off, held out — never a leaderboard
+/// (ledger A30).
+///
+/// One per reading. It is placed by whoever last closed the book having
+/// moved, and it is *offered, never applied*: moving the ribbon moves nobody.
+/// It appears as one quiet line on the room screen and a mark in the chapter
+/// list, both of which are places you have to look. A per-person ribbon would
+/// be a leaderboard with the numbers taken out, so there is one object and
+/// nothing to compare; the app never says anyone is behind, because it never
+/// puts the ribbon and a reader's own place in a sentence together.
+///
+/// `personID` is who left it, which the room does see — "Ruth left the
+/// ribbon at Mark 4" is an act of care performed in public, the same shape as
+/// banking the fire (§4.7).
+public struct Ribbon: Codable, Hashable, Sendable {
+    public var readingID: UUID
+    public var personID: UUID
+    public var chapter: Int
+    public var verse: Int
+    public var placedAt: Date
+
+    public init(readingID: UUID, personID: UUID, chapter: Int, verse: Int, placedAt: Date) {
+        self.readingID = readingID
+        self.personID = personID
+        self.chapter = chapter
+        self.verse = verse
+        self.placedAt = placedAt
     }
 }

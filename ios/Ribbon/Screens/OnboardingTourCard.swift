@@ -1,25 +1,27 @@
 import SwiftUI
 import RibbonCore
 
-/// Visual card preview for each slide in Ribbon's progressive walkthrough tour.
+// One card of the tour (S17): a picture of the thing, then the true small
+// thing about it. The pictures are the product's own objects — the Wave,
+// a page with someone on it, a note in a margin, the fire in its well —
+// drawn the way the product draws them. No glow behind the mark, no
+// gradients, no system glyphs (§13).
+
 struct OnboardingTourCard: View {
     let index: Int
 
     var body: some View {
         VStack(spacing: 28) {
             Spacer()
-
-            // Visual feature showcase
             featureVisual
                 .frame(height: 220)
-
-            // Textual content
+                .accessibilityHidden(true)
             VStack(spacing: 14) {
                 Text(title)
                     .font(RibbonType.display(24))
                     .foregroundStyle(Palette.text)
                     .multilineTextAlignment(.center)
-
+                    .accessibilityAddTraits(.isHeader)
                 Text(bodyText)
                     .font(RibbonType.ui(16))
                     .foregroundStyle(Palette.muted)
@@ -27,7 +29,6 @@ struct OnboardingTourCard: View {
                     .lineSpacing(4)
                     .padding(.horizontal, 16)
             }
-
             Spacer()
         }
     }
@@ -55,39 +56,23 @@ struct OnboardingTourCard: View {
     @ViewBuilder
     private var featureVisual: some View {
         switch index {
-        case 0:
-            visionVisual
-        case 1:
-            presenceVisual
-        case 2:
-            notesVisual
-        case 3:
-            fireVisual
-        default:
-            EmptyView()
+        case 0: visionVisual
+        case 1: presenceVisual
+        case 2: notesVisual
+        case 3: fireVisual
+        default: EmptyView()
         }
     }
 
-    // MARK: - Slide 0: The Vision
+    // The mark, on the bare ground. Nothing behind it — a glow behind the
+    // Wave is the first thing on the never-ship list.
     private var visionVisual: some View {
-        ZStack {
-            Circle()
-                .fill(
-                    RadialGradient(
-                        colors: [Palette.chartreuse.opacity(0.12), .clear],
-                        center: .center,
-                        startRadius: 20,
-                        endRadius: 100
-                    )
-                )
-                .frame(width: 180, height: 180)
-
-            WaveMark()
-                .frame(width: 90, height: 90)
-        }
+        WaveMark()
+            .frame(width: 90, height: 90)
     }
 
-    // MARK: - Slide 1: Presence Preview
+    // A page, and someone on it: the presence lozenge as the reading
+    // surface draws it.
     private var presenceVisual: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("In the beginning was the Word, and the Word was with God, and the Word was God.")
@@ -95,121 +80,71 @@ struct OnboardingTourCard: View {
                 .foregroundStyle(Palette.text.opacity(0.85))
                 .lineSpacing(6)
                 .padding(.horizontal, 20)
-
-            HStack(spacing: 8) {
+            HStack {
                 Spacer()
                 HStack(spacing: 8) {
-                    Circle()
-                        .fill(Ink.teal.color)
-                        .frame(width: 18, height: 18)
-                        .overlay(
-                            Text("R")
-                                .font(RibbonType.uiMedium(10))
-                                .foregroundStyle(Palette.ground)
-                        )
+                    PortraitView(person: Person(name: "Ruth"), ink: .teal, size: 18)
                     Text(Copy.walkthroughPresenceSample)
                         .font(RibbonType.ui(13))
                         .foregroundStyle(Palette.text)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 7)
-                .background(Palette.surface, in: Capsule())
-                .overlay(
-                    Capsule().strokeBorder(Ink.teal.color.opacity(0.4), lineWidth: 1)
-                )
-                .shadow(color: Ink.teal.color.opacity(0.15), radius: 8, x: 0, y: 3)
+                .paper(.init(RibbonShape.row))
             }
             .padding(.trailing, 16)
         }
         .padding(.vertical, 16)
-        .background(Palette.surface.opacity(0.4), in: RoundedRectangle(cornerRadius: 16))
+        .well(.card)
         .padding(.horizontal, 20)
     }
 
-    // MARK: - Slide 2: Notes Left Behind Preview
+    // A verse with a mark in its margin, and the note open under it: the
+    // waveform in the author's ink, no duration anywhere.
     private var notesVisual: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 10) {
-                Circle()
-                    .fill(Ink.ochre.color)
-                    .frame(width: 7, height: 7)
-                    .padding(.top, 7)
-
+                NoteMark(kind: .voice, ink: .ochre, found: false, mine: false, pending: false)
+                    .padding(.top, 8)
                 Text("The Light shines in the darkness, and the darkness has not overcome it.")
                     .font(RibbonType.scripture(17))
                     .foregroundStyle(Palette.text.opacity(0.85))
                     .lineSpacing(5)
             }
             .padding(.horizontal, 16)
-
-            // Pinned voice note preview
-            HStack(spacing: 10) {
-                Image(systemName: "waveform")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(Ink.ochre.color)
-
-                Text(Copy.walkthroughNoteSample)
-                    .font(RibbonType.ui(13))
-                    .foregroundStyle(Palette.text)
-
-                Spacer()
-
-                Image(systemName: "play.fill")
-                    .font(.system(size: 10))
-                    .foregroundStyle(Palette.ground)
-                    .padding(6)
-                    .background(Ink.ochre.color, in: Circle())
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    PortraitView(person: Person(name: "Ruth"), ink: .ochre, size: 18)
+                    SmallCaps(Copy.walkthroughNoteSample, size: 12)
+                }
+                WaveformView(peaks: Self.samplePeaks, ink: .ochre, progress: 0.35, onScrub: { _ in }, onTap: {})
+                    .allowsHitTesting(false)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
-            .background(Palette.raised, in: RoundedRectangle(cornerRadius: 12))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .strokeBorder(Ink.ochre.color.opacity(0.3), lineWidth: 1)
-            )
+            .paper(.row)
             .padding(.horizontal, 16)
         }
         .padding(.vertical, 16)
-        .background(Palette.surface.opacity(0.4), in: RoundedRectangle(cornerRadius: 16))
+        .well(.card)
         .padding(.horizontal, 20)
     }
 
-    // MARK: - Slide 3: The Shared Fire Preview
+    // The fire itself, in its well, as the hearth draws it.
     private var fireVisual: some View {
-        ZStack {
-            // Warm ambient bloom
-            Circle()
-                .fill(
-                    RadialGradient(
-                        colors: [
-                            Palette.flameCore.opacity(0.35),
-                            Palette.flameDeep.opacity(0.15),
-                            .clear
-                        ],
-                        center: .center,
-                        startRadius: 10,
-                        endRadius: 90
-                    )
-                )
-                .frame(width: 180, height: 180)
-
-            // Warm ember visual
-            VStack(spacing: 8) {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [Palette.flameBright, Palette.flameCore, Palette.flameDeep],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 44, height: 44)
-                    .shadow(color: Palette.flameCore.opacity(0.6), radius: 14)
-
-                Capsule()
-                    .fill(Palette.coalDim.opacity(0.6))
-                    .frame(width: 54, height: 6)
-            }
+        VStack(spacing: 10) {
+            CampfireView(state: .burning, scale: .medium, coalDepth: 0.4)
+            HairlineRule()
+                .scaleEffect(x: 0.62, y: 1)
+            SmallCaps(FireState.burning.displayName, size: 13)
         }
+        .padding(.vertical, 18)
+        .frame(maxWidth: .infinity)
+        .well(.card)
+        .padding(.horizontal, 40)
+    }
+
+    private static let samplePeaks: [Float] = (0..<40).map { i in
+        0.25 + 0.55 * Float(abs(sin(Double(i) * 0.7) * cos(Double(i) * 0.23)))
     }
 }

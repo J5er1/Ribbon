@@ -163,7 +163,7 @@ private struct EmberNoteRow: View {
                 // Sharing: plain text only, and only your own words or the
                 // verse itself — never someone else's note (S11).
                 if note.authorID == model.me?.id, let body = note.body {
-                    ShareLink(item: "\(note.verse.formatted) — \(body)") {
+                    ShareLink(item: Copy.sharedNote(note.verse.formatted, body)) {
                         SmallCaps(Copy.share, size: 11)
                     }
                     .padding(.leading, 16)
@@ -183,8 +183,8 @@ private struct QuotedHighlight: View {
             onOpenVerse(highlight.range.start)
         } label: {
             VStack(alignment: .leading, spacing: 4) {
-                if let me = model.me,
-                   let text = model.scripture.verseText(highlight.range.start, translation: me.translation) {
+                if let reading = model.state.readings.first(where: { $0.id == highlight.readingID }),
+                   let text = model.scripture.verseText(highlight.range.start, translation: model.words(room: model.room(of: reading), reading: reading)) {
                     Text(text)
                         .font(RibbonType.scripture(15))
                         .foregroundStyle(Palette.text)

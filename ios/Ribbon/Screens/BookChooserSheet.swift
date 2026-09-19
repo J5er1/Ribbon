@@ -15,7 +15,7 @@ struct BookChooserSheet: View {
 
     @State private var query = ""
 
-    private var translation: TranslationID { model.me?.translation ?? .bsb }
+    private var translation: TranslationID { model.words(room: room, reading: model.openReading(in: room)) }
     private var onShelf: Set<String> {
         Set(model.shelf(of: room).map(\.bookID))
     }
@@ -45,13 +45,7 @@ struct BookChooserSheet: View {
     }
 
     private var searchField: some View {
-        TextField(Copy.search, text: $query)
-            .font(RibbonType.ui(16))
-            .foregroundStyle(Palette.text)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .background(Palette.surface, in: RoundedRectangle(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Palette.rule, lineWidth: 1))
+        CentredTextField(text: $query, prompt: Copy.search, submitLabel: .search, centred: false)
             .autocorrectionDisabled()
     }
 
@@ -80,12 +74,13 @@ struct BookChooserSheet: View {
                     .font(RibbonType.ui(15))
                     .foregroundStyle(Palette.text)
             }
-            .frame(width: 104, height: 92)
-            .background(Palette.surface, in: RoundedRectangle(cornerRadius: 14))
-            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Palette.rule, lineWidth: 1))
+            .frame(width: 108, height: 96)
+            .contentShape(Rectangle())
+            .tile()
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(book.name), a \(book.scale.rawValue) fire")
+        .buttonStyle(.pressable)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Copy.bookIsAFire(book.name, scale: book.scale.rawValue))
     }
 
     private var allBooks: some View {
@@ -123,9 +118,7 @@ struct BookChooserSheet: View {
             .padding(.vertical, 7)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(
-            "\(book.name), a \(book.scale.rawValue) fire" +
-            (onShelf.contains(book.id) ? ", on your shelf" : ""))
+        .accessibilityLabel(Copy.bookIsAFire(book.name, scale: book.scale.rawValue, onShelf: onShelf.contains(book.id)))
     }
 
     @ViewBuilder

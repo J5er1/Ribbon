@@ -21,7 +21,6 @@ struct SignInInline: View {
 
     enum Phase: Equatable { case email, code }
     @State private var phase: Phase = .email
-    @State private var showEmailForm = false
     @State private var email = ""
     @State private var code = ""
     @State private var errorLine: String?
@@ -31,52 +30,37 @@ struct SignInInline: View {
     var body: some View {
         VStack(spacing: 16) {
             if phase == .email {
+                // What the button does, not whose service it is (A46): a
+                // browser sign-in where the build has one, a passkey where
+                // the platform and the project both do, and the emailed
+                // code underneath either — the thread that always works.
                 if model.auth0Available {
-                    WayInButton(title: Copy.signInWithAuth0) { signInWithAuth0() }
+                    WayInButton(title: Copy.signInInABrowser) { signInWithAuth0() }
                         .padding(.horizontal, 30)
-
-                    if !showEmailForm {
-                        QuietControl(title: "Or use an emailed code") {
-                            withAnimation(RibbonMotion.settle) { showEmailForm = true }
-                        }
-                    }
                 }
-                if model.passkeysAvailable && !model.auth0Available {
+                if model.passkeysAvailable {
                     QuietControl(title: Copy.useAPasskey) { signInWithPasskey() }
                 }
             }
             switch phase {
             case .email:
-                if !model.auth0Available || showEmailForm {
-                    TextField("", text: $email, prompt: Text(Copy.yourEmail).foregroundStyle(Palette.muted))
-                        .font(RibbonType.ui(17))
-                        .foregroundStyle(Palette.text)
-                        .multilineTextAlignment(.center)
-                        .keyboardType(.emailAddress)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .focused($focused)
-                        .submitLabel(.send)
-                        .onSubmit(sendCode)
-                    WayInButton(title: Copy.sendTheCode) { sendCode() }
-                        .padding(.horizontal, 40)
-                        .disabled(!email.contains("@"))
-                        .opacity(email.contains("@") ? 1 : 0.3)
-                }
+                CentredTextField(
+                    text: $email, prompt: Copy.yourEmail, submitLabel: .send,
+                    keyboard: .emailAddress, contentType: .emailAddress, onSubmit: sendCode)
+                .focused($focused)
+                WayInButton(title: Copy.sendTheCode) { sendCode() }
+                    .padding(.horizontal, 40)
+                    .disabled(!email.contains("@"))
+                    .opacity(email.contains("@") ? 1 : 0.3)
             case .code:
                 Text(Copy.codeOnItsWay)
                     .font(RibbonType.ui(15))
                     .foregroundStyle(Palette.muted)
                     .multilineTextAlignment(.center)
-                TextField("", text: $code, prompt: Text(Copy.theCode).foregroundStyle(Palette.muted))
-                    .font(RibbonType.ui(20))
-                    .foregroundStyle(Palette.text)
-                    .multilineTextAlignment(.center)
-                    .keyboardType(.numberPad)
-                    .textContentType(.oneTimeCode)
-                    .focused($focused)
-                    .submitLabel(.done)
-                    .onSubmit(verify)
+                CentredTextField(
+                    text: $code, prompt: Copy.theCode, submitLabel: .done,
+                    keyboard: .numberPad, contentType: .oneTimeCode, onSubmit: verify)
+                .focused($focused)
                 WayInButton(title: Copy.signIn) { verify() }
                     .padding(.horizontal, 40)
                     .disabled(code.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -160,8 +144,14 @@ struct SignInInline: View {
                 try await model.verifySignInCode(
                     email: email.trimmingCharacters(in: .whitespaces), code: entered)
                 onSignedIn()
-            } catch {
+            } catch SupabaseError.http(let status, _) where (400..<500).contains(status) {
+                // The server looked at the code and said no.
                 errorLine = Copy.signInCodeWrong
+            } catch {
+                // Anything else is the network, and "that code didn't work"
+                // would send them typing it again into the same silence
+                // (A44).
+                errorLine = Copy.serverUnreachable
             }
         }
     }

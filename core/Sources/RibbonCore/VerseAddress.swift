@@ -46,12 +46,71 @@ public struct VerseRange: Codable, Hashable, Sendable {
     public var chapter: Int
     public var startVerse: Int
     public var endVerse: Int
+    /// Offset into `startVerse`'s own text; nil starts at its first letter.
+    /// A mark on a phrase rather than a verse (ledger A41g). The offsets are
+    /// only honoured by a reader on `charTranslation`; anyone else sees the
+    /// whole verses, which is what the address alone promises.
+    public var startChar: Int?
+    /// Offset into `endVerse`'s own text; nil runs to its last.
+    public var endChar: Int?
+    /// The translation `startChar` and `endChar` were measured in.
+    public var charTranslation: TranslationID?
 
-    public init(bookID: String, chapter: Int, startVerse: Int, endVerse: Int) {
+    public init(
+        bookID: String, chapter: Int, startVerse: Int, endVerse: Int,
+        startChar: Int? = nil, endChar: Int? = nil, charTranslation: TranslationID? = nil
+    ) {
         self.bookID = bookID
         self.chapter = chapter
-        self.startVerse = min(startVerse, endVerse)
-        self.endVerse = max(startVerse, endVerse)
+        // The two ends are normalised, so a drag made upwards is stored
+        // exactly as one made downwards. The character offsets belong to
+        // their ends and turn over with them: a range dragged from the middle
+        // of verse five back to verse three keeps "the middle of five" as
+        // where it *stops*.
+        if startVerse > endVerse {
+            self.startVerse = endVerse
+            self.endVerse = startVerse
+            self.startChar = endChar
+            self.endChar = startChar
+        } else if startVerse == endVerse, let a = startChar, let b = endChar {
+            self.startVerse = startVerse
+            self.endVerse = endVerse
+            self.startChar = min(a, b)
+            self.endChar = max(a, b)
+        } else {
+            self.startVerse = startVerse
+            self.endVerse = endVerse
+            self.startChar = startChar
+            self.endChar = endChar
+        }
+        self.charTranslation = charTranslation
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case bookID, chapter, startVerse, endVerse, startChar, endChar, charTranslation
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            bookID: try c.decode(String.self, forKey: .bookID),
+            chapter: try c.decode(Int.self, forKey: .chapter),
+            startVerse: try c.decode(Int.self, forKey: .startVerse),
+            endVerse: try c.decode(Int.self, forKey: .endVerse),
+            startChar: try c.decodeIfPresent(Int.self, forKey: .startChar),
+            endChar: try c.decodeIfPresent(Int.self, forKey: .endChar),
+            charTranslation: try c.decodeIfPresent(TranslationID.self, forKey: .charTranslation))
+    }
+
+    /// Whether this is a plain run of whole verses — the common case.
+    public var isWholeVerses: Bool { startChar == nil && endChar == nil }
+
+    /// The offsets, if they can be read by someone on `translation`. A phrase
+    /// measured in one version means nothing in another, so anyone else gets
+    /// the whole verses.
+    public func chars(in translation: TranslationID) -> (start: Int?, end: Int?) {
+        guard let measured = charTranslation, measured == translation else { return (nil, nil) }
+        return (startChar, endChar)
     }
 
     public init(_ address: VerseAddress) {

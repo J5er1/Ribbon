@@ -128,6 +128,6 @@ struct FireBecomesEmber: View {
             settling = 2
         }
         .accessibilityElement()
-        .accessibilityLabel("The fire settles into an ember.")
+        .accessibilityLabel(Copy.theFireSettlesIntoAnEmber)
     }
 }

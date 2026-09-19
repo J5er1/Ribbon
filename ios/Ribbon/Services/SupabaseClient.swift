@@ -365,6 +365,32 @@ actor SupabaseClient {
         _ = try await run(request)
     }
 
+    /// A voice note taken back (ledger A40a). The row's delete cascades
+    /// nothing in storage, so the recording is asked for by name — its
+    /// policy lets the author delete their own object and nobody else's.
+    func deleteAudio(readingID: UUID, noteID: UUID) async throws {
+        let path = "storage/v1/object/voice-notes/\(readingID.uuidString.lowercased())/\(noteID.uuidString.lowercased()).m4a"
+        var request = URLRequest(url: base.appending(path: path))
+        request.httpMethod = "DELETE"
+        try apply(headers: &request)
+        _ = try await run(request)
+    }
+
+    /// What the project's auth offers (ledger A47). Read once, so the
+    /// passkey control appears when the switch is thrown on the dashboard
+    /// and never says "use a passkey" to a project that has none.
+    struct AuthSettings: Decodable {
+        var passkeysEnabled: Bool?
+        enum CodingKeys: String, CodingKey { case passkeysEnabled = "passkeys_enabled" }
+    }
+
+    func authSettings() async throws -> AuthSettings {
+        var request = URLRequest(url: base.appending(path: "auth/v1/settings"))
+        request.setValue(key, forHTTPHeaderField: "apikey")
+        let data = try await run(request)
+        return try JSONDecoder().decode(AuthSettings.self, from: data)
+    }
+
     // MARK: Plumbing
 
     @discardableResult

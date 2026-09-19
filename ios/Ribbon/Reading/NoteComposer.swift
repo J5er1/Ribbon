@@ -26,41 +26,59 @@ struct LeaveToolbar: View {
             if roomPaused {
                 SmallCaps(Copy.newNotesNeedTheRoom, size: 12)
             }
-            HStack(spacing: 14) {
+            HStack(spacing: 0) {
                 // Two people: eight swatches, pick per highlight, last-used
                 // pre-selected. Three or more: one swatch — yours (§4.5).
                 // Paused: only highlight shows, greyed and inert — the room
                 // reads everything and writes nothing (S02, §08).
-                if let mine = model.inkForNewHighlight(in: room) {
-                    InkSwatch(ink: mine, isSelected: !roomPaused) {
-                        if !roomPaused { onHighlight(mine) }
-                    }
-                    .opacity(roomPaused ? 0.35 : 1)
-                } else {
-                    ForEach(Ink.allCases, id: \.self) { ink in
-                        InkSwatch(ink: ink, isSelected: !roomPaused && ink == model.lastUsedInk) {
-                            if !roomPaused { onHighlight(ink) }
+                //
+                // Only the inks scroll (A26): on a narrow phone eight
+                // swatches at a finger's width will not fit beside the two
+                // verbs, and the verbs are the ones that must never leave
+                // the screen.
+                ScrollView(.horizontal) {
+                    HStack(spacing: 2) {
+                        if let mine = model.inkForNewHighlight(in: room) {
+                            InkSwatch(ink: mine, isSelected: !roomPaused) {
+                                if !roomPaused { onHighlight(mine) }
+                            }
+                            .opacity(roomPaused ? 0.35 : 1)
+                        } else {
+                            ForEach(Ink.allCases, id: \.self) { ink in
+                                InkSwatch(ink: ink, isSelected: !roomPaused && ink == model.lastUsedInk) {
+                                    if !roomPaused { onHighlight(ink) }
+                                }
+                                .opacity(roomPaused ? 0.35 : 1)
+                            }
                         }
-                        .opacity(roomPaused ? 0.35 : 1)
                     }
+                    .padding(.horizontal, 10)
                 }
+                .scrollIndicators(.hidden)
+                .fixedSize(horizontal: model.inkForNewHighlight(in: room) != nil, vertical: false)
 
                 if !roomPaused {
                     Rectangle().fill(Palette.rule).frame(width: 1, height: 20)
 
                     Button(action: onWrite) {
                         SmallCaps(Copy.write, size: 13, color: Palette.text)
+                            .frame(minWidth: 44, minHeight: 44)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .padding(.leading, 6)
 
                     Button(action: onSpeak) {
                         SmallCaps(Copy.speak, size: 13, color: Palette.text)
+                            .frame(minWidth: 44, minHeight: 44)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .padding(.trailing, 8)
                 }
             }
-            .padding(.horizontal, 18)
             .frame(height: 52)
+            .frame(maxWidth: 420)
             .ribbonGlass(in: Capsule(), interactive: true)
         }
         .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -74,6 +92,7 @@ struct InkSwatch: View {
 
     var body: some View {
         Button(action: action) {
+            // Drawn at 20 points, taken at 44 (§11).
             Circle()
                 .fill(ink.color)
                 .frame(width: 20, height: 20)
@@ -83,9 +102,12 @@ struct InkSwatch: View {
                             .padding(-3)
                     }
                 }
+                .frame(width: 44, height: 44)
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(ink.displayName) ink")
+        .accessibilityLabel(Copy.inkNamed(ink.displayName))
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 }
 
@@ -111,11 +133,12 @@ struct WriteComposer: View {
     private var composerBody: some View {
         VStack(alignment: .leading, spacing: 10) {
             SmallCaps(verse.formatted, size: 12)
-            TextField("", text: $text, axis: .vertical)
+            TextField("", text: $text, prompt: Text(Copy.whatYouWantToSay).foregroundStyle(Palette.muted), axis: .vertical)
                 .font(RibbonType.ui(16))
                 .foregroundStyle(Palette.text)
                 .lineLimit(1...12)
                 .focused($focused)
+                .accessibilityLabel(Copy.whatYouWantToSay)
             HStack {
                 Button(Copy.takeBack) { onCancel() }
                     .font(RibbonType.ui(15))
@@ -138,8 +161,7 @@ struct WriteComposer: View {
             }
         }
         .padding(16)
-        .background(Palette.surface, in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Palette.rule, lineWidth: 1))
+        .paper(.card)
         .padding(.horizontal, 16)
         .readableColumn()
         .onAppear {
@@ -199,7 +221,7 @@ struct SpeakControl: View {
                 .animation(.linear(duration: 0.05), value: recorder.livePeaks.count)
 
                 SmallCaps(
-                    draggedAway ? "let go to discard" : "release to leave it",
+                    draggedAway ? Copy.letGoToDiscard : Copy.releaseToLeaveIt,
                     size: 12,
                     color: draggedAway ? Palette.muted : Palette.text.opacity(0.7))
             }
@@ -207,6 +229,8 @@ struct SpeakControl: View {
         .padding(.horizontal, 22)
         .padding(.vertical, 14)
         .ribbonGlass(in: RoundedRectangle(cornerRadius: 18))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Copy.recordingAVoiceNote)
         .gesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { value in

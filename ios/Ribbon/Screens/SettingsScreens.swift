@@ -1,118 +1,87 @@
 import SwiftUI
+import UIKit
 import RibbonCore
 
-// S19–S22 — the four screens You pushes to: text and translation,
-// notifications, downloads, the plan.
+// S19–S22 — the four screens the menu pushes to: text, notifications,
+// downloads, the plan (ledger A23/A42). Each is a page with a title and a
+// lede, and under it groups of tiles with a section label over each and a
+// footnote under it where one is owed. Nothing here is a Settings app:
+// no icons, no grouped inset table, no disclosure triangles.
 //
-// You itself (S18) is no longer a sheet of its own. It is a section of the
-// menu, with the rooms and the room you are in — MenuScreen.swift, and
-// docs/deviations.md 14. What is still not here is what was never here: no
-// theme picker (dark is the product), no accent picker (chartreuse is the
-// brand's, not the user's), no app-icon picker.
+// What is still not here is what was never here: no theme picker (dark is
+// the product), no accent picker (chartreuse is the brand's, not the
+// user's), no app-icon picker.
 
-// S20 — text and translation. Translation is personal, not shared (§2.6);
-// changing it never moves your position or breaks a note's anchor. The
-// size slider previews live over real Scripture — the verse you were last
-// reading, which is a small thing and the kind of small thing this product
-// is made of.
+// MARK: - S20: Text
+
+/// The room reads one version (A42), and the page is yours: size, spacing
+/// and red letter move only your own page. The size slider previews live
+/// over real Scripture — the verse you were last reading.
 struct TextSettingsScreen: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        ScrollView {
+        RibbonScreen(title: Copy.textAndTranslation, lede: Copy.textLede, onBack: { dismiss() }) {
             VStack(alignment: .leading, spacing: 28) {
-                VStack(alignment: .leading, spacing: 12) {
-                    SmallCaps(Copy.translation, size: 12)
-                        .accessibilityAddTraits(.isHeader)
-                    // Bundled translations always; licensed ones (NKJV
-                    // first) appear the day their edition is configured on
-                    // the proxy — never as a dead row.
+                SettingsGroup(title: Copy.translation, detail: Copy.translationIsTheRooms) {
+                    // Bundled translations always; licensed ones appear the
+                    // day their edition is configured on the proxy — never
+                    // as a dead row.
                     ForEach(model.availableTranslations) { translation in
-                        let chosen = model.me?.translation == translation.id
-                        Button {
+                        SettingChoice(
+                            translation.displayName,
+                            subtitle: translation.isBundled ? Copy.bundledSub : Copy.streamsSub,
+                            chosen: (model.currentRoom?.translation ?? model.me?.translation) == translation.id
+                        ) {
                             model.setTranslation(translation.id)
-                        } label: {
-                            HStack {
-                                Text(translation.displayName)
-                                    .font(RibbonType.ui(16))
-                                    .foregroundStyle(Palette.text)
-                                Spacer()
-                                if chosen {
-                                    Circle().fill(Palette.chartreuse).frame(width: 6, height: 6)
-                                }
-                            }
-                            // A row is a target, and no target is shorter
-                            // than a finger (§11, deviation 12).
-                            .frame(minHeight: 44)
-                            .padding(.vertical, 6)
-                            .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
-                        // The chartreuse dot is the only drawn sign of which
-                        // translation is yours, and colour is never the only
-                        // signal (§11).
-                        .accessibilityAddTraits(chosen ? [.isSelected] : [])
                     }
                 }
 
-                VStack(alignment: .leading, spacing: 12) {
-                    SmallCaps(Copy.textSize, size: 12)
-                        .accessibilityAddTraits(.isHeader)
-                    Slider(
-                        value: Binding(
-                            get: { model.settings.scriptureSize },
-                            set: { size in model.updateSettings { $0.scriptureSize = size } }),
-                        in: 16...24, step: 0.5)
-                        .tint(Palette.chartreuse)
-                        // The small caps above it are a heading, not this
-                        // control's name, so the control is given its own.
-                        .accessibilityLabel(Copy.textSize)
-                }
-
-                VStack(alignment: .leading, spacing: 12) {
-                    SmallCaps(Copy.lineSpacing, size: 12)
-                        .accessibilityAddTraits(.isHeader)
-                    Picker(Copy.lineSpacing, selection: Binding(
-                        get: { model.settings.lineSpacingStep },
-                        set: { step in model.updateSettings { $0.lineSpacingStep = step } })
-                    ) {
-                        Text(Copy.lineSpacingClose).tag(0)
-                        Text(Copy.lineSpacingBook).tag(1)
-                        Text(Copy.lineSpacingOpen).tag(2)
+                SettingsGroup(title: Copy.thePage, detail: Copy.thePageIsYours) {
+                    SettingControl(Copy.textSize, subtitle: Copy.textSizeSub) {
+                        VStack(spacing: 12) {
+                            Slider(
+                                value: Binding(
+                                    get: { model.settings.scriptureSize },
+                                    set: { size in model.updateSettings { $0.scriptureSize = size } }),
+                                in: 16...24, step: 0.5)
+                            .tint(Palette.chartreuse)
+                            .accessibilityLabel(Copy.textSize)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .well(.small)
+                            preview
+                        }
                     }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
+                    SettingControl(Copy.lineSpacing, subtitle: Copy.lineSpacingSub) {
+                        Segments(
+                            options: [Copy.lineSpacingClose, Copy.lineSpacingBook, Copy.lineSpacingOpen],
+                            selection: Binding(
+                                get: { model.settings.lineSpacingStep },
+                                set: { step in model.updateSettings { $0.lineSpacingStep = step } }))
+                        .accessibilityLabel(Copy.lineSpacing)
+                    }
+                    SettingSwitch(
+                        Copy.redLetter, subtitle: Copy.redLetterSub,
+                        isOn: Binding(
+                            get: { model.settings.redLetter },
+                            set: { on in model.updateSettings { $0.redLetter = on } }))
                 }
-
-                Toggle(isOn: Binding(
-                    get: { model.settings.redLetter },
-                    set: { on in model.updateSettings { $0.redLetter = on } })
-                ) {
-                    Text(Copy.redLetter)
-                        .font(RibbonType.ui(16))
-                        .foregroundStyle(Palette.text)
-                }
-                .tint(Palette.chartreuse)
-
-                preview
             }
-            .padding(24)
         }
-        .scrollIndicators(.hidden)
-        .room()
     }
 
-    /// The live preview: the verse you were last reading, in your
-    /// translation, at your size.
+    /// The live preview: the verse you were last reading, in the room's
+    /// version, at your size, in a well of its own.
     @ViewBuilder
     private var preview: some View {
-        if let me = model.me,
-           let room = model.currentRoom,
+        if let room = model.currentRoom,
            let reading = model.openReading(in: room) {
             let position = model.myPosition(in: reading)
-            if let text = model.scripture.verseText(position, translation: me.translation) {
+            if let text = model.scripture.verseText(position, translation: model.words(room: room, reading: reading)) {
                 VStack(alignment: .leading, spacing: 8) {
-                    HairlineRule()
                     Text(text)
                         .font(RibbonType.scripture(model.settings.scriptureSize))
                         .foregroundStyle(Palette.text)
@@ -120,85 +89,147 @@ struct TextSettingsScreen: View {
                         .fixedSize(horizontal: false, vertical: true)
                     SmallCaps(position.formatted, size: 11)
                 }
-                .padding(.top, 10)
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .well(.small)
             }
         }
     }
 }
 
-// S19 — notifications, per room, not global: you want everything from your
-// wife and almost nothing from the Thursday study. The finished-book note
-// has no switch — it fires a handful of times a year and is an invitation
-// back, not an absence notification. Nothing here is about absence,
-// lapses, streaks, or reminders to read, because those notifications
-// don't exist.
-struct NotificationSettingsScreen: View {
-    @Environment(AppModel.self) private var model
+/// A drawn segmented control: a well, and a paper pill that slides to the
+/// chosen stop on a spring. The stops are words, in ivory when chosen and
+/// muted otherwise, so colour is never the only signal.
+struct Segments: View {
+    let options: [String]
+    @Binding var selection: Int
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 30) {
-                ForEach(model.state.rooms) { room in
-                    roomSection(room)
+        GeometryReader { proxy in
+            let width = proxy.size.width / CGFloat(max(1, options.count))
+            ZStack(alignment: .leading) {
+                Color.clear.frame(maxWidth: .infinity, maxHeight: .infinity).well(.small)
+                Color.clear
+                    .frame(width: width - 4, height: proxy.size.height - 4)
+                    .paper(.init(RibbonShape.small - 2))
+                    .offset(x: 2 + width * CGFloat(selection))
+                    .animation(RibbonMotion.touched(still: reduceMotion), value: selection)
+                HStack(spacing: 0) {
+                    ForEach(options.indices, id: \.self) { index in
+                        Button {
+                            selection = index
+                        } label: {
+                            Text(options[index])
+                                .font(RibbonType.ui(15))
+                                .foregroundStyle(index == selection ? Palette.text : Palette.muted)
+                                .frame(width: width, height: proxy.size.height)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityAddTraits(index == selection ? [.isSelected] : [])
+                    }
                 }
-                quietHours
             }
-            .padding(24)
         }
-        .scrollIndicators(.hidden)
-        .room()
+        .frame(height: 44)
+    }
+}
+
+// MARK: - S19: Notifications
+
+/// Per room, not global: you want everything from your wife and almost
+/// nothing from the Thursday study. The finished-book note has no switch —
+/// it fires a handful of times a year and is an invitation back. Nothing
+/// here is about absence, lapses, streaks, or reminders to read, because
+/// those notifications don't exist.
+struct NotificationSettingsScreen: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
+
+    private enum Edge { case from, until }
+    @State private var editing: Edge?
+    @State private var allowed = true
+
+    var body: some View {
+        RibbonScreen(title: Copy.notifications, lede: Copy.notificationsLede, onBack: { dismiss() }) {
+            VStack(alignment: .leading, spacing: 28) {
+                if !allowed && model.state.hasAskedAboutNotifications {
+                    // The OS is silencing it (S19): one line admitting so,
+                    // and the one control that helps. Never a second ask.
+                    HStack(spacing: 8) {
+                        Text(Copy.iOSIsNotPassingTheseOn)
+                            .font(RibbonType.ui(15))
+                            .foregroundStyle(Palette.muted)
+                        Spacer(minLength: 6)
+                        QuietControl(title: Copy.openIOSSettings) {
+                            if let url = URL(string: UIApplication.openNotificationSettingsURLString) {
+                                UIApplication.shared.open(url)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, RibbonShape.textInset)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .paper(.row)
+                }
+
+                ForEach(model.state.rooms) { room in
+                    roomGroup(room)
+                }
+
+                SettingsGroup(title: Copy.quietHours, footnote: Copy.thinkingOfYouStillArrives) {
+                    SettingRow(Copy.quietHoursFrom, value: clock(model.settings.quietHoursStart), chevron: false) {
+                        editing = editing == .from ? nil : .from
+                    }
+                    if editing == .from {
+                        minutePicker(minutes: Binding(
+                            get: { model.settings.quietHoursStart },
+                            set: { m in model.updateSettings { $0.quietHoursStart = m } }))
+                    }
+                    SettingRow(Copy.quietHoursUntil, value: clock(model.settings.quietHoursEnd), chevron: false) {
+                        editing = editing == .until ? nil : .until
+                    }
+                    if editing == .until {
+                        minutePicker(minutes: Binding(
+                            get: { model.settings.quietHoursEnd },
+                            set: { m in model.updateSettings { $0.quietHoursEnd = m } }))
+                    }
+                }
+                .animation(RibbonMotion.settle, value: editing)
+            }
+        }
+        .task { await Notifications.refreshAllowed(); allowed = Notifications.allowed }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                Task { await Notifications.refreshAllowed(); allowed = Notifications.allowed }
+            }
+        }
     }
 
-    private func roomSection(_ room: Room) -> some View {
+    private func roomGroup(_ room: Room) -> some View {
         let prefs = model.notificationPrefs(for: room)
-        return VStack(alignment: .leading, spacing: 14) {
-            SmallCaps(model.displayName(of: room), size: 12)
-                .accessibilityAddTraits(.isHeader)
-            toggle(Copy.notesLeftForYou, prefs.notesLeft) { on in
-                var p = prefs; p.notesLeft = on; model.setNotificationPrefs(p, for: room)
-            }
-            toggle(Copy.cardsOpen, prefs.cardsOpen) { on in
-                var p = prefs; p.cardsOpen = on; model.setNotificationPrefs(p, for: room)
-            }
-            toggle(Copy.whenTheyOpenTheBook, prefs.whenTheyOpenTheBook) { on in
-                var p = prefs; p.whenTheyOpenTheBook = on; model.setNotificationPrefs(p, for: room)
-            }
-            toggle(Copy.thinkingOfYou, prefs.thinkingOfYou) { on in
-                var p = prefs; p.thinkingOfYou = on; model.setNotificationPrefs(p, for: room)
-            }
+        let book = model.openReading(in: room).flatMap { Bible.book(id: $0.bookID)?.name }
+        return SettingsGroup(title: model.displayName(of: room), detail: book) {
+            SettingSwitch(Copy.notesLeftForYou, subtitle: Copy.notesLeftForYouSub, isOn: Binding(
+                get: { prefs.notesLeft },
+                set: { on in var p = prefs; p.notesLeft = on; model.setNotificationPrefs(p, for: room) }))
+            SettingSwitch(Copy.cardsOpen, subtitle: Copy.cardsOpenSub, isOn: Binding(
+                get: { prefs.cardsOpen },
+                set: { on in var p = prefs; p.cardsOpen = on; model.setNotificationPrefs(p, for: room) }))
+            SettingSwitch(Copy.whenTheyOpenTheBook, subtitle: Copy.whenTheyOpenTheBookSub, isOn: Binding(
+                get: { prefs.whenTheyOpenTheBook },
+                set: { on in var p = prefs; p.whenTheyOpenTheBook = on; model.setNotificationPrefs(p, for: room) }))
+            SettingSwitch(Copy.thinkingOfYou, subtitle: Copy.thinkingOfYouSub, isOn: Binding(
+                get: { prefs.thinkingOfYou },
+                set: { on in var p = prefs; p.thinkingOfYou = on; model.setNotificationPrefs(p, for: room) }))
         }
     }
 
-    private func toggle(_ title: String, _ value: Bool, set: @escaping (Bool) -> Void) -> some View {
-        Toggle(isOn: Binding(get: { value }, set: set)) {
-            Text(title)
-                .font(RibbonType.ui(16))
-                .foregroundStyle(Palette.text)
-        }
-        .tint(Palette.chartreuse)
-    }
-
-    private var quietHours: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            SmallCaps(Copy.quietHours, size: 12)
-                .accessibilityAddTraits(.isHeader)
-            HStack(spacing: 10) {
-                minutePicker(
-                    minutes: Binding(
-                        get: { model.settings.quietHoursStart },
-                        set: { m in model.updateSettings { $0.quietHoursStart = m } }))
-                Text(Copy.quietHoursTo)
-                    .font(RibbonType.ui(15))
-                    .foregroundStyle(Palette.muted)
-                minutePicker(
-                    minutes: Binding(
-                        get: { model.settings.quietHoursEnd },
-                        set: { m in model.updateSettings { $0.quietHoursEnd = m } }))
-            }
-            Text(Copy.thinkingOfYouStillArrives)
-                .font(RibbonType.ui(13))
-                .foregroundStyle(Palette.muted)
-        }
+    private func clock(_ minutes: Int) -> String {
+        let date = Calendar.current.date(bySettingHour: minutes / 60, minute: minutes % 60, second: 0, of: Date()) ?? Date()
+        return date.formatted(date: .omitted, time: .shortened)
     }
 
     private func minutePicker(minutes: Binding<Int>) -> some View {
@@ -215,46 +246,39 @@ struct NotificationSettingsScreen: View {
                     minutes.wrappedValue = (c.hour ?? 0) * 60 + (c.minute ?? 0)
                 }),
             displayedComponents: .hourAndMinute)
+        .datePickerStyle(.wheel)
         .labelsHidden()
         .colorScheme(.dark)
+        .frame(maxWidth: .infinity)
+        .frame(height: 160)
+        .clipped()
+        .well()
     }
 }
 
-// S21 — downloads. Megabytes are a fine number: they measure a device, not
-// a person. Both launch translations ship in the app, whole.
+// MARK: - S21: Downloads
+
+/// Megabytes are a fine number: they measure a device, not a person. Both
+/// launch translations ship in the app, whole; a licensed one streams.
 struct DownloadsScreen: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                SmallCaps(Copy.onThisPhone, size: 12)
-                    .accessibilityAddTraits(.isHeader)
+        RibbonScreen(title: Copy.downloads, lede: Copy.downloadsLede, onBack: { dismiss() }) {
+            SettingsGroup(title: Copy.onThisPhone, footnote: Copy.voiceNotesPolicy) {
                 ForEach(model.availableTranslations) { translation in
-                    HStack {
-                        Text(translation.fullName)
-                            .font(RibbonType.ui(16))
-                            .foregroundStyle(Palette.text)
-                        Spacer()
-                        if translation.isBundled {
-                            SmallCaps(Copy.megabytes(bundledMegabytes(translation.id)), size: 12)
-                        } else {
+                    SettingValue(
+                        translation.fullName,
+                        value: translation.isBundled
+                            ? Copy.megabytes(bundledMegabytes(translation.id))
                             // Licensed text streams; the book being read
                             // stays on the phone, the rest doesn't — its
                             // license, not our design.
-                            SmallCaps(Copy.streams, size: 12)
-                        }
-                    }
+                            : Copy.streams)
                 }
-                Text(Copy.voiceNotesPolicy)
-                    .font(RibbonType.ui(14))
-                    .foregroundStyle(Palette.muted)
-                    .padding(.top, 8)
             }
-            .padding(24)
         }
-        .scrollIndicators(.hidden)
-        .room()
     }
 
     private func bundledMegabytes(_ translation: TranslationID) -> Int {
@@ -270,45 +294,32 @@ struct DownloadsScreen: View {
     }
 }
 
-// S22 — the plan. The first book is free, all the way through — not a
-// 7-day trial, because a clock is a count. The ask appears in exactly two
-// places: the shelf after the first ember, and here. A non-paying member
-// never sees a price and never learns who pays.
+// MARK: - S22: The plan
+
+/// The first book is free, all the way through — not a 7-day trial,
+/// because a clock is a count. The ask appears in exactly two places: the
+/// shelf after the first ember, and here. A non-paying member never sees a
+/// price and never learns who pays.
 struct PlanScreen: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                Text(Copy.firstBookFree)
-                    .font(RibbonType.ui(17))
-                    .foregroundStyle(Palette.text)
+        RibbonScreen(title: Copy.plan, lede: Copy.planLede, onBack: { dismiss() }) {
+            SettingsGroup(footnote: Copy.theAskComesOnce) {
+                SettingNote(Copy.firstBookFree)
                 if let room = model.currentRoom, room.isPaused {
-                    // S22's anatomy is "Start the room again if paused ·
-                    // manage in the store", and the restore half needs
-                    // StoreKit, which arrives with billing (deviation 11).
-                    // What stood here was a chartreuse capsule with an empty
-                    // body: a control that says exactly what happens and then
-                    // does not do it, which is worse than no control and
-                    // reads as a failure the app never names. So the room
-                    // says the true thing instead, and the store is where the
-                    // other half of it lives.
-                    Text(Copy.roomPaused)
-                        .font(RibbonType.ui(15))
-                        .foregroundStyle(Palette.text)
-                    Link(destination: URL(string: "https://apps.apple.com/account/subscriptions")!) {
-                        SmallCaps(Copy.manageInStore, size: 13, color: Palette.muted)
-                            .frame(minHeight: 44)
-                            .contentShape(Rectangle())
+                    // The restore half needs StoreKit, which arrives with
+                    // billing (deviation 11): the room says the true thing,
+                    // and the store is where the other half of it lives.
+                    SettingNote(Copy.roomPaused)
+                    SettingRow(Copy.manageInStore) {
+                        if let url = URL(string: "https://apps.apple.com/account/subscriptions") {
+                            UIApplication.shared.open(url)
+                        }
                     }
                 }
-                Text(Copy.theAskComesOnce)
-                    .font(RibbonType.ui(15))
-                    .foregroundStyle(Palette.muted)
             }
-            .padding(24)
         }
-        .scrollIndicators(.hidden)
-        .room()
     }
 }

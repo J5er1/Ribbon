@@ -37,6 +37,13 @@ struct RoomGraph {
     var positions: [RemoteSync.PositionRow] = []
     var cards: [RemoteSync.CardRow] = []
     var cardAnswers: [RemoteSync.CardAnswerRow] = []
+    var ribbons: [RemoteSync.RibbonRow] = []
+    /// Whether the notes and highlights above are the whole of what the
+    /// backend holds, or a query failed on the way. Local rows are pruned
+    /// against a complete answer only (ledger A36): an empty list from a
+    /// failed fetch is not "everything was deleted".
+    var notesComplete = false
+    var highlightsComplete = false
 }
 
 @MainActor
@@ -47,6 +54,12 @@ final class RemoteSync {
     private(set) var email: String?
 
     var isSignedIn: Bool { userID != nil }
+    /// Signed in through the browser rather than Supabase's own auth: no
+    /// passkey can be added to such a session (ledger A47).
+    private(set) var signedInWithAuth0 = false
+    /// Whether the project's auth has passkeys switched on. Nil until
+    /// asked; sticky once known.
+    private(set) var passkeysEnabled: Bool?
 
     /// Restores a persisted session, if one exists. Always returns a
     /// service — signed out is a state, not an absence.
@@ -56,8 +69,18 @@ final class RemoteSync {
             await sync.client.restore(session)
             sync.userID = session.user.id
             sync.email = session.user.email
+            sync.signedInWithAuth0 = session.isAuth0
         }
         return sync
+    }
+
+    /// Asks the project what its auth offers, once. A failure leaves the
+    /// answer unknown, which the interface reads as "not yet".
+    func learnWhatAuthOffers() async {
+        guard passkeysEnabled == nil else { return }
+        if let settings = try? await client.authSettings() {
+            passkeysEnabled = settings.passkeysEnabled ?? false
+        }
     }
 
     // MARK: - Sign-in: an emailed code, no passwords (§6.10)
@@ -71,6 +94,7 @@ final class RemoteSync {
         SessionKeychain.save(session)
         userID = session.user.id
         self.email = session.user.email ?? email
+        signedInWithAuth0 = false
         return session.user.id
     }
 
@@ -98,6 +122,7 @@ final class RemoteSync {
         SessionKeychain.save(session)
         userID = session.user.id
         email = session.user.email
+        signedInWithAuth0 = false
         return session.user.id
     }
 
@@ -118,6 +143,7 @@ final class RemoteSync {
         SessionKeychain.save(session)
         userID = session.user.id
         self.email = session.user.email ?? email
+        signedInWithAuth0 = true
         return session.user.id
     }
 
@@ -126,6 +152,7 @@ final class RemoteSync {
         SessionKeychain.clear()
         userID = nil
         email = nil
+        signedInWithAuth0 = false
     }
 
     /// A token fit for the Realtime socket (§4.2).
@@ -233,7 +260,7 @@ final class RemoteSync {
     func push(room: Room) async throws {
         try await withAuthRetry {
             try await self.client.upsert(into: "rooms", rows: [
-                RoomRow(id: room.id, name: room.name, isPaused: room.isPaused, createdAt: room.createdAt)
+                RoomRow(id: room.id, name: room.name, isPaused: room.isPaused, createdAt: room.createdAt, translation: room.translation.rawValue)
             ])
         }
     }
@@ -266,7 +293,8 @@ final class RemoteSync {
                 ReadingRow(
                     id: reading.id, roomId: reading.roomID, bookId: reading.bookID,
                     scale: reading.handiwork.scale.rawValue,
-                    startedAt: reading.startedAt, finishedAt: reading.finishedAt)
+                    startedAt: reading.startedAt, finishedAt: reading.finishedAt,
+                    translation: reading.translation.rawValue)
             ])
         }
         try await withAuthRetry {
@@ -303,18 +331,32 @@ final class RemoteSync {
         }
     }
 
-    /// Account deletion (§6.8): the profile row goes, and the cascade
-    /// takes everything authored by the person that the backend holds.
-    /// Best-effort on the portrait object first (its policy is the
-    /// person's own).
-    func deleteAccountData() async {
+    /// Account deletion (§6.8), the part that is the person's own: the
+    /// portrait object goes, and the profile row is kept but emptied — a
+    /// neutral name, no face — because deleting the row would cascade
+    /// through every note they chose to leave behind (ledger A40). Which
+    /// notes go is decided by the caller, before this.
+    func forgetProfile(neutralName: String) async {
         guard let userID else { return }
         try? await withAuthRetry {
             try await self.client.deletePortrait(personID: userID)
         }
         try? await withAuthRetry {
-            try await self.client.delete(from: "profiles", query: [
-                URLQueryItem(name: "id", value: "eq.\(userID.uuidString.lowercased())")
+            try await self.client.upsert(into: "profiles", rows: [
+                ProfileRow(id: userID, name: neutralName, portraitPath: nil, translation: TranslationID.bsb.rawValue)
+            ])
+        }
+    }
+
+    /// Everything one person authored in one reading's notes — the
+    /// "take them back" half of leaving or deleting (§6.8).
+    func deleteOwnNotes(readingIDs: [UUID], personID: UUID) async throws {
+        guard !readingIDs.isEmpty else { return }
+        let list = "in.(\(readingIDs.map { $0.uuidString.lowercased() }.joined(separator: ",")))"
+        try await withAuthRetry {
+            try await self.client.delete(from: "notes", query: [
+                URLQueryItem(name: "author_id", value: "eq.\(personID.uuidString.lowercased())"),
+                URLQueryItem(name: "reading_id", value: list),
             ])
         }
     }
@@ -383,7 +425,10 @@ final class RemoteSync {
                     startVerse: highlight.range.startVerse,
                     endVerse: highlight.range.endVerse,
                     ink: highlight.ink.rawValue,
-                    createdAt: highlight.createdAt
+                    createdAt: highlight.createdAt,
+                    startChar: highlight.range.startChar,
+                    endChar: highlight.range.endChar,
+                    charTranslation: highlight.range.charTranslation?.rawValue
                 )],
                 onConflict: "id")
         }
@@ -397,11 +442,37 @@ final class RemoteSync {
         }
     }
 
-    func deleteNote(id: UUID) async throws {
+    /// A note taken back (ledger A40a). The recording goes first: a row
+    /// whose object outlives it is a voice nobody can find but everybody
+    /// can still fetch. If the object will not go, the row stays too, and
+    /// the whole thing is tried again later.
+    func deleteNote(id: UUID, readingID: UUID, voice: Bool) async throws {
+        if voice {
+            do {
+                try await withAuthRetry {
+                    try await self.client.deleteAudio(readingID: readingID, noteID: id)
+                }
+            } catch SupabaseError.http(404, _) {
+                // Already gone, or never uploaded: nothing to keep the row for.
+            }
+        }
         try await withAuthRetry {
             try await self.client.delete(
                 from: "notes",
                 query: [URLQueryItem(name: "id", value: "eq.\(id.uuidString.lowercased())")])
+        }
+    }
+
+    /// The ribbon, placed (ledger A30). One per reading; whoever placed it
+    /// last wins, on this device and on the server alike.
+    func push(ribbon: Ribbon) async throws {
+        try await withAuthRetry {
+            try await self.client.upsert(
+                into: "ribbons",
+                rows: [RibbonRow(
+                    readingId: ribbon.readingID, personId: ribbon.personID,
+                    chapter: ribbon.chapter, verse: ribbon.verse, placedAt: ribbon.placedAt)],
+                onConflict: "reading_id")
         }
     }
 
@@ -510,7 +581,10 @@ final class RemoteSync {
                 query: [URLQueryItem(name: "room_id", value: roomList)])
         }) ?? []
         let readingIDs = graph.readings.map(\.id)
-        if !readingIDs.isEmpty {
+        if readingIDs.isEmpty {
+            graph.notesComplete = true
+            graph.highlightsComplete = true
+        } else {
             let readingList = "in.(\(readingIDs.map { $0.uuidString.lowercased() }.joined(separator: ",")))"
             graph.fires = try await withAuthRetry {
                 try await self.client.select(
@@ -522,11 +596,14 @@ final class RemoteSync {
                     [FuelEventRow].self, from: "fuel_events",
                     query: [URLQueryItem(name: "reading_id", value: readingList)])
             }
-            graph.notes = (try? await withAuthRetry {
+            if let notes = try? await withAuthRetry({
                 try await self.client.select(
                     [NoteRow].self, from: "notes",
                     query: [URLQueryItem(name: "reading_id", value: readingList)])
-            }) ?? []
+            }) {
+                graph.notes = notes
+                graph.notesComplete = true
+            }
             let noteIDs = graph.notes.map(\.id)
             if !noteIDs.isEmpty {
                 let noteList = "in.(\(noteIDs.map { $0.uuidString.lowercased() }.joined(separator: ",")))"
@@ -536,9 +613,17 @@ final class RemoteSync {
                         query: [URLQueryItem(name: "note_id", value: noteList)])
                 }) ?? []
             }
-            graph.highlights = (try? await withAuthRetry {
+            if let highlights = try? await withAuthRetry({
                 try await self.client.select(
                     [HighlightRow].self, from: "highlights",
+                    query: [URLQueryItem(name: "reading_id", value: readingList)])
+            }) {
+                graph.highlights = highlights
+                graph.highlightsComplete = true
+            }
+            graph.ribbons = (try? await withAuthRetry {
+                try await self.client.select(
+                    [RibbonRow].self, from: "ribbons",
                     query: [URLQueryItem(name: "reading_id", value: readingList)])
             }) ?? []
             graph.positions = (try? await withAuthRetry {
@@ -635,6 +720,7 @@ final class RemoteSync {
         var name: String?
         var isPaused: Bool
         var createdAt: Date
+        var translation: String?
     }
 
     struct MembershipRow: Codable {
@@ -660,6 +746,7 @@ final class RemoteSync {
         var scale: String
         var startedAt: Date
         var finishedAt: Date?
+        var translation: String?
     }
 
     struct FireRow: Codable {
@@ -719,6 +806,17 @@ final class RemoteSync {
         var endVerse: Int
         var ink: String
         var createdAt: Date
+        var startChar: Int?
+        var endChar: Int?
+        var charTranslation: String?
+    }
+
+    struct RibbonRow: Codable {
+        var readingId: UUID
+        var personId: UUID
+        var chapter: Int
+        var verse: Int
+        var placedAt: Date
     }
 
     struct PositionRow: Codable {

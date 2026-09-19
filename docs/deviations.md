@@ -3022,6 +3022,257 @@ A51. **The page is now built before the pull, not by it.** A50 named its own
     held for as long as the reader is in a room. That is the trade, and it is
     the right way round — the memory is idle, the milliseconds were not.
 
+## iOS (phase four): the second pass
+
+Android took a design pass of its own (A18–A51) and the two platforms
+drifted: one had a hearth, tiles, a ribbon and a chapter list, and the
+other had the phase-one screens. This pass brings iOS level with it. Where
+an Android entry describes the *product* decision — the greeting, the
+ribbon, the room's one version, the notification gates — iOS now does the
+same thing and this section does not repeat the argument; it records what
+is different on iOS, and why. The Android numbers are cited so the two
+halves of each decision can be read together.
+
+I1. **The design system is the same system.** `Shapes.swift` carries the
+    same radii (small 12, row 16, card 22, group 28, sheet 34), the same
+    seam (2 pt), the same text inset (20) and row heights (60/76), and the
+    same `inGroup` rule for a tile's corners inside a stack — the outer
+    corners on the group, the inner ones small — as `Shapes.kt` (A20/A23).
+    `Surfaces.swift` is `paper`/`well`: surface or ground, the grain over
+    it, and a one-point rule at the edge, because surface and ground are
+    1.05:1 apart on this palette and a tile cannot stop where it stops
+    without one. One difference: a group hands its rows their corners
+    through the environment (`tileShape`), so a row is the same code alone
+    and in company, where Compose passes a shape parameter. No icons on any
+    of these screens; the chevron is drawn.
+
+I2. **Springs.** `RibbonMotion` gains the three critically damped springs
+    A48 named — `cover` (stiffness 180), `handled` (400), `touched`
+    (1500), damping 2√k — for the things a finger holds, and `release`
+    (220 ms) for a gesture let go of. Every token now comes in two,
+    `settle` and `settle(still:)`, so "under reduce motion this is a cut" is
+    decided in one place. A pressed tile gives by 2.5% on `touched` and
+    nothing overshoots (§9.1).
+
+I3. **The hearth (A48).** The room screen is the greeting by the hour, who
+    is here as one sentence (and a tap to that person), and the hearth: the
+    seats in a row (38 pt faces in 44–48 pt targets, the accent ring for
+    present, the top half-ring for idle, a dashed open seat when somebody
+    is expected), the fire in a well of the ground, the way in, the ribbon
+    offered under it, and — until it has been done once — "Pull the fire
+    up to open the book." Left for you, the shelf and the quiet-day foot
+    follow. The starter shelf shows on first run only.
+
+    *The pull is different on iOS.* Android drives the book sheet's
+    progress from the same number the finger moves. Here the fire follows
+    the finger (translation, a 10% swell, the hearth receding), and past a
+    fifth of the travel or a 480 pt/s flick the page comes up from the foot
+    of the screen on the `cover` spring — the same numbers, but the page
+    does not track the finger before the commit, because the reading
+    surface is a separate overlay whose transition SwiftUI owns. Below the
+    commit the fire returns on `handled` with the release velocity. Pulling
+    the fire down at the top of the room opens your rooms (28 pt of
+    square-root lean, 96 pt to commit). Both gestures have a tap: the
+    way-in capsule and the room's name, and both are VoiceOver actions on
+    the fire.
+
+I4. **Two menus (A29).** The room's name opens the room; your face opens
+    You. Each is a `RibbonScreen`: a pinned bar carrying only the way back
+    (or Close), a display-30 title on the page, a lede under it, and tiles.
+    The room holds Invite someone (with `inviteSend` as its subtitle, or the
+    six-people line), Notifications and Plan with what they contain under
+    their names, the room's own controls (its name as a field that
+    cross-fades in place, your ink, the quiet way out), your rooms as paper
+    rows, and Start a room / Join with an invite. You holds your face at 88
+    beside your name as a display-26 field that commits when you are done,
+    How you read (Text), This phone (Downloads), Your account, and the
+    quiet delete. Notifications moved from You to the room because they are
+    per room (A29). Appearance (A18) is not here: iOS has no Material You
+    and the room keeps its own chartreuse, so there is nothing to switch.
+
+I5. **Settings as tiles (A23).** Text is the room's translation as a choice
+    group ("Everyone in this room reads this one.") and The page ("Yours
+    alone. Nobody else's page moves.") with the size slider and its live
+    preview in wells, line spacing as a drawn segmented control with a
+    paper pill sliding on `touched`, and red letter as a switch. Every row
+    carries the true small thing under its title (A23's subs).
+    Notifications are one group per room (titled with the room, the book as
+    detail), four switches with subs, then quiet hours as two rows opening
+    a wheel in a well, and the footnote about the touch that still arrives.
+    Downloads and Plan are one group each. When the OS is silencing the app
+    after the one ask, Notifications says so in one line and offers
+    Settings — never a second ask.
+
+I6. **The ribbon (A30) and the chapter list (A31).** Closing the book leaves
+    the ribbon where you were, if you moved and the book is not finished;
+    it is pushed on `ribbons` (last placed wins) and merged the same way.
+    The room offers it in one sentence under the way in; the chapter list —
+    from the running-head pill at the foot of the page, beside the Wave —
+    shows the book's name, the ribbon row with "Go there", and the chapters
+    as a grid of numbers: the one you are in on paper, the rest bare, a
+    16×2 accent hairline where the ribbon is. The ribbon and your own place
+    are never in one sentence.
+
+I7. **The room reads one version (A42).** `Room.translation` and
+    `Reading.translation` arrive in RibbonCore with tolerant decoding (an
+    older state file reads `bsb`), the rows carry them, `words(room:
+    reading:)` is what every page, search, preview and quoted verse now
+    asks, and the note card's quote in the author's translation is gone.
+    `setTranslation` still writes the profile — the person's default for
+    the next room — and changes the room on screen. Finished readings keep
+    the version they were read in. Kotlin already had all of this; the
+    Swift model now matches it, with tests.
+
+I8. **A mark on a phrase (A41g), and the washes (A41b/d/f).** `VerseRange`
+    gains `startChar`, `endChar`, `charTranslation`, normalised in the
+    initialiser (a drag made upwards stores as one made downwards; the
+    offsets turn over with their ends) and decoded leniently. The page
+    honours offsets only when they were measured in the version on this
+    page; anyone else sees the whole verses. Two handles (10 pt knobs in 44
+    pt targets) sit under the first and last letters of a lift and drag to
+    word edges; each has four VoiceOver actions — a verse or a word, either
+    way — and the whole verse has "open what's here" and "leave something
+    here" (§11).
+
+    The wash is redrawn: one path per mark, filled once (no dark band at a
+    line break, no staggered rows, one shape), hung off the baseline (0.88
+    above, 0.28 below of the body size, clamped to the line box) rather
+    than filling the leading, with a horizontal-only 0.6 pt end wobble on a
+    stable hash. Overlaps are screened — 1−(1−a)(1−b) — a shade darker per
+    extra ink (+5%) and never past 36%. A mark arriving from somebody else
+    eases up on `arrive`; your own is revealed along its words on `settle`
+    with a 10 pt soft tip, and over somebody else's mark their ink stands
+    ahead of the tip and the mixture behind it. TextKit is not SwiftUI, so
+    the drawing is driven by a display link for the length of the arrival
+    and then stops. Under reduce motion every wash is simply there.
+
+I9. **Notifications (A34/A39).** `UNUserNotificationCenter`, five kinds,
+    three gates (`shouldPost`: the room's switch, quiet hours wrap-aware
+    with equal ends meaning none, and the room on screen — except a
+    finished book and a touch), no badge ever. The merge diffs against
+    `notifiedThrough`; a nil watermark (a first sync) sets it and posts
+    nothing; it advances on every merge. Notes are grouped by author (one
+    post per person, naming the verse for one note and only the person for
+    several), one post for the cards, one for a finished book. "When they
+    open the book" comes from the roster while the room's channel is up;
+    thinking of you is a touch first and a name second, and in quiet hours
+    only the touch. A tap on a post lands on the room, the verse or the
+    cards through `pendingDestination`, and a post that arrives before the
+    window exists waits in `NotificationRouter`.
+
+    The one ask (§6.1) is Ribbon's own dialog over the book — "Tell you
+    when Ruth leaves a note?" with Tell me / Don't — raised the first time
+    you leave a note or find one in a room of more than one, and only if
+    the system has not already been asked. The system prompt follows Tell
+    me and never precedes it.
+
+    The room is checked on while the app is away by a `BGAppRefreshTask`
+    (`bible.ribbon.app.roomwatch`, 15 minutes at the earliest), registered
+    before launch finishes by an app delegate, started only once someone is
+    signed in and cancelled on sign-out. iOS decides the real cadence; a
+    phone that is never opened is checked less, which is right. A wake
+    with no model builds one for the pull alone (no faces, no channel).
+
+I10. **What this phone still owes the backend (A36/A40).** Room renames and
+    version changes, note deletes (with the reading and whether it was a
+    voice note, so the recording can go first), note edits, highlight
+    deletes, and the "unsaid" list (a quiet day, a highlight, a card
+    answer, the ribbon) are all replayed at the top of `refreshFromRemote`,
+    and `merge` reads them: a pending delete is not brought back, a pending
+    edit keeps its local body, and notes and highlights are pruned against
+    the backend only when the pull for them actually succeeded
+    (`notesComplete` / `highlightsComplete`). Invites minted here are kept
+    out of the prune in a *persisted* set until the push lands (A37); an
+    in-memory set was forgotten at relaunch and the prune deleted a link
+    already in somebody's thread.
+
+I11. **Taking things back (A40/A40a).** A voice note taken back deletes the
+    storage object first and the row after; a 404 on the object is not a
+    reason to keep the row. Leaving with "take them back" deletes the notes
+    while the membership still exists, then the membership. Deleting the
+    account deletes the notes if asked, then *forgets the profile* —
+    portrait object gone, name set to "Someone", no path — and never the
+    profile row, because the row's cascade would take every note they chose
+    to leave behind. Highlights are never deleted: a mark on a shared page
+    is not a possession (§6.8).
+
+I12. **Invites that actually left the phone (A37).** `hasLiveInvite` counts
+    an invite you minted only once the share sheet was opened on it, so a
+    room of one that has told nobody is not told "The invite is still out."
+    The join screen shows the inviter's monogram, says "You'll join as
+    Ruth." with "Join as someone else" for a phone that already has a
+    person, and a session the phone thought it had that turns out to be
+    gone sends the join to the sign-in step rather than a dead end.
+
+I13. **The card turns (A33).** The reflection card turns over on `open`
+    with the face swapped at the halfway point and un-mirrored; under
+    reduce motion it cuts. The answer field has no prompt and no box — a
+    hairline under the words and the cursor in your ink; Answer / Keep what
+    I had appear only once something is typed or an edit is under way;
+    answers are ivory, names in ink. Every literal on the card moved into
+    `Copy`.
+
+I14. **Front door (A25/A28).** The tour's copy no longer says "gamified
+    streak counters" or shows "0:42" — the four cards say the true small
+    thing about the product in its own words, and their pictures are the
+    product's own objects: the Wave on the bare ground (no glow behind the
+    mark, §13), a page with a presence lozenge, a note mark with a waveform
+    in ink and no duration, the fire in a well. The intent step's four
+    answers are one group of tiles, all in ivory. The progress bar's fill
+    is on `settle` and still under reduce motion; its back control is the
+    drawn chevron. Every text field in the product is one `CentredTextField`
+    on paper. "Continue with Auth0" is "Continue in a browser" (A46). The
+    launch window carries the Wave unfurling — a band widening 22→108 over
+    440 ms, then the mark settling 1.04→1 over 560 ms — and leaves only
+    when the model is loaded and the mark has settled.
+
+I15. **Offline, and a chapter that would not come (A45).** `NWPathMonitor`
+    → `isOnline`, read by exactly one thing: the fire dims. A licensed
+    chapter that fails to stream says "Mark isn't on this phone yet." where
+    the words would be with "Try again"; connectivity coming back re-asks
+    once without a tap.
+
+I16. **Sign-in failures are told apart (A44).** A 4xx on the code is "That
+    code didn't work"; anything else is "Can't reach Ribbon right now",
+    because sending someone back to retype a code into the same silence is
+    the wrong instruction.
+
+I17. **State salvage (A43).** A `state.json` this build cannot decode whole
+    is kept beside the new one as `state.json.unreadable`, and the settings,
+    the three asked-once flags and the two invite sets are read out of it
+    field by field. `notifiedThrough` is deliberately not salvaged: after a
+    reset the next merge should be silent.
+
+I18. **Passkeys (A47).** `/auth/v1/settings` is read once (sticky) and "Use
+    a passkey" appears only when the project has them on and the platform
+    can run the ceremony — and no longer only when a browser sign-in is
+    absent. "Add a passkey" needs a Supabase session of its own
+    (`canAddAPasskey`), never a browser one. A registration that did not
+    finish says so in one line and keeps the control.
+
+I19. **Small things, each its own defect.** The note mark is one circle
+    whose stroke morphs (a hairline pending, a ring written, a filled dot
+    spoken) and whose breath fades out on found rather than stopping. The
+    presence form holds a departed reader for one `arrive` so the lozenge
+    fades reading the name. Only the inks scroll on the leave toolbar; write
+    and speak are pinned, and every swatch is drawn at 20 and taken at 44.
+    The Person screen is a `RibbonScreen`: the face at 96 on the bare
+    ground, the ink row spoken as "Your ink, crimson", what they left as one
+    group of tiles showing the words once found (or yours) and "not yet
+    found" otherwise, the quiet way out at the foot, and one dialog whose
+    question cross-fades from "Leave this room?" to "Leave your notes
+    behind?". The ink picker's swatches are 44 pt targets with an animated
+    ring. The `firstName` rule lives in `Copy` on both platforms.
+    Confirmation questions are Ribbon's own card (`ConfirmDialog`), not the
+    system sheet, because the words §6.8 and §6.1 specify are Ribbon's.
+
+I20. **Not carried across, on purpose.** Appearance / Material You (A18,
+    A21): no analogue on iOS. The predictive-back peel (A49): iOS has the
+    interactive pop and the sheet drag, both the platform's. The look book
+    (A24): screenshot tests want a simulator, which this pass did not
+    have; the parity is in the ledger, not in pictures — see the questions
+    at the foot of the pull request.
+
 ## Licensed translations (decided: API.Bible)
 
 Open question §16.8 is now part-decided: **NKJV plus two undecided

@@ -36,6 +36,11 @@ struct PortraitView: View {
 /// Unfound marks breathe — 0.65 → 1.0 over 4 s, eased both ways, slow
 /// enough that it never reads as an alert. Your own marks never breathe.
 /// Pending marks render hairline until they land.
+///
+/// One shape, not two (ledger A38): the dot and the ring are the same
+/// circle with a different stroke, so a mark that changes kind or lands
+/// morphs rather than swaps, and the breath fades out on found rather than
+/// stopping between two frames.
 struct NoteMark: View {
     var kind: NoteKind
     var ink: Ink
@@ -46,32 +51,41 @@ struct NoteMark: View {
     @State private var breathing = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    private var breathes: Bool { !mine && !found && !pending && !reduceMotion }
+
     private var baseOpacity: Double {
+        if pending { return 0.9 }
         if mine { return 0.8 }
         if found { return 0.55 }
         return breathing ? 1.0 : 0.65
     }
 
+    /// The stroke: hairline while pending, the ring's weight for a written
+    /// note, and the whole radius — a filled dot — for a voice note.
+    private var lineWidth: CGFloat {
+        if pending { return 0.7 }
+        return kind == .voice ? 3 : 1.4
+    }
+
     var body: some View {
-        Group {
-            switch kind {
-            case .voice:
-                if pending {
-                    Circle().strokeBorder(ink.color, lineWidth: 0.7)
-                } else {
-                    Circle().fill(ink.color)
-                }
-            case .written:
-                Circle().strokeBorder(ink.color, lineWidth: pending ? 0.7 : 1.4)
-            }
-        }
-        .frame(width: 6, height: 6)
-        .opacity(pending ? 0.9 : baseOpacity)
-        .onAppear {
-            guard !mine, !found, !pending, !reduceMotion else { return }
+        Circle()
+            .strokeBorder(ink.color, lineWidth: lineWidth)
+            .frame(width: 6, height: 6)
+            .opacity(baseOpacity)
+            .animation(RibbonMotion.settle(still: reduceMotion), value: lineWidth)
+            .animation(RibbonMotion.settle(still: reduceMotion), value: found)
+            .onAppear { setBreath() }
+            .onChange(of: breathes) { _, _ in setBreath() }
+            .accessibilityHidden(true)
+    }
+
+    private func setBreath() {
+        if breathes {
             withAnimation(.easeInOut(duration: 4).repeatForever(autoreverses: true)) {
                 breathing = true
             }
+        } else {
+            withAnimation(RibbonMotion.settle(still: reduceMotion)) { breathing = false }
         }
     }
 }

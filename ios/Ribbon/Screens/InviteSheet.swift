@@ -54,6 +54,10 @@ struct InviteSheet: View {
                             .padding(.vertical, 13)
                             .background(Palette.chartreuse, in: Capsule())
                     }
+                    // Opening the share sheet is the moment the link leaves
+                    // the phone (A37): from here on the room may say the
+                    // invite is out.
+                    .simultaneousGesture(TapGesture().onEnded { model.inviteWasHandedOut(invite) })
                 }
             }
             Spacer()
@@ -82,13 +86,7 @@ struct NewRoomSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
             SmallCaps(Copy.roomName, size: 12)
-            TextField("", text: $name, prompt: Text(Copy.optional).foregroundStyle(Palette.muted))
-                .font(RibbonType.ui(18))
-                .foregroundStyle(Palette.text)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-                .background(Palette.surface, in: RoundedRectangle(cornerRadius: 10))
-                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Palette.rule, lineWidth: 1))
+            CentredTextField(text: $name, prompt: Copy.optional, submitLabel: .done, centred: false)
 
             WayInButton(title: Copy.startARoomControl) {
                 let trimmed = name.trimmingCharacters(in: .whitespaces)

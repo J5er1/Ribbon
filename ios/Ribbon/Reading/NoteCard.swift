@@ -38,16 +38,9 @@ struct NoteCard: View {
             case .voice:
                 voiceBody
             }
-
-            // When the note quotes the verse, the quote renders in the
-            // author's translation, small — you see the words they were
-            // looking at (§2.6).
-            if let quote = authorTranslationQuote {
-                Text(quote)
-                    .font(RibbonType.scripture(13))
-                    .foregroundStyle(Palette.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            // The verse in the author's own version used to be quoted
+            // here; the room reads one version now (A42), so there is
+            // nothing to translate between.
         }
         .padding(.vertical, 8)
         .contextMenu {
@@ -102,9 +95,11 @@ struct NoteCard: View {
                                 .multilineTextAlignment(.leading)
                         } else {
                             SmallCaps(Copy.transcript, size: 12)
+                                .frame(minHeight: 44)
                         }
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(transcriptShown ? Copy.hidesTheTranscript : Copy.showsTheTranscript)
                 }
             }
         }
@@ -120,20 +115,13 @@ struct NoteCard: View {
         }
     }
 
-    private var authorTranslationQuote: String? {
-        guard let author, author.translation != model.me?.translation else { return nil }
-        guard let text = model.scripture.verseText(note.verse, translation: author.translation)
-        else { return nil }
-        return "“\(text)”"
-    }
-
     private var accessibilityText: String {
-        let name = author?.name ?? ""
+        let name = author?.name ?? Copy.someone
         switch note.kind {
         case .written:
-            return "Note from \(name). \(note.body ?? "")"
+            return Copy.noteFrom(name, note.body ?? "")
         case .voice:
-            return "Voice note from \(name). \(note.transcript ?? "")"
+            return Copy.voiceNoteFrom(name, note.transcript ?? "")
         }
     }
 }
@@ -169,8 +157,8 @@ struct WaveformView: View {
                         onScrub(max(0, min(1, value.location.x / max(1, width))))
                     })
         }
-        .frame(height: 34)
-        .accessibilityLabel("Play the voice note")
+        .frame(height: 44)
+        .accessibilityLabel(Copy.playTheVoiceNote)
         .accessibilityAddTraits(.isButton)
     }
 

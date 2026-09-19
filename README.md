@@ -142,13 +142,16 @@ reading surface with real ink blending, notes, presence, and every screen
 through to the join flow and settings. It builds and its tests pass; it has
 not yet been run on a physical device.
 
-Android has since taken a design pass of its own, and the two platforms are
-deliberately no longer identical (docs/deviations.md A18–A40a):
+Android took a design pass of its own (docs/deviations.md A18–A51), and
+iOS has now taken the same pass (docs/deviations.md I1–I20), so the two
+platforms are level again. The one deliberate difference is colour: Android
+takes it from the wallpaper (Material You), iOS keeps the brand's
+chartreuse. What the pass gave both:
 
-- **Material You, unharmonised.** The room takes its colour from the
-  wallpaper. The fire and the eight inks never move — they are objects in
-  the room rather than the room itself. Appearance (S26) turns it off for
-  Ribbon's own chartreuse.
+- **Material You, unharmonised (Android only).** The room takes its colour
+  from the wallpaper. The fire and the eight inks never move — they are
+  objects in the room rather than the room itself. Appearance (S26) turns
+  it off for Ribbon's own chartreuse.
 - **The room is a hearth.** It greets you by name, says who is here in a
   sentence rather than only to a screen reader, seats the room's people
   around the fire, and stands the fire in a recess of the unlit ground.
@@ -168,13 +171,17 @@ deliberately no longer identical (docs/deviations.md A18–A40a):
 - **A chapter list**, reached from the foot of the page, marking where you
   are and where the ribbon is. Nothing else, because everything else a
   chapter grid usually shows is a count.
-- **The launch window carries the Wave**, unfurling. Android always shows a
-  splash; this one is ours.
-- **There is a look book.** `./gradlew :app:testDebugUnitTest` renders every
-  screen this touched, on both palettes, to `android/app/build/shots` — and
-  CI keeps them as an artifact. Until somebody installs the APK it is the
-  only way to see this app.
+- **The launch window carries the Wave**, unfurling, on both platforms.
+- **A mark on a phrase**, not only a verse, with handles that snap to word
+  edges and a VoiceOver equivalent for every drag; and the washes redrawn
+  as one shape per mark, screened where they overlap.
+- **Notifications, gated three ways** and never a badge; the one ask made in
+  context; a background pull every fifteen minutes while signed in.
+- **There is a look book on Android.** `./gradlew :app:testDebugUnitTest`
+  renders every screen this touched, on both palettes, to
+  `android/app/build/shots` — and CI keeps them as an artifact.
 
 Still ahead on both platforms: the presence socket and the content half of
 sync (notes, highlights, positions), and everything §15 puts in phase two.
-`docs/deviations.md` is the honest ledger — §A is Android's.
+`docs/deviations.md` is the honest ledger — §A is Android's, §I is the
+iOS pass that followed it.
