@@ -539,9 +539,9 @@ struct ChapterTextView: UIViewRepresentable {
                     guard !covering.isEmpty else { continue }
                     var color = covering[0].ink.uiColor
                     for other in covering.dropFirst() { color = Self.screen(color, other.ink.uiColor) }
-                    let alpha = min(0.36, Palette.highlightWash + 0.05 * Double(covering.count - 1))
+                    let alpha = CGFloat(min(0.36, Palette.highlightWash + 0.05 * Double(covering.count - 1)))
                     let struck = covering.first { $0.id == parent.justMarked }
-                    result[SpanKey(verse: verse, from: from, to: to)] = (color, alpha, struck)
+                    result[SpanKey(verse: verse, from: from, to: to)] = (color: color, alpha: alpha, inside: struck)
                 }
             }
             return result

@@ -309,7 +309,7 @@ private struct HearthView: View {
         .padding(RoomMetrics.hearthPadding)
         .paper(.group)
         .offset(y: -pull * travel * RoomMetrics.hearthFollow)
-        .opacity(max(0, min(1, 1 - pull * 1.25)))
+        .opacity(Double(max(CGFloat(0), min(CGFloat(1), 1 - pull * 1.25))))
         .background {
             GeometryReader { proxy in
                 Color.clear.onAppear { travel = max(200, proxy.size.height * RibbonMotion.openTravel) }

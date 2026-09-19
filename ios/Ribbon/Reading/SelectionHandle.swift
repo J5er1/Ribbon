@@ -31,7 +31,6 @@ struct SelectionHandle: View {
                 .onChanged { value in onDrag(value.location) })
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(label)
-        .accessibilityAddTraits(.adjustable)
         .accessibilityAction(named: Copy.aVerseFurtherOn) { onVerse(true) }
         .accessibilityAction(named: Copy.aVerseBack) { onVerse(false) }
         .accessibilityAction(named: Copy.aWordFurtherOn) { onWord(true) }
