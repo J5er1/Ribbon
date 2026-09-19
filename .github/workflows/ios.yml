@@ -25,6 +25,9 @@ jobs:
         with:
           xcode-version: latest-stable
 
+      # The driver stops scheduling files after the first error by default;
+      # asking it to carry on means one run reports every error in the
+      # module rather than one per push.
       - name: Build the app for the simulator
         run: |
           set -o pipefail
@@ -36,6 +39,7 @@ jobs:
             -skipPackagePluginValidation \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGN_IDENTITY="" \
+            OTHER_SWIFT_FLAGS='$(inherited) -continue-building-after-errors' \
             2>&1 | tee build.log | grep -E "error:|warning: .*(never used|unreachable)|\*\* BUILD"
 
       - name: Keep the full build log
