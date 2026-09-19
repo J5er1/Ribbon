@@ -42,6 +42,9 @@ struct JoinFlow: View {
     /// Set down mid-join (the sheet swiped away): the join completes —
     /// they did join — but arriving must not happen underneath them.
     @State private var wasSetDown = false
+    /// "Join as someone else": the person this phone already is, declined
+    /// for this room. The name step then runs as it would for a stranger.
+    @State private var asSomeoneElse = false
     @FocusState private var nameFocused: Bool
 
     var body: some View {
@@ -90,17 +93,39 @@ struct JoinFlow: View {
 
     private var previewStep: some View {
         VStack(spacing: 20) {
+            // The inviter's face is not on this phone yet; their monogram
+            // stands in, so the invitation is from a person and not a
+            // product.
+            if let inviter = preview?.inviterName, !inviter.isEmpty {
+                PortraitView(person: Person(name: inviter), ink: nil, size: 64)
+                    .accessibilityHidden(true)
+            }
             Text(inviteLine)
                 .font(RibbonType.display(24))
                 .foregroundStyle(Palette.text)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 44)
+                .accessibilityAddTraits(.isHeader)
             if let roomName = preview?.roomName, !roomName.isEmpty {
                 SmallCaps(roomName, size: 13)
             }
             WayInButton(title: Copy.join) { advanceFromPreview() }
                 .padding(.horizontal, 80)
                 .padding(.top, 8)
+            if let me = model.me, !asSomeoneElse {
+                // Joining as the person this phone already is (A37): the
+                // name is stated and can be declined, never re-asked.
+                VStack(spacing: 6) {
+                    Text(Copy.joiningAs(me.name))
+                        .font(RibbonType.ui(14))
+                        .foregroundStyle(Palette.muted)
+                    QuietControl(title: Copy.joinAsSomeoneElse) {
+                        asSomeoneElse = true
+                        name = ""
+                        withAnimation(RibbonMotion.settle) { phase = .name }
+                    }
+                }
+            }
             if let onStartInstead {
                 QuietControl(title: Copy.startARoomInstead, action: onStartInstead)
             }
@@ -143,14 +168,9 @@ struct JoinFlow: View {
             Text(Copy.portraitReason)
                 .font(RibbonType.ui(15))
                 .foregroundStyle(Palette.muted)
-            TextField("", text: $name, prompt: Text(Copy.yourName).foregroundStyle(Palette.muted))
-                .font(RibbonType.ui(20))
-                .foregroundStyle(Palette.text)
-                .multilineTextAlignment(.center)
+            CentredTextField(text: $name, prompt: Copy.yourName, submitLabel: .done, contentType: .name, onSubmit: advanceFromName)
                 .focused($nameFocused)
                 .padding(.horizontal, 40)
-                .submitLabel(.done)
-                .onSubmit(advanceFromName)
             WayInButton(title: Copy.thatsMe) { advanceFromName() }
                 .padding(.horizontal, 80)
                 .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -231,7 +251,16 @@ struct JoinFlow: View {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
         Task {
-            await model.completeOnboarding(name: trimmed, portraitData: portraitData, startRoom: false)
+            if asSomeoneElse, model.me != nil {
+                // A different person on the same phone: the name and face
+                // change, the account underneath does not — an account is
+                // one person, and joining somebody's room as their spouse
+                // from their phone is the same person with another name.
+                model.updateMe(name: trimmed)
+                if let portraitData { await model.setPortrait(portraitData) }
+            } else {
+                await model.completeOnboarding(name: trimmed, portraitData: portraitData, startRoom: false)
+            }
             withAnimation(RibbonMotion.settle) {
                 phase = model.isSignedIn ? .joining : .signIn
             }
@@ -252,6 +281,12 @@ struct JoinFlow: View {
                 guard !wasSetDown else { return }
                 model.switchRoom(to: roomID)
                 onDone()
+            } catch SupabaseError.notSignedIn {
+                // A session this phone thought it had is gone (A37): the
+                // sign-in step, not a dead end — the invite is still good.
+                withAnimation(RibbonMotion.settle) { phase = .signIn }
+            } catch SupabaseError.http(401, _) {
+                withAnimation(RibbonMotion.settle) { phase = .signIn }
             } catch {
                 phase = .dead(deadLine(for: error))
             }

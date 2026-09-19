@@ -159,11 +159,14 @@ struct OnboardingFlow: View {
                 .foregroundStyle(Palette.text)
                 .multilineTextAlignment(.center)
 
-            VStack(spacing: 12) {
-                intentOption(index: 0, title: Copy.walkthroughIntentSpouse, icon: "heart")
-                intentOption(index: 1, title: Copy.walkthroughIntentFriend, icon: "person.2")
-                intentOption(index: 2, title: Copy.walkthroughIntentGroup, icon: "person.3")
-                intentOption(index: 3, title: Copy.walkthroughIntentSolo, icon: "book")
+            // Four answers in one group of tiles, all in ivory: the
+            // unchosen ones are not lesser, they are simply not chosen. No
+            // icons — the words are the whole of each.
+            SettingsGroup {
+                SettingChoice(Copy.walkthroughIntentSpouse, chosen: selectedIntent == 0) { choose(0) }
+                SettingChoice(Copy.walkthroughIntentFriend, chosen: selectedIntent == 1) { choose(1) }
+                SettingChoice(Copy.walkthroughIntentGroup, chosen: selectedIntent == 2) { choose(2) }
+                SettingChoice(Copy.walkthroughIntentSolo, chosen: selectedIntent == 3) { choose(3) }
             }
             .padding(.horizontal, 28)
 
@@ -177,59 +180,19 @@ struct OnboardingFlow: View {
         }
     }
 
-    private func intentOption(index: Int, title: String, icon: String) -> some View {
-        Button {
-            selectedIntent = index
-            Haptics.light()
-        } label: {
-            HStack(spacing: 14) {
-                Image(systemName: icon)
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(selectedIntent == index ? Palette.chartreuse : Palette.muted)
-                    .frame(width: 24)
-
-                Text(title)
-                    .font(RibbonType.ui(16))
-                    .foregroundStyle(selectedIntent == index ? Palette.text : Palette.muted)
-
-                Spacer()
-
-                if selectedIntent == index {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Palette.chartreuse)
-                }
-            }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 15)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(selectedIntent == index ? Palette.raised : Palette.surface)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .strokeBorder(selectedIntent == index ? Palette.chartreuse.opacity(0.6) : Palette.rule, lineWidth: 1)
-            )
-        }
-        .buttonStyle(.plain)
+    private func choose(_ index: Int) {
+        selectedIntent = index
+        Haptics.light()
     }
 
     // The way back to a room you already have.
     private var signInStep: some View {
         VStack(spacing: 24) {
             HStack {
-                Button {
-                    withAnimation(RibbonMotion.settle) { step = .tour(0) }
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(Palette.muted)
-                        .frame(width: 32, height: 32)
-                }
-                .buttonStyle(.plain)
+                BackChevron { withAnimation(RibbonMotion.settle) { step = .tour(0) } }
                 Spacer()
             }
-            .padding(.horizontal, 20)
+            .padding(.horizontal, 12)
             .padding(.top, 8)
 
             Spacer()
@@ -295,14 +258,9 @@ struct OnboardingFlow: View {
                 .font(RibbonType.ui(15))
                 .foregroundStyle(Palette.muted)
 
-            TextField("", text: $name, prompt: Text(Copy.yourName).foregroundStyle(Palette.muted))
-                .font(RibbonType.ui(20))
-                .foregroundStyle(Palette.text)
-                .multilineTextAlignment(.center)
+            CentredTextField(text: $name, prompt: Copy.yourName, submitLabel: .done, contentType: .name, onSubmit: advanceFromName)
                 .focused($nameFocused)
                 .padding(.horizontal, 40)
-                .submitLabel(.done)
-                .onSubmit(advanceFromName)
 
             WayInButton(title: Copy.thatsMe) { advanceFromName() }
                 .padding(.horizontal, 80)
@@ -324,21 +282,8 @@ struct OnboardingFlow: View {
                 .foregroundStyle(Palette.text)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 48)
-            TextField(
-                "", text: $pastedInvite,
-                prompt: Text(Copy.pasteInvitePrompt).foregroundStyle(Palette.muted))
-                .font(RibbonType.ui(16))
-                .foregroundStyle(Palette.text)
-                .multilineTextAlignment(.center)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-                .background(Palette.surface, in: RoundedRectangle(cornerRadius: 10))
-                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Palette.rule, lineWidth: 1))
+            CentredTextField(text: $pastedInvite, prompt: Copy.pasteInvitePrompt, submitLabel: .go, keyboard: .URL, onSubmit: acceptPasted)
                 .padding(.horizontal, 48)
-                .submitLabel(.go)
-                .onSubmit(acceptPasted)
                 .onChange(of: pastedInvite) { _, text in
                     // A pasted link is complete the moment it lands —
                     // don't make them find a go button.
@@ -414,6 +359,7 @@ struct OnboardingFlow: View {
                         .padding(.vertical, 13)
                         .background(Palette.chartreuse, in: Capsule())
                 }
+                .simultaneousGesture(TapGesture().onEnded { model.inviteWasHandedOut(invite) })
             }
 
             // You can read alone immediately while the invite is out — the

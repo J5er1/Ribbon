@@ -35,6 +35,24 @@ struct AppSettings: Codable, Hashable {
     }
 }
 
+/// A write this phone still owes the backend (A36): the row is looked up
+/// by id at replay, so nothing but the intent is stored. Persisted, because
+/// a highlight made offline and forgotten at relaunch is pruned by the next
+/// complete pull as if somebody had taken it back.
+enum PendingWrite: Codable, Hashable {
+    case quietDay(UUID)
+    case highlight(UUID)
+    case cardAnswer(cardID: UUID)
+    case ribbon(readingID: UUID)
+}
+
+/// A note this phone is still deleting: what the delete needs to know
+/// after the note itself is gone from state.
+struct PendingNoteDelete: Codable, Hashable {
+    var readingID: UUID
+    var voice: Bool
+}
+
 /// The whole of what the app remembers.
 struct AppState: Codable {
     var me: Person?
@@ -46,18 +64,58 @@ struct AppState: Codable {
     var highlights: [Highlight] = []
     var quietDays: [QuietDay] = []
     var positions: [ReadingPosition] = []
+    /// One per reading: where the room left off, offered and never applied
+    /// (ledger A30).
+    var ribbons: [Ribbon] = []
     var cards: [ReflectionCard] = []
     var invites: [Invite] = []
     var currentRoomID: UUID?
     var settings = AppSettings()
     var hasSeenMarginHint = false
+    /// Whether the fire has ever been pulled up on this phone. The hearth
+    /// says how to open the book until it has been done once (§6.1).
+    var hasPulledTheFire = false
+    /// Whether this device has been asked about notifications yet (§6.1).
+    /// The app asks once, in context, and a question that comes back is
+    /// worse than no question. Per install, never pushed: a fact about this
+    /// phone, not about the person.
+    var hasAskedAboutNotifications = false
     /// The tag of the portrait object each face on this device came from,
     /// so a conditional fetch can be told what it already has. Persisted:
     /// a relaunch must not re-download every face in the room.
     var portraitETags: [UUID: String] = [:]
+    /// The newest row this device has already accounted for, for the
+    /// purpose of notifications (S19). Nil means this device has never
+    /// merged anything, and the first merge sets the watermark and posts
+    /// nothing at all: a first sync on a new phone restores every room a
+    /// person is in, which for a couple a year into this is several hundred
+    /// notes, and several hundred notifications in one breath is the single
+    /// most destructive failure this feature has. It advances on every
+    /// merge whether or not anything was posted.
+    var notifiedThrough: Date?
+    /// Invites minted on this phone that the backend has not acknowledged.
+    /// Persisted, because a link the sender has already pasted into a
+    /// message thread must outlive a pull that cannot see it yet (A37).
+    var invitesNotYetPushed: Set<UUID> = []
+    /// Invites that actually left this phone — the share sheet was opened
+    /// on them. Minting is not sending: S15's pending state is about a link
+    /// that was handed out, and only this device knows it pressed share.
+    var invitesHandedOut: Set<UUID> = []
+    /// What this phone said that the backend has not heard yet (A36,
+    /// A40). Each is replayed at the top of a refresh, and the merge reads
+    /// them so a pull cannot undo what is still on its way. Persisted: a
+    /// take-back made offline and forgotten at relaunch would come back on
+    /// the next pull with the backend copy never deleted.
+    var pendingRoomPushes: Set<UUID> = []
+    var pendingNoteDeletes: [UUID: PendingNoteDelete] = [:]
+    var pendingNotePushes: Set<UUID> = []
+    var pendingHighlightDeletes: Set<UUID> = []
+    /// Keyed, so saying the same thing twice replaces rather than repeats.
+    var unsaid: [UUID: PendingWrite] = [:]
 
     enum CodingKeys: String, CodingKey {
-        case me, people, rooms, memberships, readings, notes, highlights, quietDays, positions, cards, invites, currentRoomID, settings, hasSeenMarginHint, portraitETags
+        case me, people, rooms, memberships, readings, notes, highlights, quietDays, positions, ribbons, cards, invites, currentRoomID, settings, hasSeenMarginHint, hasPulledTheFire, hasAskedAboutNotifications, portraitETags, notifiedThrough, invitesNotYetPushed, invitesHandedOut
+        case pendingRoomPushes, pendingNoteDeletes, pendingNotePushes, pendingHighlightDeletes, unsaid
     }
 
     init() {}
@@ -73,12 +131,23 @@ struct AppState: Codable {
         highlights = try container.decodeIfPresent([Highlight].self, forKey: .highlights) ?? []
         quietDays = try container.decodeIfPresent([QuietDay].self, forKey: .quietDays) ?? []
         positions = try container.decodeIfPresent([ReadingPosition].self, forKey: .positions) ?? []
+        ribbons = try container.decodeIfPresent([Ribbon].self, forKey: .ribbons) ?? []
         cards = try container.decodeIfPresent([ReflectionCard].self, forKey: .cards) ?? []
         invites = try container.decodeIfPresent([Invite].self, forKey: .invites) ?? []
         currentRoomID = try container.decodeIfPresent(UUID.self, forKey: .currentRoomID)
         settings = try container.decodeIfPresent(AppSettings.self, forKey: .settings) ?? AppSettings()
         hasSeenMarginHint = try container.decodeIfPresent(Bool.self, forKey: .hasSeenMarginHint) ?? false
+        hasPulledTheFire = try container.decodeIfPresent(Bool.self, forKey: .hasPulledTheFire) ?? false
+        hasAskedAboutNotifications = try container.decodeIfPresent(Bool.self, forKey: .hasAskedAboutNotifications) ?? false
         portraitETags = try container.decodeIfPresent([UUID: String].self, forKey: .portraitETags) ?? [:]
+        notifiedThrough = try container.decodeIfPresent(Date.self, forKey: .notifiedThrough)
+        invitesNotYetPushed = try container.decodeIfPresent(Set<UUID>.self, forKey: .invitesNotYetPushed) ?? []
+        invitesHandedOut = try container.decodeIfPresent(Set<UUID>.self, forKey: .invitesHandedOut) ?? []
+        pendingRoomPushes = try container.decodeIfPresent(Set<UUID>.self, forKey: .pendingRoomPushes) ?? []
+        pendingNoteDeletes = try container.decodeIfPresent([UUID: PendingNoteDelete].self, forKey: .pendingNoteDeletes) ?? [:]
+        pendingNotePushes = try container.decodeIfPresent(Set<UUID>.self, forKey: .pendingNotePushes) ?? []
+        pendingHighlightDeletes = try container.decodeIfPresent(Set<UUID>.self, forKey: .pendingHighlightDeletes) ?? []
+        unsaid = try container.decodeIfPresent([UUID: PendingWrite].self, forKey: .unsaid) ?? [:]
     }
 }
 
@@ -100,7 +169,50 @@ actor LocalStore {
 
     func load() -> AppState {
         guard let data = try? Data(contentsOf: url) else { return AppState() }
-        return (try? Self.decoder.decode(AppState.self, from: data)) ?? AppState()
+        if let state = try? Self.decoder.decode(AppState.self, from: data) { return state }
+        return salvage(data)
+    }
+
+    /// A state file this build cannot read whole (ledger A43).
+    ///
+    /// The room's content is the backend's and comes back on the next pull;
+    /// what would not come back is what only this phone knows — the
+    /// reader's settings, the three "asked once" flags, and the invites that
+    /// left this phone before the backend heard of them. Each is read on
+    /// its own, so one unreadable field cannot take the rest with it, and
+    /// the unreadable file is kept beside the new one rather than
+    /// overwritten, so that whatever went wrong can be looked at.
+    private func salvage(_ data: Data) -> AppState {
+        keepTheUnreadableFile()
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return AppState()
+        }
+        func saved<T: Decodable>(_ key: String, _ fallback: T) -> T {
+            guard let raw = object[key],
+                  let bytes = try? JSONSerialization.data(withJSONObject: raw, options: [.fragmentsAllowed]),
+                  let value = try? Self.decoder.decode(T.self, from: bytes)
+            else { return fallback }
+            return value
+        }
+        var state = AppState()
+        state.settings = saved("settings", AppSettings())
+        state.hasSeenMarginHint = saved("hasSeenMarginHint", false)
+        state.hasPulledTheFire = saved("hasPulledTheFire", false)
+        state.hasAskedAboutNotifications = saved("hasAskedAboutNotifications", false)
+        state.invitesNotYetPushed = saved("invitesNotYetPushed", Set<UUID>())
+        state.invitesHandedOut = saved("invitesHandedOut", Set<UUID>())
+        // Deliberately not salvaged: `notifiedThrough`. Nil means this device
+        // has never merged, which makes the next merge silent (S19) — and
+        // after a reset that is exactly right, because everything is about
+        // to arrive at once.
+        return state
+    }
+
+    /// One copy, replaced each time, at `state.json.unreadable`.
+    private func keepTheUnreadableFile() {
+        let kept = url.deletingLastPathComponent().appendingPathComponent("state.json.unreadable")
+        try? FileManager.default.removeItem(at: kept)
+        try? FileManager.default.copyItem(at: url, to: kept)
     }
 
     func save(_ state: AppState) {

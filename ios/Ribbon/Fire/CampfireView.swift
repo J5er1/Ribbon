@@ -62,6 +62,7 @@ struct CampfireView: View {
         .frame(maxWidth: 560)
         .frame(height: frameHeight)
         .opacity(dimmed ? 0.92 : 1)
+        .animation(RibbonMotion.arrive, value: dimmed)
         .accessibilityElement()
         .accessibilityLabel(Copy.fireIs(state.displayName))
     }

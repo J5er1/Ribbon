@@ -6,26 +6,71 @@ import RibbonCore
 // saying nothing, which is correct (§05). The fastest path from launch to
 // Scripture is the product (§6.2).
 
+/// The model, for the two things that run without a scene: a background
+/// pull, and a tapped notification arriving before the window exists.
+@MainActor
+enum AppSession {
+    static weak var model: AppModel?
+}
+
+/// What has to exist before the app finishes launching: the background
+/// task's handler and the notification centre's delegate. Both refuse to be
+/// set later, and neither needs a screen.
+final class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        NotificationRouter.shared.install()
+        // The closure before the registration, and both before launch
+        // finishes: a wake can be delivered the moment the handler exists.
+        RoomWatch.pull = {
+            // The app may be awake with its model, or this may be a wake
+            // from nothing: either way, one pull, and the merge posts what
+            // arrived (S19).
+            if let model = AppSession.model {
+                await model.refreshFromRemote()
+            } else {
+                let model = await AppModel.load(forBackgroundPull: true)
+                await model.refreshFromRemote()
+            }
+        }
+        RoomWatch.register()
+        return true
+    }
+}
+
 @main
 struct RibbonApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @State private var model: AppModel?
     /// A URL that arrived before the model finished loading — the normal
     /// case when tapping an invite link cold-starts the app (S16).
     @State private var bufferedURL: URL?
+    /// The mark's unfurl has run its course (ledger A28): the launch mark
+    /// leaves when the model is loaded *and* the mark has settled, so a
+    /// fast phone still sees the whole of it and a slow one never sees a
+    /// spinner.
+    @State private var markSettled = false
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
-            Group {
+            ZStack {
                 if let model {
                     RootView()
                         .environment(model)
                 } else {
-                    // One frame of the unlit ground while state loads from
-                    // disk — indistinguishable from the launch screen.
+                    // The unlit ground while state loads from disk —
+                    // indistinguishable from the launch screen.
                     GrainBackground()
                 }
+                if model == nil || !markSettled {
+                    LaunchMark { markSettled = true }
+                        .transition(.opacity)
+                }
             }
+            .animation(RibbonMotion.settle, value: model == nil || !markSettled)
             .preferredColorScheme(.dark)
             .task {
                 if model == nil {
@@ -34,6 +79,8 @@ struct RibbonApp: App {
                         loaded.handleInviteURL(bufferedURL)
                         self.bufferedURL = nil
                     }
+                    AppSession.model = loaded
+                    loaded.visibleRoomID = loaded.currentRoom?.id
                     model = loaded
                     // The room renders from local state instantly; the
                     // backend catches up behind it.
@@ -54,7 +101,11 @@ struct RibbonApp: App {
                 guard let model else { return }
                 switch phase {
                 case .active:
+                    // The room is on screen again: a note left here is not
+                    // something the phone needs to tell you about (S19).
+                    model.visibleRoomID = model.currentRoom?.id
                     Task {
+                        await Notifications.refreshAllowed()
                         await model.refreshFromRemote()
                         // The room's live line comes back with the app, and
                         // only with it: a phone in a pocket is not present,
@@ -63,6 +114,7 @@ struct RibbonApp: App {
                         await model.openRoomChannel()
                     }
                 case .background:
+                    model.visibleRoomID = nil
                     Task { await model.closeRoomChannel() }
                 default:
                     break
@@ -96,6 +148,13 @@ struct RootView: View {
     /// The finishing sequence's "Start another" lands in the chooser (S13).
     @State private var chooserRequested = false
     @State private var navigationPath = NavigationPath()
+    /// The pull on the fire (A48): 0 where it sits, 1 at the end of its
+    /// travel. The page rises on this number while `pulling` is set, and
+    /// the root carries it to 1 on the cover spring when the pull commits.
+    @State private var bookPull: CGFloat = 0
+    /// The reading a pull has taken hold of — built under the room the
+    /// moment the finger takes the fire, so there is a page to lift.
+    @State private var pulling: Reading?
 
     var body: some View {
         Group {
@@ -120,10 +179,31 @@ struct RootView: View {
                     chooserRequested: $chooserRequested,
                     onOpenReading: { reading, target in
                         openTarget = target
-                        withAnimation(RibbonMotion.arrive) { openReading = reading }
+                        if pulling?.id == reading.id {
+                            // The finger started this: the page finishes
+                            // the movement from wherever the pull left it.
+                            withAnimation(RibbonMotion.cover) {
+                                bookPull = 1
+                                openReading = reading
+                            } completion: {
+                                pulling = nil
+                                bookPull = 0
+                            }
+                        } else {
+                            withAnimation(RibbonMotion.cover) { openReading = reading }
+                        }
                     },
                     onOpenRooms: { menu = .rooms },
-                    onYou: { menu = .you })
+                    onYou: { menu = .you },
+                    bookPull: $bookPull,
+                    onBeginOpening: { reading in
+                        if openReading == nil { pulling = reading }
+                    },
+                    onAbandonOpening: {
+                        withAnimation(RibbonMotion.handled) { bookPull = 0 } completion: {
+                            if openReading == nil { pulling = nil }
+                        }
+                    })
                 .navigationDestination(for: UUID.self) { readingID in
                     if let reading = model.state.readings.first(where: { $0.id == readingID }) {
                         EmberRecordScreen(
@@ -165,27 +245,35 @@ struct RootView: View {
                 // The reading is a full-screen cover in spirit, but drawn
                 // in-tree so the closing drag settles like a book (S02) —
                 // sliding down over the room rather than a system sheet.
-                if let reading = openReading {
-                    ReadingScreen(
-                        room: room,
-                        reading: reading,
-                        openAt: openTarget,
-                        onClose: {
-                            withAnimation(RibbonMotion.settle) { openReading = nil }
-                            openTarget = nil
-                        },
-                        onFinished: {
-                            withAnimation(RibbonMotion.settle) { openReading = nil }
-                            openTarget = nil
-                        },
-                        onStartAnother: {
-                            withAnimation(RibbonMotion.settle) { openReading = nil }
-                            openTarget = nil
-                            chooserRequested = true
-                        })
-                    .transition(.asymmetric(
-                        insertion: .opacity,
-                        removal: .move(edge: .bottom).combined(with: .opacity)))
+                // While the fire is being pulled the page is already here,
+                // under the room's foot, rising on the pull's own number;
+                // opened any other way it comes up on the cover spring.
+                GeometryReader { proxy in
+                    if let reading = openReading ?? pulling {
+                        ReadingScreen(
+                            room: room,
+                            reading: reading,
+                            openAt: openTarget,
+                            onClose: {
+                                withAnimation(RibbonMotion.settle) { openReading = nil }
+                                openTarget = nil
+                            },
+                            onFinished: {
+                                withAnimation(RibbonMotion.settle) { openReading = nil }
+                                openTarget = nil
+                            },
+                            onStartAnother: {
+                                withAnimation(RibbonMotion.settle) { openReading = nil }
+                                openTarget = nil
+                                chooserRequested = true
+                            })
+                        .offset(y: openReading == nil ? (1 - bookPull) * proxy.size.height : 0)
+                        // The page goes back down the way it came when the
+                        // book closes.
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .bottom),
+                            removal: .move(edge: .bottom).combined(with: .opacity)))
+                    }
                 }
             }
             // The menu, full screen. It is one screen rather than the
@@ -225,6 +313,33 @@ struct RootView: View {
                 if open == nil, let held = deferredInvite {
                     deferredInvite = nil
                     model.pendingInvite = held
+                }
+            }
+            .onChange(of: model.pendingDestination, initial: true) { _, destination in
+                // A tapped notification (S19): the room it was about, then
+                // the verse or the cards it named. The menu gets out of the
+                // way; a book open over another room closes.
+                guard let destination else { return }
+                model.pendingDestination = nil
+                menu = nil
+                if destination.roomID != model.currentRoom?.id {
+                    openReading = nil
+                    openTarget = nil
+                    model.switchRoom(to: destination.roomID)
+                }
+                switch destination {
+                case .verse(_, let readingID, let verse):
+                    if let reading = model.state.readings.first(where: { $0.id == readingID }) {
+                        openTarget = verse
+                        withAnimation(RibbonMotion.cover) { openReading = reading }
+                    }
+                case .cards(_, let readingID, let chapter):
+                    if let reading = model.state.readings.first(where: { $0.id == readingID }) {
+                        openTarget = VerseAddress(bookID: reading.bookID, chapter: chapter, verse: 1)
+                        withAnimation(RibbonMotion.cover) { openReading = reading }
+                    }
+                case .room:
+                    break
                 }
             }
             .sheet(item: pendingInviteBinding) { pending in

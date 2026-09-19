@@ -23,7 +23,13 @@ struct PresenceForm: View {
     /// "Ruth is with you" appears once per follower, then rests.
     @State private var announcedFollowers: Set<UUID> = []
 
-    private var people: [PresentPerson] { model.presentPeople }
+    /// The roster as drawn: a person who has left stays for the length of
+    /// the arrive curve, fading, rather than vanishing between two frames
+    /// (A27). What is *announced* is still the socket's truth — the hold
+    /// is a drawing, not a claim.
+    @State private var shown: [PresentPerson] = []
+    @State private var leaving: Set<UUID> = []
+    private var people: [PresentPerson] { shown }
 
     /// Someone whose scroll is yours: their portrait tucks against the form.
     private var follower: PresentPerson? {
@@ -44,8 +50,34 @@ struct PresenceForm: View {
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
-        .animation(RibbonMotion.open, value: expanded)
-        .animation(RibbonMotion.arrive, value: people)
+        .animation(RibbonMotion.open(still: reduceMotion), value: expanded)
+        .animation(RibbonMotion.arrive(still: reduceMotion), value: people)
+        .onChange(of: model.presentPeople, initial: true) { _, now in
+            holdRoster(now)
+        }
+    }
+
+    /// Arrivals and changes land at once; departures are held for one
+    /// arrive so the lozenge can fade out reading the name.
+    private func holdRoster(_ now: [PresentPerson]) {
+        let nowIDs = Set(now.map(\.id))
+        // Somebody who came back inside the fade is not leaving.
+        leaving.subtract(nowIDs)
+        var next = now
+        for person in shown where !nowIDs.contains(person.id) && !leaving.contains(person.id) {
+            leaving.insert(person.id)
+            next.append(person)
+            let id = person.id
+            DispatchQueue.main.asyncAfter(deadline: .now() + (reduceMotion ? 0 : RibbonMotion.arriveDuration)) {
+                guard leaving.contains(id) else { return }
+                leaving.remove(id)
+                shown.removeAll { $0.id == id }
+            }
+        }
+        for person in shown where leaving.contains(person.id) && !next.contains(where: { $0.id == person.id }) {
+            next.append(person)
+        }
+        shown = next
     }
 
     // MARK: Collapsed — the lozenge
@@ -60,7 +92,7 @@ struct PresenceForm: View {
                     .fill(Palette.raised)
                     .overlay(Capsule().strokeBorder(Palette.rule, lineWidth: 1))
                     .frame(width: 20, height: 34)
-                    .accessibilityLabel("Reading quietly. Only you can see you.")
+                    .accessibilityLabel(Copy.readingQuietlySpoken)
             } else if let front = people.first {
                 lozenge(front, stacked: people.count > 1)
             }
@@ -243,11 +275,11 @@ struct PresenceForm: View {
 
     private func presenceLabel(_ person: PresentPerson, othersCount: Int) -> String {
         let name = model.person(person.id)?.name ?? person.name
-        let base = person.isIdle ? "\(name) is here, but still" : "\(name) is reading"
+        let base = person.isIdle ? Copy.personIsHereButStill(name) : Copy.personIsReading(name)
         // Never a count of people — name who else is here instead.
         if othersCount > 0 {
             let others = people.dropFirst().compactMap { model.person($0.id)?.name ?? $0.name }
-            return base + ", with " + others.joined(separator: " and ")
+            return Copy.alsoHere(base, others)
         }
         return base
     }

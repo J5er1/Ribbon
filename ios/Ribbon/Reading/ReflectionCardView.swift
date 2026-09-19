@@ -1,28 +1,31 @@
 import SwiftUI
 import RibbonCore
 
-/// Reflection Card (S08 / S09):
-/// A question everyone answers before anyone reads the answers.
-///
-/// Sealed:
-/// - Question in Literata, generously set
-/// - Answer field (or answered view with tap to edit)
-/// - "This opens when everyone has answered."
-/// - "set it down" button (small caps, low contrast)
-/// - Rules: never names who hasn't answered, never shows count
-///
-/// Open:
-/// - 480 ms slow ease-out turn
-/// - Every answer with author's portrait, first name, and ink color
-/// - No timestamps, no reactions, no replies
+// The reflection card (§4.6, S08/S09, ledger A33): a question everyone
+// answers before anyone reads the answers.
+//
+// Sealed: the question in Literata, generously set; your answer in ivory
+// once you have given one, or the field — no prompt, no box, a hairline
+// under the words and the cursor in your ink; "This opens when everyone has
+// answered." The card never names who hasn't answered and never says how
+// many have. "set it down" is quiet, at the right.
+//
+// Open: the card turns over — 480 ms, no overshoot — and every answer is
+// there in membership order with a face and a first name in the author's
+// ink; the answers themselves in ivory, because they are words and not
+// marks. No timestamps, no reactions, no replies.
+
 struct ReflectionCardView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let card: ReflectionCard
     let reading: Reading
     let room: Room
 
     @State private var answerDraft: String = ""
     @State private var isEditing = false
+    /// 0 sealed face up, 1 open face up: the card's turn.
+    @State private var turn: CGFloat = 0
     @FocusState private var isFieldFocused: Bool
 
     private var myAnswer: String? {
@@ -30,191 +33,173 @@ struct ReflectionCardView: View {
         return card.answers[me.id]
     }
 
-    private var myMembership: Membership? {
-        model.myMembership(in: room)
-    }
-
     private var myInk: Ink {
-        myMembership?.ink ?? .ochre
+        model.myMembership(in: room)?.ink ?? model.lastUsedInk
     }
 
     var body: some View {
         if card.state == .setDown {
             EmptyView()
         } else {
-            VStack(alignment: .leading, spacing: 18) {
-                // The question in Literata (§4.6, S08/S09)
-                Text(card.question)
-                    .font(RibbonType.scripture(19))
-                    .foregroundStyle(Palette.text)
-                    .lineSpacing(5)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                if card.state == .open {
-                    openContent
-                        .transition(.asymmetric(
-                            insertion: .opacity.combined(with: .scale(scale: 0.98)),
-                            removal: .opacity
-                        ))
+            let open = card.state == .open
+            // Past halfway the far face is showing; it is drawn already
+            // turned the other way, so that the words come out the right
+            // way round.
+            let showingOpen = turn >= 0.5
+            ZStack {
+                if showingOpen {
+                    face(open: true)
+                        .rotation3DEffect(.degrees(180), axis: (x: 0, y: 1, z: 0))
                 } else {
-                    sealedContent
+                    face(open: false)
                 }
             }
-            .padding(22)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Palette.surface)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Palette.rule, lineWidth: 1)
-                    )
-            )
-            .animation(.easeOut(duration: 0.48), value: card.state)
+            .rotation3DEffect(.degrees(Double(turn) * 180), axis: (x: 0, y: 1, z: 0), perspective: 0.6)
             .onAppear {
-                if let myAnswer {
-                    answerDraft = myAnswer
-                }
+                turn = open ? 1 : 0
+                if let myAnswer { answerDraft = myAnswer }
             }
+            .onChange(of: open) { _, isOpen in
+                withAnimation(RibbonMotion.open(still: reduceMotion)) { turn = isOpen ? 1 : 0 }
+            }
+            .accessibilityElement(children: .contain)
         }
     }
 
-    // MARK: - S08: Sealed Content
+    private func face(open: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text(card.question)
+                .font(RibbonType.scripture(19))
+                .foregroundStyle(Palette.text)
+                .lineSpacing(5)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityLabel(open ? Copy.cardOpenSpoken(card.question) : Copy.cardSealedSpoken(card.question))
+            if open {
+                openContent
+            } else {
+                sealedContent
+            }
+        }
+        .padding(22)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .paper(.card)
+    }
+
+    // MARK: - S08: Sealed
+
+    private var typed: Bool {
+        !answerDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 
     @ViewBuilder
     private var sealedContent: some View {
         VStack(alignment: .leading, spacing: 14) {
             if let myAnswer, !isEditing {
-                // Answered state
                 VStack(alignment: .leading, spacing: 8) {
                     Text(myAnswer)
                         .font(RibbonType.ui(16))
-                        .foregroundStyle(myInk.color)
+                        .foregroundStyle(Palette.text)
                         .lineSpacing(4)
                         .fixedSize(horizontal: false, vertical: true)
-
-                    Button {
+                        .accessibilityLabel("\(Copy.yourAnswer). \(myAnswer)")
+                    QuietControl(title: Copy.editYourAnswer) {
                         answerDraft = myAnswer
                         isEditing = true
                         isFieldFocused = true
-                    } label: {
-                        SmallCaps("Edit your answer", size: 12)
-                            .foregroundStyle(Palette.muted)
                     }
-                    .buttonStyle(.plain)
                 }
-
-                // The quiet waiting line (§4.6, S08):
-                // Never names who hasn't answered · never shows how many have
-                Text("This opens when everyone has answered.")
+                Text(Copy.cardOpensWhenEveryoneHasAnswered)
                     .font(RibbonType.ui(14))
                     .foregroundStyle(Palette.muted)
                     .padding(.top, 4)
             } else {
-                // Unanswered (or editing) state
-                VStack(alignment: .leading, spacing: 12) {
-                    TextField("", text: $answerDraft, prompt: Text("Your thoughts...").foregroundColor(Palette.muted.opacity(0.5)), axis: .vertical)
+                VStack(alignment: .leading, spacing: 10) {
+                    // No prompt and no box: the words go where the words
+                    // go, with a hairline under them and the cursor in
+                    // your ink.
+                    TextField("", text: $answerDraft, axis: .vertical)
                         .font(RibbonType.ui(16))
                         .foregroundStyle(Palette.text)
-                        .lineLimit(3...8)
+                        .tint(myInk.color)
+                        .lineLimit(1...8)
                         .focused($isFieldFocused)
-                        .padding(.vertical, 8)
-                        .padding(.horizontal, 10)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(Palette.ground.opacity(0.5))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .stroke(Palette.rule, lineWidth: 1)
-                                )
-                        )
-
-                    HStack {
-                        Button {
-                            let text = answerDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-                            guard !text.isEmpty else { return }
-                            model.answerCard(card, answer: text, in: room)
-                            isEditing = false
-                            isFieldFocused = false
-                        } label: {
-                            Text("Answer")
-                                .font(RibbonType.uiMedium(15))
-                                .foregroundStyle(Palette.chartreuse)
-                                .padding(.vertical, 6)
-                                .padding(.horizontal, 14)
-                                .background(
-                                    Capsule()
-                                        .stroke(Palette.chartreuse.opacity(0.4), lineWidth: 1)
-                                )
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(answerDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
-                        if isEditing {
+                        .accessibilityLabel(Copy.yourAnswer)
+                    HairlineRule()
+                    if typed || isEditing {
+                        HStack(spacing: 18) {
                             Button {
-                                answerDraft = myAnswer ?? ""
+                                let text = answerDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+                                guard !text.isEmpty else { return }
+                                model.answerCard(card, answer: text, in: room)
                                 isEditing = false
                                 isFieldFocused = false
                             } label: {
-                                Text("Cancel")
-                                    .font(RibbonType.ui(15))
-                                    .foregroundStyle(Palette.muted)
-                                    .padding(.leading, 8)
+                                Text(Copy.answer)
+                                    .font(RibbonType.uiMedium(14))
+                                    .foregroundStyle(typed ? Palette.chartreuse : Palette.muted)
+                                    .frame(minHeight: 44)
+                                    .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
+                            .disabled(!typed)
+                            if isEditing {
+                                QuietControl(title: Copy.keepWhatIHad) {
+                                    answerDraft = myAnswer ?? ""
+                                    isEditing = false
+                                    isFieldFocused = false
+                                }
+                            }
+                            Spacer()
                         }
-
-                        Spacer()
+                        .transition(.opacity)
                     }
                 }
+                .animation(RibbonMotion.arrive(still: reduceMotion), value: typed || isEditing)
+                if !isEditing {
+                    Text(Copy.cardOpensWhenEveryoneHasAnswered)
+                        .font(RibbonType.ui(14))
+                        .foregroundStyle(Palette.muted)
+                }
             }
 
-            // Set it down action (S08)
             HStack {
                 Spacer()
-                Button {
-                    model.setDownCard(card)
-                } label: {
-                    SmallCaps("set it down", size: 12)
-                        .foregroundStyle(Palette.muted.opacity(0.6))
-                }
-                .buttonStyle(.plain)
+                // Any member may set a sealed card down for the room; it
+                // leaves without ceremony.
+                QuietControl(title: Copy.setItDown) { model.setDownCard(card) }
             }
-            .padding(.top, 6)
         }
     }
 
-    // MARK: - S09: Open Content
+    // MARK: - S09: Open
 
     @ViewBuilder
     private var openContent: some View {
         VStack(alignment: .leading, spacing: 16) {
             HairlineRule()
-
-            let members = model.members(of: room)
-            ForEach(members, id: \.personID) { member in
+            ForEach(model.members(of: room), id: \.personID) { member in
                 if let answer = card.answers[member.personID] {
                     let person = model.person(member.personID)
                     let ink = member.ink ?? .ochre
+                    let name = firstName(person?.name ?? Copy.someone)
                     VStack(alignment: .leading, spacing: 8) {
                         HStack(spacing: 8) {
                             PortraitView(
-                                person: person,
-                                ink: ink,
-                                size: 22,
-                                image: person.flatMap { model.portrait($0.id) }
-                            )
-                            SmallCaps(person?.name.split(separator: " ").first.map(String.init) ?? "Reader", size: 12)
-                                .foregroundStyle(ink.color)
+                                person: person, ink: ink, size: 22,
+                                image: person.flatMap { model.portrait($0.id) })
+                            SmallCaps(name, size: 12, color: ink.color)
                             Spacer()
                         }
-
                         Text(answer)
                             .font(RibbonType.ui(16))
-                            .foregroundStyle(ink.color)
+                            .foregroundStyle(Palette.text)
                             .lineSpacing(4)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     .padding(.vertical, 4)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(Copy.answerFrom(name, answer))
                 }
             }
         }

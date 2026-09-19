@@ -15,6 +15,10 @@
 			</array>
 		</dict>
 	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>bible.ribbon.app.roomwatch</string>
+	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSMicrophoneUsageDescription</key>
@@ -31,6 +35,10 @@
 		<string>AlegreyaSans-Bold.ttf</string>
 		<string>AlegreyaSansSC-Regular.ttf</string>
 		<string>AlegreyaSansSC-Medium.ttf</string>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
 	</array>
 	<key>UILaunchScreen</key>
 	<dict>

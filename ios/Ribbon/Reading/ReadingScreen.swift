@@ -26,6 +26,25 @@ struct ReadingScreen: View {
     @State private var composer: ComposerState?
     @State private var recorder = VoiceRecorder()
     @State private var editingNote: Note?
+    /// A mark you made just now, revealed along its words (A41d).
+    @State private var justMarked: UUID?
+    /// The typeset page of each chapter on screen, for the handles.
+    @State private var pages: [Int: ChapterPageHandle] = [:]
+    /// The chapter list (A31), from the running-head pill at the foot.
+    @State private var showChapters = false
+    /// The one question about notifications (§6.1), raised from the two
+    /// moments the build book names — a note left, and a note found.
+    @State private var askAboutNotifications = false
+    /// Where the book opened, so closing knows whether you moved (A30).
+    @State private var openedAt: VerseAddress?
+    /// Where you are right now, as the page reports it — ahead of the
+    /// throttled save, so the ribbon is left where you were and not where
+    /// the last save was.
+    @State private var latestAddress: VerseAddress?
+    /// Licensed chapters that would not come, and how many times each has
+    /// been asked for — the retry re-keys the fetch (A45).
+    @State private var chapterAttempts: [Int: Int] = [:]
+    @State private var chapterFailed: Set<Int> = []
 
     // Open note (one at a time; a stack opens whole)
     @State private var openNoteVerse: VerseAddress?
@@ -61,7 +80,8 @@ struct ReadingScreen: View {
     }
 
     private var book: BibleBook? { Bible.book(id: reading.bookID) }
-    private var translation: TranslationID { model.me?.translation ?? .bsb }
+    /// The room reads one version (A42).
+    private var translation: TranslationID { model.words(room: room, reading: reading) }
     private var bookText: ScriptureBookText? {
         model.scripture.book(reading.bookID, translation: translation)
     }
@@ -117,6 +137,7 @@ struct ReadingScreen: View {
             }
             .onAppear {
                 let position = openAt ?? model.myPosition(in: reading)
+                openedAt = position
                 if position.chapter > 1 {
                     programmaticScrollUntil = Date().addingTimeInterval(1.5)
                     proxy.scrollTo(position.chapter, anchor: .top)
@@ -171,6 +192,54 @@ struct ReadingScreen: View {
         .overlay(alignment: .center) { highlightLabelOverlay }
         .room()
         .preferredColorScheme(.dark)
+        .sheet(isPresented: $showChapters) {
+            ChaptersSheet(reading: reading, currentChapter: currentChapter) { chapter in
+                showChapters = false
+                scrollCommand = chapter
+            }
+        }
+        .confirm(askDialog, dismissTitle: Copy.dontTellMe)
+        .onChange(of: model.isOnline) { _, online in
+            // Connectivity back: the chapters that would not come are
+            // asked for again, once, without a tap.
+            if online, !chapterFailed.isEmpty {
+                for n in chapterFailed { chapterAttempts[n, default: 0] += 1 }
+                chapterFailed = []
+            }
+        }
+    }
+
+    /// The chapter whose top has crossed the upper third — where you are.
+    private var currentChapter: Int {
+        model.myPosition(in: reading).chapter
+    }
+
+    /// "Tell you when Ruth leaves a note?" — §6.1's exact question, asked
+    /// once. Two answers and no third: "Not now" only exists in apps that
+    /// intend to ask again, and this one does not. On "Tell me" the system
+    /// prompt follows; on "Don't" it never appears. Either way the app
+    /// remembers that it asked.
+    private var askDialog: Binding<ConfirmState?> {
+        Binding(
+            get: {
+                guard askAboutNotifications, let name = model.whoTheAskIsAbout(in: room) else { return nil }
+                return ConfirmState(question: Copy.tellYouWhen(name), choices: [
+                    ConfirmChoice(Copy.tellMe) {
+                        askAboutNotifications = false
+                        Task { await model.askForNotifications() }
+                    },
+                ])
+            },
+            set: { state in
+                if state == nil {
+                    model.markAskedAboutNotifications()
+                    askAboutNotifications = false
+                }
+            })
+    }
+
+    private func considerAsking() {
+        if model.shouldAskAboutNotifications(in: room) { askAboutNotifications = true }
     }
 
     // MARK: Chapters
@@ -187,21 +256,28 @@ struct ReadingScreen: View {
                         lineHeightMultiple: model.settings.lineHeightMultiple,
                         redLetter: model.settings.redLetter,
                         dynamicTypeSize: dynamicTypeSize),
-                    verseInks: verseInks(chapter: n),
-                    liftedVerses: liftedChapter == n ? lifted.map { $0.verses } : nil,
+                    marks: marks(chapter: n),
+                    justMarked: justMarked,
+                    lifted: liftedChapter == n ? lifted : nil,
                     openNote: openNote(in: n),
                     isFirstChapter: n == 1,
                     showMarginHint: !model.state.hasSeenMarginHint && n == 1,
+                    handle: page(n),
                     onLayout: { chapterLayouts[n] = $0 },
                     onLongPressVerse: { verse in beginLift(chapter: n, verse: verse) },
                     onDragToVerse: { verse in extendLift(chapter: n, verse: verse) },
                     onDragEnded: {},
                     onTapVerse: { verse in tapVerse(chapter: n, verse: verse) },
+                    onMarkDrawn: { justMarked = nil },
                     onNoteSlot: { y in noteSlotY[n] = y })
 
                 gutterMarks(chapter: n)
                 openNoteCard(chapter: n)
+                if liftedChapter == n, lifted != nil, composer == .toolbar {
+                    liftHandles(chapter: n)
+                }
             }
+            .coordinateSpace(name: "chapter")
             .onGeometryChange(for: CGRect.self) { geometry in
                 geometry.frame(in: .scrollView)
             } action: { frame in
@@ -212,20 +288,36 @@ struct ReadingScreen: View {
         } else if let licensed = TranslationRegistry.translation(for: translation), !licensed.isBundled {
             // A licensed translation's chapter, genuinely fetching (S02):
             // the running head appears and the body fades in — no
-            // skeleton lines, which read as fake text.
-            VStack(alignment: .leading) {
+            // skeleton lines, which read as fake text. If it would not
+            // come, the page says so where the words would be, and offers
+            // the one thing that helps (A45).
+            VStack(alignment: .leading, spacing: 18) {
                 SmallCaps(
                     book?.chapterHeading(n) ?? "\(reading.bookID) \(n)", size: 14,
                     color: Palette.text.opacity(0.4))
-                Spacer().frame(height: 320)
+                if chapterFailed.contains(n) {
+                    Text(Copy.chapterWouldntCome(book?.name ?? reading.bookID))
+                        .font(RibbonType.ui(15))
+                        .foregroundStyle(Palette.muted)
+                    QuietControl(title: Copy.tryAgain) {
+                        chapterFailed.remove(n)
+                        chapterAttempts[n, default: 0] += 1
+                    }
+                } else {
+                    Spacer().frame(height: 320)
+                }
             }
             .padding(.leading, 36)
-            .task {
+            .padding(.trailing, 26)
+            .task(id: chapterAttempts[n, default: 0]) {
                 let address = VerseAddress(bookID: reading.bookID, chapter: n, verse: 1)
                 if let chapter = await model.scripture.ensureRemoteChapter(address, translation: licensed) {
                     withAnimation(RibbonMotion.arrive) {
                         remoteChapters[n] = chapter
+                        chapterFailed.remove(n)
                     }
+                } else if !Task.isCancelled {
+                    withAnimation(RibbonMotion.arrive) { _ = chapterFailed.insert(n) }
                 }
             }
         } else {
@@ -238,14 +330,104 @@ struct ReadingScreen: View {
         }
     }
 
-    private func verseInks(chapter: Int) -> [Int: [Ink]] {
-        var result: [Int: [Ink]] = [:]
+    /// The page of a chapter, kept across re-evaluations.
+    private func page(_ n: Int) -> ChapterPageHandle {
+        if let existing = pages[n] { return existing }
+        let handle = ChapterPageHandle()
+        DispatchQueue.main.async { pages[n] = handle }
+        return handle
+    }
+
+    /// Every mark on a chapter, verse by verse. A phrase's offsets are
+    /// honoured only when they were measured in the version on this page
+    /// (A41g); otherwise the whole verse, which is what the address alone
+    /// promises.
+    private func marks(chapter: Int) -> [VerseMark] {
+        var result: [VerseMark] = []
         for highlight in model.highlights(in: reading, chapter: chapter) {
+            let chars = highlight.range.chars(in: translation)
             for verse in highlight.range.verses {
-                result[verse, default: []].append(highlight.ink)
+                result.append(VerseMark(
+                    id: highlight.id, verse: verse,
+                    from: verse == highlight.range.startVerse ? chars.start : nil,
+                    to: verse == highlight.range.endVerse ? chars.end : nil,
+                    ink: highlight.ink, mine: highlight.authorID == model.me?.id))
             }
         }
         return result
+    }
+
+    // MARK: The handles (A41g)
+
+    /// The two ends of the lift, draggable to a word's edge — and, for a
+    /// finger that cannot drag, four actions each (§11).
+    @ViewBuilder
+    private func liftHandles(chapter: Int) -> some View {
+        let layout = chapterLayouts[chapter] ?? ChapterLayout()
+        if let start = layout.liftStart {
+            SelectionHandle(
+                label: Copy.whereTheMarkStarts,
+                onDrag: { point in moveHandle(chapter: chapter, start: true, to: point) },
+                onVerse: { forward in stepHandleVerse(chapter: chapter, start: true, forward: forward) },
+                onWord: { forward in stepHandleWord(chapter: chapter, start: true, forward: forward) })
+            .position(x: start.minX, y: start.maxY + 8)
+        }
+        if let end = layout.liftEnd {
+            SelectionHandle(
+                label: Copy.whereTheMarkEnds,
+                onDrag: { point in moveHandle(chapter: chapter, start: false, to: point) },
+                onVerse: { forward in stepHandleVerse(chapter: chapter, start: false, forward: forward) },
+                onWord: { forward in stepHandleWord(chapter: chapter, start: false, forward: forward) })
+            .position(x: end.maxX, y: end.maxY + 8)
+        }
+    }
+
+    private func moveHandle(chapter: Int, start: Bool, to point: CGPoint) {
+        guard let handle = pages[chapter], let current = lifted,
+              let placed = handle.place(at: point)
+        else { return }
+        let edge = handle.wordEdge(verse: placed.verse, offset: placed.offset, forward: !start)
+        setLift(chapter: chapter, start: start, verse: placed.verse, offset: edge, current: current)
+    }
+
+    private func stepHandleVerse(chapter: Int, start: Bool, forward: Bool) {
+        guard let current = lifted else { return }
+        let verse = (start ? current.startVerse : current.endVerse) + (forward ? 1 : -1)
+        // A verse the page does not have — before the first or past the
+        // last — is not a place a mark can go.
+        guard verse >= 1, let page = pages[chapter], page.length(of: verse) > 0 else { return }
+        setLift(chapter: chapter, start: start, verse: verse, offset: start ? 0 : page.length(of: verse), current: current)
+    }
+
+    private func stepHandleWord(chapter: Int, start: Bool, forward: Bool) {
+        guard let handle = pages[chapter], let current = lifted else { return }
+        let verse = start ? current.startVerse : current.endVerse
+        let length = handle.length(of: verse)
+        let offset = start ? (current.startChar ?? 0) : (current.endChar ?? length)
+        setLift(chapter: chapter, start: start, verse: verse, offset: handle.wordStep(verse: verse, offset: offset, forward: forward), current: current)
+    }
+
+    /// One end moved. A whole verse is a whole verse: an end at its first
+    /// or last letter is stored as nil, so the mark reads the same on a
+    /// page in another version.
+    private func setLift(chapter: Int, start: Bool, verse: Int, offset: Int, current: VerseRange) {
+        let length = pages[chapter]?.length(of: verse) ?? 0
+        let clamped = max(0, min(length, offset))
+        var startVerse = current.startVerse, endVerse = current.endVerse
+        var startChar = current.startChar, endChar = current.endChar
+        if start {
+            startVerse = verse
+            startChar = clamped == 0 ? nil : clamped
+        } else {
+            endVerse = verse
+            endChar = clamped >= length ? nil : clamped
+        }
+        let next = VerseRange(
+            bookID: reading.bookID, chapter: chapter,
+            startVerse: startVerse, endVerse: endVerse,
+            startChar: startChar, endChar: endChar,
+            charTranslation: (startChar == nil && endChar == nil) ? nil : translation)
+        if next != current { lifted = next }
     }
 
     private func openNote(in chapter: Int) -> (verse: Int, height: CGFloat)? {
@@ -305,11 +487,11 @@ struct ReadingScreen: View {
         private var accessibilityLabel: String {
             // §11, exactly: "Note from Ruth, verse 9, not yet found." A
             // stack announces by author and never by count.
-            let names = notes.compactMap { model.person($0.authorID)?.name }
+            let names = notes.filter { $0.authorID != model.me?.id }.compactMap { model.person($0.authorID)?.name }
             let unfound = notes.contains { !$0.foundBy.contains(model.me?.id ?? UUID()) && $0.authorID != model.me?.id }
-            let who = names.isEmpty ? "you" : Set(names).sorted().joined(separator: " and ")
-            let noun = notes.count == 1 ? "Note" : "Notes"
-            return "\(noun) from \(who), verse \(notes.first?.verse.verse ?? 0)\(unfound ? ", not yet found" : "")"
+            return Copy.marginNotes(
+                authors: Set(names).sorted(), verse: notes.first?.verse.verse ?? 0,
+                several: notes.count > 1, unfound: unfound)
         }
     }
 
@@ -351,15 +533,11 @@ struct ReadingScreen: View {
             if let lifted, let chapter = liftedChapter {
                 LeaveToolbar(
                     room: room,
-                    range: VerseRange(
-                        bookID: reading.bookID, chapter: chapter,
-                        startVerse: lifted.startVerse, endVerse: lifted.endVerse),
+                    range: lifted,
                     roomPaused: room.isPaused,
                     onHighlight: { ink in
-                        model.addHighlight(
-                            VerseRange(bookID: reading.bookID, chapter: chapter,
-                                       startVerse: lifted.startVerse, endVerse: lifted.endVerse),
-                            ink: ink, in: reading)
+                        let made = model.addHighlight(lifted, ink: ink, in: reading)
+                        justMarked = made?.id
                         clearLift()
                     },
                     onWrite: { composer = .write(VerseAddress(bookID: reading.bookID, chapter: chapter, verse: lifted.startVerse)) },
@@ -376,6 +554,7 @@ struct ReadingScreen: View {
                         model.editWrittenNote(note, body: body)
                     } else {
                         model.leaveWrittenNote(body, at: address, in: reading)
+                        considerAsking()
                     }
                     editingNote = nil
                     clearLift()
@@ -388,6 +567,7 @@ struct ReadingScreen: View {
                 recorder: recorder,
                 onKeep: { url, waveform in
                     model.leaveVoiceNote(audioURL: url, waveform: waveform, at: address, in: reading)
+                    considerAsking()
                     clearLift()
                 },
                 onDismiss: clearLift)
@@ -407,23 +587,40 @@ struct ReadingScreen: View {
                     }
                 }
                 // The way out: the Wave, ~20 pt, muted ivory, centred at
-                // the bottom edge. Nothing else down there. The glass
-                // capsule stays small; the touch target doesn't — a
-                // finger must be able to close the book (44 pt minimum).
-                Button(action: close) {
-                    WaveMark(color: Palette.text.opacity(0.55))
-                        .frame(width: 20, height: 20)
-                        .padding(.horizontal, 26)
-                        .padding(.vertical, 9)
-                        .ribbonGlass(in: Capsule())
-                        .frame(minWidth: 88, minHeight: 52)
-                        .contentShape(Rectangle())
+                // the bottom edge. Beside it, at the leading edge, the
+                // running head as a pill: where you are, and the way to the
+                // chapter list (A31). The glass capsules stay small; the
+                // touch targets don't (44 pt minimum).
+                ZStack {
+                    Button(action: close) {
+                        WaveMark(color: Palette.text.opacity(0.55))
+                            .frame(width: 20, height: 20)
+                            .padding(.horizontal, 26)
+                            .padding(.vertical, 9)
+                            .ribbonGlass(in: Capsule())
+                            .frame(minWidth: 88, minHeight: 52)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .hoverEffect(.lift)
+                    // Esc closes the book on a hardware keyboard.
+                    .keyboardShortcut(.cancelAction)
+                    .accessibilityLabel(Copy.closeTheBook)
+                    HStack {
+                        Button { showChapters = true } label: {
+                            SmallCaps(book?.chapterHeading(currentChapter) ?? "", size: 12, color: Palette.text.opacity(0.7))
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 9)
+                                .ribbonGlass(in: Capsule())
+                                .frame(minHeight: 44)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(Copy.chapters)
+                        .padding(.leading, 16)
+                        Spacer()
+                    }
                 }
-                .buttonStyle(.plain)
-                .hoverEffect(.lift)
-                // Esc closes the book on a hardware keyboard.
-                .keyboardShortcut(.cancelAction)
-                .accessibilityLabel(Copy.closeTheBook)
             }
             .padding(.bottom, 6)
         }
@@ -560,10 +757,13 @@ struct ReadingScreen: View {
                 // one wrong for a frame.
                 noteSlotY[address.chapter] = nil
                 openNoteVerse = address
+                var foundOne = false
                 for note in model.notes(in: reading, chapter: address.chapter)
                 where note.verse.verse == address.verse {
+                    if note.authorID != model.me?.id { foundOne = true }
                     model.markFound(note)
                 }
+                if foundOne { considerAsking() }
             }
         }
     }
@@ -602,6 +802,12 @@ struct ReadingScreen: View {
             model.markMarginHintSeen()
         }
         recordFuel()
+        // Closing the book leaves the ribbon where you were — only if you
+        // moved, and never in a finished book (A30).
+        let here = latestAddress ?? model.myPosition(in: reading)
+        if let openedAt, openedAt != here, !reading.isFinished {
+            model.leaveTheRibbon(in: reading, at: here)
+        }
         onClose()
     }
 
@@ -621,6 +827,7 @@ struct ReadingScreen: View {
             .filter { $0.value <= yInChapter }
             .max { $0.value < $1.value }?.key ?? 1
         let address = VerseAddress(bookID: reading.bookID, chapter: chapter, verse: verse)
+        latestAddress = address
         // Position saves are cheap but not free — a scroll emits geometry
         // every frame, and the store persists on mutation.
         if Date().timeIntervalSince(lastPositionSave) > 2 {
