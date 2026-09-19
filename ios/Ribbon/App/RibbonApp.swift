@@ -148,6 +148,13 @@ struct RootView: View {
     /// The finishing sequence's "Start another" lands in the chooser (S13).
     @State private var chooserRequested = false
     @State private var navigationPath = NavigationPath()
+    /// The pull on the fire (A48): 0 where it sits, 1 at the end of its
+    /// travel. The page rises on this number while `pulling` is set, and
+    /// the root carries it to 1 on the cover spring when the pull commits.
+    @State private var bookPull: CGFloat = 0
+    /// The reading a pull has taken hold of — built under the room the
+    /// moment the finger takes the fire, so there is a page to lift.
+    @State private var pulling: Reading?
 
     var body: some View {
         Group {
@@ -172,10 +179,31 @@ struct RootView: View {
                     chooserRequested: $chooserRequested,
                     onOpenReading: { reading, target in
                         openTarget = target
-                        withAnimation(RibbonMotion.cover) { openReading = reading }
+                        if pulling?.id == reading.id {
+                            // The finger started this: the page finishes
+                            // the movement from wherever the pull left it.
+                            withAnimation(RibbonMotion.cover) {
+                                bookPull = 1
+                                openReading = reading
+                            } completion: {
+                                pulling = nil
+                                bookPull = 0
+                            }
+                        } else {
+                            withAnimation(RibbonMotion.cover) { openReading = reading }
+                        }
                     },
                     onOpenRooms: { menu = .rooms },
-                    onYou: { menu = .you })
+                    onYou: { menu = .you },
+                    bookPull: $bookPull,
+                    onBeginOpening: { reading in
+                        if openReading == nil { pulling = reading }
+                    },
+                    onAbandonOpening: {
+                        withAnimation(RibbonMotion.handled) { bookPull = 0 } completion: {
+                            if openReading == nil { pulling = nil }
+                        }
+                    })
                 .navigationDestination(for: UUID.self) { readingID in
                     if let reading = model.state.readings.first(where: { $0.id == readingID }) {
                         EmberRecordScreen(
@@ -217,30 +245,35 @@ struct RootView: View {
                 // The reading is a full-screen cover in spirit, but drawn
                 // in-tree so the closing drag settles like a book (S02) —
                 // sliding down over the room rather than a system sheet.
-                if let reading = openReading {
-                    ReadingScreen(
-                        room: room,
-                        reading: reading,
-                        openAt: openTarget,
-                        onClose: {
-                            withAnimation(RibbonMotion.settle) { openReading = nil }
-                            openTarget = nil
-                        },
-                        onFinished: {
-                            withAnimation(RibbonMotion.settle) { openReading = nil }
-                            openTarget = nil
-                        },
-                        onStartAnother: {
-                            withAnimation(RibbonMotion.settle) { openReading = nil }
-                            openTarget = nil
-                            chooserRequested = true
-                        })
-                    // The page comes up from the foot of the screen, the
-                    // way the pull on the fire started it, and goes back
-                    // down the same way when the book closes.
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .bottom),
-                        removal: .move(edge: .bottom).combined(with: .opacity)))
+                // While the fire is being pulled the page is already here,
+                // under the room's foot, rising on the pull's own number;
+                // opened any other way it comes up on the cover spring.
+                GeometryReader { proxy in
+                    if let reading = openReading ?? pulling {
+                        ReadingScreen(
+                            room: room,
+                            reading: reading,
+                            openAt: openTarget,
+                            onClose: {
+                                withAnimation(RibbonMotion.settle) { openReading = nil }
+                                openTarget = nil
+                            },
+                            onFinished: {
+                                withAnimation(RibbonMotion.settle) { openReading = nil }
+                                openTarget = nil
+                            },
+                            onStartAnother: {
+                                withAnimation(RibbonMotion.settle) { openReading = nil }
+                                openTarget = nil
+                                chooserRequested = true
+                            })
+                        .offset(y: openReading == nil ? (1 - bookPull) * proxy.size.height : 0)
+                        // The page goes back down the way it came when the
+                        // book closes.
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .bottom),
+                            removal: .move(edge: .bottom).combined(with: .opacity)))
+                    }
                 }
             }
             // The menu, full screen. It is one screen rather than the

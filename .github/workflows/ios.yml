@@ -1,0 +1,47 @@
+name: ios
+
+# The iOS app, compiled on every push and pull request — the loop that
+# TestFlight (main only) and Xcode Cloud (whose logs live in App Store
+# Connect) do not close for a change made anywhere but a Mac. No signing,
+# no archive, no simulator boot: one build for the simulator, and the log
+# kept as an artifact so a failure can be read in full.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # The app targets iOS 26 (see ios/Ribbon.xcodeproj); the same
+      # selection TestFlight makes.
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Build the app for the simulator
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project ios/Ribbon.xcodeproj \
+            -scheme Ribbon \
+            -destination 'generic/platform=iOS Simulator' \
+            -skipMacroValidation \
+            -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY="" \
+            2>&1 | tee build.log | grep -E "error:|warning: .*(never used|unreachable)|\*\* BUILD"
+
+      - name: Keep the full build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: build.log
+          retention-days: 7

@@ -23,6 +23,16 @@ struct RoomScreen: View {
     var onOpenReading: (Reading, VerseAddress?) -> Void
     var onOpenRooms: () -> Void
     var onYou: () -> Void
+    /// The pull on the fire, 0 where it sits and 1 at the end of its
+    /// travel. Owned by the root, because the page rises on the same
+    /// number the fire moves on (A48): one number, so the two cannot fall
+    /// out of step.
+    @Binding var bookPull: CGFloat
+    /// The finger has taken hold of the fire: the page is built now, under
+    /// the room, so the pull has something to lift.
+    var onBeginOpening: (Reading) -> Void
+    /// Let go short of the commit: the page goes back down with the fire.
+    var onAbandonOpening: () -> Void
 
     @State private var showChooser = false
     @State private var showInviteShare = false
@@ -43,7 +53,10 @@ struct RoomScreen: View {
                 HearthView(
                     room: room,
                     reading: reading,
+                    pull: $bookPull,
                     onOpenReading: onOpenReading,
+                    onBeginOpening: onBeginOpening,
+                    onAbandonOpening: onAbandonOpening,
                     onPickABook: { showChooser = true },
                     onInvite: { showInviteShare = true },
                     onOpenRooms: onOpenRooms)
@@ -255,13 +268,15 @@ private struct HearthView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let room: Room
     let reading: Reading?
+    /// 0 where the fire sits, 1 at the end of its travel up.
+    @Binding var pull: CGFloat
     var onOpenReading: (Reading, VerseAddress?) -> Void
+    var onBeginOpening: (Reading) -> Void
+    var onAbandonOpening: () -> Void
     var onPickABook: () -> Void
     var onInvite: () -> Void
     var onOpenRooms: () -> Void
 
-    /// 0 where the fire sits, 1 at the end of its travel up.
-    @State private var pull: CGFloat = 0
     @State private var travel: CGFloat = 320
 
     var body: some View {
@@ -272,7 +287,9 @@ private struct HearthView: View {
                 if let reading, Bible.book(id: reading.bookID) != nil {
                     TheFire(
                         room: room, reading: reading, pull: $pull, travel: travel,
+                        onBeginOpening: { onBeginOpening(reading) },
                         onOpened: { onOpenReading(reading, nil) },
+                        onAbandoned: onAbandonOpening,
                         onOpenRooms: onOpenRooms)
                     .transition(.opacity)
                 } else {
@@ -310,7 +327,9 @@ private struct TheFire: View {
     let reading: Reading
     @Binding var pull: CGFloat
     let travel: CGFloat
+    var onBeginOpening: () -> Void
     var onOpened: () -> Void
+    var onAbandoned: () -> Void
     var onOpenRooms: () -> Void
 
     @State private var sink: CGFloat = 0
@@ -362,6 +381,7 @@ private struct TheFire: View {
                     if !opening {
                         opening = true
                         model.markFirePulled()
+                        onBeginOpening()
                     }
                     sink = 0
                     pull = reduceMotion ? 0 : min(1, -dy / travel)
@@ -376,10 +396,12 @@ private struct TheFire: View {
                 if dy < 0 {
                     let flung = -velocity > RibbonMotion.openFling
                     if pull >= RibbonMotion.openCommit || flung || (reduceMotion && -dy > 40) {
+                        // The root carries the pull the rest of the way,
+                        // with the speed the finger let go at.
                         onOpened()
-                        withAnimation(RibbonMotion.settle(still: reduceMotion)) { pull = 0 }
-                    } else {
+                    } else if opening {
                         withAnimation(RibbonMotion.handled(velocity: -velocity / max(1, travel))) { pull = 0 }
+                        onAbandoned()
                     }
                 } else {
                     if dy >= RoomMetrics.roomCommit { onOpenRooms() }

@@ -3063,18 +3063,20 @@ I3. **The hearth (A48).** The room screen is the greeting by the hour, who
     up to open the book." Left for you, the shelf and the quiet-day foot
     follow. The starter shelf shows on first run only.
 
-    *The pull is different on iOS.* Android drives the book sheet's
-    progress from the same number the finger moves. Here the fire follows
-    the finger (translation, a 10% swell, the hearth receding), and past a
-    fifth of the travel or a 480 pt/s flick the page comes up from the foot
-    of the screen on the `cover` spring — the same numbers, but the page
-    does not track the finger before the commit, because the reading
-    surface is a separate overlay whose transition SwiftUI owns. Below the
-    commit the fire returns on `handled` with the release velocity. Pulling
-    the fire down at the top of the room opens your rooms (28 pt of
-    square-root lean, 96 pt to commit). Both gestures have a tap: the
-    way-in capsule and the room's name, and both are VoiceOver actions on
-    the fire.
+    *One number, as on Android.* The root owns the pull; the hearth moves
+    it. The moment the finger takes the fire the reading is built under the
+    room's foot (the page before the pull, not by it — #30), and it rises
+    on the pull's own number while the fire follows the finger (translation,
+    a 10% swell, the hearth receding). Past a fifth of the travel or a
+    480 pt/s flick the root carries the number to 1 on the `cover` spring
+    and the page finishes the movement from wherever the finger left it;
+    let go short of that, the fire returns on `handled` with the release
+    velocity and the page goes back down with it. Pulling the fire down at
+    the top of the room opens your rooms (28 pt of square-root lean, 96 pt
+    to commit). Both gestures have a tap: the way-in capsule and the room's
+    name, and both are VoiceOver actions on the fire. Under reduce motion
+    nothing moves under the finger; the commit is by distance and the page
+    arrives on the spring.
 
 I4. **Two menus (A29).** The room's name opens the room; your face opens
     You. Each is a `RibbonScreen`: a pinned bar carrying only the way back
