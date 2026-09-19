@@ -691,16 +691,16 @@ final class AppModel {
     /// last placed wins; placing it where it already is says nothing.
     func leaveTheRibbon(in reading: Reading, at address: VerseAddress) {
         guard let me = state.me, !reading.isFinished else { return }
-        let ribbon = Ribbon(readingID: reading.id, personID: me.id, chapter: address.chapter, verse: address.verse, placedAt: Date())
+        let placed = Ribbon(readingID: reading.id, personID: me.id, chapter: address.chapter, verse: address.verse, placedAt: Date())
         if let existing = ribbon(in: reading),
-           existing.chapter == ribbon.chapter, existing.verse == ribbon.verse, existing.personID == ribbon.personID {
+           existing.chapter == placed.chapter, existing.verse == placed.verse, existing.personID == placed.personID {
             return
         }
         state.ribbons.removeAll { $0.readingID == reading.id }
-        state.ribbons.append(ribbon)
+        state.ribbons.append(placed)
         persist()
         if let remote, remote.isSignedIn {
-            sayItAgainIfNeeded(reading.id) { try await $0.push(ribbon: ribbon) }
+            sayItAgainIfNeeded(reading.id) { try await $0.push(ribbon: placed) }
         }
     }
 
