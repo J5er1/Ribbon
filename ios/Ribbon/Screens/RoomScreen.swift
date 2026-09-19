@@ -405,6 +405,9 @@ private struct TheFire: View {
                     }
                 } else {
                     if dy >= RoomMetrics.roomCommit { onOpenRooms() }
+                    // A pull that started and came back down did not
+                    // commit: the page the root built goes back with it.
+                    if opening { onAbandoned() }
                     withAnimation(RibbonMotion.handled(still: reduceMotion)) { sink = 0 }
                 }
                 opening = false

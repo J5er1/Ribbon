@@ -147,6 +147,7 @@ struct NotificationSettingsScreen: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private enum Edge { case from, until }
     @State private var editing: Edge?
@@ -197,7 +198,7 @@ struct NotificationSettingsScreen: View {
                             set: { m in model.updateSettings { $0.quietHoursEnd = m } }))
                     }
                 }
-                .animation(RibbonMotion.settle, value: editing)
+                .animation(RibbonMotion.settle(still: reduceMotion), value: editing)
             }
         }
         .task { await Notifications.refreshAllowed(); allowed = Notifications.allowed }

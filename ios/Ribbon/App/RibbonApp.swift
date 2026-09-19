@@ -22,20 +22,20 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         NotificationRouter.shared.install()
-        RoomWatch.register()
-        Task { @MainActor in
-            RoomWatch.pull = {
-                // The app may be awake with its model, or this may be a
-                // wake from nothing: either way, one pull, and the merge
-                // posts what arrived (S19).
-                if let model = AppSession.model {
-                    await model.refreshFromRemote()
-                } else {
-                    let model = await AppModel.load(forBackgroundPull: true)
-                    await model.refreshFromRemote()
-                }
+        // The closure before the registration, and both before launch
+        // finishes: a wake can be delivered the moment the handler exists.
+        RoomWatch.pull = {
+            // The app may be awake with its model, or this may be a wake
+            // from nothing: either way, one pull, and the merge posts what
+            // arrived (S19).
+            if let model = AppSession.model {
+                await model.refreshFromRemote()
+            } else {
+                let model = await AppModel.load(forBackgroundPull: true)
+                await model.refreshFromRemote()
             }
         }
+        RoomWatch.register()
         return true
     }
 }

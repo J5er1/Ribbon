@@ -3181,12 +3181,22 @@ I10. **What this phone still owes the backend (A36/A40).** Room renames and
     deletes, and the "unsaid" list (a quiet day, a highlight, a card
     answer, the ribbon) are all replayed at the top of `refreshFromRemote`,
     and `merge` reads them: a pending delete is not brought back, a pending
-    edit keeps its local body, and notes and highlights are pruned against
-    the backend only when the pull for them actually succeeded
-    (`notesComplete` / `highlightsComplete`). Invites minted here are kept
-    out of the prune in a *persisted* set until the push lands (A37); an
-    in-memory set was forgotten at relaunch and the prune deleted a link
-    already in somebody's thread.
+    edit keeps its local body, a highlight still on its way up is not
+    pruned, and notes and highlights are pruned against the backend only
+    when the pull for them actually succeeded (`notesComplete` /
+    `highlightsComplete`).
+
+    *Persisted, where Android's are in memory.* Every one of these lives in
+    `AppState` and is written on each change. Android keeps them in the
+    model and loses them at process death; the invite set was the first to
+    move into the store (A37) because a link already in somebody's thread
+    was being pruned, and the same failure was waiting on the others — a
+    take-back made offline and forgotten at relaunch came back on the next
+    pull with the backend copy never deleted, and a highlight made offline
+    was pruned by the next complete pull as if somebody had taken it back.
+    The unsaid list stores the *intent* (which quiet day, which highlight,
+    which card, which reading's ribbon) and looks the row up at replay, so a
+    row that has since gone has nothing left to say.
 
 I11. **Taking things back (A40/A40a).** A voice note taken back deletes the
     storage object first and the row after; a 404 on the object is not a

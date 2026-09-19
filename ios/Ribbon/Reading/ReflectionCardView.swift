@@ -62,7 +62,7 @@ struct ReflectionCardView: View {
             .onChange(of: open) { _, isOpen in
                 withAnimation(RibbonMotion.open(still: reduceMotion)) { turn = isOpen ? 1 : 0 }
             }
-            .accessibilityElement(children: open ? .contain : .combine)
+            .accessibilityElement(children: .contain)
         }
     }
 

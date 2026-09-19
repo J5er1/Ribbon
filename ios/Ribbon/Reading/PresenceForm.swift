@@ -61,12 +61,15 @@ struct PresenceForm: View {
     /// arrive so the lozenge can fade out reading the name.
     private func holdRoster(_ now: [PresentPerson]) {
         let nowIDs = Set(now.map(\.id))
+        // Somebody who came back inside the fade is not leaving.
+        leaving.subtract(nowIDs)
         var next = now
         for person in shown where !nowIDs.contains(person.id) && !leaving.contains(person.id) {
             leaving.insert(person.id)
             next.append(person)
             let id = person.id
             DispatchQueue.main.asyncAfter(deadline: .now() + (reduceMotion ? 0 : RibbonMotion.arriveDuration)) {
+                guard leaving.contains(id) else { return }
                 leaving.remove(id)
                 shown.removeAll { $0.id == id }
             }

@@ -59,6 +59,9 @@ private struct ConfirmModifier: ViewModifier {
                         }
                         .padding(.horizontal, 28)
                         .readableColumn(maxWidth: 420)
+                        // A screen reader stays on the question until it
+                        // is answered, as a finger does.
+                        .accessibilityAddTraits(.isModal)
                         .transition(.opacity.combined(with: .scale(scale: 0.97)))
                     }
                 }

@@ -229,8 +229,11 @@ struct SpeakControl: View {
         .padding(.horizontal, 22)
         .padding(.vertical, 14)
         .ribbonGlass(in: RoundedRectangle(cornerRadius: 18))
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Copy.recordingAVoiceNote)
+        // While recording the whole control is one element with one
+        // sentence; refused or out of room it stays a container, so the
+        // one control that helps is still reachable.
+        .accessibilityElement(children: (deniedRoute || storageFull) ? .contain : .ignore)
+        .accessibilityLabel((deniedRoute || storageFull) ? "" : Copy.recordingAVoiceNote)
         .gesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { value in

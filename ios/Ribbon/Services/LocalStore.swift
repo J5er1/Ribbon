@@ -35,6 +35,24 @@ struct AppSettings: Codable, Hashable {
     }
 }
 
+/// A write this phone still owes the backend (A36): the row is looked up
+/// by id at replay, so nothing but the intent is stored. Persisted, because
+/// a highlight made offline and forgotten at relaunch is pruned by the next
+/// complete pull as if somebody had taken it back.
+enum PendingWrite: Codable, Hashable {
+    case quietDay(UUID)
+    case highlight(UUID)
+    case cardAnswer(cardID: UUID)
+    case ribbon(readingID: UUID)
+}
+
+/// A note this phone is still deleting: what the delete needs to know
+/// after the note itself is gone from state.
+struct PendingNoteDelete: Codable, Hashable {
+    var readingID: UUID
+    var voice: Bool
+}
+
 /// The whole of what the app remembers.
 struct AppState: Codable {
     var me: Person?
@@ -83,9 +101,21 @@ struct AppState: Codable {
     /// on them. Minting is not sending: S15's pending state is about a link
     /// that was handed out, and only this device knows it pressed share.
     var invitesHandedOut: Set<UUID> = []
+    /// What this phone said that the backend has not heard yet (A36,
+    /// A40). Each is replayed at the top of a refresh, and the merge reads
+    /// them so a pull cannot undo what is still on its way. Persisted: a
+    /// take-back made offline and forgotten at relaunch would come back on
+    /// the next pull with the backend copy never deleted.
+    var pendingRoomPushes: Set<UUID> = []
+    var pendingNoteDeletes: [UUID: PendingNoteDelete] = [:]
+    var pendingNotePushes: Set<UUID> = []
+    var pendingHighlightDeletes: Set<UUID> = []
+    /// Keyed, so saying the same thing twice replaces rather than repeats.
+    var unsaid: [UUID: PendingWrite] = [:]
 
     enum CodingKeys: String, CodingKey {
         case me, people, rooms, memberships, readings, notes, highlights, quietDays, positions, ribbons, cards, invites, currentRoomID, settings, hasSeenMarginHint, hasPulledTheFire, hasAskedAboutNotifications, portraitETags, notifiedThrough, invitesNotYetPushed, invitesHandedOut
+        case pendingRoomPushes, pendingNoteDeletes, pendingNotePushes, pendingHighlightDeletes, unsaid
     }
 
     init() {}
@@ -113,6 +143,11 @@ struct AppState: Codable {
         notifiedThrough = try container.decodeIfPresent(Date.self, forKey: .notifiedThrough)
         invitesNotYetPushed = try container.decodeIfPresent(Set<UUID>.self, forKey: .invitesNotYetPushed) ?? []
         invitesHandedOut = try container.decodeIfPresent(Set<UUID>.self, forKey: .invitesHandedOut) ?? []
+        pendingRoomPushes = try container.decodeIfPresent(Set<UUID>.self, forKey: .pendingRoomPushes) ?? []
+        pendingNoteDeletes = try container.decodeIfPresent([UUID: PendingNoteDelete].self, forKey: .pendingNoteDeletes) ?? [:]
+        pendingNotePushes = try container.decodeIfPresent(Set<UUID>.self, forKey: .pendingNotePushes) ?? []
+        pendingHighlightDeletes = try container.decodeIfPresent(Set<UUID>.self, forKey: .pendingHighlightDeletes) ?? []
+        unsaid = try container.decodeIfPresent([UUID: PendingWrite].self, forKey: .unsaid) ?? [:]
     }
 }
 

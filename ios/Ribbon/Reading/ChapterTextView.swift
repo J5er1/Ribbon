@@ -561,6 +561,10 @@ struct ChapterTextView: UIViewRepresentable {
                 if var existing = settled[key] {
                     existing.color = span.color
                     existing.alpha = span.alpha
+                    // The page may have been set again since — the margin
+                    // hint leaving moves every offset — so the words are
+                    // found afresh.
+                    existing.ranges = page.pageRanges(verse: key.verse, from: key.from, to: key.to)
                     if let started = existing.arrivedAt,
                        now - started > (existing.stroke ? RibbonMotion.settleDuration : RibbonMotion.arriveDuration) {
                         existing.arrivedAt = nil

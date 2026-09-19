@@ -176,7 +176,8 @@ chartreuse. What the pass gave both:
   edges and a VoiceOver equivalent for every drag; and the washes redrawn
   as one shape per mark, screened where they overlap.
 - **Notifications, gated three ways** and never a badge; the one ask made in
-  context; a background pull every fifteen minutes while signed in.
+  context; while signed in, a background pull is asked for no sooner than
+  every fifteen minutes (the phone decides when, and whether).
 - **There is a look book on Android.** `./gradlew :app:testDebugUnitTest`
   renders every screen this touched, on both palettes, to
   `android/app/build/shots` — and CI keeps them as an artifact.

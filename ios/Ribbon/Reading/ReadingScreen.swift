@@ -37,6 +37,10 @@ struct ReadingScreen: View {
     @State private var askAboutNotifications = false
     /// Where the book opened, so closing knows whether you moved (A30).
     @State private var openedAt: VerseAddress?
+    /// Where you are right now, as the page reports it — ahead of the
+    /// throttled save, so the ribbon is left where you were and not where
+    /// the last save was.
+    @State private var latestAddress: VerseAddress?
     /// Licensed chapters that would not come, and how many times each has
     /// been asked for — the retry re-keys the fetch (A45).
     @State private var chapterAttempts: [Int: Int] = [:]
@@ -389,8 +393,10 @@ struct ReadingScreen: View {
     private func stepHandleVerse(chapter: Int, start: Bool, forward: Bool) {
         guard let current = lifted else { return }
         let verse = (start ? current.startVerse : current.endVerse) + (forward ? 1 : -1)
-        guard verse >= 1 else { return }
-        setLift(chapter: chapter, start: start, verse: verse, offset: start ? 0 : (pages[chapter]?.length(of: verse) ?? 0), current: current)
+        // A verse the page does not have — before the first or past the
+        // last — is not a place a mark can go.
+        guard verse >= 1, let page = pages[chapter], page.length(of: verse) > 0 else { return }
+        setLift(chapter: chapter, start: start, verse: verse, offset: start ? 0 : page.length(of: verse), current: current)
     }
 
     private func stepHandleWord(chapter: Int, start: Bool, forward: Bool) {
@@ -798,7 +804,7 @@ struct ReadingScreen: View {
         recordFuel()
         // Closing the book leaves the ribbon where you were — only if you
         // moved, and never in a finished book (A30).
-        let here = model.myPosition(in: reading)
+        let here = latestAddress ?? model.myPosition(in: reading)
         if let openedAt, openedAt != here, !reading.isFinished {
             model.leaveTheRibbon(in: reading, at: here)
         }
@@ -821,6 +827,7 @@ struct ReadingScreen: View {
             .filter { $0.value <= yInChapter }
             .max { $0.value < $1.value }?.key ?? 1
         let address = VerseAddress(bookID: reading.bookID, chapter: chapter, verse: verse)
+        latestAddress = address
         // Position saves are cheap but not free — a scroll emits geometry
         // every frame, and the store persists on mutation.
         if Date().timeIntervalSince(lastPositionSave) > 2 {

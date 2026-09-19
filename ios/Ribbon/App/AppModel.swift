@@ -80,7 +80,12 @@ final class AppModel {
         }
         let model = AppModel(state: state, store: store, presence: presence)
         model.remote = remote
-        if forBackgroundPull { return model }
+        if forBackgroundPull {
+            // What the merge may post depends on this; stale, it posts
+            // nothing and the watermark moves past the rows anyway.
+            await Notifications.refreshAllowed()
+            return model
+        }
         await model.loadPortraits()
         model.startListeningToPresence()
         await model.openRoomChannel()
@@ -115,6 +120,10 @@ final class AppModel {
     /// Who was in the book at the last roster, so an arrival is a
     /// difference and not a roster.
     private var wasReading: Set<UUID> = []
+    /// The first roster after a connect or a room change is a baseline,
+    /// not an arrival: the people in it were already reading before this
+    /// phone was listening.
+    private var haveARoster = false
 
     /// "When they open the book" (§10.3): from the roster, and only while
     /// the room's channel is up — which is to say, only while this phone is
@@ -124,6 +133,10 @@ final class AppModel {
         let now = Set(people.map(\.id))
         let arrived = now.subtracting(wasReading)
         wasReading = now
+        guard haveARoster else {
+            haveARoster = true
+            return
+        }
         guard !arrived.isEmpty, let room = currentRoom, let reading = openReading(in: room),
               let book = Bible.book(id: reading.bookID)?.name
         else { return }
@@ -186,6 +199,9 @@ final class AppModel {
     func closeRoomChannel() async {
         catchUpTask?.cancel()
         catchUpTask = nil
+        // The next roster is a baseline again.
+        wasReading = []
+        haveARoster = false
         await presence.disconnect()
     }
 
@@ -322,6 +338,8 @@ final class AppModel {
         state.currentRoomID = roomID
         followingPersonID = nil
         presentPeople = []
+        wasReading = []
+        haveARoster = false
         if visibleRoomID != nil { visibleRoomID = roomID }
         persist()
         Task { [weak self] in await self?.openRoomChannel() }
@@ -450,31 +468,74 @@ final class AppModel {
         members(of: room).count >= Room.capacity
     }
 
-    /// Rooms whose rename or version change hasn't landed remotely —
-    /// merge() must not let a stale pull revert an edit that was never
-    /// pushed, and the next refresh replays it first (A36).
-    private var pendingRoomPushes: Set<UUID> = []
-
     // What this phone said that the backend has not heard yet (ledger A36,
-    // A40). Each set is replayed at the top of `refreshFromRemote`, and
-    // `merge` reads them so a pull cannot undo what is still on its way.
-    private var pendingNoteDeletes: Set<UUID> = []
-    private var pendingNoteDeleteShapes: [UUID: (readingID: UUID, voice: Bool)] = [:]
-    private var pendingNotePushes: Set<UUID> = []
-    private var pendingHighlightDeletes: Set<UUID> = []
+    // A40). Each set lives in `AppState` and is persisted on every change,
+    // replayed at the top of `refreshFromRemote`, and read by `merge` so a
+    // pull cannot undo what is still on its way. Rooms whose rename or
+    // version change hasn't landed: merge() must not let a stale pull
+    // revert an edit that was never pushed.
+    private var pendingRoomPushes: Set<UUID> {
+        get { state.pendingRoomPushes }
+        set { state.pendingRoomPushes = newValue; persist() }
+    }
+    private var pendingNoteDeletes: [UUID: PendingNoteDelete] {
+        get { state.pendingNoteDeletes }
+        set { state.pendingNoteDeletes = newValue; persist() }
+    }
+    private var pendingNotePushes: Set<UUID> {
+        get { state.pendingNotePushes }
+        set { state.pendingNotePushes = newValue; persist() }
+    }
+    private var pendingHighlightDeletes: Set<UUID> {
+        get { state.pendingHighlightDeletes }
+        set { state.pendingHighlightDeletes = newValue; persist() }
+    }
     /// Writes that carry their own row and nothing merge could revert: a
-    /// quiet day, a highlight, a card answer. Keyed, so saying the same
-    /// thing twice replaces rather than repeats.
-    private var unsaid: [(key: UUID, push: (RemoteSync) async throws -> Void)] = []
+    /// quiet day, a highlight, a card answer, the ribbon. Keyed, so saying
+    /// the same thing twice replaces rather than repeats.
+    private var unsaid: [UUID: PendingWrite] {
+        get { state.unsaid }
+        set { state.unsaid = newValue; persist() }
+    }
 
-    private func sayItAgainIfNeeded(_ key: UUID, _ push: @escaping (RemoteSync) async throws -> Void) {
+    /// Highlights still on their way up: the prune must not take them.
+    private var pendingHighlightPushes: Set<UUID> {
+        Set(state.unsaid.values.compactMap { write in
+            if case .highlight(let id) = write { return id }
+            return nil
+        })
+    }
+
+    private func sayItAgainIfNeeded(_ key: UUID, _ write: PendingWrite) {
         guard let remote, remote.isSignedIn else { return }
-        unsaid.removeAll { $0.key == key }
-        unsaid.append((key, push))
+        unsaid[key] = write
         pushing { [weak self] in
-            if (try? await push(remote)) != nil {
-                self?.unsaid.removeAll { $0.key == key }
+            guard let self else { return }
+            if (try? await self.perform(write, on: remote)) != nil {
+                self.unsaid.removeValue(forKey: key)
             }
+        }
+    }
+
+    /// One unsaid write, said. The row is whatever state holds now; a row
+    /// that is gone has nothing left to say and counts as said.
+    private func perform(_ write: PendingWrite, on remote: RemoteSync) async throws {
+        switch write {
+        case .quietDay(let id):
+            guard let day = state.quietDays.first(where: { $0.id == id }) else { return }
+            try await remote.push(quietDay: day)
+        case .highlight(let id):
+            guard let highlight = state.highlights.first(where: { $0.id == id }) else { return }
+            try await remote.push(highlight: highlight)
+        case .cardAnswer(let cardID):
+            guard let card = state.cards.first(where: { $0.id == cardID }),
+                  let me = state.me, let answer = card.answers[me.id]
+            else { return }
+            try await remote.push(cardAnswer: (cardID: card.id, personID: me.id, body: answer))
+            try await remote.push(card: card)
+        case .ribbon(let readingID):
+            guard let ribbon = state.ribbons.first(where: { $0.readingID == readingID }) else { return }
+            try await remote.push(ribbon: ribbon)
         }
     }
 
@@ -514,16 +575,14 @@ final class AppModel {
             let roomID = room.id
             let personID = me.id
             for note in mine {
-                pendingNoteDeletes.insert(note.id)
-                pendingNoteDeleteShapes[note.id] = (note.readingID, note.kind == .voice)
+                pendingNoteDeletes[note.id] = PendingNoteDelete(readingID: note.readingID, voice: note.kind == .voice)
             }
             Task { [weak self] in
                 // Taking the notes back has to happen while the membership
                 // still exists: the notes' own policy is the member's.
                 for note in mine {
                     if (try? await remote.deleteNote(id: note.id, readingID: note.readingID, voice: note.kind == .voice)) != nil {
-                        self?.pendingNoteDeletes.remove(note.id)
-                        self?.pendingNoteDeleteShapes.removeValue(forKey: note.id)
+                        self?.pendingNoteDeletes.removeValue(forKey: note.id)
                     }
                 }
                 // The nudge goes first, and it has to: once the membership
@@ -700,7 +759,7 @@ final class AppModel {
         state.ribbons.append(placed)
         persist()
         if let remote, remote.isSignedIn {
-            sayItAgainIfNeeded(reading.id) { try await $0.push(ribbon: placed) }
+            sayItAgainIfNeeded(reading.id, .ribbon(readingID: reading.id))
         }
     }
 
@@ -736,7 +795,7 @@ final class AppModel {
         }) else { return }
         state.quietDays.append(day)
         persist()
-        sayItAgainIfNeeded(day.id) { try await $0.push(quietDay: day) }
+        sayItAgainIfNeeded(day.id, .quietDay(day.id))
     }
 
     func activeQuietDay(in room: Room, at now: Date = Date()) -> QuietDay? {
@@ -870,12 +929,10 @@ final class AppModel {
         persist()
         if let remote, remote.isSignedIn {
             let voice = note.kind == .voice
-            pendingNoteDeletes.insert(note.id)
-            pendingNoteDeleteShapes[note.id] = (note.readingID, voice)
+            pendingNoteDeletes[note.id] = PendingNoteDelete(readingID: note.readingID, voice: voice)
             pushing { [weak self] in
                 if (try? await remote.deleteNote(id: note.id, readingID: note.readingID, voice: voice)) != nil {
-                    self?.pendingNoteDeletes.remove(note.id)
-                    self?.pendingNoteDeleteShapes.removeValue(forKey: note.id)
+                    self?.pendingNoteDeletes.removeValue(forKey: note.id)
                 }
             }
         }
@@ -924,7 +981,7 @@ final class AppModel {
         lastUsedInk = ink
         recordReadingActivity(reading: reading, at: range.start)
         persist()
-        sayItAgainIfNeeded(highlight.id) { try await $0.push(highlight: highlight) }
+        sayItAgainIfNeeded(highlight.id, .highlight(highlight.id))
         return highlight
     }
 
@@ -987,11 +1044,7 @@ final class AppModel {
         }
         let updated = state.cards[index]
         persist()
-        let personID = me.id
-        sayItAgainIfNeeded(updated.id) { remote in
-            try await remote.push(cardAnswer: (cardID: updated.id, personID: personID, body: answer))
-            try await remote.push(card: updated)
-        }
+        sayItAgainIfNeeded(updated.id, .cardAnswer(cardID: updated.id))
     }
 
     func setDownCard(_ card: ReflectionCard) {
@@ -1104,6 +1157,16 @@ final class AppModel {
         // behind. Highlights stay either way: a mark on a shared page is
         // not a possession (§6.8).
         let mine = (keepNotesBehind || state.me == nil) ? [] : state.notes.filter { $0.authorID == state.me?.id }
+        // Every recording on this phone goes with the state that named it —
+        // theirs as well as yours, whatever was chosen about the rows.
+        let recordings = state.notes.compactMap(\.audioPath)
+        if !recordings.isEmpty {
+            Task { [store] in
+                for path in recordings {
+                    try? FileManager.default.removeItem(at: await store.audioFileURL(path))
+                }
+            }
+        }
         if let remote, remote.isSignedIn {
             Task {
                 for note in mine {
@@ -1352,11 +1415,9 @@ final class AppModel {
                 pendingRoomPushes.remove(roomID)
             }
         }
-        for noteID in Array(pendingNoteDeletes) {
-            let shape = pendingNoteDeleteShapes[noteID]
-            if (try? await remote.deleteNote(id: noteID, readingID: shape?.readingID ?? noteID, voice: shape?.voice ?? false)) != nil {
-                pendingNoteDeletes.remove(noteID)
-                pendingNoteDeleteShapes.removeValue(forKey: noteID)
+        for (noteID, shape) in pendingNoteDeletes {
+            if (try? await remote.deleteNote(id: noteID, readingID: shape.readingID, voice: shape.voice)) != nil {
+                pendingNoteDeletes.removeValue(forKey: noteID)
             }
         }
         for noteID in Array(pendingNotePushes) {
@@ -1376,9 +1437,9 @@ final class AppModel {
                 pendingHighlightDeletes.remove(highlightID)
             }
         }
-        for (key, push) in unsaid {
-            if (try? await push(remote)) != nil {
-                unsaid.removeAll { $0.key == key }
+        for (key, write) in unsaid {
+            if (try? await perform(write, on: remote)) != nil {
+                unsaid.removeValue(forKey: key)
             }
         }
         for inviteID in Array(state.invitesNotYetPushed) {
@@ -1683,7 +1744,7 @@ final class AppModel {
             let noteKind = NoteKind(rawValue: row.kind) ?? .written
             let verse = VerseAddress(bookID: row.bookId, chapter: row.chapter, verse: row.verse)
             let transcriptState: TranscriptState? = nil
-            if pendingNoteDeletes.contains(row.id) { continue }
+            if pendingNoteDeletes[row.id] != nil { continue }
             if let i = state.notes.firstIndex(where: { $0.id == row.id }) {
                 let mine = pendingNotePushes.contains(row.id)
                 if !mine { state.notes[i].body = row.body ?? state.notes[i].body }
@@ -1776,9 +1837,11 @@ final class AppModel {
         if graph.highlightsComplete {
             let pulledReadings = Set(graph.readings.map(\.id))
             let pulledHighlights = Set(graph.highlights.map(\.id))
+            let stillGoingUp = pendingHighlightPushes
             state.highlights.removeAll { highlight in
                 pulledReadings.contains(highlight.readingID) && !pulledHighlights.contains(highlight.id)
                     && !pendingHighlightDeletes.contains(highlight.id)
+                    && !stillGoingUp.contains(highlight.id)
             }
         }
 
