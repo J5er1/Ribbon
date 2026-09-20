@@ -198,7 +198,14 @@ extension Passkeys: ASAuthorizationControllerPresentationContextProviding {
     nonisolated func presentationAnchor(
         for controller: ASAuthorizationController
     ) -> ASPresentationAnchor {
-        MainActor.assumeIsolated { anchor ?? ASPresentationAnchor() }
+        // `perform` sets the anchor before it builds the controller, and
+        // every caller has already refused to start without one, so the
+        // ceremony never actually gets past the first of these. What stands
+        // behind it is the window the person is looking at, and then any
+        // window the app has — never a window made up on the spot, which
+        // could not have presented anything anyway. iOS 26 says as much by
+        // deprecating the way to make one.
+        MainActor.assumeIsolated { anchor ?? keyWindowAnchor() ?? anyWindowAnchor() }
     }
 }
 
@@ -211,4 +218,24 @@ func keyWindowAnchor() -> ASPresentationAnchor? {
         .compactMap { $0 as? UIWindowScene }
         .first { $0.activationState == .foregroundActive }?
         .keyWindow
+}
+
+/// The last resort behind `keyWindowAnchor()`: any window the app already
+/// has, and failing that a window belonging to a scene it already has. An
+/// app with neither is an app with nothing on screen, which is not a state
+/// a passkey ceremony can be started from.
+@MainActor
+private func anyWindowAnchor() -> ASPresentationAnchor {
+    let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+    let inFront = scenes.first { $0.activationState == .foregroundActive }
+    if let window = inFront?.windows.first ?? scenes.flatMap(\.windows).first {
+        return window
+    }
+    if let scene = inFront ?? scenes.first {
+        return ASPresentationAnchor(windowScene: scene)
+    }
+    // No scenes at all. Nothing could be presented from here whatever we
+    // return, and a window is still owed: an empty one is a poor answer,
+    // but trapping in its place would be a worse one.
+    return ASPresentationAnchor(frame: .zero)
 }
