@@ -1701,10 +1701,15 @@ final class AppModel {
         // An invite the backend no longer has (the room went, or it aged
         // out of a prune) must not go on being offered from here.
         let pulledInvites = Set(graph.invites.map(\.id))
+        // Read out of `state` before the removal starts, never inside it:
+        // `removeAll` holds `state` for writing for as long as the closure
+        // runs, and reading `state` from within that closure is two
+        // overlapping accesses to one property, which traps (A52).
+        let notYetPushed = state.invitesNotYetPushed
         state.invites.removeAll { invite in
             pulledRooms.contains(invite.roomID)
                 && !pulledInvites.contains(invite.id)
-                && !state.invitesNotYetPushed.contains(invite.id)
+                && !notYetPushed.contains(invite.id)
         }
 
         for row in graph.quietDays {
@@ -1849,10 +1854,13 @@ final class AppModel {
         if graph.highlightsComplete {
             let pulledReadings = Set(graph.readings.map(\.id))
             let pulledHighlights = Set(graph.highlights.map(\.id))
+            // Both of these read `state` through their getters, so both are
+            // taken before the removal rather than inside it (A52).
             let stillGoingUp = pendingHighlightPushes
+            let beingTakenBack = pendingHighlightDeletes
             state.highlights.removeAll { highlight in
                 pulledReadings.contains(highlight.readingID) && !pulledHighlights.contains(highlight.id)
-                    && !pendingHighlightDeletes.contains(highlight.id)
+                    && !beingTakenBack.contains(highlight.id)
                     && !stillGoingUp.contains(highlight.id)
             }
         }
