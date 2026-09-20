@@ -77,7 +77,11 @@ for (const t of TRANSLATIONS) {
 mkdirSync(dist, { recursive: true });
 cpSync(join(repo, "mark", "ribbon-wordmark-cesso.png"), join(dist, "wordmark.png"));
 cpSync(join(repo, "mark", "ribbon-icon-cesso-2048.png"), join(dist, "icon.png"));
-cpSync(join(repo, "ios", "Ribbon", "Resources", "PaperGrain.png"), join(dist, "grain.png"));
+// The grain is the app's own texture, and the app keeps it in its asset
+// catalog: the landing page and the phone share one file on purpose.
+cpSync(
+  join(repo, "ios", "Ribbon", "Resources", "Assets.xcassets", "PaperGrain.imageset", "PaperGrain.png"),
+  join(dist, "grain.png"));
 cpSync(join(here, "ribbon.css"), join(dist, "ribbon.css"));
 cpSync(join(here, "reading.js"), join(dist, "reading.js"));
 
