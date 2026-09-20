@@ -88,7 +88,19 @@ final class AppModel {
         }
         await model.loadPortraits()
         model.startListeningToPresence()
-        await model.openRoomChannel()
+        // Started, not waited for. Opening the room's socket needs the
+        // account's token, and `realtimeToken()` refreshes an expired one
+        // over the network — a round trip with no bound the launch can
+        // afford. Awaited here it gated the whole of `load()`, and the app
+        // shows nothing but the launch mark until `load()` returns, so a
+        // slow or unreachable backend held the first frame until the system
+        // gave up on the launch and killed the app without a word.
+        //
+        // Nothing here needs it: the listener above is already attached, so
+        // the roster arrives whenever the socket does, and the room renders
+        // from local state regardless (§6.10). Same shape as the auth
+        // question below.
+        Task { await model.openRoomChannel() }
         await Notifications.refreshAllowed()
         NotificationRouter.shared.deliver = { [weak model] destination in
             model?.pendingDestination = destination
