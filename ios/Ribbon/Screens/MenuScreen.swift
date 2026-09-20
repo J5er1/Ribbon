@@ -435,14 +435,17 @@ private struct YouIdentity: View {
     @FocusState private var nameFocused: Bool
 
     var body: some View {
-        let hasFace = model.me.flatMap { model.portrait($0.id) } != nil
+        // Read here, in the body, where the main actor is. The picker's
+        // label is a closure the model may not be reached from, and the
+        // face was being looked up twice besides.
+        let me = model.me
+        let face = me.flatMap { model.portrait($0.id) }
+        let hasFace = face != nil
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .center, spacing: 18) {
                 PhotosPicker(selection: $portraitItem, matching: .images) {
-                    PortraitView(
-                        person: model.me, ink: nil, size: 88,
-                        image: model.me.flatMap { model.portrait($0.id) })
-                    .accessibilityHidden(true)
+                    PortraitView(person: me, ink: nil, size: 88, image: face)
+                        .accessibilityHidden(true)
                 }
                 .buttonStyle(.pressable)
                 // What the control does depends on whether there is a face

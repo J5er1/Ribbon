@@ -14,8 +14,18 @@ struct BookChooserSheet: View {
     var onChoose: (String) -> Void
 
     @State private var query = ""
+    /// What the last finished search found. Held rather than computed:
+    /// searching reads every book on the phone, which is not something a
+    /// view body may do (see `searchResults`).
+    @State private var hits: [ScriptureStore.SearchHit] = []
+    /// A search is out. The empty state waits for it, so that typing does
+    /// not flash "Nothing matches" on the way to the hits.
+    @State private var searching = false
 
     private var translation: TranslationID { model.words(room: room, reading: model.openReading(in: room)) }
+    private var trimmedQuery: String { query.trimmingCharacters(in: .whitespaces) }
+    /// Two characters is where the chooser turns into a search (S13).
+    private var hasQuery: Bool { trimmedQuery.count >= 2 }
     private var onShelf: Set<String> {
         Set(model.shelf(of: room).map(\.bookID))
     }
@@ -27,7 +37,7 @@ struct BookChooserSheet: View {
                     searchField
                         .padding(.top, 16)
 
-                    if query.trimmingCharacters(in: .whitespaces).count >= 2 {
+                    if hasQuery {
                         searchResults
                     } else {
                         starterRow
@@ -42,6 +52,26 @@ struct BookChooserSheet: View {
             .toolbarVisibility(.hidden, for: .navigationBar)
         }
         .presentationBackground(Palette.ground)
+        // The search runs here rather than in the body, off the main
+        // thread, and the id restarts it — which is also how it is
+        // cancelled, since the task from the previous keystroke is torn
+        // down before this one begins.
+        .task(id: "\(translation.rawValue)\u{1}\(trimmedQuery)") {
+            guard hasQuery else {
+                hits = []
+                searching = false
+                return
+            }
+            searching = true
+            // A keystroke is not a search: a moment to finish the word,
+            // which the next keystroke cancels before any book is opened.
+            try? await Task.sleep(for: .milliseconds(200))
+            guard !Task.isCancelled else { return }
+            let found = await model.scripture.hits(matching: trimmedQuery, translation: translation)
+            guard !Task.isCancelled else { return }
+            hits = found
+            searching = false
+        }
     }
 
     private var searchField: some View {
@@ -123,12 +153,15 @@ struct BookChooserSheet: View {
 
     @ViewBuilder
     private var searchResults: some View {
-        let hits = model.scripture.search(query, translation: translation)
         if hits.isEmpty {
             VStack(alignment: .leading, spacing: 18) {
-                Text(Copy.nothingMatches)
-                    .font(RibbonType.ui(15))
-                    .foregroundStyle(Palette.muted)
+                // Nothing to say yet while the books are still being read:
+                // "Nothing matches" is a finding, not a waiting state.
+                if !searching {
+                    Text(Copy.nothingMatches)
+                        .font(RibbonType.ui(15))
+                        .foregroundStyle(Palette.muted)
+                }
                 // The list stays visible beneath (S13).
                 allBooks
             }
