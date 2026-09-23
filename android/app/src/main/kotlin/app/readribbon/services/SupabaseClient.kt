@@ -150,15 +150,26 @@ class SupabaseClient(
      * when the merge key isn't the primary key (memberships merge on
      * room_id,person_id — a joiner's row was minted server-side with its own
      * id).
+     *
+     * [ignoreDuplicates] leaves a row that is already there alone
+     * (`ON CONFLICT DO NOTHING`) instead of rewriting it. It is for the
+     * writes that only need the row to *exist* — a foreign-key target — and
+     * have no business updating one somebody else's policy guards.
      */
-    suspend fun upsert(table: String, rowsJson: String, onConflict: String? = null) {
+    suspend fun upsert(
+        table: String,
+        rowsJson: String,
+        onConflict: String? = null,
+        ignoreDuplicates: Boolean = false,
+    ) {
         val query = onConflict?.let { listOf("on_conflict" to it) } ?: emptyList()
+        val resolution = if (ignoreDuplicates) "ignore-duplicates" else "merge-duplicates"
         request(
             method = "POST",
             url = url("rest/v1/$table", query),
             body = rowsJson.toByteArray(),
             authenticated = true,
-            headers = mapOf("Prefer" to "resolution=merge-duplicates,return=minimal"),
+            headers = mapOf("Prefer" to "resolution=$resolution,return=minimal"),
         )
     }
 

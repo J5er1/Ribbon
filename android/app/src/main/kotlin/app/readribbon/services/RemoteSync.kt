@@ -377,6 +377,31 @@ class RemoteSync(
         }
     }
 
+    /**
+     * The room row as a target for the invite's foreign key, and nothing
+     * more.
+     *
+     * `rooms_update` is `is_member(id)`, and the membership is pushed
+     * *after* the room — so a room whose row is already there but whose
+     * membership is not refuses the update, and the chain dies one step
+     * before the membership that would have let it through. Registering a
+     * link only needs the row to exist; a rename travels by `push(room)` on
+     * its own path.
+     */
+    suspend fun ensure(room: Room) {
+        withAuthRetry {
+            client.upsert(
+                table = "rooms",
+                rowsJson = SupabaseClient.json.encodeToString(listOf(
+                    RoomRow(
+                        id = room.id, name = room.name, isPaused = room.isPaused,
+                        createdAt = room.createdAt,
+                        translation = room.translation.rawValue),
+                )),
+                ignoreDuplicates = true)
+        }
+    }
+
     suspend fun push(membership: Membership) {
         withAuthRetry {
             client.upsert(

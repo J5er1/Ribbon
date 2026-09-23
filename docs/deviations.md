@@ -3022,6 +3022,45 @@ A51. **The page is now built before the pull, not by it.** A50 named its own
     held for as long as the reader is in a room. That is the trade, and it is
     the right way round — the memory is idle, the milliseconds were not.
 
+A52. **The invite the backend never heard of, and the deadlock that kept it
+    that way.** Owner, on two Auth0 accounts, both iOS: every link answered
+    "That invite isn't there any more. Ask for a new one."
+
+    It was telling the truth. `invite_preview` is anon-callable and security
+    definer, so it answers for anybody holding the link, and no rows back
+    means exactly one thing — there is no row in `invites` with that id. The
+    link had never been registered.
+
+    **The push died one step before the step that would have let it
+    through.** `pushInvite` registers what a link needs, in order: the
+    profile, the room, the membership, then the invite. The room push was a
+    blind upsert — `resolution=merge-duplicates`, conflicting on the primary
+    key — so for a room whose row was already there it became an `UPDATE`,
+    and `rooms_update` is `is_member(id)`, which stays false until the
+    *membership* lands, which is the next step. 42501, every time, on every
+    resume, for good:
+
+        new row violates row-level security policy for table "rooms"
+
+    The profile push in front of it succeeding is what clears the account of
+    suspicion: `profiles_insert` is `id = current_user_id()`, so getting past
+    it proves the Auth0 token resolves to the right person. The identity was
+    never the problem; the ordering was.
+
+    **Registering a link does not need to rewrite the room.** The row is
+    wanted as the invite's foreign-key target and nothing else, so
+    `ensure(room:)` sends `resolution=ignore-duplicates`: a room already
+    there is left alone, `rooms_update` is never consulted, and the chain
+    reaches the membership and the invite. A rename still travels — it has
+    its own push, on its own path, where an update is the whole point.
+
+    **What this does not fix**, and could not: a room seated by an identity
+    that is no longer signed in. `memberships_insert` admits your own row
+    only into a room with no members or one you are already in, so a room
+    whose only membership belongs to an account you have stopped using
+    cannot be re-entered from the app at all. That is a repair to be run
+    against the database, not a path for the client to find.
+
 ## iOS (phase four): the second pass
 
 Android took a design pass of its own (A18–A51) and the two platforms
