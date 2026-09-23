@@ -54,6 +54,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -132,6 +133,7 @@ import app.readribbon.services.VoiceRecorder
 import app.readribbon.services.ensureRemoteChapter
 import java.io.File
 import kotlin.math.abs
+import kotlin.math.roundToInt
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -139,6 +141,8 @@ import kotlin.time.Instant
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 // S02 — the surface everything else exists to protect. No top bar, no back
@@ -171,6 +175,44 @@ private val FUEL_INTERVAL = 25.seconds
 
 /** A highlight's label names who made it, then goes (S06). */
 private val HIGHLIGHT_LABEL_LIFETIME = 2600.milliseconds
+
+/**
+ * How far above the reading line a landed verse's first line rests (I30).
+ * Just above, not on it: the page counts a verse as yours once its first line
+ * has crossed the line, and a verse sitting exactly on it is a coin toss
+ * between two verses.
+ */
+private val LANDING_LEAD = 6.dp
+
+/**
+ * A verse the page has been sent to (deviation 7, I30): its own place as the
+ * book opens, a named place, or the way back after a follow.
+ *
+ * Swift's `Landing` also carries the two moves it takes to get there, because
+ * a `ScrollViewReader` can only aim at a view. `landOn` makes them in one
+ * coroutine, so this is only what outlives them — the hold: the page says you
+ * are at the verse until a scroll carries the reading line off it.
+ */
+private data class Landing(
+    /** Which landing this is, so one still waiting can tell it was replaced. */
+    val id: Int,
+    val address: VerseAddress,
+    /** There. From here the page is held at the verse. */
+    val arrived: Boolean = false,
+    /**
+     * Where `trackReading` found the reading line once the page came to rest:
+     * the hold lasts until it finds it somewhere else.
+     */
+    val line: VerseAddress? = null,
+)
+
+/**
+ * A verse's first line in its chapter — or, in a version without that verse
+ * (there are verses some translations leave out), the nearest one before it
+ * that the version has.
+ */
+private fun ChapterLayout.firstLineOf(verse: Int): Dp? =
+    verseFirstLineY[verse] ?: verseFirstLineY.filterKeys { it < verse }.maxByOrNull { it.key }?.value
 
 /** The gutter's centre line. Left edge, notes only (§4.2). */
 private val GUTTER_X = 14.dp
@@ -325,6 +367,17 @@ fun ReadingScreen(
      */
     var programmaticScrollUntil by remember { mutableStateOf(Instant.DISTANT_PAST) }
 
+    /** The verse the page has been sent to, and whether it is there (I30). */
+    var landing by remember { mutableStateOf<Landing?>(null) }
+    var landingsMade by remember { mutableIntStateOf(0) }
+
+    /**
+     * Where you are right now, as the page reports it — ahead of the
+     * throttled save, as Swift's `latestAddress` is, so the ribbon is left
+     * where you were and not where the last save was.
+     */
+    var latestAddress by remember { mutableStateOf<VerseAddress?>(null) }
+
     /**
      * How much room the presence panel needs beside the text. The panel
      * never covers Scripture, so the measure insets instead and the text
@@ -402,6 +455,9 @@ fun ReadingScreen(
      * still breaks a follow (§4.2).
      */
     fun scrollToChapter(n: Int) {
+        // A chapter chosen, or a follow carrying the page: either way it is
+        // somewhere else now, and a landing lets go.
+        landing = null
         scope.launch {
             val index = itemIndexOfChapter(n).coerceIn(0, (chapterCount - 1) * 2)
             // Under reduce motion the page is simply already there (§11).
@@ -420,6 +476,83 @@ fun ReadingScreen(
         scrollToChapter(n)
     }
 
+    /**
+     * Sends the page to a verse (deviation 7, I30).
+     *
+     * The verse's first line comes to rest just above the reading line — the
+     * upper third, the line `trackReading` reads your place from — so the
+     * page, measuring itself, finds the verse it was sent to. It used to land
+     * on the head of the verse's chapter, where the same measure found a verse
+     * near the top and saved that: every open and close slid your place back
+     * to the start of its chapter.
+     *
+     * Swift aims a `ScrollViewReader` at a mark set in the chapter and has to
+     * learn where `.top` puts it. `scrollToItem` takes an offset into the item,
+     * and the list knows its own padding, so here it is one exact move once
+     * the chapter's lines are known — with the chapter brought on first when
+     * they are not, because a verse's line only exists once its chapter is
+     * typeset. A verse near the head of its chapter keeps the chapter at the
+     * top: the offset never goes above the chapter's own.
+     */
+    suspend fun landOn(address: VerseAddress, animated: Boolean) {
+        if (address.bookID != reading.bookID) return
+        // Wherever the page is now is where you were reading, and this is
+        // about to take it somewhere else: keep it, ahead of the throttle.
+        if (landing == null) {
+            latestAddress?.takeIf { it != model.myPosition(reading) }?.let {
+                model.savePosition(reading = reading, address = it)
+            }
+        }
+        val chapter = address.chapter.coerceIn(1, chapterCount)
+        val index = itemIndexOfChapter(chapter)
+        val id = ++landingsMade
+        landing = Landing(id = id, address = address)
+        latestAddress = address
+        programmaticScrollUntil = Clock.System.now() + PROGRAMMATIC_SCROLL_GRACE
+        val layout = chapterLayouts[chapter] ?: run {
+            listState.scrollToItem(index)
+            snapshotFlow { chapterLayouts[chapter] }.filterNotNull().first()
+        }
+        // Taken back while it waited: a finger on the page, or somewhere else
+        // asked for.
+        if (landing?.id != id) return
+        val offset = layout.firstLineOf(address.verse)?.let { verseY ->
+            with(density) {
+                listState.layoutInfo.beforeContentPadding + verseY.toPx() -
+                    (viewportHeight * 0.3f - LANDING_LEAD.toPx())
+            }.roundToInt().coerceAtLeast(0)
+        } ?: 0
+        programmaticScrollUntil = Clock.System.now() + PROGRAMMATIC_SCROLL_GRACE
+        if (animated && !reduceMotion) {
+            listState.animateScrollToItem(index, offset)
+        } else {
+            listState.scrollToItem(index, offset)
+        }
+        if (landing?.id == id) landing = landing?.copy(arrived = true)
+    }
+
+    /**
+     * The verse the page was sent to, for as long as it is still where you
+     * are; null, and the page is yours. Swift's `heldLanding(against:)`.
+     *
+     * Without the hold, the page's own measure would decide where you are the
+     * moment it came to rest — and that measure is only as good as the
+     * landing's aim. Held, you are where you were sent until a scroll carries
+     * the reading line off the verse it came to rest on.
+     */
+    fun heldLanding(measured: VerseAddress): VerseAddress? {
+        val held = landing ?: return null
+        if (!held.arrived) return held.address
+        val line = held.line
+        if (line == null) {
+            landing = held.copy(line = measured)
+            return held.address
+        }
+        if (line == measured) return held.address
+        landing = null
+        return null
+    }
+
     fun recordFuel(at: VerseAddress? = null) {
         lastFuelRecord = Clock.System.now()
         model.recordReadingActivity(
@@ -429,11 +562,6 @@ fun ReadingScreen(
     }
 
     /**
-     * The book has been put down: the last things that belong to having been
-     * in it. Separate from [close] because a page can also leave under a
-     * finger, which is not a close *request* but a close that has happened.
-     */
-/**
      * Where this session started, so that closing the book without having
      * read moves nothing.
      *
@@ -442,14 +570,32 @@ fun ReadingScreen(
      * this it would drag the room's ribbon back to wherever you happened to
      * be. Worse than doing nothing: it would quietly undo somebody else's
      * ribbon on a glance.
+     *
+     * Taken again each time the book opens (see `sheet.committed` below).
+     * The page outlives the reading of it (A51), and remembered once, this
+     * was the place the page was first built at: read once, and every later
+     * glance put the ribbon back where that first reading stopped.
      */
-    val openedAt = remember(reading.id) { model.myPosition(reading) }
+    var openedAt by remember(reading.id) { mutableStateOf(model.myPosition(reading)) }
 
+    /**
+     * The book has been put down: the last things that belong to having been
+     * in it. Separate from [close] because a page can also leave under a
+     * finger, which is not a close *request* but a close that has happened.
+     */
     fun laidDown() {
         if (!model.state.hasSeenMarginHint) {
             model.markMarginHintSeen()
         }
         recordFuel()
+        // Where you stopped, ahead of the throttled save — unless the page is
+        // still held where it was sent, which is not somewhere you read to
+        // (I30). Then it is your own place, untouched.
+        if (landing == null) {
+            latestAddress?.takeIf { it != model.myPosition(reading) }?.let {
+                model.savePosition(reading = reading, address = it)
+            }
+        }
         // The ribbon goes where you stopped (A30). There is no control for
         // this because there is no separate act: closing the book *is* the
         // gesture, the same as it is with a ribbon in a physical Bible. Your
@@ -627,7 +773,9 @@ fun ReadingScreen(
     fun follow(person: PresentPerson) {
         // Tap a portrait to follow — a page-fly, no confirmation dialog
         // (§4.2).
-        followBackOffer.beganFollowing(model.myPosition(reading))
+        // Where you were is where the page says, not the last throttled save
+        // of it.
+        followBackOffer.beganFollowing(latestAddress ?: model.myPosition(reading))
         model.followingPersonID = person.id
         person.position?.let {
             carriedTo = person.id to it.chapter
@@ -678,12 +826,21 @@ fun ReadingScreen(
             ?.filterValues { it <= yInChapter }
             ?.maxByOrNull { it.value }
             ?.key ?: 1
-        val address = VerseAddress(bookID = reading.bookID, chapter = chapter, verse = verse)
+        val measured = VerseAddress(bookID = reading.bookID, chapter = chapter, verse = verse)
+        // A verse the page was sent to stays where you are until you move
+        // off it (I30).
+        val held = heldLanding(measured)
+        val address = held ?: measured
+        latestAddress = address
         // Position saves are cheap but not free — a scroll emits geometry
         // every frame, and the store persists on mutation.
         if (now - lastPositionSave > POSITION_SAVE_INTERVAL) {
             lastPositionSave = now
-            model.savePosition(reading = reading, address = address)
+            // Being sent to a verse is not reading to it: your own place
+            // waits until you do.
+            if (held == null) {
+                model.savePosition(reading = reading, address = address)
+            }
             if (!model.readingQuietly) {
                 val fraction = (yInChapter.value / maxOf(1f, frame.height)).toDouble().coerceIn(0.0, 1.0)
                 scope.launch {
@@ -756,6 +913,9 @@ fun ReadingScreen(
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
                 if (source != NestedScrollSource.UserInput) return Offset.Zero
+                // A finger on the page takes back a landing still on its way
+                // (I30): Swift's `fingerDown`, read where the drag arrives.
+                if (landing?.arrived == false) landing = null
                 // Once the book is coming down it owns the gesture in both
                 // directions. Without this, pushing back up would scroll
                 // Scripture underneath a page that is halfway off the screen.
@@ -826,25 +986,23 @@ fun ReadingScreen(
 
     // Opening, in two halves, because the page is raised before it is
     // entered. Where it opens is settled at once — the page has to rise
-    // already showing the right chapter, not jump to it once it lands.
+    // already showing the right verse, not jump to it once it lands.
     //
     // Keyed on `openAt` rather than `Unit`, and that is load-bearing now the
     // page is built before anybody asks for it (A51): a standby page is
     // composed with no target and settles on your own position, and the
     // target for a tapped notification or a quoted verse arrives *after* it.
     // Under `Unit` that target was never read and the page opened in the
-    // wrong place. Compared against where the list already is rather than
-    // against chapter 1, because a pre-positioned page can be asked to go
-    // back to the first chapter as well as forward.
+    // wrong place. The landing is an absolute move, so a pre-positioned page
+    // can be sent back towards the first chapter as well as forward, and one
+    // already where it is asked to be does not move.
     LaunchedEffect(openAt) {
-        val position = openAt ?: model.myPosition(reading)
-        val index = itemIndexOfChapter(position.chapter)
-        val settled = listState.firstVisibleItemIndex == index &&
-            listState.firstVisibleItemScrollOffset == 0
-        if (!settled) {
-            programmaticScrollUntil = Clock.System.now() + PROGRAMMATIC_SCROLL_GRACE
-            listState.scrollToItem(index)
-        }
+        // A named place is your own going somewhere, and a follow still
+        // running from before ends here (§4.2) — or the roster's next tick
+        // would carry the page off the verse it was sent to.
+        if (openAt != null) model.followingPersonID = null
+        // On the verse, not the top of its chapter (deviation 7, I30).
+        landOn(openAt ?: model.myPosition(reading), animated = false)
     }
 
     // Following is a thread, not a jump (§4.2).
@@ -887,6 +1045,7 @@ fun ReadingScreen(
     // recording a reading that did not happen.
     LaunchedEffect(sheet.committed) {
         if (!sheet.committed) return@LaunchedEffect
+        openedAt = model.myPosition(reading)
         recordFuel()
     }
 
@@ -1121,7 +1280,8 @@ fun ReadingScreen(
                     clearLift()
                 },
                 onDismissVoice = ::clearLift,
-                onGoBack = { address -> goToChapter(address.chapter) },
+                // Where you were is a verse, not the top of its chapter (I30).
+                onGoBack = { address -> scope.launch { landOn(address, animated = true) } },
                 onClose = ::close,
                 modifier = Modifier.align(Alignment.BottomCenter),
             )

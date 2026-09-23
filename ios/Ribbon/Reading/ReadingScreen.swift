@@ -44,6 +44,10 @@ struct ReadingScreen: View {
     /// throttled save, so the ribbon is left where you were and not where
     /// the last save was.
     @State private var latestAddress: VerseAddress?
+    /// The chapter the running head names. Kept apart from
+    /// `latestAddress`, and written only when it changes, so that the page
+    /// is not re-read on every verse a scroll passes.
+    @State private var headChapter: Int?
     /// Licensed chapters that would not come, and how many times each has
     /// been asked for — the retry re-keys the fetch (A45).
     @State private var chapterAttempts: [Int: Int] = [:]
@@ -229,6 +233,11 @@ struct ReadingScreen: View {
             .onAppear {
                 let position = openAt ?? model.myPosition(in: reading)
                 openedAt = model.myPosition(in: reading)
+                // A named place is your own going somewhere, and a follow
+                // still running from before ends here (§4.2) — or the
+                // roster's next tick would carry the page off the verse it
+                // was sent to.
+                if openAt != nil { model.followingPersonID = nil }
                 // On the verse, not the top of its chapter (deviation 7,
                 // I30). The page is rising while this happens, so the moves
                 // are made without animation: it arrives already there.
@@ -343,8 +352,11 @@ struct ReadingScreen: View {
     }
 
     /// The chapter whose top has crossed the upper third — where you are.
+    /// As the page reports it rather than as last saved: a page held where
+    /// it was sent saves nothing until you move (I30), and the running head
+    /// still has to name the chapter on the screen.
     private var currentChapter: Int {
-        model.myPosition(in: reading).chapter
+        headChapter ?? model.myPosition(in: reading).chapter
     }
 
     /// "Tell you when Ruth leaves a note?" — §6.1's exact question, asked
@@ -1256,6 +1268,7 @@ struct ReadingScreen: View {
         let held = heldLanding(against: measured)
         let address = held ?? measured
         latestAddress = address
+        if headChapter != address.chapter { headChapter = address.chapter }
         // Position saves are cheap but not free — a scroll emits geometry
         // every frame, and the store persists on mutation.
         if Date().timeIntervalSince(lastPositionSave) > 2 {

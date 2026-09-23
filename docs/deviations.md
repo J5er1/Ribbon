@@ -53,10 +53,17 @@ reasoning.
    carve appears, and the card fades/settles over 400 ms. Revisit on
    device.
 
-7. **Position restore is chapter-plus-verse tracked, chapter-anchored on
-   open.** Reading reopens at your chapter; scroll-to-exact-verse is a
-   device-tuning pass (`ScrollViewReader` needs laid-out geometry to
-   target a verse's line).
+7. **Position restore lands on the verse.** It was chapter-anchored:
+   reading reopened at the head of your chapter, and scroll-to-exact-verse
+   was left for a device-tuning pass because `ScrollViewReader` needs
+   laid-out geometry to aim at a verse's line. It is no longer a deviation
+   (September 2026; A54, I30). Every way into the book now lands the
+   verse's first line on the reading line. The chapter anchor had turned
+   out to cost more than precision: the page measured itself at the
+   chapter's head and saved what it found, so opening the book and closing
+   it again was enough to lose the verse. What still wants a device is the
+   aim itself: how far above the line the verse rests, and the one number
+   iOS reads off its own first landing (I30).
 
 8. **Word-boundary highlight extension is not built.** S06's "word
    boundaries when dragged slowly" — the current drag snaps to verse
@@ -3096,6 +3103,59 @@ A53. **Following did not follow, and your own name did not look like
     the smallest thing that says otherwise; the in-place edit S18 asks for is
     untouched.
 
+A54. **The book opens on your verse, not the head of its chapter.**
+    Deviation 7 left verse-level restore for a device, and it was a defect
+    rather than an imprecision. §6.2: "Reading opens at your position." §6.3:
+    "Tap → reading opens at that verse, the mark breathing." Every way into
+    the book — your own place, a waiting row's note, the ribbon, a quoted
+    verse, a tapped notification, "back to where you were" — scrolled to the
+    head of the verse's chapter. Then the page measured where it was, and the
+    verse under the reading line, a few verses into the chapter, went into
+    your position on the first pass. Opening the book and closing it again
+    was enough to lose the verse; and since your place had moved, closing
+    left the room's ribbon there too — the glance `openedAt` exists to make
+    harmless.
+
+    **Landing.** `landOn` puts the verse's first line 6 dp above the reading
+    line: the upper third, the same line `trackReading` reads your place
+    from, so the page measuring itself finds the verse it was sent to. Just
+    above rather than on it, because a verse sitting exactly on the line is a
+    coin toss between two. `scrollToItem` takes an offset into the item and
+    the list knows its own padding, so it is one exact move once the
+    chapter's lines are known; a chapter not yet typeset is brought on first
+    and waited for. A verse near the head of its chapter is already above the
+    line with the chapter at the top of the screen, and opens that way: the
+    page does not scroll back past the chapter's head to put it on the line.
+    A verse the room's version leaves out lands on the nearest verse before
+    it.
+
+    **Holding.** The landed verse is where you are until a scroll carries the
+    reading line off the verse it came to rest on; then the page's measure
+    has it again. Without the hold the aim would have to be exact to the
+    point, forever, or every open would move you a verse. With it, a line of
+    aim costs a line of where the verse sits, never the verse. Held, the page
+    saves no position, because being sent somewhere is not reading to it: a
+    note looked at and closed leaves your place and the ribbon where they
+    were. Presence still says where the page is. A finger on the page takes
+    back a landing still on its way.
+
+    **Three things it exposed.** `openedAt` was remembered once, and since
+    A51 the page outlives the reading of it, so after the first read every
+    later glance put the ribbon back where that read had stopped; it is taken
+    again whenever the book opens. The follow-back offer remembered the last
+    throttled save, and closing the book trusted one up to two seconds
+    behind; both now use the page's own last word (`latestAddress`, which
+    Swift already kept). And a named place opened with a follow still running
+    from before was taken away again on the roster's next tick. A named place
+    is your own going somewhere, and the follow ends, as your own scroll
+    would end it.
+
+    **Not changed.** Following still carries the page by chapter: A53's
+    reasoning holds, since their scroll inside a chapter is a finer signal
+    than the page can answer without twitching. "The cards are open" still
+    opens at the head of the chapter whose card opened, and the card is at
+    its foot. None of this has run on a device.
+
 ## iOS (phase four): the second pass
 
 Android took a design pass of its own (A18–A51) and the two platforms
@@ -3538,6 +3598,46 @@ I29. **Not changed: a note's line height still opens at once.** S04 asks for
     it is trusted. Everything above was built by CI's simulator compile and
     reasoned through against the SwiftUI documentation, and none of it has
     yet been run on a device.
+
+I30. **The book opens on your verse (A54).** The decision and the hold are
+    A54's; what is different on iOS is the aim. A `ScrollViewReader` can
+    only aim at a view, and a chapter is one text view, so the landing sets
+    a point-sized mark inside the chapter — at the depth that, put at the top
+    of the screen, leaves the verse's line on the reading line — and scrolls
+    to that. A chapter not on the page is two moves: the chapter, then the
+    mark, once the chapter has been typeset and said where its lines are.
+
+    **The one number the page has to learn.** `scrollTo(_:anchor: .top)`
+    lines a view up with the top of the scroll view's visible area. The page
+    measures itself in the `.scrollView` space, and the documentation does
+    not say where one sits in the other — the safe area, give or take. So
+    the page reads it off its first landing, which always starts from a
+    known place: the chapter just put there by `.top`, or the first chapter
+    at rest less the page's top margin. The last chapter is not trusted for
+    it, because it can be too short to scroll its top all the way up. Until
+    then the top content inset stands in. This is the number a device should
+    check first. The hold means a wrong one moves where the verse sits by a
+    few points, never which verse is yours.
+
+    **Travelling one way.** "Back to where you were" eases. A chapter that is
+    not on the page comes in at its top when the page is travelling down to
+    it and at its foot travelling up, and the move to the line is made only
+    if it carries on the same way: a verse the page would have to turn back
+    for is already on the screen, and turning back is the overshoot §9.1
+    forbids. Every other landing is made without animation. The book is
+    still rising when it opens, so it arrives already there.
+
+    **What else was wrong on iOS.** A notification tapped while the book was
+    open left the page where it was: the target was read in `onAppear` and
+    never again. It lands now, at once, as it always has on Android. The
+    reading page had no identity of its own, so a notification that opened
+    another book over this one would have kept this book's typeset chapters;
+    it takes one per book. The running head named the chapter of the last
+    save, which a held page does not make; it names the chapter on the
+    screen, written only when that changes, so a scroll does not re-read the
+    page on every verse. And `openedAt` was where the page was sent rather
+    than your own place (Android has always taken your own), so a note opened
+    and closed left the ribbon near it.
 
 ## Licensed translations (decided: API.Bible)
 

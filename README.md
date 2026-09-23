@@ -168,6 +168,9 @@ The one deliberate difference is colour: Android takes it from the wallpaper
 - **The ribbon.** The room keeps one place in the book — where whoever read
   last set it down. It is offered, never applied: one quiet sentence you may
   tap. Your own position is untouched and the book still opens where you are.
+- **The book opens on your verse**, not at the head of its chapter — and so
+  does every other way in: a waiting note, the ribbon, a quoted verse, a
+  tapped notification, the way back after a follow (A54, I30).
 - **A chapter list**, reached from the foot of the page, marking where you
   are and where the ribbon is. Nothing else, because everything else a
   chapter grid usually shows is a count.
