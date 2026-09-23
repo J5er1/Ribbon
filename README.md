@@ -172,6 +172,8 @@ The one deliberate difference is colour: Android takes it from the wallpaper
   does every other way in: a waiting note, the ribbon, a quoted verse, a
   tapped notification, the way back after a follow. "The cards are open"
   opens on the card (A54, I30).
+- **Note search, on the shelf**: something someone said, across every book
+  the room has read, the open one included (A55).
 - **A chapter list**, reached from the foot of the page, marking where you
   are and where the ribbon is. Nothing else, because everything else a
   chapter grid usually shows is a count.

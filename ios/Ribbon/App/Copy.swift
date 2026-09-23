@@ -241,6 +241,11 @@ enum Copy {
     // MARK: The chooser (S13)
     static let goodPlacesToStart = "Good places to start together"
     static let nothingMatches = "Nothing matches that."
+    /// Note search's prompt, on the shelf (S23) — the book's own words for
+    /// it: finding "something someone said".
+    static let findSomethingSaid = "Something someone said"
+    /// A note found by a search, read out: where, and who (never how many).
+    static func noteFound(_ verse: String, by name: String) -> String { "\(verse), from \(name)" }
     static let search = "Search"
     /// A book as the chooser speaks it: its name and the fire it makes,
     /// which is a scale, not a number (Law 2).

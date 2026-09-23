@@ -90,7 +90,10 @@ struct RoomScreen: View {
                     VStack(alignment: .leading, spacing: 12) {
                         SectionLabel(Copy.theShelf)
                             .padding(.horizontal, RoomMetrics.gutter)
-                        ShelfView(room: room, readings: shelf, onStartAnother: { showChooser = true })
+                        ShelfView(
+                            room: room, readings: shelf,
+                            onStartAnother: { showChooser = true },
+                            onOpenNote: { reading, verse in onOpenReading(reading, .verse(verse)) })
                     }
                     .padding(.top, 40)
                     .transition(.opacity)

@@ -1311,6 +1311,35 @@ class AppModel(
         notes(reading).filter { it.verse.chapter == chapter }
 
     /**
+     * What someone said, found (S23) — Swift's `notes(in:matching:)`: every
+     * note the room has left, in every reading it has done, the open one
+     * included, because the shelf is the room's whole memory and not only its
+     * finished books. Written notes by their words, voice notes by their
+     * transcripts; any case, any accent.
+     *
+     * A note left for you and not yet found is not searched. Its words are the
+     * verse's to give you (§6.3), and the room already lists it waiting.
+     *
+     * The open book first, then the shelf from the latest ember back; inside a
+     * book, verse order. A search begins at two characters, as the chooser's
+     * does (S13). Everything here is on the phone, so it works offline and
+     * says nothing about what is not (S23).
+     */
+    fun notes(room: Room, matching: String): List<Note> {
+        val query = matching.trim()
+        val me = state.me ?: return emptyList()
+        if (query.length < 2) return emptyList()
+        val sought = query.folded()
+        val readings = listOfNotNull(openReading(room)) + shelf(room).reversed()
+        return readings.flatMap { reading ->
+            notes(reading).filter { note ->
+                (note.authorID == me.id || me.id in note.foundBy) &&
+                    (note.body ?: note.transcript)?.folded()?.contains(sought) == true
+            }
+        }
+    }
+
+    /**
      * Notes left for me that I haven't found yet — the room's waiting rows
      * (S01). Rows, never a count, never a badge.
      */
@@ -3211,3 +3240,15 @@ class AppModel(
         }
     }
 }
+
+/**
+ * Any case, any accent (S23): Swift's `localizedStandardContains`, which a
+ * Kotlin `contains(ignoreCase = true)` is only half of — "Élie" and "elie"
+ * are one word to somebody searching for it.
+ */
+internal fun String.folded(): String =
+    java.text.Normalizer.normalize(this, java.text.Normalizer.Form.NFD)
+        .replace(COMBINING_MARKS, "")
+        .lowercase()
+
+private val COMBINING_MARKS = Regex("\\p{Mn}+")

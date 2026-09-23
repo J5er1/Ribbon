@@ -834,6 +834,31 @@ final class AppModel {
         notes(in: reading).filter { $0.verse.chapter == chapter }
     }
 
+    /// What someone said, found (S23): every note the room has left, in
+    /// every reading it has done — the open one included, because the shelf
+    /// is the room's whole memory and not only its finished books. Written
+    /// notes by their words, voice notes by their transcripts; any case, any
+    /// accent.
+    ///
+    /// A note left for you and not yet found is not searched. Its words are
+    /// the verse's to give you (§6.3), and the room already lists it waiting.
+    ///
+    /// The open book first, then the shelf from the latest ember back; inside
+    /// a book, verse order. A search begins at two characters, as the
+    /// chooser's does (S13). Everything here is on the phone, so it works
+    /// offline and says nothing about what is not (S23).
+    func notes(in room: Room, matching query: String) -> [Note] {
+        let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard query.count >= 2, let me = state.me else { return [] }
+        let readings = [openReading(in: room)].compactMap { $0 } + shelf(of: room).reversed()
+        return readings.flatMap { reading in
+            notes(in: reading).filter { note in
+                guard note.authorID == me.id || note.foundBy.contains(me.id) else { return false }
+                return (note.body ?? note.transcript)?.localizedStandardContains(query) == true
+            }
+        }
+    }
+
     /// Notes left for me that I haven't found yet — the room's waiting rows
     /// (S01). Rows, never a count, never a badge.
     func waitingNotes(in room: Room) -> [Note] {

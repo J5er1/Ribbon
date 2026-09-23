@@ -224,11 +224,16 @@ fun BookChooserContent(
 
 // MARK: The search field
 
+/**
+ * The one search field — the chooser's, and the shelf's for notes (S23),
+ * which differ only in what they ask for.
+ */
 @Composable
-private fun SearchField(
+internal fun SearchField(
     query: String,
     onQueryChange: (String) -> Unit,
     modifier: Modifier = Modifier,
+    prompt: String = Copy.SEARCH,
 ) {
     val shape = RoundedCornerShape(10.dp)
     Box(
@@ -245,7 +250,7 @@ private fun SearchField(
     ) {
         if (query.isEmpty()) {
             Text(
-                text = Copy.SEARCH,
+                text = prompt,
                 style = RibbonType.ui(16f),
                 color = Palette.muted,
                 // The prompt is the field's decoration, not a second stop on
@@ -264,7 +269,7 @@ private fun SearchField(
             keyboardOptions = KeyboardOptions(autoCorrectEnabled = false),
             modifier = Modifier
                 .fillMaxWidth()
-                .semantics { contentDescription = Copy.SEARCH },
+                .semantics { contentDescription = prompt },
         )
     }
 }

@@ -44,11 +44,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import app.readribbon.app.AppModel
 import app.readribbon.app.Copy
+import app.readribbon.app.firstName
+import app.readribbon.app.folded
 import app.readribbon.core.Bible
 import app.readribbon.core.Highlight
 import app.readribbon.core.Ink
@@ -129,17 +137,159 @@ private val PORTRAIT_ROW_SPACING = (-20).dp
  *   so it is absent rather than empty-stated.
  * @param onOpenEmber the push to one ember's record (S11) — Swift's
  *   `NavigationLink(value: reading.id)`.
+ * @param onOpenNote a note found by the search, opened where it was left — in
+ *   its own book (S23).
  */
 @Composable
 fun ShelfView(
+    model: AppModel,
     room: Room,
     readings: List<Reading>,
     onStartAnother: () -> Unit,
     onOpenEmber: (Uuid) -> Unit,
+    onOpenNote: (Reading, VerseAddress) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val reduceMotion = rememberReduceMotion()
+    val focusManager = LocalFocusManager.current
+    var query by remember { mutableStateOf("") }
+    val trimmed = query.trim()
+    // Two characters is where a search begins (S13, S23).
+    val searching = trimmed.length >= 2
+    val found = if (searching) model.notes(room, matching = query) else emptyList()
+
     Column(
         modifier = modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.Start,
+        verticalArrangement = Arrangement.spacedBy(20.dp),
+    ) {
+        // Note search lives here, where what it searches lives (S23): not a
+        // bar across the front door, but a field on the room's memory.
+        SearchField(
+            query = query,
+            onQueryChange = { query = it },
+            prompt = Copy.FIND_SOMETHING_SAID,
+            modifier = Modifier.padding(horizontal = 24.dp),
+        )
+
+        AnimatedVisibility(
+            visible = found.isNotEmpty(),
+            enter = fadeIn(RibbonMotion.arrive(reduceMotion)),
+            exit = fadeOut(RibbonMotion.arrive(reduceMotion)),
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                found.forEach { note ->
+                    FoundNote(
+                        model = model,
+                        note = note,
+                        query = trimmed,
+                        onOpen = {
+                            // The keyboard goes with the room: the book comes
+                            // up over it.
+                            focusManager.clearFocus()
+                            model.state.readings
+                                .firstOrNull { it.id == note.readingID }
+                                ?.let { onOpenNote(it, note.verse) }
+                        },
+                    )
+                }
+            }
+        }
+
+        // Finding nothing says so over the shelf, which stays beneath, as the
+        // chooser's list does (S13).
+        AnimatedVisibility(
+            visible = searching && found.isEmpty(),
+            enter = fadeIn(RibbonMotion.arrive(reduceMotion)),
+            exit = fadeOut(RibbonMotion.arrive(reduceMotion)),
+        ) {
+            Text(
+                text = Copy.NOTHING_MATCHES,
+                style = RibbonType.ui(15f),
+                color = Palette.muted,
+                modifier = Modifier.padding(horizontal = 24.dp),
+            )
+        }
+
+        AnimatedVisibility(
+            visible = found.isEmpty(),
+            enter = fadeIn(RibbonMotion.arrive(reduceMotion)),
+            exit = fadeOut(RibbonMotion.arrive(reduceMotion)),
+        ) {
+            TheEmbers(
+                readings = readings,
+                onStartAnother = onStartAnother,
+                onOpenEmber = onOpenEmber,
+            )
+        }
+    }
+}
+
+/** One note found: where it is and whose, then its words around the match. */
+@Composable
+private fun FoundNote(
+    model: AppModel,
+    note: Note,
+    query: String,
+    onOpen: () -> Unit,
+) {
+    val said = note.body ?: note.transcript ?: ""
+    val name = if (note.authorID == model.me?.id) {
+        Copy.YOU
+    } else {
+        firstName(model.person(note.authorID)?.name ?: "")
+    }
+    val spoken = Copy.noteFound(note.verse.formatted, name) + ". " + said
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .sizeIn(minHeight = 44.dp)
+            .clickable(role = Role.Button, onClick = onOpen)
+            .clearAndSetSemantics {
+                contentDescription = spoken
+                role = Role.Button
+                onClick { onOpen(); true }
+            },
+        verticalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        SmallCaps("${note.verse.formatted} · $name", size = 12f, color = Palette.text.copy(alpha = 0.8f))
+        Text(
+            text = excerpt(said, query),
+            style = RibbonType.ui(15f),
+            color = Palette.muted,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/**
+ * The words around the match, so one late in a long note is still on the two
+ * lines a row has: from the start of a word a little before it. Swift's
+ * `excerpt(_:around:)`.
+ */
+private fun excerpt(said: String, query: String): String {
+    val at = said.folded().indexOf(query.folded())
+    // Folding keeps a Latin word's length but not every script's, so an index
+    // past the words' own end is not one to cut at.
+    if (at <= 48 || at >= said.length) return said
+    var start = at - 40
+    while (start > 0 && !said[start - 1].isWhitespace()) start--
+    return "…" + said.substring(start)
+}
+
+/** The embers, the keepsake line and the way to another book. */
+@Composable
+private fun TheEmbers(
+    readings: List<Reading>,
+    onStartAnother: () -> Unit,
+    onOpenEmber: (Uuid) -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.Start,
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {

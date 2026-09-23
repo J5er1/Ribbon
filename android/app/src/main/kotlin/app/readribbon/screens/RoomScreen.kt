@@ -390,10 +390,14 @@ fun RoomScreen(
                     Column(Modifier.padding(top = 40.dp, start = GUTTER, end = GUTTER)) {
                         SectionLabel(Copy.THE_SHELF)
                         ShelfView(
+                            model = model,
                             room = room,
                             readings = shelf,
                             onStartAnother = { showChooser = true },
                             onOpenEmber = onOpenEmber,
+                            onOpenNote = { reading, verse ->
+                                onOpenReading(reading, ReadingPlace.Verse(verse))
+                            },
                         )
                     }
                 }

@@ -3165,6 +3165,33 @@ A54. **The book opens on your verse, not the head of its chapter.**
     than the page can answer without twitching. None of this has run on a
     device.
 
+A55. **Note search, on the shelf (S23).** "Two searches, deliberately
+    separate." Scripture search has lived in the chooser for some time; note
+    search, which S23 puts on the shelf, had never been built. It is now, on
+    both platforms.
+
+    - **Where.** A field at the head of the shelf: the room's memory, not a
+      bar across the front door. It is there when the shelf is — from the
+      first finished book, since S10 has no shelf before one — and it covers
+      every reading the room has done, the open one included.
+    - **What it matches.** A note's words, or a voice note's transcript; any
+      case, any accent (`localizedStandardContains` on Swift, a folded
+      compare on Kotlin that does the same). Two characters begin a search,
+      as in the chooser.
+    - **What it will not find.** A note left for you and not yet found. Its
+      words are the verse's to give you (§6.3), and the room already lists it
+      waiting; a search box that read it out first would be a read receipt
+      the other way round.
+    - **What it shows.** The open book's notes first, then the shelf from the
+      latest ember back, in verse order within each: the reference and who,
+      then the words around the match. No count of anything. A row opens its
+      own book at the note's verse, and the keyboard goes with the room.
+      Finding nothing says so over the shelf, which stays.
+    - **Offline.** Everything it searches is on the phone, so it works, and
+      says nothing about the rest (S23).
+
+    `NoteSearchTest` holds the rules.
+
 ## iOS (phase four): the second pass
 
 Android took a design pass of its own (A18–A51) and the two platforms
@@ -3727,8 +3754,8 @@ written, this ledger records the difference.
   after ~96 h of quiet lands at catching, and any further feeding ≥15 min
   later lifts it. All in `FireTuning`, none of it ever surfaced in copy.
 - **Search field** in the chooser also searches Scripture text of every
-  bundled book (S23's scripture search); note search on the shelf is
-  phase-aligned with cards and not yet built.
+  bundled book (S23's scripture search); note search lives on the shelf
+  (A55).
 - **Four motion tokens the book does not name**, all in
   `RibbonMotion` (Android) because Android has two kinds of motion §9.1
   never had to describe. The **peel** — 6% smaller, 24 dp down, 28% toward
