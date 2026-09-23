@@ -46,8 +46,8 @@ struct SignInInline: View {
             case .email:
                 CentredTextField(
                     text: $email, prompt: Copy.yourEmail, submitLabel: .send,
-                    keyboard: .emailAddress, contentType: .emailAddress, onSubmit: sendCode)
-                .focused($focused)
+                    keyboard: .emailAddress, contentType: .emailAddress,
+                    focus: $focused, onSubmit: sendCode)
                 WayInButton(title: Copy.sendTheCode) { sendCode() }
                     .padding(.horizontal, 40)
                     .disabled(!emailReady || busy)
@@ -59,8 +59,8 @@ struct SignInInline: View {
                     .multilineTextAlignment(.center)
                 CentredTextField(
                     text: $code, prompt: Copy.theCode, submitLabel: .done,
-                    keyboard: .numberPad, contentType: .oneTimeCode, onSubmit: verify)
-                .focused($focused)
+                    keyboard: .numberPad, contentType: .oneTimeCode,
+                    focus: $focused, onSubmit: verify)
                 WayInButton(title: Copy.signIn) { verify() }
                     .padding(.horizontal, 40)
                     .disabled(!codeReady || busy)

@@ -241,13 +241,17 @@ struct SettingRow: View {
     var subtitle: String?
     var value: String?
     var chevron = true
+    /// The row whose value is being set right now, in a picker opened
+    /// beneath it: its value lights, so the picker says whose it is.
+    var active = false
     var action: () -> Void
 
-    init(_ title: String, subtitle: String? = nil, value: String? = nil, chevron: Bool = true, action: @escaping () -> Void) {
+    init(_ title: String, subtitle: String? = nil, value: String? = nil, chevron: Bool = true, active: Bool = false, action: @escaping () -> Void) {
         self.title = title
         self.subtitle = subtitle
         self.value = value
         self.chevron = chevron
+        self.active = active
         self.action = action
     }
 
@@ -257,7 +261,8 @@ struct SettingRow: View {
                 RowText(title: title, subtitle: subtitle)
                 Spacer(minLength: 8)
                 if let value {
-                    SmallCaps(value, size: 13, color: Palette.muted)
+                    SmallCaps(value, size: 13, color: active ? Palette.chartreuse : Palette.muted)
+                        .animation(RibbonMotion.arrive, value: active)
                 }
                 if chevron {
                     Chevron()
@@ -271,6 +276,7 @@ struct SettingRow: View {
         }
         .buttonStyle(.pressable)
         .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(active ? .isSelected : [])
     }
 }
 

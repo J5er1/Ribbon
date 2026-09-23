@@ -273,19 +273,7 @@ struct PresenceForm: View {
         .contentShape(Rectangle())
         .onTapGesture { onFollow(person) }
         .onLongPressGesture(minimumDuration: 0.7) {
-            Haptics.shared.completeThinkingOfYouHold()
-            Task { await model.presence.sendThinkingOfYou(to: person.id) }
-            // The ring stays full for a moment and then lets go, so what
-            // the hold did is seen as well as felt.
-            sentTo = person.id
-            holdTarget = nil
-            holdProgress = 0
-            Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(600))
-                withAnimation(RibbonMotion.settle) {
-                    if sentTo == person.id { sentTo = nil }
-                }
-            }
+            thinkOf(person)
         } onPressingChanged: { pressing in
             if pressing {
                 sentTo = nil
@@ -309,7 +297,29 @@ struct PresenceForm: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(presenceLabel(person, othersCount: 0))
-        .accessibilityHint("Tap to follow. Hold to let them know you're thinking of them.")
+        .accessibilityHint(Copy.followsThem)
+        // The hold, as an action (§11): a screen reader could hear that
+        // holding would send it, and had nothing to do instead of holding.
+        // Android has always published it this way.
+        .accessibilityAction(named: Copy.thinkingOfYou) { thinkOf(person) }
+    }
+
+    /// The hold completed, or the action taken: the tap on the shoulder goes
+    /// (§4.3).
+    private func thinkOf(_ person: PresentPerson) {
+        Haptics.shared.completeThinkingOfYouHold()
+        Task { await model.presence.sendThinkingOfYou(to: person.id) }
+        // The ring stays full for a moment and then lets go, so what
+        // the hold did is seen as well as felt.
+        sentTo = person.id
+        holdTarget = nil
+        holdProgress = 0
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(600))
+            withAnimation(RibbonMotion.settle) {
+                if sentTo == person.id { sentTo = nil }
+            }
+        }
     }
 
     private var myInk: Ink {

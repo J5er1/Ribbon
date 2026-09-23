@@ -3150,11 +3150,20 @@ A54. **The book opens on your verse, not the head of its chapter.**
     is your own going somewhere, and the follow ends, as your own scroll
     would end it.
 
+    **The cards.** "The cards are open" opened at the head of the chapter
+    whose card had opened — Android's own comment said the page had to land
+    at the chapter's end for the card to be on screen, and then asked for
+    its first verse — and the room's row of the same name opened at your
+    own place. A card is not a verse: it sits below the chapter's last one
+    (§4.6). So the place the book is sent to is a verse or a card
+    (`ReadingPlace`), and a card brings its passage end to the top of the
+    screen. The row goes to the card that opened last. Nothing is held,
+    because nothing was read.
+
     **Not changed.** Following still carries the page by chapter: A53's
     reasoning holds, since their scroll inside a chapter is a finer signal
-    than the page can answer without twitching. "The cards are open" still
-    opens at the head of the chapter whose card opened, and the card is at
-    its foot. None of this has run on a device.
+    than the page can answer without twitching. None of this has run on a
+    device.
 
 ## iOS (phase four): the second pass
 
@@ -3638,6 +3647,30 @@ I30. **The book opens on your verse (A54).** The decision and the hold are
     page on every verse. And `openedAt` was where the page was sent rather
     than your own place (Android has always taken your own), so a note opened
     and closed left the ribbon near it.
+
+I31. **Four small things the motion pass saw and left.** I29 closed on what
+    was not done; these were smaller, and they are done now.
+
+    - **A mark taken back vanished.** Android lowers a removed wash to
+      nothing (A38); iOS dropped it between two frames. It lifts off the
+      words now on `arrive`, and a piece of it that another mark still
+      covers is that mark's, drawn at once — the rule Android keeps. A fade
+      stays a fade under reduce motion (I22).
+    - **A field said nothing about being typed in.** The shared text field
+      sits on paper this dark, and the caret was the only sign of focus —
+      and on the sign-in, with an address and then a code, no sign at all of
+      which field was listening. Its edge brightens under the caret. The
+      caller's hold on focus is passed in rather than laid over the field
+      from outside, so one binding, not two, decides where focus is.
+    - **Quiet hours' wheel did not say whose it was.** Two times share one
+      wheel, which opens under the row it sets; that row's time lights while
+      the wheel is open, and is marked selected for VoiceOver. Android opens
+      a dialog for each time and never needed it.
+    - **The presence form's hint was a string in a view, and the hold had no
+      equivalent.** The hint is in `Copy`, as the tap's consequence ("Follows
+      them"), and the hold is published as an action, "Thinking of you", as
+      it always has been on Android (§11: every gesture has an equivalent
+      that is not a gesture).
 
 ## Licensed translations (decided: API.Bible)
 

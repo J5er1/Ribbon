@@ -198,7 +198,10 @@ struct NotificationSettingsScreen: View {
                 }
 
                 SettingsGroup(title: Copy.quietHours, footnote: Copy.thinkingOfYouStillArrives) {
-                    SettingRow(Copy.quietHoursFrom, value: clock(model.settings.quietHoursStart), chevron: false) {
+                    // The wheel opens under the row it sets, and that row's
+                    // time lights while it is open: with two times and one
+                    // wheel, the wheel has to say whose it is.
+                    SettingRow(Copy.quietHoursFrom, value: clock(model.settings.quietHoursStart), chevron: false, active: editing == .from) {
                         editing = editing == .from ? nil : .from
                     }
                     if editing == .from {
@@ -206,7 +209,7 @@ struct NotificationSettingsScreen: View {
                             get: { model.settings.quietHoursStart },
                             set: { m in model.updateSettings { $0.quietHoursStart = m } }))
                     }
-                    SettingRow(Copy.quietHoursUntil, value: clock(model.settings.quietHoursEnd), chevron: false) {
+                    SettingRow(Copy.quietHoursUntil, value: clock(model.settings.quietHoursEnd), chevron: false, active: editing == .until) {
                         editing = editing == .until ? nil : .until
                     }
                     if editing == .until {

@@ -145,6 +145,8 @@ struct WashSpec {
     /// What the page already showed here — somebody else's mark that the
     /// pen mixes rather than replaces.
     var beneath: (color: UIColor, alpha: CGFloat)?
+    /// When it began lifting off the words — a mark taken back — or nil.
+    var leftAt: CFTimeInterval? = nil
 }
 
 private extension NSAttributedString.Key {
@@ -264,10 +266,20 @@ final class InkLayoutManager: NSLayoutManager {
     /// Whether every wash has settled — the display link's stop signal.
     var isAnimating: Bool {
         let now = CACurrentMediaTime()
-        return washes.contains { arrival(of: $0, at: now).drawn < 1 || $0.arrivedAt.map { now - $0 < RibbonMotion.settleDuration } == true }
+        return washes.contains { wash in
+            if let left = wash.leftAt { return now - left < RibbonMotion.arriveDuration }
+            return arrival(of: wash, at: now).drawn < 1 || wash.arrivedAt.map { now - $0 < RibbonMotion.settleDuration } == true
+        }
     }
 
     private func arrival(of wash: WashSpec, at now: CFTimeInterval) -> (alpha: CGFloat, drawn: CGFloat) {
+        if let left = wash.leftAt {
+            // Taken back: the ink lifts off the words, on the curve it came
+            // on. A fade, and a fade stays one under reduce motion (§11).
+            let raw = max(0, min(1, (now - left) / RibbonMotion.arriveDuration))
+            let eased = 1 - pow(1 - raw, 2)  // ease-out
+            return (wash.alpha * CGFloat(1 - eased), 1)
+        }
         guard let started = wash.arrivedAt, !reduceMotion else { return (wash.alpha, 1) }
         let duration = wash.stroke ? RibbonMotion.settleDuration : RibbonMotion.arriveDuration
         let raw = max(0, min(1, (now - started) / duration))
@@ -591,10 +603,36 @@ struct ChapterTextView: UIViewRepresentable {
                     color: span.color, alpha: span.alpha, arrivedAt: now, stroke: stroke,
                     beneath: was.map { ($0.color, $0.alpha) })
             }
+            // Taken back: down to nothing rather than gone between two frames
+            // (Android's A38 had this and iOS never did). A span that has
+            // merely been re-cut is still covered by what remains, and is
+            // that mark's now, drawn at once.
+            for (key, old) in settled where current[key] == nil {
+                if let left = old.leftAt {
+                    if now - left < RibbonMotion.arriveDuration {
+                        next[key] = old
+                        anyArriving = true
+                    }
+                    continue
+                }
+                let middle = (key.from + key.to) / 2
+                let stillWashed = current.keys.contains { $0.verse == key.verse && $0.from <= middle && $0.to > middle }
+                guard !stillWashed else { continue }
+                var leaving = old
+                leaving.leftAt = now
+                leaving.arrivedAt = nil
+                leaving.stroke = false
+                leaving.beneath = nil
+                leaving.ranges = page.pageRanges(verse: key.verse, from: key.from, to: key.to)
+                next[key] = leaving
+                anyArriving = true
+            }
             settled = next
             let washes = next.values.sorted { ($0.ranges.first?.location ?? 0) < ($1.ranges.first?.location ?? 0) }
             let changed = washes.count != ink.washes.count
-                || zip(washes, ink.washes).contains { a, b in a.key != b.key || a.alpha != b.alpha || a.color != b.color || a.arrivedAt != b.arrivedAt }
+                || zip(washes, ink.washes).contains { a, b in
+                    a.key != b.key || a.alpha != b.alpha || a.color != b.color || a.arrivedAt != b.arrivedAt || a.leftAt != b.leftAt
+                }
             if changed {
                 ink.washes = washes
                 // The glyphs live in the text container's own drawing pass;
@@ -623,6 +661,8 @@ struct ChapterTextView: UIViewRepresentable {
             if !ink.isAnimating {
                 displayLink?.invalidate()
                 displayLink = nil
+                // What was lifting off has gone.
+                settled = settled.filter { $0.value.leftAt == nil }
                 for key in settled.keys { settled[key]?.arrivedAt = nil; settled[key]?.beneath = nil }
                 ink.washes = settled.values.sorted { ($0.ranges.first?.location ?? 0) < ($1.ranges.first?.location ?? 0) }
                 ink.invalidateDisplay(forGlyphRange: NSRange(location: 0, length: ink.numberOfGlyphs))

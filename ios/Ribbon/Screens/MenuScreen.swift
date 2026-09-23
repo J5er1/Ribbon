@@ -642,9 +642,17 @@ struct CentredTextField: View {
     var keyboard: UIKeyboardType = .default
     var contentType: UITextContentType?
     var centred = true
+    /// The caller's hold on the caret, when it wants one — to raise the
+    /// keyboard as a step arrives, or to put it away. The field keeps its
+    /// own otherwise. Passed in rather than laid over the field from
+    /// outside, so that one binding, not two, decides where focus is.
+    var focus: FocusState<Bool>.Binding?
     var onSubmit: () -> Void = {}
 
+    @FocusState private var ownFocus: Bool
+
     var body: some View {
+        let focused = focus?.wrappedValue ?? ownFocus
         TextField("", text: $text, prompt: Text(prompt).foregroundStyle(Palette.muted))
             .font(RibbonType.ui(17))
             .foregroundStyle(Palette.text)
@@ -655,9 +663,21 @@ struct CentredTextField: View {
             .autocorrectionDisabled(keyboard != .default)
             .submitLabel(submitLabel)
             .onSubmit(onSubmit)
+            .focused(focus ?? $ownFocus)
             .padding(.horizontal, RibbonShape.textInset)
             .frame(maxWidth: .infinity, minHeight: 52)
             .paper(.row)
+            // The field you are typing into says so. On paper this dark the
+            // caret was the only sign — a blinking point, and on a screen
+            // with two fields (an address, then a code) no sign at all of
+            // which one was listening. Its edge brightens under the caret,
+            // as the name's hairline does in the menu (A53).
+            .overlay {
+                TileShape.row.shape
+                    .strokeBorder(Palette.text.opacity(focused ? 0.32 : 0), lineWidth: 1)
+                    .allowsHitTesting(false)
+            }
+            .animation(RibbonMotion.arrive, value: focused)
             .accessibilityLabel(prompt)
     }
 }

@@ -176,8 +176,7 @@ struct JoinFlow: View {
             Text(Copy.portraitReason)
                 .font(RibbonType.ui(15))
                 .foregroundStyle(Palette.muted)
-            CentredTextField(text: $name, prompt: Copy.yourName, submitLabel: .done, contentType: .name, onSubmit: advanceFromName)
-                .focused($nameFocused)
+            CentredTextField(text: $name, prompt: Copy.yourName, submitLabel: .done, contentType: .name, focus: $nameFocused, onSubmit: advanceFromName)
                 .padding(.horizontal, 40)
             WayInButton(title: Copy.thatsMe) { advanceFromName() }
                 .padding(.horizontal, 80)
