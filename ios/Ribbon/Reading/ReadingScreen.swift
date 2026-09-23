@@ -6,15 +6,24 @@ import RibbonCore
 // bottom: the Wave mark, and a downward drag from scroll-top that settles
 // like a book closing.
 
+/// Where the book is asked to open: a verse, or the card at the foot of a
+/// chapter. A card is not a verse — it sits below the chapter's last one
+/// (§4.6) — and "The cards are open" has to land on the card, not on the
+/// chapter a whole chapter above it.
+enum ReadingPlace: Equatable {
+    case verse(VerseAddress)
+    case card(chapter: Int)
+}
+
 struct ReadingScreen: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let room: Room
     let reading: Reading
-    /// A named place to open at (a waiting row's note, a quoted verse) —
-    /// nil opens at your own position.
-    var openAt: VerseAddress?
+    /// A named place to open at (a waiting row's note, a quoted verse, a
+    /// card that has opened) — nil opens at your own position.
+    var openAt: ReadingPlace?
     var onClose: () -> Void
     var onFinished: () -> Void
     /// "Start another" at the finishing (§6.5) — lands in the chooser
@@ -147,6 +156,8 @@ struct ReadingScreen: View {
         enum Target: Equatable {
             case chapter(Int, UnitPoint)
             case mark
+            /// The passage end below a chapter, where its card is.
+            case passageEnd(Int)
         }
         var target: Target
         var animated: Bool
@@ -154,6 +165,8 @@ struct ReadingScreen: View {
 
     /// The landing's mark, as the ScrollViewReader knows it.
     private struct LandingMark: Hashable {}
+    /// A chapter's passage end, as the ScrollViewReader knows it.
+    private struct PassageEndMark: Hashable { var chapter: Int }
 
     /// How far above the reading line a landed verse's first line rests.
     /// Just above, not on it: the page counts a verse as yours once its
@@ -196,6 +209,7 @@ struct ReadingScreen: View {
                                     withAnimation(RibbonMotion.settle(still: reduceMotion)) { proxy.scrollTo(n + 1, anchor: .top) }
                                 },
                                 onClose: close)
+                            .id(PassageEndMark(chapter: n))
                         }
                     }
                     finishingSection
@@ -231,7 +245,7 @@ struct ReadingScreen: View {
                 fingerDown = newPhase == .interacting || newPhase == .tracking
             }
             .onAppear {
-                let position = openAt ?? model.myPosition(in: reading)
+                let position = address(of: openAt)
                 openedAt = model.myPosition(in: reading)
                 // A named place is your own going somewhere, and a follow
                 // still running from before ends here (§4.2) — or the
@@ -239,9 +253,10 @@ struct ReadingScreen: View {
                 // was sent to.
                 if openAt != nil { model.followingPersonID = nil }
                 // On the verse, not the top of its chapter (deviation 7,
-                // I30). The page is rising while this happens, so the moves
-                // are made without animation: it arrives already there.
-                land(at: position, animated: false, opening: true)
+                // I30), or on the card. The page is rising while this
+                // happens, so the moves are made without animation: it
+                // arrives already there.
+                go(to: openAt, opening: true)
                 recordFuel()
                 if !model.readingQuietly {
                     // The channel is the room's and is already open; this is
@@ -291,6 +306,8 @@ struct ReadingScreen: View {
                         proxy.scrollTo(n, anchor: anchor)
                     case .mark:
                         proxy.scrollTo(LandingMark(), anchor: .top)
+                    case .passageEnd(let n):
+                        proxy.scrollTo(PassageEndMark(chapter: n), anchor: .top)
                     }
                 } completion: {
                     // Straight away when nothing animated, at the end of the
@@ -307,7 +324,7 @@ struct ReadingScreen: View {
                 // a scroll of your own would end it (§4.2).
                 guard let target else { return }
                 model.followingPersonID = nil
-                land(at: target, animated: false)
+                go(to: target, opening: false)
             }
             .onChange(of: model.presentPeople) { _, roster in
                 followAlong(roster)
@@ -1036,6 +1053,59 @@ struct ReadingScreen: View {
 
     // MARK: Landing on a verse (deviation 7, I30)
 
+    /// The verse a place is at. A card's is the head of its chapter — the
+    /// address a reader there is at, which is what presence says ("Mark 6").
+    private func address(of place: ReadingPlace?) -> VerseAddress {
+        switch place {
+        case .verse(let address)?:
+            return address
+        case .card(let chapter)?:
+            return VerseAddress(bookID: reading.bookID, chapter: chapter, verse: 1)
+        case nil:
+            return model.myPosition(in: reading)
+        }
+    }
+
+    /// Sends the page to a place: its card, or its verse.
+    private func go(to place: ReadingPlace?, opening: Bool) {
+        if case .card(let chapter)? = place {
+            landOnCard(of: chapter, opening: opening)
+        } else {
+            land(at: address(of: place), animated: false, opening: opening)
+        }
+    }
+
+    /// Sends the page to the card at the foot of a chapter (§6.4). "The
+    /// cards are open" is about the card, and it sits below the chapter's
+    /// last verse: landing on the chapter's head put a whole chapter between
+    /// the reader and what they had been told about. The passage end comes
+    /// to the top of the screen. It is not a verse, so nothing is held —
+    /// your place stays your own until you read on.
+    ///
+    /// The last chapter has no passage end: it ends in the finishing, and a
+    /// card is never set there. A card named in it lands on its chapter.
+    private func landOnCard(of chapter: Int, opening: Bool) {
+        guard chapter >= 1, chapter < (book?.chapterCount ?? 1) else {
+            land(
+                at: VerseAddress(bookID: reading.bookID, chapter: max(1, chapter), verse: 1),
+                animated: false, opening: opening)
+            return
+        }
+        keepYourPlace()
+        endLanding()
+        landingMove = LandingMove(target: .passageEnd(chapter), animated: false)
+    }
+
+    /// Wherever the page is now is where you were reading, and a move is
+    /// about to take it somewhere else: keep it, ahead of the throttle. A
+    /// page held where it was sent has not been read from, and keeps
+    /// nothing.
+    private func keepYourPlace() {
+        if landing == nil, let latestAddress, latestAddress != model.myPosition(in: reading) {
+            model.savePosition(reading: reading, address: latestAddress)
+        }
+    }
+
     /// Sends the page to a verse.
     ///
     /// The verse's first line comes to rest just above the reading line —
@@ -1058,11 +1128,7 @@ struct ReadingScreen: View {
     /// forbids.
     private func land(at address: VerseAddress, animated: Bool, opening: Bool = false) {
         guard address.bookID == reading.bookID else { return }
-        // Wherever the page is now is where you were reading, and this is
-        // about to take it somewhere else: keep it, ahead of the throttle.
-        if landing == nil, let latestAddress, latestAddress != model.myPosition(in: reading) {
-            model.savePosition(reading: reading, address: latestAddress)
-        }
+        keepYourPlace()
         let from = latestAddress ?? model.myPosition(in: reading)
         latestAddress = address
         landingMark = nil
@@ -1164,6 +1230,8 @@ struct ReadingScreen: View {
         case .mark:
             guard landing.placed, !landing.arrived else { return }
             arrive()
+        case .passageEnd:
+            break
         }
     }
 

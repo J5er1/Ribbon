@@ -138,7 +138,7 @@ struct RootView: View {
     @State private var openReading: Reading?
     /// Where the reading should open, when a row or a quoted verse named a
     /// place (§6.3, S11). Nil means your own position.
-    @State private var openTarget: VerseAddress?
+    @State private var openTarget: ReadingPlace?
     /// The menu, when it is open, and which of its two doors was used
     /// (S14 + S18 in one screen — MenuScreen.swift, deviations 14). Nil is
     /// the room, which is the only permanent destination.
@@ -234,7 +234,7 @@ struct RootView: View {
                                 // A quoted verse opens the reading at that
                                 // verse (S11) — the finished book's own
                                 // pages, not a copy.
-                                openBook(reading, at: verse)
+                                openBook(reading, at: .verse(verse))
                             },
                             onReadAgain: { bookID in
                                 navigationPath = NavigationPath()
@@ -253,7 +253,7 @@ struct RootView: View {
                                 // book's note opens that book, not the
                                 // open one.
                                 if let reading = model.state.readings.first(where: { $0.id == readingID }) {
-                                    openBook(reading, at: verse)
+                                    openBook(reading, at: .verse(verse))
                                 }
                             })
                     }
@@ -351,11 +351,13 @@ struct RootView: View {
                 switch destination {
                 case .verse(_, let readingID, let verse):
                     if let reading = model.state.readings.first(where: { $0.id == readingID }) {
-                        openBook(reading, at: verse)
+                        openBook(reading, at: .verse(verse))
                     }
                 case .cards(_, let readingID, let chapter):
                     if let reading = model.state.readings.first(where: { $0.id == readingID }) {
-                        openBook(reading, at: VerseAddress(bookID: reading.bookID, chapter: chapter, verse: 1))
+                        // The card itself, at the foot of its chapter — not
+                        // the chapter's head, a whole chapter above it.
+                        openBook(reading, at: .card(chapter: chapter))
                     }
                 case .room:
                     break
@@ -388,7 +390,7 @@ struct RootView: View {
     /// comes up from the foot of the room on the cover spring, the same
     /// movement from every door (a pushed screen used to send it up on a
     /// quicker curve than the room did); under reduce motion it fades in.
-    private func openBook(_ reading: Reading, at target: VerseAddress?) {
+    private func openBook(_ reading: Reading, at target: ReadingPlace?) {
         openTarget = target
         withAnimation(reduceMotion ? RibbonMotion.settle : RibbonMotion.cover) { openReading = reading }
     }

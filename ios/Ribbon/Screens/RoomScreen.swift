@@ -20,7 +20,7 @@ struct RoomScreen: View {
     /// Set from outside when "Start another" at a finishing should land
     /// in the chooser (S13).
     @Binding var chooserRequested: Bool
-    var onOpenReading: (Reading, VerseAddress?) -> Void
+    var onOpenReading: (Reading, ReadingPlace?) -> Void
     var onOpenRooms: () -> Void
     var onYou: () -> Void
     /// The pull on the fire, 0 where it sits and 1 at the end of its
@@ -273,7 +273,7 @@ private struct HearthView: View {
     let reading: Reading?
     /// 0 where the fire sits, 1 at the end of its travel up.
     @Binding var pull: CGFloat
-    var onOpenReading: (Reading, VerseAddress?) -> Void
+    var onOpenReading: (Reading, ReadingPlace?) -> Void
     var onBeginOpening: (Reading) -> Void
     var onFinishOpening: (Reading, CGFloat) -> Void
     var onAbandonOpening: (CGFloat) -> Void
@@ -616,7 +616,7 @@ private struct WayIn: View {
     @Environment(AppModel.self) private var model
     let room: Room
     let reading: Reading?
-    var onOpenReading: (Reading, VerseAddress?) -> Void
+    var onOpenReading: (Reading, ReadingPlace?) -> Void
     var onPickABook: () -> Void
 
     var body: some View {
@@ -630,7 +630,7 @@ private struct WayIn: View {
                 }
                 if let ribbon = model.ribbonWorthOffering(in: reading) {
                     RibbonOffer(reading: reading, ribbon: ribbon, book: book) { address in
-                        onOpenReading(reading, address)
+                        onOpenReading(reading, .verse(address))
                     }
                 }
                 if !model.state.hasPulledTheFire {
@@ -729,23 +729,28 @@ private struct WaitingSection: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let room: Room
     let reading: Reading?
-    var onOpenReading: (Reading, VerseAddress?) -> Void
+    var onOpenReading: (Reading, ReadingPlace?) -> Void
     var onSendItAgain: () -> Void
     var onPickAnInk: () -> Void
 
     var body: some View {
         let waiting = room.isPaused ? [] : Array(model.waitingNotes(in: room).prefix(4))
         let alone = model.members(of: room).count == 1
-        let cardsOpen = reading.map { r in
-            !room.isPaused && model.state.cards.contains { $0.readingID == r.id && $0.state == .open }
-        } ?? false
+        // The card the row is about: the one that opened last. The row goes
+        // to it, at the foot of its chapter, rather than to your own place.
+        let openCard = reading.flatMap { r in
+            room.isPaused ? nil : model.state.cards
+                .filter { $0.readingID == r.id && $0.state == .open }
+                .max { ($0.openedAt ?? .distantPast) < ($1.openedAt ?? .distantPast) }
+        }
+        let cardsOpen = openCard != nil
         let anInkToPick = !room.isPaused && model.inkIsIdentity(in: room) && model.myMembership(in: room)?.ink == nil
         let hasRows = !waiting.isEmpty || cardsOpen || anInkToPick
         let hasInvite = !room.isPaused && alone && model.hasLiveInvite(room)
 
         VStack(alignment: .leading, spacing: 0) {
             if hasRows || hasInvite {
-                rows(waiting: waiting, cardsOpen: cardsOpen, anInkToPick: anInkToPick, hasRows: hasRows, hasInvite: hasInvite)
+                rows(waiting: waiting, openCard: openCard, anInkToPick: anInkToPick, hasRows: hasRows, hasInvite: hasInvite)
                     .padding(.top, 30)
                     .transition(.opacity)
             }
@@ -761,7 +766,7 @@ private struct WaitingSection: View {
     }
 
     @ViewBuilder
-    private func rows(waiting: [Note], cardsOpen: Bool, anInkToPick: Bool, hasRows: Bool, hasInvite: Bool) -> some View {
+    private func rows(waiting: [Note], openCard: ReflectionCard?, anInkToPick: Bool, hasRows: Bool, hasInvite: Bool) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             if hasRows {
                 SectionLabel(Copy.leftForYou)
@@ -774,7 +779,7 @@ private struct WaitingSection: View {
                         text: note.kind == .voice
                             ? Copy.leftYouAVoiceNote(firstName(author.name), note.verse.formatted)
                             : Copy.leftYouANote(firstName(author.name), note.verse.formatted),
-                        action: { if let reading { onOpenReading(reading, note.verse) } }
+                        action: { if let reading { onOpenReading(reading, .verse(note.verse)) } }
                     ) {
                         NoteMark(
                             kind: note.kind,
@@ -784,8 +789,8 @@ private struct WaitingSection: View {
                     .transition(.opacity)
                 }
             }
-            if cardsOpen, let reading {
-                WaitingRow(text: Copy.notifCardsOpen, action: { onOpenReading(reading, nil) }) {
+            if let openCard, let reading {
+                WaitingRow(text: Copy.notifCardsOpen, action: { onOpenReading(reading, .card(chapter: openCard.chapter)) }) {
                     Circle().fill(Palette.chartreuse).frame(width: 6, height: 6)
                 }
                 .transition(.opacity)

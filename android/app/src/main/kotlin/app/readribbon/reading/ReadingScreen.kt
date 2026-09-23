@@ -247,10 +247,21 @@ sealed interface ComposerState {
 }
 
 /**
+ * Where the book is asked to open: a verse, or the card at the foot of a
+ * chapter. A card is not a verse — it sits below the chapter's last one
+ * (§4.6) — and "The cards are open" has to land on the card, not on the
+ * chapter a whole chapter above it. Swift's `ReadingPlace`.
+ */
+sealed interface ReadingPlace {
+    data class Verse(val address: VerseAddress) : ReadingPlace
+    data class Card(val chapter: Int) : ReadingPlace
+}
+
+/**
  * The reading surface.
  *
  * @param openAt A named place to open at (a waiting row's note, a quoted
- *   verse) — null opens at your own position.
+ *   verse, a card that has opened) — null opens at your own position.
  * @param onStartAnother "Start another" at the finishing (§6.5) — lands in
  *   the chooser (S13), not back on the room's way-in.
  */
@@ -276,7 +287,7 @@ fun ReadingScreen(
     onFinished: () -> Unit,
     onStartAnother: () -> Unit,
     modifier: Modifier = Modifier,
-    openAt: VerseAddress? = null,
+    openAt: ReadingPlace? = null,
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -396,6 +407,16 @@ fun ReadingScreen(
      */
     val astir = sheet.engaged || sheet.committed
 
+    /**
+     * The verse a place is at. A card's is the head of its chapter — the
+     * address a reader there is at, which is what presence says ("Mark 6").
+     */
+    fun addressOf(place: ReadingPlace?): VerseAddress = when (place) {
+        is ReadingPlace.Verse -> place.address
+        is ReadingPlace.Card -> VerseAddress(bookID = reading.bookID, chapter = place.chapter, verse = 1)
+        null -> model.myPosition(reading)
+    }
+
     // Keyed on `sheet.committed` as well, and that is load-bearing: the page
     // exists before the pull that raises it, and announcing yourself into the
     // book because a thumb brushed the fire and thought better of it would
@@ -416,7 +437,7 @@ fun ReadingScreen(
         if (!model.readingQuietly && model.me != null) {
             // The channel is the room's and is already open; this is the
             // book's half — saying you are in it (§4.2).
-            val pos = openAt ?: model.myPosition(reading)
+            val pos = addressOf(openAt)
             model.presence.present(pos, 0.0, isIdle = false, following = model.followingPersonID)
         } else {
             model.presence.withdraw()
@@ -477,6 +498,18 @@ fun ReadingScreen(
     }
 
     /**
+     * Wherever the page is now is where you were reading, and a move is about
+     * to take it somewhere else: keep it, ahead of the throttle. A page held
+     * where it was sent has not been read from, and keeps nothing.
+     */
+    fun keepYourPlace() {
+        if (landing != null) return
+        latestAddress?.takeIf { it != model.myPosition(reading) }?.let {
+            model.savePosition(reading = reading, address = it)
+        }
+    }
+
+    /**
      * Sends the page to a verse (deviation 7, I30).
      *
      * The verse's first line comes to rest just above the reading line — the
@@ -496,13 +529,7 @@ fun ReadingScreen(
      */
     suspend fun landOn(address: VerseAddress, animated: Boolean) {
         if (address.bookID != reading.bookID) return
-        // Wherever the page is now is where you were reading, and this is
-        // about to take it somewhere else: keep it, ahead of the throttle.
-        if (landing == null) {
-            latestAddress?.takeIf { it != model.myPosition(reading) }?.let {
-                model.savePosition(reading = reading, address = it)
-            }
-        }
+        keepYourPlace()
         val chapter = address.chapter.coerceIn(1, chapterCount)
         val index = itemIndexOfChapter(chapter)
         val id = ++landingsMade
@@ -529,6 +556,31 @@ fun ReadingScreen(
             listState.scrollToItem(index, offset)
         }
         if (landing?.id == id) landing = landing?.copy(arrived = true)
+    }
+
+    /**
+     * Sends the page to the card at the foot of a chapter (§6.4). "The cards
+     * are open" is about the card, and it sits below the chapter's last
+     * verse: landing on the chapter's head put a whole chapter between the
+     * reader and what they had been told about. The passage end — the row
+     * after the chapter's — comes to the top of the screen. It is not a
+     * verse, so nothing is held: your place stays your own until you read on.
+     *
+     * The last chapter has no passage end: it ends in the finishing, and a
+     * card is never set there. A card named in it lands on its chapter.
+     */
+    suspend fun landOnCard(chapter: Int) {
+        if (chapter < 1 || chapter >= chapterCount) {
+            landOn(
+                VerseAddress(bookID = reading.bookID, chapter = chapter.coerceAtLeast(1), verse = 1),
+                animated = false,
+            )
+            return
+        }
+        keepYourPlace()
+        landing = null
+        programmaticScrollUntil = Clock.System.now() + PROGRAMMATIC_SCROLL_GRACE
+        listState.scrollToItem(itemIndexOfChapter(chapter) + 1)
     }
 
     /**
@@ -1001,8 +1053,12 @@ fun ReadingScreen(
         // running from before ends here (§4.2) — or the roster's next tick
         // would carry the page off the verse it was sent to.
         if (openAt != null) model.followingPersonID = null
-        // On the verse, not the top of its chapter (deviation 7, I30).
-        landOn(openAt ?: model.myPosition(reading), animated = false)
+        // On the verse, not the top of its chapter (deviation 7, I30) — or
+        // on the card.
+        when (val place = openAt) {
+            is ReadingPlace.Card -> landOnCard(place.chapter)
+            else -> landOn(addressOf(place), animated = false)
+        }
     }
 
     // Following is a thread, not a jump (§4.2).
