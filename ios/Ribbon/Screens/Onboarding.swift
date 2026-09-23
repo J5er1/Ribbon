@@ -433,17 +433,16 @@ private struct ThreadMove: Transition {
     let direction: ThreadDirection
 
     func body(content: Content, phase: TransitionPhase) -> some View {
-        let side = self.side(phase)
         content
-            .visualEffect { effect, proxy in
-                effect.offset(x: side * proxy.size.width)
+            .visualEffect { [across = shift(at: phase)] effect, proxy in
+                effect.offset(x: across * proxy.size.width)
             }
             .opacity(phase.isIdentity ? 1 : 0)
     }
 
     /// Where the step is, in widths: in from the side the thread is going
     /// to, out by the side it came from.
-    private func side(_ phase: TransitionPhase) -> CGFloat {
+    private func shift(at phase: TransitionPhase) -> CGFloat {
         switch phase {
         case .willAppear: return direction.sign
         case .didDisappear: return -direction.sign
