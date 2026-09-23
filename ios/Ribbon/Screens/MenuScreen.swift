@@ -429,6 +429,7 @@ private struct YouScreen: View {
 /// when you are done and an empty name reverts.
 private struct YouIdentity: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var name = ""
     @State private var portraitItem: PhotosPickerItem?
@@ -471,6 +472,23 @@ private struct YouIdentity: View {
                         if !focused { commit() }
                     }
                     .frame(minHeight: 44)
+                    // The one field in the app that wears no paper: your
+                    // name, in the room's own display face, edited where it
+                    // is written (S18). With nothing under it there was
+                    // nothing to say it was a field at all — it read as a
+                    // heading, and the way to your own name was a tap nobody
+                    // had a reason to make. A hairline is the smallest thing
+                    // that says this line is yours to change; it brightens
+                    // under the caret and is otherwise as quiet as every
+                    // other rule on the screen.
+                    .overlay(alignment: .bottom) {
+                        Rectangle()
+                            .fill(nameFocused ? Palette.text : Palette.rule)
+                            .frame(height: 1)
+                            .animation(
+                                RibbonMotion.arrive(still: reduceMotion),
+                                value: nameFocused)
+                    }
                     .accessibilityLabel(Copy.yourName)
                     .accessibilityHint(Copy.editsYourName)
             }
