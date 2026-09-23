@@ -279,6 +279,11 @@ struct RootView: View {
                                 closeBook()
                                 chooserRequested = true
                             })
+                        // One page per book. A notification can open another
+                        // book over this one (S19), and without its own
+                        // identity the new book would inherit this one's
+                        // typeset chapters, its landing, and where it opened.
+                        .id(reading.id)
                         .offset(y: openReading == nil ? (1 - bookPull) * proxy.size.height : 0)
                         // The page goes back down the way it came when the
                         // book closes. Under reduce motion a page the size

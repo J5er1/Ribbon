@@ -36,7 +36,9 @@ struct ReadingScreen: View {
     /// The one question about notifications (§6.1), raised from the two
     /// moments the build book names — a note left, and a note found.
     @State private var askAboutNotifications = false
-    /// Where the book opened, so closing knows whether you moved (A30).
+    /// Your own place when the book opened, so closing knows whether you
+    /// read anywhere (A30). Not where the page was sent: opening on a note
+    /// and closing again is a glance, and a glance leaves no ribbon.
     @State private var openedAt: VerseAddress?
     /// Where you are right now, as the page reports it — ahead of the
     /// throttled save, so the ribbon is left where you were and not where
@@ -79,11 +81,84 @@ struct ReadingScreen: View {
     /// of a chapter they are still reading down, once a tick.
     @State private var carriedTo: (person: UUID, chapter: Int)?
 
+    // Landing on a verse (deviation 7, I30)
+    /// The verse the page has been sent to, and how far it has got.
+    @State private var landing: Landing?
+    /// Where the landing's mark sits in its chapter, in the chapter's own
+    /// space: the point the scroll view is asked to put at its top.
+    @State private var landingMark: (chapter: Int, y: CGFloat)?
+    /// The landing's next move, for the ScrollViewReader to make.
+    @State private var landingMove: LandingMove?
+    /// Where a scroll to `.top` really puts a view, in the `.scrollView`
+    /// space the page measures itself in: the safe area, give or take. Read
+    /// off the first landing, which always starts from a known place.
+    @State private var scrollTop: CGFloat?
+    /// The scroll view's top inset — what `scrollTop` is taken to be until
+    /// the page has seen it.
+    @State private var topInset: CGFloat = 0
+    /// The chapters the lazy stack has actually built. A chapter's lines can
+    /// be aimed at only while it is here.
+    @State private var chaptersOnPage: Set<Int> = []
+
     enum ComposerState: Equatable {
         case toolbar
         case write(VerseAddress)
         case speak(VerseAddress)
     }
+
+    /// A verse the page has been sent to: its own place when the book
+    /// opens, a named place (a waiting row's note, the ribbon, a quoted
+    /// verse, a notification), or the way back after a follow.
+    ///
+    /// A verse's line is only known once its chapter has been typeset, so a
+    /// chapter that is not on the page is two moves: the chapter, then the
+    /// line. Once there, the landing stops being a move and becomes a hold —
+    /// the page says you are at that verse until a scroll carries the
+    /// reading line off it.
+    private struct Landing: Equatable {
+        enum Approach: Equatable {
+            /// The chapter was on the page already.
+            case onPage
+            /// The book has just opened on its first chapter, which is
+            /// already where the page starts.
+            case bookTop
+            /// A chapter-length move first — down to it, arriving at its
+            /// top, or up to it, arriving at its foot — and whether that has
+            /// finished.
+            case travelling(down: Bool, done: Bool)
+        }
+        var address: VerseAddress
+        var animated: Bool
+        var approach: Approach
+        /// The verse's own move has been asked for.
+        var placed = false
+        /// There. The page is held at the verse from here on.
+        var arrived = false
+        /// Where `trackReading` found the reading line once the page came to
+        /// rest: the hold lasts until it finds it somewhere else.
+        var line: VerseAddress?
+    }
+
+    private struct LandingMove: Equatable {
+        enum Target: Equatable {
+            case chapter(Int, UnitPoint)
+            case mark
+        }
+        var target: Target
+        var animated: Bool
+    }
+
+    /// The landing's mark, as the ScrollViewReader knows it.
+    private struct LandingMark: Hashable {}
+
+    /// How far above the reading line a landed verse's first line rests.
+    /// Just above, not on it: the page counts a verse as yours once its
+    /// first line has crossed the line, and a verse sitting exactly on it is
+    /// a coin toss between two verses.
+    private static let landingLead: CGFloat = 6
+    /// The margin above the first chapter — also where the first chapter
+    /// sits below the scroll view's top when the book opens.
+    private static let pageTop: CGFloat = 26
 
     private var book: BibleBook? { Bible.book(id: reading.bookID) }
     /// The room reads one version (A42).
@@ -112,13 +187,16 @@ struct ReadingScreen: View {
                                 nextChapterTitle: book?.chapterHeading(n + 1) ?? "\(n + 1)",
                                 // Under reduce motion the page does not fly a
                                 // chapter's length: it is simply there (§11).
-                                onContinue: { withAnimation(RibbonMotion.settle(still: reduceMotion)) { proxy.scrollTo(n + 1, anchor: .top) } },
+                                onContinue: {
+                                    endLanding()
+                                    withAnimation(RibbonMotion.settle(still: reduceMotion)) { proxy.scrollTo(n + 1, anchor: .top) }
+                                },
                                 onClose: close)
                         }
                     }
                     finishingSection
                 }
-                .padding(.top, 26)
+                .padding(.top, Self.pageTop)
                 // The measure: Scripture holds a readable line length on
                 // any canvas — the reading surface is the product, and a
                 // 150-character line is not reading.
@@ -140,16 +218,21 @@ struct ReadingScreen: View {
             } action: { _, height in
                 if height > 0 { viewportHeight = height }
             }
+            .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                geometry.contentInsets.top
+            } action: { _, top in
+                topInset = top
+            }
             .onScrollPhaseChange { _, newPhase in
                 fingerDown = newPhase == .interacting || newPhase == .tracking
             }
             .onAppear {
                 let position = openAt ?? model.myPosition(in: reading)
-                openedAt = position
-                if position.chapter > 1 {
-                    programmaticScrollUntil = Date().addingTimeInterval(1.5)
-                    proxy.scrollTo(position.chapter, anchor: .top)
-                }
+                openedAt = model.myPosition(in: reading)
+                // On the verse, not the top of its chapter (deviation 7,
+                // I30). The page is rising while this happens, so the moves
+                // are made without animation: it arrives already there.
+                land(at: position, animated: false, opening: true)
                 recordFuel()
                 if !model.readingQuietly {
                     // The channel is the room's and is already open; this is
@@ -179,12 +262,43 @@ struct ReadingScreen: View {
             }
             .onChange(of: scrollCommand) { _, command in
                 if let command {
+                    // A chapter chosen, or a follow carrying the page: either
+                    // way it is somewhere else now, and a landing lets go.
+                    endLanding()
                     programmaticScrollUntil = Date().addingTimeInterval(1.5)
                     withAnimation(RibbonMotion.settle(still: reduceMotion)) {
                         proxy.scrollTo(command, anchor: .top)
                     }
                     scrollCommand = nil
                 }
+            }
+            .onChange(of: landingMove) { _, move in
+                guard let move else { return }
+                landingMove = nil
+                programmaticScrollUntil = Date().addingTimeInterval(1.5)
+                withAnimation(move.animated ? RibbonMotion.settle(still: reduceMotion) : nil) {
+                    switch move.target {
+                    case .chapter(let n, let anchor):
+                        proxy.scrollTo(n, anchor: anchor)
+                    case .mark:
+                        proxy.scrollTo(LandingMark(), anchor: .top)
+                    }
+                } completion: {
+                    // Straight away when nothing animated, at the end of the
+                    // ease when something did.
+                    landingMoved(move)
+                }
+            }
+            .onChange(of: openAt) { _, target in
+                // A named place asked for while the book is already open — a
+                // notification tapped over the page (S19). This page used to
+                // stay where it was. It goes there now as it would have
+                // opened there: at once, the way Android has always taken
+                // it. Going somewhere is your own move, so a follow ends, as
+                // a scroll of your own would end it (§4.2).
+                guard let target else { return }
+                model.followingPersonID = nil
+                land(at: target, animated: false)
             }
             .onChange(of: model.presentPeople) { _, roster in
                 followAlong(roster)
@@ -282,7 +396,10 @@ struct ReadingScreen: View {
                     isFirstChapter: n == 1,
                     showMarginHint: !model.state.hasSeenMarginHint && n == 1,
                     handle: page(n),
-                    onLayout: { chapterLayouts[n] = $0 },
+                    onLayout: { layout in
+                        chapterLayouts[n] = layout
+                        continueLanding(in: n)
+                    },
                     onLongPressVerse: { verse in beginLift(chapter: n, verse: verse) },
                     onDragToVerse: { verse in extendLift(chapter: n, verse: verse) },
                     onDragEnded: {},
@@ -295,14 +412,28 @@ struct ReadingScreen: View {
                 if liftedChapter == n, lifted != nil, composer == .toolbar {
                     liftHandles(chapter: n)
                 }
+                if let mark = landingMark, mark.chapter == n {
+                    // Nothing to see: a point in the chapter for the scroll
+                    // view to aim at, set so that the verse's line comes to
+                    // rest on the reading line (I30).
+                    Color.clear
+                        .frame(width: 1, height: 1)
+                        .id(LandingMark())
+                        .position(x: 0.5, y: mark.y + 0.5)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
             }
             .coordinateSpace(name: "chapter")
             .onGeometryChange(for: CGRect.self) { geometry in
                 geometry.frame(in: .scrollView)
             } action: { frame in
                 chapterFrames[n] = frame
+                continueLanding(in: n)
                 trackReading(chapter: n, frame: frame)
             }
+            .onAppear { _ = chaptersOnPage.insert(n) }
+            .onDisappear { _ = chaptersOnPage.remove(n) }
             .padding(.bottom, 8)
         } else if let licensed = TranslationRegistry.translation(for: translation), !licensed.isBundled {
             // A licensed translation's chapter, genuinely fetching (S02):
@@ -616,7 +747,9 @@ struct ReadingScreen: View {
                    Date() < offer.until,
                    model.followingPersonID == nil {
                     QuietControl(title: Copy.backToWhereYouWere) {
-                        scrollCommand = offer.address.chapter
+                        // Where you were is a verse, not the top of its
+                        // chapter (I30).
+                        land(at: offer.address, animated: true)
                         withAnimation(RibbonMotion.arrive) { followBackOffer = nil }
                     }
                     .transition(.opacity)
@@ -837,8 +970,9 @@ struct ReadingScreen: View {
 
     private func follow(_ person: PresentPerson) {
         // Tap a portrait to follow — a page-fly, no confirmation dialog
-        // (§4.2).
-        followBackOffer = (model.myPosition(in: reading), Date().addingTimeInterval(120))
+        // (§4.2). Where you were is where the page says, not the last
+        // throttled save of it.
+        followBackOffer = (latestAddress ?? model.myPosition(in: reading), Date().addingTimeInterval(120))
         model.followingPersonID = person.id
         if let position = person.position {
             carriedTo = (person.id, position.chapter)
@@ -888,6 +1022,196 @@ struct ReadingScreen: View {
         scrollCommand = there.chapter
     }
 
+    // MARK: Landing on a verse (deviation 7, I30)
+
+    /// Sends the page to a verse.
+    ///
+    /// The verse's first line comes to rest just above the reading line —
+    /// the upper third, the line `trackReading` reads your place from — so
+    /// the page, measuring itself, finds the verse it was sent to. It used
+    /// to land on the top of the verse's chapter, where the same measure
+    /// found a verse a screen or more earlier, and saved that: every time the
+    /// book was opened and closed, your place slid back to the head of its
+    /// chapter.
+    ///
+    /// A verse near the head of its chapter does not move the page past the
+    /// head. With the chapter's top at the top of the screen it is already
+    /// above the line, and the chapter opens as a chapter.
+    ///
+    /// Animated, the page travels one way only. A chapter that is not on the
+    /// page comes in at its top when the page is travelling down to it and
+    /// at its foot travelling up, and the second move, to the line, is made
+    /// only if it carries on the same way. A verse it would have to turn back
+    /// for is already on the screen, and turning back is the overshoot §9.1
+    /// forbids.
+    private func land(at address: VerseAddress, animated: Bool, opening: Bool = false) {
+        guard address.bookID == reading.bookID else { return }
+        // Wherever the page is now is where you were reading, and this is
+        // about to take it somewhere else: keep it, ahead of the throttle.
+        if landing == nil, let latestAddress, latestAddress != model.myPosition(in: reading) {
+            model.savePosition(reading: reading, address: latestAddress)
+        }
+        let from = latestAddress ?? model.myPosition(in: reading)
+        latestAddress = address
+        landingMark = nil
+        let chapter = address.chapter
+        if opening {
+            // The page starts at the top of the book: the first chapter is
+            // already here, and every other one is further down.
+            if chapter <= 1 {
+                landing = Landing(address: address, animated: false, approach: .bookTop)
+            } else {
+                landing = Landing(address: address, animated: false, approach: .travelling(down: true, done: false))
+                landingMove = LandingMove(target: .chapter(chapter, .top), animated: false)
+            }
+        } else if chaptersOnPage.contains(chapter), chapterLayouts[chapter] != nil {
+            landing = Landing(address: address, animated: animated, approach: .onPage)
+            continueLanding(in: chapter)
+        } else {
+            let down = address >= from
+            landing = Landing(address: address, animated: animated, approach: .travelling(down: down, done: false))
+            landingMove = LandingMove(target: .chapter(chapter, down ? .top : .bottom), animated: animated)
+        }
+    }
+
+    /// The second half of a landing, once the verse's chapter is on the
+    /// page and typeset: the move to the line itself — or none, when the
+    /// verse is already where it should be.
+    private func continueLanding(in chapter: Int) {
+        guard var landing, landing.address.chapter == chapter,
+              !landing.placed, !landing.arrived,
+              chaptersOnPage.contains(chapter),
+              let layout = chapterLayouts[chapter],
+              let frame = chapterFrames[chapter]
+        else { return }
+        // The first time, what `.top` means on this screen.
+        switch landing.approach {
+        case .onPage:
+            break
+        case .bookTop:
+            // At rest, the first chapter sits the page's top margin below
+            // where `.top` would put it.
+            learnScrollTop(frame.minY - Self.pageTop)
+        case .travelling(let down, let done):
+            guard done else { return }
+            // Just put there by `.top`: this is what `.top` means — except
+            // in the last chapter, which can be too short for the page to
+            // scroll its top all the way up.
+            if down, chapter < (book?.chapterCount ?? 1) {
+                learnScrollTop(frame.minY)
+            }
+        }
+        guard let verseY = firstLine(of: landing.address.verse, in: layout) else {
+            arrive()
+            return
+        }
+        let line = viewportHeight * 0.3 - Self.landingLead
+        let top = scrollTop ?? topInset
+        // Far enough into the chapter that the mark, put at the top, leaves
+        // the verse's line on the reading line — but never above the
+        // chapter's own top: a verse near the head of its chapter is already
+        // above the line with the chapter beginning at the top of the
+        // screen, and the chapter opens as a chapter.
+        let markY = max(0, verseY + top - line)
+        // How far the page has to travel for it: down the book is positive.
+        let distance = frame.minY - top + markY
+        let goes: Bool
+        switch landing.approach {
+        case .bookTop:
+            // Opened at the very top of the book, margin and all: it moves
+            // only for a verse below the line.
+            goes = frame.minY + verseY - line > 1
+        case .travelling(let down, _) where landing.animated && !reduceMotion:
+            goes = down ? distance > 1 : distance < -1
+        default:
+            goes = abs(distance) > 1
+        }
+        guard goes else {
+            arrive()
+            return
+        }
+        landingMark = (chapter, markY)
+        landing.placed = true
+        self.landing = landing
+        let animated = landing.animated
+        // The mark has to be on the page before it can be aimed at.
+        DispatchQueue.main.async {
+            landingMove = LandingMove(target: .mark, animated: animated)
+        }
+    }
+
+    private func landingMoved(_ move: LandingMove) {
+        guard let landing else { return }
+        switch move.target {
+        case .chapter(let chapter, _):
+            guard chapter == landing.address.chapter,
+                  case .travelling(let down, false) = landing.approach
+            else { return }
+            self.landing?.approach = .travelling(down: down, done: true)
+            continueLanding(in: chapter)
+        case .mark:
+            guard landing.placed, !landing.arrived else { return }
+            arrive()
+        }
+    }
+
+    /// There. From here the landing is a hold, against whatever
+    /// `trackReading` next finds the page at rest on.
+    private func arrive() {
+        landing?.arrived = true
+        landing?.line = nil
+    }
+
+    /// The page is yours again.
+    private func endLanding() {
+        if landing != nil { landing = nil }
+        if landingMark != nil { landingMark = nil }
+    }
+
+    /// The verse the page was sent to, for as long as it is still where you
+    /// are; nil, and the page is yours.
+    ///
+    /// Without the hold, the page's own measure would decide where you are
+    /// the moment it came to rest — and that measure is only as good as the
+    /// landing's aim. A line out either way, and every open would move you a
+    /// verse. Held, you are where you were sent until a scroll carries the
+    /// reading line off the verse it came to rest on.
+    private func heldLanding(against address: VerseAddress) -> VerseAddress? {
+        guard let landing else { return nil }
+        guard landing.arrived else {
+            // Still on its way. A finger on the page takes it back mid-flight.
+            if fingerDown {
+                endLanding()
+                return nil
+            }
+            return landing.address
+        }
+        guard let line = landing.line else {
+            self.landing?.line = address
+            return landing.address
+        }
+        if line == address { return landing.address }
+        endLanding()
+        return nil
+    }
+
+    /// What a scroll to `.top` was seen to mean, kept if it is a believable
+    /// answer: no higher than the scroll view's own top, and above the
+    /// reading line. Learned once, normally as the book opens, and kept for
+    /// as long as the page is open.
+    private func learnScrollTop(_ value: CGFloat) {
+        guard scrollTop == nil, value >= -1, value < viewportHeight * 0.3 - Self.landingLead else { return }
+        scrollTop = value
+    }
+
+    /// A verse's first line in its chapter — or, in a version without that
+    /// verse (there are verses some translations leave out), the nearest one
+    /// before it that the version has.
+    private func firstLine(of verse: Int, in layout: ChapterLayout) -> CGFloat? {
+        if let y = layout.verseFirstLineY[verse] { return y }
+        return layout.verseFirstLineY.filter { $0.key < verse }.max { $0.key < $1.key }?.value
+    }
+
     private func close() {
         guard !closing else { return }
         closing = true
@@ -895,9 +1219,16 @@ struct ReadingScreen: View {
             model.markMarginHintSeen()
         }
         recordFuel()
+        // Where you stopped: the page's own last word on it, ahead of the
+        // throttled save — unless the page is still held where it was sent,
+        // which is not somewhere you read to (I30). Then it is your own
+        // place, untouched.
+        let here = landing == nil ? (latestAddress ?? model.myPosition(in: reading)) : model.myPosition(in: reading)
+        if here != model.myPosition(in: reading) {
+            model.savePosition(reading: reading, address: here)
+        }
         // Closing the book leaves the ribbon where you were — only if you
         // moved, and never in a finished book (A30).
-        let here = latestAddress ?? model.myPosition(in: reading)
         if let openedAt, openedAt != here, !reading.isFinished {
             model.leaveTheRibbon(in: reading, at: here)
         }
@@ -919,13 +1250,21 @@ struct ReadingScreen: View {
         let verse = layout?.verseFirstLineY
             .filter { $0.value <= yInChapter }
             .max { $0.value < $1.value }?.key ?? 1
-        let address = VerseAddress(bookID: reading.bookID, chapter: chapter, verse: verse)
+        let measured = VerseAddress(bookID: reading.bookID, chapter: chapter, verse: verse)
+        // A verse the page was sent to stays where you are until you move
+        // off it (I30).
+        let held = heldLanding(against: measured)
+        let address = held ?? measured
         latestAddress = address
         // Position saves are cheap but not free — a scroll emits geometry
         // every frame, and the store persists on mutation.
         if Date().timeIntervalSince(lastPositionSave) > 2 {
             lastPositionSave = Date()
-            model.savePosition(reading: reading, address: address)
+            // Being sent to a verse is not reading to it: your own place
+            // waits until you do.
+            if held == nil {
+                model.savePosition(reading: reading, address: address)
+            }
             if !model.readingQuietly {
                 let fraction = max(0, min(1, Double(yInChapter / max(1, frame.height))))
                 Task {
