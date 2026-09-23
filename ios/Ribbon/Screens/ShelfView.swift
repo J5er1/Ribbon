@@ -22,8 +22,10 @@ struct ShelfView: View {
                             EmberView(scale: reading.handiwork.scale)
                             SmallCaps(Bible.book(id: reading.bookID)?.name ?? reading.bookID, size: 12)
                         }
+                        .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    // An ember takes a press the way a tile does.
+                    .buttonStyle(.pressable)
                 }
             }
             .padding(.horizontal, 24)
@@ -44,6 +46,7 @@ struct ShelfView: View {
 // source of the printed keepsake.
 struct EmberRecordScreen: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
     let reading: Reading
     var onOpenVerse: (VerseAddress) -> Void
     var onReadAgain: (String) -> Void
@@ -53,6 +56,24 @@ struct EmberRecordScreen: View {
     private var highlights: [Highlight] { model.highlights(in: reading) }
 
     var body: some View {
+        VStack(spacing: 0) {
+            // The way back, pinned, in the room's own drawn chevron — the one
+            // pushed screen that still wore the system's bar and its glyph,
+            // where every other page the room pushes has this (A29).
+            HStack(spacing: 0) {
+                BackChevron { dismiss() }
+                Spacer()
+            }
+            .padding(.horizontal, 8)
+            .frame(height: 52)
+
+            record
+        }
+        .room()
+        .toolbar(.hidden, for: .navigationBar)
+    }
+
+    private var record: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 VStack(spacing: 10) {
@@ -79,7 +100,7 @@ struct EmberRecordScreen: View {
                                     size: 30,
                                     image: model.portrait(membership.personID))
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.pressable)
                         }
                     }
                     .padding(.top, 6)
@@ -126,7 +147,6 @@ struct EmberRecordScreen: View {
             .readableColumn()
         }
         .scrollIndicators(.hidden)
-        .room()
     }
 }
 
@@ -151,6 +171,11 @@ private struct EmberNoteRow: View {
                     SmallCaps(note.verse.formatted, size: 12, color: Palette.text.opacity(0.8))
                     Spacer()
                 }
+                // The whole row answers, a finger's height of it: only the
+                // mark and the verse's letters did, and the space between
+                // them — most of the row — did nothing.
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             if open {
@@ -195,6 +220,8 @@ private struct QuotedHighlight: View {
                 }
                 SmallCaps(highlight.range.formatted, size: 11)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }

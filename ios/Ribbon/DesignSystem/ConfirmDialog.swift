@@ -62,11 +62,16 @@ private struct ConfirmModifier: ViewModifier {
                         // A screen reader stays on the question until it
                         // is answered, as a finger does.
                         .accessibilityAddTraits(.isModal)
-                        .transition(.opacity.combined(with: .scale(scale: 0.97)))
+                        // The card comes up out of the room a breath; under
+                        // reduce motion it only fades, and the question
+                        // still cross-fades in place (§11).
+                        .transition(reduceMotion
+                            ? AnyTransition.opacity
+                            : AnyTransition.opacity.combined(with: .scale(scale: 0.97)))
                     }
                 }
-                .animation(RibbonMotion.arrive(still: reduceMotion), value: state == nil)
-                .animation(RibbonMotion.settle(still: reduceMotion), value: state?.question)
+                .animation(RibbonMotion.arrive, value: state == nil)
+                .animation(RibbonMotion.settle, value: state?.question)
             }
             .onChange(of: state, initial: true) { _, now in
                 if let now { held = now }

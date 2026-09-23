@@ -53,7 +53,10 @@ struct InviteSheet: View {
                             .padding(.horizontal, 28)
                             .padding(.vertical, 13)
                             .background(Palette.chartreuse, in: Capsule())
+                            .contentShape(Capsule())
                     }
+                    // The same give as every other control in the room.
+                    .buttonStyle(.pressable)
                     // Opening the share sheet is the moment the link leaves
                     // the phone (A37): from here on the room may say the
                     // invite is out.

@@ -3359,6 +3359,186 @@ I20. **Not carried across, on purpose.** Appearance / Material You (A18,
     have; the parity is in the ledger, not in pictures — see the questions
     at the foot of the pull request.
 
+I21. **The fire's release had the wrong speed, pointed the wrong way.** The
+    hearth's pull (I3) is one number from the finger to the page, and the
+    number was sound; what it was handed at release was not.
+
+    *The flick was measured as a distance.* `predictedEndTranslation` minus
+    the translation is how much further a prediction says the finger would
+    have gone — a length, compared against `openFling`, which is points per
+    second (I3, A48). A flick had to be roughly twice as fast as the number
+    says before it counted. It is `DragGesture.Value.velocity` now.
+
+    *The spring was set off backwards.* SwiftUI takes a spring's starting
+    speed relative to the distance it has left, positive towards the mark.
+    It was given points per second over the travel — neither divided by the
+    distance nor signed for it — so a finger still moving up as it let go
+    sent the fire down fast, and one already coming back sent it up first.
+    `RibbonMotion.cover(rate:towards:)` and `handled(rate:towards:)` take the
+    rate and the distance left and do the division themselves, and cap the
+    result below the spring's natural frequency: a critically damped spring
+    started towards its mark faster than √k per unit of distance crosses the
+    mark, which is the overshoot §9.1 forbids, reached through the one kind
+    of animation built never to have it.
+
+    *The commit threw the speed away.* "The root carries the pull the rest of
+    the way, with the speed the finger let go at," said the comment, and the
+    root set off from rest. It carries the speed now.
+
+    *Let go short, the page vanished.* The fire animated itself back down,
+    and the root then asked for the same value again. The second request
+    changed nothing, so its completion ran at once and took the half-risen
+    page out of the tree while the fire was still falling: the page did not
+    go back down, it was simply gone. The root owns the release alone — one
+    spring, fire and page together — and takes the page away when it has
+    arrived, unless the fire has been taken hold of again in the meantime
+    (`pullHold`: a quick re-grab lands inside the last release).
+
+    And one movement from every door. Every other way into the book from the
+    room came up on `cover`; from a pushed screen — a quoted verse on an
+    ember, a note on somebody's page, "read it again" — it came up on
+    `arrive`, a curve two thirds as long. `openBook` is the one door.
+
+I22. **Reduce motion fades; it does not cut.** §11 is specific: "Morphs
+    become cross-fades. The card turn becomes a fade." The `still:` tokens
+    (I2) made every animated change under reduce motion a cut, including
+    changes that never moved anything — a word cross-fading under the fire,
+    a presence ring's opacity, the hairline under your name brightening. A
+    cut is not a cross-fade, and it is the one thing §9.1 asks the room never
+    to do.
+
+    `Motion.swift` now says what `still:` is for: movement. A change that is
+    only opacity or colour asks for the plain token and keeps its curve. And
+    where movement was being cut, it becomes the fade §11 asks for:
+
+    - The book fades in and out where it will be read rather than travelling
+      a screen's height. It is no longer built under the room during a pull,
+      since nothing moves under the finger (I3) and there is nothing to lift.
+    - The presence form fades at its edge. The leave toolbar, the confirm
+      card, a face taking its seat and the onboarding steps fade without the
+      slide or the swell.
+    - The card turn is a cross-fade (I23). The segmented control's pill fades
+      from one stop to the next. The presence ring cross-fades between whole
+      and half. A choice's check fades rather than drawing itself in.
+    - A tile under a finger dims to 72% rather than giving. Held still, it
+      used to answer a press with nothing at all.
+    - The other way: a scroll that flies the page a chapter's length — to the
+      person you follow, to a chapter from the list, on to the next — is now
+      simply there. That flight is exactly the movement §11 is written for,
+      and it was the one thing the reading surface still animated under it.
+
+    Layout that shifts because something arrived or left (a waiting row, the
+    quiet-hours wheel, the account section) still cuts under reduce motion,
+    as before: the fade there would carry a slide with it.
+
+I23. **The card turned the wrong face first.** The reflection card chose its
+    face from `turn >= 0.5`, and `turn` is the state — 1 from the first frame
+    of the turn, since that is where it is going. So the open face, drawn
+    already mirrored, replaced the sealed one at once, and the first half of
+    every turn showed the open card backwards with the sealed face nowhere.
+    `CardTurn` is `Animatable`: it is handed the angle actually reached, frame
+    by frame, and changes faces edge-on, which is what I13 says it does.
+    Setting a card down, answering it and taking an answer back to edit now
+    cross-fade; setting one down used to make the page jump up under the
+    thumb that had just tapped it.
+
+I24. **What still happened between two frames.** A38 and A41 swept Android
+    for these; this is the same sweep on iOS.
+
+    - A fire changing state — caught by the reading you have just closed,
+      banked by a quiet day while you look at it — was redrawn as another
+      fire. It cross-fades now, the two fires sharing their seed so they
+      breathe in step and only the state differs.
+    - The composer: the toolbar giving way to writing or speaking, editing a
+      note, and back — all cross-fades. Dragged away from a recording, the
+      waveform recedes and the line under it turns over on `release`.
+    - The follow thread fades in and out. "Back to where you were" fades, and
+      forgets on its own at two minutes; it only went when the page next
+      happened to redraw.
+    - The running head at the foot of the page cross-fades between chapters,
+      its capsule easing to the new width.
+    - The highlight label faded away only on its timeout; a tap and Remove
+      now fade it too.
+    - The room's "Left for you": notes and the invite settled in, but the
+      cards opening and an ink to pick arrived on one frame, and the section
+      itself always did.
+    - A present reader going still now unwinds their ring to its crown
+      (it jumped), and presence rings come and go on `arrive`, which is the
+      curve §9.1 files presence appearing under.
+    - Thinking of you: the filled ring rests a moment and then lets go. It
+      vanished on the frame the hold succeeded, so the one gesture in the
+      product with no words had no visible end either. Letting go short is
+      on `release`, where it had a 150 ms curve no token names.
+    - The ink picker dismissed on the same frame as the tap; the ring never
+      moved. It settles round the choice, and then the sheet goes.
+    - A choice's check draws itself in on `touched`; the words of the
+      segmented control brighten as the pill arrives under them, not before.
+    - The join's steps cross-fade, the dead end and "Joining" included. The
+      sign-in error line fades, and the control lowers while a code is on its
+      way — before, the only sign a tap had been heard was the network
+      answering.
+    - Portraits settle into their circles; "That's me" wakes with the first
+      letter rather than switching on.
+    - The way-in capsule, the invite's send button, embers on the shelf and
+      the faces on an ember take a press as a tile does. They took none, or
+      the system's dimming, beside tiles that gave.
+
+I25. **The haptics §9.3 lists, and only those.** "Someone arrives: one soft
+    transient, low intensity" — `someoneArrives()` has existed since phase
+    one and nothing called it. The presence form plays it when somebody opens
+    the book while you are reading; never for the people already there when
+    you opened it, and never for a reader coming back inside the fade, who as
+    far as the page is concerned never left. The other way: the intent step's
+    tiles played a `UIImpactFeedbackGenerator` tick on every tap — a
+    selection tick, which §9.3 names as unwanted, from a preset, which §12.1
+    rules out. It is gone, and `Haptics.light()` with it.
+
+I26. **Onboarding's thread moved one way.** Every step arrived from the right
+    and left by the left, going back included, so back looked like on. The
+    step leaving is drawn with the transition it last had, which means a
+    direction held in view state reaches it one move late; `ThreadMove` reads
+    the direction through a reference, at the moment the move is made. The
+    progress bar belonged to each step and slid away with it, so its fill —
+    the thing it is for — was never once seen to move. There is one bar now,
+    standing still over the thread, the accent running along each segment
+    (and back, going back). The mark dissolves into the first card in place
+    rather than the card sliding in over it.
+
+I27. **Places a finger could not land, and one tap that made two people.**
+    The book chooser's rows were 34 points tall and answered only on the
+    book's name and its fire, with a dead gap between them; the whole row
+    answers now, at 44. An ember's notes and its quoted highlights were the
+    same. Remove on a highlight's label, Read quietly, Try again under a
+    transcript, Take back in the composer and Open Settings after a refused
+    microphone were each the height of their own letters, and are 44 now.
+    The ember record was the one screen the room pushes that still wore the
+    system's navigation bar and its glyph; it has the drawn chevron (A29).
+
+    "That's me", at onboarding and at a join, started a task per tap. With a
+    portrait there is an await before the person exists, and a quick second
+    tap inside it made a second person and orphaned the first. One tap, one
+    person.
+
+I28. **The fire becomes an ember in front of the reader, and once.** The
+    finishing sequence began when the lazy page built it, which can be a
+    screen below the fold, so a slow reader could arrive at an ember that had
+    already settled without them. It begins now when the finishing is in
+    view — the same test that finishes the book. And a book finished before
+    it was opened this time ends on its ember rather than burning down again:
+    §9.1 has fire → ember once per book.
+
+I29. **Not changed: a note's line height still opens at once.** S04 asks for
+    400 ms. Deviation 6 says why iOS does not — the carve is an exclusion
+    path, and opening it per frame means TextKit laying out the chapter and
+    SwiftUI measuring it every frame — and says to revisit on a device. This
+    pass had no device either, so the card still settles into a carve that is
+    already there, as before. The honest way to do it is to animate the
+    drawing rather than the layout (lay out once, draw the lines under the
+    carve lifted and let them down), and it wants measuring on a phone before
+    it is trusted. Everything above was built by CI's simulator compile and
+    reasoned through against the SwiftUI documentation, and none of it has
+    yet been run on a device.
+
 ## Licensed translations (decided: API.Bible)
 
 Open question §16.8 is now part-decided: **NKJV plus two undecided

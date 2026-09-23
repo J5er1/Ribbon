@@ -98,9 +98,24 @@ struct EmberView: View {
 struct FireBecomesEmber: View {
     var scale: FireScale
     var coalDepth: Double
+    /// The reader has reached it. The settling happens in front of them —
+    /// it used to start when the lazy page built it, which can be well
+    /// below the fold, so a slow reader arrived at an ember that had
+    /// already become one without them.
+    var begin: Bool
     /// 0 = the fire as it was, 1 = the last licks, 2 = the ember.
-    @State private var settling = 0
+    @State private var settling: Int
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// `alreadyAnEmber`: the book was finished before it was opened this
+    /// time. Fire → ember happens once per book (§9.1), so a finished book
+    /// read again ends on its ember rather than burning down a second time.
+    init(scale: FireScale, coalDepth: Double, begin: Bool, alreadyAnEmber: Bool) {
+        self.scale = scale
+        self.coalDepth = coalDepth
+        self.begin = begin
+        _settling = State(initialValue: alreadyAnEmber ? 2 : 0)
+    }
 
     var body: some View {
         ZStack {
@@ -116,8 +131,12 @@ struct FireBecomesEmber: View {
                 ? .easeInOut(duration: 0.4)
                 : .easeInOut(duration: RibbonMotion.becomeDuration * 0.44),
             value: settling)
-        .task {
+        .task(id: begin) {
+            guard begin, settling == 0 else { return }
             try? await Task.sleep(for: .milliseconds(600))
+            // Scrolled away inside the pause: the fire is still there to be
+            // come back to, rather than jumping to its end off screen.
+            guard !Task.isCancelled else { return }
             if reduceMotion {
                 // One quiet cross-fade; the intermediate flare is motion.
                 settling = 2

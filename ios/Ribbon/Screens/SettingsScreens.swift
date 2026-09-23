@@ -110,11 +110,19 @@ struct Segments: View {
             let width = proxy.size.width / CGFloat(max(1, options.count))
             ZStack(alignment: .leading) {
                 Color.clear.frame(maxWidth: .infinity, maxHeight: .infinity).well(.small)
-                Color.clear
-                    .frame(width: width - 4, height: proxy.size.height - 4)
-                    .paper(.init(RibbonShape.small - 2))
-                    .offset(x: 2 + width * CGFloat(selection))
-                    .animation(RibbonMotion.touched(still: reduceMotion), value: selection)
+                if reduceMotion {
+                    // Held still, the pill does not travel between stops:
+                    // it fades out of the old one and into the new (§11).
+                    // It used to jump.
+                    ForEach(options.indices, id: \.self) { index in
+                        pill(width: width, height: proxy.size.height)
+                            .offset(x: 2 + width * CGFloat(index))
+                            .opacity(index == selection ? 1 : 0)
+                    }
+                } else {
+                    pill(width: width, height: proxy.size.height)
+                        .offset(x: 2 + width * CGFloat(selection))
+                }
                 HStack(spacing: 0) {
                     ForEach(options.indices, id: \.self) { index in
                         Button {
@@ -131,8 +139,17 @@ struct Segments: View {
                     }
                 }
             }
+            // The pill and the words together: the chosen word brightens
+            // as the pill arrives under it, rather than before it does.
+            .animation(reduceMotion ? RibbonMotion.arrive : RibbonMotion.touched, value: selection)
         }
         .frame(height: 44)
+    }
+
+    private func pill(width: CGFloat, height: CGFloat) -> some View {
+        Color.clear
+            .frame(width: width - 4, height: height - 4)
+            .paper(.init(RibbonShape.small - 2))
     }
 }
 

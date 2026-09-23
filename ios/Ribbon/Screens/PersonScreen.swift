@@ -176,6 +176,8 @@ struct InkPickerSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let room: Room
+    /// A swatch has been taken and the sheet is on its way out.
+    @State private var choosing = false
 
     var body: some View {
         VStack(spacing: 26) {
@@ -188,16 +190,25 @@ struct InkPickerSheet: View {
                 ForEach(Ink.allCases, id: \.self) { ink in
                     let isTaken = taken.contains(ink) && ink != mine
                     Button {
-                        guard !isTaken else { return }
+                        guard !isTaken, !choosing else { return }
+                        choosing = true
                         model.pickInk(ink, in: room)
-                        dismiss()
+                        // The ring settles round the choice before the sheet
+                        // goes, so the choice is seen to be taken. It used to
+                        // leave on the same frame, and the ring never moved.
+                        DispatchQueue.main.asyncAfter(deadline: .now() + RibbonMotion.arriveDuration) {
+                            dismiss()
+                        }
                     } label: {
                         ZStack {
                             Circle()
                                 .strokeBorder(Palette.text.opacity(0.8), lineWidth: 1.6)
                                 .frame(width: 38, height: 38)
+                                .scaleEffect(ink == mine || reduceMotion ? 1 : 0.84)
                                 .opacity(ink == mine ? 1 : 0)
-                                .animation(RibbonMotion.touched(still: reduceMotion), value: mine)
+                                // Under reduce motion the ring only fades
+                                // from one swatch to the next.
+                                .animation(reduceMotion ? RibbonMotion.arrive : RibbonMotion.touched, value: mine)
                             Circle()
                                 .fill(ink.color.opacity(isTaken ? 0.2 : 1))
                                 .frame(width: 30, height: 30)

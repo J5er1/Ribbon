@@ -116,9 +116,9 @@ struct BookChooserSheet: View {
     private var allBooks: some View {
         VStack(alignment: .leading, spacing: 22) {
             ForEach(Bible.sections, id: \.section) { section, books in
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 0) {
                     SmallCaps(section.rawValue, size: 12)
-                        .padding(.bottom, 6)
+                        .padding(.bottom, 4)
                     ForEach(books) { book in
                         bookRow(book)
                     }
@@ -145,7 +145,11 @@ struct BookChooserSheet: View {
                 }
                 CampfireGlyph(state: .burning, scale: book.scale, height: 20)
             }
-            .padding(.vertical, 7)
+            // The row answers across its width and a finger's height: it
+            // was the name and the fire, with a dead gap between them, 34
+            // points tall.
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(Copy.bookIsAFire(book.name, scale: book.scale.rawValue, onShelf: onShelf.contains(book.id)))
@@ -183,6 +187,8 @@ struct BookChooserSheet: View {
                                         .multilineTextAlignment(.leading)
                                 }
                             }
+                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                            .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                     case .book(let id):

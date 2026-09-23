@@ -40,31 +40,45 @@ struct CampfireView: View {
     }
 
     var body: some View {
-        Group {
-            if reduceMotion {
-                // The fire holds a state instead of flickering (§11).
-                Canvas { context, size in
-                    FirePainter.draw(
-                        in: &context, size: size, time: seed,
-                        state: state, scale: scale, coalDepth: coalDepth)
-                }
-            } else {
-                TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
-                    Canvas { context, size in
-                        FirePainter.draw(
-                            in: &context, size: size,
-                            time: timeline.date.timeIntervalSinceReferenceDate + seed,
-                            state: state, scale: scale, coalDepth: coalDepth)
-                    }
-                }
-            }
+        ZStack {
+            // A fire that changes state in front of you — banked by
+            // somebody's quiet day, caught again by a reading — cross-fades
+            // from the fire it was instead of being redrawn as another
+            // between two frames. Both share the seed, so under the fade the
+            // two breathe in step and only the state differs. A fade is
+            // light rather than movement: it holds under reduce motion.
+            flames(state)
+                .id(state)
+                .transition(.opacity)
         }
+        .animation(RibbonMotion.settle, value: state)
         .frame(maxWidth: 560)
         .frame(height: frameHeight)
         .opacity(dimmed ? 0.92 : 1)
         .animation(RibbonMotion.arrive, value: dimmed)
         .accessibilityElement()
         .accessibilityLabel(Copy.fireIs(state.displayName))
+    }
+
+    @ViewBuilder
+    private func flames(_ state: FireState) -> some View {
+        if reduceMotion {
+            // The fire holds a state instead of flickering (§11).
+            Canvas { context, size in
+                FirePainter.draw(
+                    in: &context, size: size, time: seed,
+                    state: state, scale: scale, coalDepth: coalDepth)
+            }
+        } else {
+            TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
+                Canvas { context, size in
+                    FirePainter.draw(
+                        in: &context, size: size,
+                        time: timeline.date.timeIntervalSinceReferenceDate + seed,
+                        state: state, scale: scale, coalDepth: coalDepth)
+                }
+            }
+        }
     }
 }
 

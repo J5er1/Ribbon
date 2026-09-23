@@ -132,6 +132,7 @@ struct PersonRoute: Hashable {
 
 struct RootView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var onboarding = false
     @State private var openReading: Reading?
@@ -155,6 +156,10 @@ struct RootView: View {
     /// The reading a pull has taken hold of — built under the room the
     /// moment the finger takes the fire, so there is a page to lift.
     @State private var pulling: Reading?
+    /// Each hold on the fire, counted, so a page going back down from one
+    /// pull is not taken out from under the next one: a quick re-grab
+    /// lands while the last release is still settling.
+    @State private var pullHold = 0
 
     var body: some View {
         Group {
@@ -177,31 +182,48 @@ struct RootView: View {
                 RoomScreen(
                     room: room,
                     chooserRequested: $chooserRequested,
-                    onOpenReading: { reading, target in
-                        openTarget = target
-                        if pulling?.id == reading.id {
-                            // The finger started this: the page finishes
-                            // the movement from wherever the pull left it.
-                            withAnimation(RibbonMotion.cover) {
-                                bookPull = 1
-                                openReading = reading
-                            } completion: {
-                                pulling = nil
-                                bookPull = 0
-                            }
-                        } else {
-                            withAnimation(RibbonMotion.cover) { openReading = reading }
-                        }
-                    },
+                    onOpenReading: { reading, target in openBook(reading, at: target) },
                     onOpenRooms: { menu = .rooms },
                     onYou: { menu = .you },
                     bookPull: $bookPull,
                     onBeginOpening: { reading in
-                        if openReading == nil { pulling = reading }
+                        pullHold += 1
+                        // Under reduce motion nothing moves under the
+                        // finger, so there is no page to lift: it arrives,
+                        // fading, when the pull commits.
+                        if openReading == nil, !reduceMotion { pulling = reading }
                     },
-                    onAbandonOpening: {
-                        withAnimation(RibbonMotion.handled) { bookPull = 0 } completion: {
+                    onFinishOpening: { reading, rate in
+                        guard pulling?.id == reading.id else {
+                            openBook(reading, at: nil)
+                            return
+                        }
+                        // The finger started this: the page finishes the
+                        // movement from wherever the pull left it, at the
+                        // speed the finger let go at.
+                        openTarget = nil
+                        withAnimation(RibbonMotion.cover(rate: rate, towards: 1 - bookPull)) {
+                            bookPull = 1
+                            openReading = reading
+                        } completion: {
+                            pulling = nil
+                            bookPull = 0
+                        }
+                    },
+                    onAbandonOpening: { rate in
+                        // Let go short of the commit: the page goes back
+                        // down with the fire on the one spring, carrying the
+                        // finger's speed, and leaves the tree only once it
+                        // has arrived — not the moment the finger lifts.
+                        let hold = pullHold
+                        guard bookPull > 0 else {
                             if openReading == nil { pulling = nil }
+                            return
+                        }
+                        withAnimation(RibbonMotion.handled(rate: rate, towards: -bookPull)) {
+                            bookPull = 0
+                        } completion: {
+                            if openReading == nil, pullHold == hold { pulling = nil }
                         }
                     })
                 .navigationDestination(for: UUID.self) { readingID in
@@ -212,14 +234,12 @@ struct RootView: View {
                                 // A quoted verse opens the reading at that
                                 // verse (S11) — the finished book's own
                                 // pages, not a copy.
-                                openTarget = verse
-                                withAnimation(RibbonMotion.arrive) { openReading = reading }
+                                openBook(reading, at: verse)
                             },
                             onReadAgain: { bookID in
                                 navigationPath = NavigationPath()
                                 let new = model.startReading(bookID: bookID, in: room)
-                                openTarget = nil
-                                withAnimation(RibbonMotion.arrive) { openReading = new }
+                                openBook(new, at: nil)
                             })
                     }
                 }
@@ -233,8 +253,7 @@ struct RootView: View {
                                 // book's note opens that book, not the
                                 // open one.
                                 if let reading = model.state.readings.first(where: { $0.id == readingID }) {
-                                    openTarget = verse
-                                    withAnimation(RibbonMotion.arrive) { openReading = reading }
+                                    openBook(reading, at: verse)
                                 }
                             })
                     }
@@ -254,25 +273,22 @@ struct RootView: View {
                             room: room,
                             reading: reading,
                             openAt: openTarget,
-                            onClose: {
-                                withAnimation(RibbonMotion.settle) { openReading = nil }
-                                openTarget = nil
-                            },
-                            onFinished: {
-                                withAnimation(RibbonMotion.settle) { openReading = nil }
-                                openTarget = nil
-                            },
+                            onClose: closeBook,
+                            onFinished: closeBook,
                             onStartAnother: {
-                                withAnimation(RibbonMotion.settle) { openReading = nil }
-                                openTarget = nil
+                                closeBook()
                                 chooserRequested = true
                             })
                         .offset(y: openReading == nil ? (1 - bookPull) * proxy.size.height : 0)
                         // The page goes back down the way it came when the
-                        // book closes.
-                        .transition(.asymmetric(
-                            insertion: .move(edge: .bottom),
-                            removal: .move(edge: .bottom).combined(with: .opacity)))
+                        // book closes. Under reduce motion a page the size
+                        // of the screen does not travel: it fades in where
+                        // it will be read, and out the same way (§11).
+                        .transition(reduceMotion
+                            ? AnyTransition.opacity
+                            : AnyTransition.asymmetric(
+                                insertion: .move(edge: .bottom),
+                                removal: .move(edge: .bottom).combined(with: .opacity)))
                     }
                 }
             }
@@ -330,13 +346,11 @@ struct RootView: View {
                 switch destination {
                 case .verse(_, let readingID, let verse):
                     if let reading = model.state.readings.first(where: { $0.id == readingID }) {
-                        openTarget = verse
-                        withAnimation(RibbonMotion.cover) { openReading = reading }
+                        openBook(reading, at: verse)
                     }
                 case .cards(_, let readingID, let chapter):
                     if let reading = model.state.readings.first(where: { $0.id == readingID }) {
-                        openTarget = VerseAddress(bookID: reading.bookID, chapter: chapter, verse: 1)
-                        withAnimation(RibbonMotion.cover) { openReading = reading }
+                        openBook(reading, at: VerseAddress(bookID: reading.bookID, chapter: chapter, verse: 1))
                     }
                 case .room:
                     break
@@ -362,6 +376,22 @@ struct RootView: View {
                     }
                 }
         }
+    }
+
+    /// The book, opened by any door but the pull — the way in, a waiting
+    /// row, a quoted verse, a note on somebody's page, a notification. It
+    /// comes up from the foot of the room on the cover spring, the same
+    /// movement from every door (a pushed screen used to send it up on a
+    /// quicker curve than the room did); under reduce motion it fades in.
+    private func openBook(_ reading: Reading, at target: VerseAddress?) {
+        openTarget = target
+        withAnimation(reduceMotion ? RibbonMotion.settle : RibbonMotion.cover) { openReading = reading }
+    }
+
+    /// The book closing, whichever way it was closed: settling like a book.
+    private func closeBook() {
+        withAnimation(RibbonMotion.settle) { openReading = nil }
+        openTarget = nil
     }
 
     /// The pending invite, bindable for the sheet without dragging

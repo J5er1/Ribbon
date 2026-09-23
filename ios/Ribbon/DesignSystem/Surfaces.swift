@@ -66,14 +66,19 @@ private struct TileModifier: ViewModifier {
 
 /// A tile that takes a press: it gives under the finger by 2.5% on a
 /// critically damped spring and comes back the same way. No wash, no
-/// ripple, no overshoot (§9.1). Under reduce motion it does not move.
+/// ripple, no overshoot (§9.1). Under reduce motion it does not move — it
+/// dims a little instead, because movement becomes a fade under §11, not
+/// nothing, and a press that nothing answers is a press the finger has to
+/// wonder about.
 struct PressableStyle: ButtonStyle {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {
+        let pressed = configuration.isPressed
         configuration.label
-            .scaleEffect(configuration.isPressed && !reduceMotion ? RibbonShape.pressedScale : 1)
-            .animation(RibbonMotion.touched(still: reduceMotion), value: configuration.isPressed)
+            .scaleEffect(pressed && !reduceMotion ? RibbonShape.pressedScale : 1)
+            .opacity(pressed && reduceMotion ? 0.72 : 1)
+            .animation(reduceMotion ? RibbonMotion.release : RibbonMotion.touched, value: pressed)
     }
 }
 
@@ -370,6 +375,7 @@ struct SettingChoice: View {
     var subtitle: String?
     var chosen: Bool
     var action: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(_ title: String, subtitle: String? = nil, chosen: Bool, action: @escaping () -> Void) {
         self.title = title
@@ -385,17 +391,21 @@ struct SettingChoice: View {
                 Spacer(minLength: 8)
                 ZStack {
                     Circle().strokeBorder(chosen ? Palette.chartreuse : Palette.rule, lineWidth: 1.5)
-                    if chosen {
-                        Path { p in
-                            p.move(to: CGPoint(x: 5, y: 10))
-                            p.addLine(to: CGPoint(x: 8.5, y: 13.5))
-                            p.addLine(to: CGPoint(x: 15, y: 7))
-                        }
-                        .stroke(Palette.chartreuse, style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round))
-                        .frame(width: 20, height: 20)
+                    // The check draws itself in the way a pen would, and
+                    // lifts off the same way when the choice moves on — a
+                    // dot moving down a list, on the fingertip's spring.
+                    // Under reduce motion it is simply there, fading.
+                    Path { p in
+                        p.move(to: CGPoint(x: 5, y: 10))
+                        p.addLine(to: CGPoint(x: 8.5, y: 13.5))
+                        p.addLine(to: CGPoint(x: 15, y: 7))
                     }
+                    .trim(from: 0, to: chosen || reduceMotion ? 1 : 0)
+                    .stroke(Palette.chartreuse, style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round))
+                    .opacity(chosen ? 1 : 0)
                 }
                 .frame(width: 20, height: 20)
+                .animation(reduceMotion ? RibbonMotion.arrive : RibbonMotion.touched, value: chosen)
                 .accessibilityHidden(true)
             }
             .padding(.horizontal, RibbonShape.textInset)

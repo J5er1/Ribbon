@@ -143,10 +143,10 @@ through to the join flow and settings. It builds and its tests pass; it has
 not yet been run on a physical device.
 
 Android took a design pass of its own (docs/deviations.md A18–A51), and
-iOS has now taken the same pass (docs/deviations.md I1–I20), so the two
-platforms are level again. The one deliberate difference is colour: Android
-takes it from the wallpaper (Material You), iOS keeps the brand's
-chartreuse. What the pass gave both:
+iOS has now taken the same pass (docs/deviations.md I1–I20) and the motion
+sweep Android had after it (I21–I29), so the two platforms are level again.
+The one deliberate difference is colour: Android takes it from the wallpaper
+(Material You), iOS keeps the brand's chartreuse. What the pass gave both:
 
 - **Material You, unharmonised (Android only).** The room takes its colour
   from the wallpaper. The fire and the eight inks never move — they are

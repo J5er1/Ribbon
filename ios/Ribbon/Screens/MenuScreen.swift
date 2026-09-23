@@ -429,7 +429,6 @@ private struct YouScreen: View {
 /// when you are done and an empty name reverts.
 private struct YouIdentity: View {
     @Environment(AppModel.self) private var model
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var name = ""
     @State private var portraitItem: PhotosPickerItem?
@@ -485,9 +484,9 @@ private struct YouIdentity: View {
                         Rectangle()
                             .fill(nameFocused ? Palette.text : Palette.rule)
                             .frame(height: 1)
-                            .animation(
-                                RibbonMotion.arrive(still: reduceMotion),
-                                value: nameFocused)
+                            // A change of light: it fades under reduce
+                            // motion as well.
+                            .animation(RibbonMotion.arrive, value: nameFocused)
                     }
                     .accessibilityLabel(Copy.yourName)
                     .accessibilityHint(Copy.editsYourName)
@@ -615,8 +614,10 @@ private struct JoinWithInviteScreen: View {
                         .font(RibbonType.ui(14))
                         .foregroundStyle(Palette.muted)
                         .padding(.horizontal, RibbonShape.textInset)
+                        .transition(.opacity)
                 }
             }
+            .animation(RibbonMotion.arrive, value: missed)
         }
     }
 

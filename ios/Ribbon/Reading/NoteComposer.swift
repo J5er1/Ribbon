@@ -13,6 +13,7 @@ enum ComposerMode: Equatable {
 
 struct LeaveToolbar: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let room: Room
     let range: VerseRange
     /// Paused rooms: only highlight shows, greyed, with one line (S02).
@@ -81,7 +82,11 @@ struct LeaveToolbar: View {
             .frame(maxWidth: 420)
             .ribbonGlass(in: Capsule(), interactive: true)
         }
-        .transition(.move(edge: .bottom).combined(with: .opacity))
+        // It rises from the foot of the page; under reduce motion it fades
+        // in where it will be used (§11).
+        .transition(reduceMotion
+            ? AnyTransition.opacity
+            : AnyTransition.move(edge: .bottom).combined(with: .opacity))
     }
 }
 
@@ -140,10 +145,16 @@ struct WriteComposer: View {
                 .focused($focused)
                 .accessibilityLabel(Copy.whatYouWantToSay)
             HStack {
-                Button(Copy.takeBack) { onCancel() }
-                    .font(RibbonType.ui(15))
-                    .foregroundStyle(Palette.muted)
-                    .buttonStyle(.plain)
+                // The way out is as easy to hit as the way on — it was the
+                // height of its own letters.
+                Button { onCancel() } label: {
+                    Text(Copy.takeBack)
+                        .font(RibbonType.ui(15))
+                        .foregroundStyle(Palette.muted)
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle().inset(by: -8))
+                }
+                .buttonStyle(.plain)
                 Spacer()
                 Button {
                     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -205,6 +216,8 @@ struct SpeakControl: View {
                     }
                 } label: {
                     SmallCaps(Copy.openSettings, size: 13, color: Palette.chartreuse)
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle().inset(by: -8))
                 }
                 .buttonStyle(.plain)
             } else {
@@ -224,8 +237,12 @@ struct SpeakControl: View {
                     draggedAway ? Copy.letGoToDiscard : Copy.releaseToLeaveIt,
                     size: 12,
                     color: draggedAway ? Palette.muted : Palette.text.opacity(0.7))
+                    .contentTransition(.opacity)
             }
         }
+        // Dragged away, the waveform recedes and the line under it turns
+        // over — both on the let-go curve, where they used to switch.
+        .animation(RibbonMotion.release, value: draggedAway)
         .padding(.horizontal, 22)
         .padding(.vertical, 14)
         .ribbonGlass(in: RoundedRectangle(cornerRadius: 18))

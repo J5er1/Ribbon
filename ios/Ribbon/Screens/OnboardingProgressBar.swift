@@ -1,9 +1,10 @@
 import SwiftUI
 
-/// The tour's progress: one hairline segment per card, filling on the
-/// settle curve — held still under reduce motion — with the way back on
-/// the left and sign-in on the right. No system glyphs: the chevron is the
-/// product's own.
+/// The tour's progress: one hairline segment per card, the accent filling
+/// along each on the settle curve — brightening in place under reduce
+/// motion — with the way back on the left and sign-in on the right. No
+/// system glyphs: the chevron is the product's own. One bar for the whole
+/// thread (OnboardingFlow), so the fill is seen to move.
 struct OnboardingProgressBar: View {
     let currentStep: Int
     let totalSteps: Int
@@ -20,12 +21,21 @@ struct OnboardingProgressBar: View {
             }
             HStack(spacing: 6) {
                 ForEach(0..<totalSteps, id: \.self) { index in
+                    let filled = index <= currentStep
                     Capsule()
-                        .fill(index <= currentStep ? Palette.chartreuse : Palette.rule)
+                        .fill(Palette.rule)
+                        .overlay(alignment: .leading) {
+                            // The accent runs along the segment the way the
+                            // thread runs, and back again going back.
+                            Capsule()
+                                .fill(Palette.chartreuse)
+                                .scaleEffect(x: filled || reduceMotion ? 1 : 0.001, y: 1, anchor: .leading)
+                                .opacity(filled ? 1 : 0)
+                        }
                         .frame(height: 3)
                 }
             }
-            .animation(RibbonMotion.settle(still: reduceMotion), value: currentStep)
+            .animation(RibbonMotion.settle, value: currentStep)
             .accessibilityHidden(true)
             if let onSignIn {
                 Button(action: onSignIn) {

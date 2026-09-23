@@ -31,8 +31,12 @@ struct RoomScreen: View {
     /// The finger has taken hold of the fire: the page is built now, under
     /// the room, so the pull has something to lift.
     var onBeginOpening: (Reading) -> Void
-    /// Let go short of the commit: the page goes back down with the fire.
-    var onAbandonOpening: () -> Void
+    /// Let go past the commit, or flung: the root carries the page the rest
+    /// of the way. The speed is the pull's own, in pulls per second, upward.
+    var onFinishOpening: (Reading, CGFloat) -> Void
+    /// Let go short of the commit: the page goes back down with the fire,
+    /// at the speed the finger let go at.
+    var onAbandonOpening: (CGFloat) -> Void
 
     @State private var showChooser = false
     @State private var showInviteShare = false
@@ -56,6 +60,7 @@ struct RoomScreen: View {
                     pull: $bookPull,
                     onOpenReading: onOpenReading,
                     onBeginOpening: onBeginOpening,
+                    onFinishOpening: onFinishOpening,
                     onAbandonOpening: onAbandonOpening,
                     onPickABook: { showChooser = true },
                     onInvite: { showInviteShare = true },
@@ -194,7 +199,6 @@ private struct RoomHeader: View {
 /// here as a sentence. Never a count, never a list of pills.
 private struct Greeting: View {
     @Environment(AppModel.self) private var model
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let room: Room
 
     var body: some View {
@@ -206,7 +210,7 @@ private struct Greeting: View {
                     .foregroundStyle(Palette.text)
                     .accessibilityAddTraits(.isHeader)
                     .contentTransition(.opacity)
-                    .animation(RibbonMotion.settle(still: reduceMotion), value: hour)
+                    .animation(RibbonMotion.settle, value: hour)
                 PresenceLine(room: room)
             }
         }
@@ -265,14 +269,14 @@ private struct PresenceLine: View {
 
 private struct HearthView: View {
     @Environment(AppModel.self) private var model
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let room: Room
     let reading: Reading?
     /// 0 where the fire sits, 1 at the end of its travel up.
     @Binding var pull: CGFloat
     var onOpenReading: (Reading, VerseAddress?) -> Void
     var onBeginOpening: (Reading) -> Void
-    var onAbandonOpening: () -> Void
+    var onFinishOpening: (Reading, CGFloat) -> Void
+    var onAbandonOpening: (CGFloat) -> Void
     var onPickABook: () -> Void
     var onInvite: () -> Void
     var onOpenRooms: () -> Void
@@ -289,6 +293,7 @@ private struct HearthView: View {
                         room: room, reading: reading, pull: $pull, travel: travel,
                         onBeginOpening: { onBeginOpening(reading) },
                         onOpened: { onOpenReading(reading, nil) },
+                        onCommitted: { rate in onFinishOpening(reading, rate) },
                         onAbandoned: onAbandonOpening,
                         onOpenRooms: onOpenRooms)
                     .transition(.opacity)
@@ -300,7 +305,9 @@ private struct HearthView: View {
             }
             .frame(maxWidth: .infinity)
             .well(.card)
-            .animation(RibbonMotion.arrive(still: reduceMotion), value: reading?.id)
+            // A fire catching where the hearth was unlit is a change of
+            // light: it cross-fades under reduce motion too.
+            .animation(RibbonMotion.arrive, value: reading?.id)
             Air(18)
             WayIn(
                 room: room, reading: reading,
@@ -328,8 +335,11 @@ private struct TheFire: View {
     @Binding var pull: CGFloat
     let travel: CGFloat
     var onBeginOpening: () -> Void
+    /// The tap equivalent (§11): VoiceOver's "Continue in Mark".
     var onOpened: () -> Void
-    var onAbandoned: () -> Void
+    /// The pull committed, and how fast it was going.
+    var onCommitted: (CGFloat) -> Void
+    var onAbandoned: (CGFloat) -> Void
     var onOpenRooms: () -> Void
 
     @State private var sink: CGFloat = 0
@@ -356,7 +366,7 @@ private struct TheFire: View {
                 .foregroundStyle(Palette.text)
             SmallCaps(state.displayName, size: 13)
                 .contentTransition(.opacity)
-                .animation(RibbonMotion.settle(still: reduceMotion), value: state.displayName)
+                .animation(RibbonMotion.settle, value: state.displayName)
         }
         .padding(.vertical, 18)
         .frame(maxWidth: .infinity)
@@ -392,22 +402,31 @@ private struct TheFire: View {
             }
             .onEnded { value in
                 let dy = value.translation.height
-                let velocity = value.predictedEndTranslation.height - dy
+                // The finger's own speed as it lifted, in points per second
+                // — not the distance a prediction adds on, which is a
+                // length standing in for a speed and made the flick about
+                // twice as hard to land as `openFling` says. As the pull
+                // moves: pulls per second, upward positive.
+                let speed = value.velocity.height
+                let rate = -speed / max(1, travel)
                 if dy < 0 {
-                    let flung = -velocity > RibbonMotion.openFling
+                    let flung = -speed > RibbonMotion.openFling
                     if pull >= RibbonMotion.openCommit || flung || (reduceMotion && -dy > 40) {
                         // The root carries the pull the rest of the way,
                         // with the speed the finger let go at.
-                        onOpened()
+                        onCommitted(rate)
                     } else if opening {
-                        withAnimation(RibbonMotion.handled(velocity: -velocity / max(1, travel))) { pull = 0 }
-                        onAbandoned()
+                        // The root takes the fire and the page back down
+                        // together, on one spring — the fire animating
+                        // itself here as well left the page to be taken out
+                        // of the tree before it had arrived.
+                        onAbandoned(rate)
                     }
                 } else {
                     if dy >= RoomMetrics.roomCommit { onOpenRooms() }
                     // A pull that started and came back down did not
                     // commit: the page the root built goes back with it.
-                    if opening { onAbandoned() }
+                    if opening { onAbandoned(0) }
                     withAnimation(RibbonMotion.handled(still: reduceMotion)) { sink = 0 }
                 }
                 opening = false
@@ -466,6 +485,11 @@ private struct Seats: View {
         let idle = room.isPaused ? Set<UUID>() : Set(model.presentPeople.filter(\.isIdle).map(\.id))
         let seatKept = model.somebodyIsExpected(room)
         let places = min(members.count, Room.capacity) + (seatKept ? 1 : 0)
+        // A face taking its seat comes in from a little smaller; under
+        // reduce motion it only fades in (§11).
+        let seating = reduceMotion
+            ? AnyTransition.opacity
+            : AnyTransition.opacity.combined(with: .scale(scale: 0.82))
 
         GeometryReader { proxy in
             let touch: CGFloat = places <= 1
@@ -480,16 +504,16 @@ private struct Seats: View {
                         present: present.contains(membership.personID),
                         idle: idle.contains(membership.personID),
                         touch: touch, face: face)
-                    .transition(.opacity.combined(with: .scale(scale: 0.82)))
+                    .transition(seating)
                 }
                 if seatKept {
                     OpenSeat(touch: touch, face: face, onInvite: onInvite)
-                        .transition(.opacity.combined(with: .scale(scale: 0.82)))
+                        .transition(seating)
                 }
             }
             .frame(maxWidth: .infinity)
-            .animation(RibbonMotion.arrive(still: reduceMotion), value: members.map(\.personID))
-            .animation(RibbonMotion.arrive(still: reduceMotion), value: seatKept)
+            .animation(RibbonMotion.arrive, value: members.map(\.personID))
+            .animation(RibbonMotion.arrive, value: seatKept)
         }
         .frame(height: RoomMetrics.seatTouch)
     }
@@ -497,7 +521,6 @@ private struct Seats: View {
 
 private struct Seat: View {
     @Environment(AppModel.self) private var model
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let room: Room
     let personID: UUID
     let present: Bool
@@ -517,7 +540,10 @@ private struct Seat: View {
                 PresenceRing(shown: present, half: idle)
                     .frame(width: face + (RoomMetrics.ring + RoomMetrics.ringGap) * 2,
                            height: face + (RoomMetrics.ring + RoomMetrics.ringGap) * 2)
-                    .animation(RibbonMotion.handled(still: reduceMotion), value: present)
+                    // Presence appearing is the `arrive` curve (§9.1), and a
+                    // change of light, so it fades under reduce motion too.
+                    .animation(RibbonMotion.arrive, value: present)
+                    .animation(RibbonMotion.settle, value: idle)
                 PortraitView(
                     person: person,
                     ink: model.membership(of: personID, in: room.id)?.ink,
@@ -538,15 +564,30 @@ private struct Seat: View {
 private struct PresenceRing: View {
     var shown: Bool
     var half: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        // A path starts at three o'clock and runs clockwise, so the second
-        // half is the top: nine o'clock over the crown to three.
+        ZStack {
+            if reduceMotion {
+                // Held still, the whole ring and the half cross-fade.
+                ring(from: 0).opacity(half ? 0 : 1)
+                ring(from: 0.5).opacity(half ? 1 : 0)
+            } else {
+                // Going still unwinds the ring to its crown, and reading
+                // again draws it back round — it was a jump between the two.
+                ring(from: half ? 0.5 : 0)
+            }
+        }
+        .opacity(shown ? 1 : 0)
+        .accessibilityHidden(true)
+    }
+
+    // A path starts at three o'clock and runs clockwise, so the second half
+    // is the top: nine o'clock over the crown to three.
+    private func ring(from start: CGFloat) -> some View {
         Circle()
-            .trim(from: half ? 0.5 : 0, to: 1)
+            .trim(from: start, to: 1)
             .stroke(Palette.chartreuse, lineWidth: RoomMetrics.ring)
-            .opacity(shown ? 1 : 0)
-            .accessibilityHidden(true)
     }
 }
 
@@ -702,57 +743,74 @@ private struct WaitingSection: View {
         let hasRows = !waiting.isEmpty || cardsOpen || anInkToPick
         let hasInvite = !room.isPaused && alone && model.hasLiveInvite(room)
 
-        if hasRows || hasInvite {
-            VStack(alignment: .leading, spacing: 8) {
-                if hasRows {
-                    SectionLabel(Copy.leftForYou)
-                        .padding(.bottom, 2)
-                }
-                ForEach(waiting) { note in
-                    if let author = model.person(note.authorID) {
-                        WaitingRow(
-                            text: note.kind == .voice
-                                ? Copy.leftYouAVoiceNote(firstName(author.name), note.verse.formatted)
-                                : Copy.leftYouANote(firstName(author.name), note.verse.formatted),
-                            action: { if let reading { onOpenReading(reading, note.verse) } }
-                        ) {
-                            NoteMark(
-                                kind: note.kind,
-                                ink: model.membership(of: note.authorID, in: room.id)?.ink ?? .clay,
-                                found: false, mine: false, pending: false)
-                        }
-                        .transition(.opacity)
+        VStack(alignment: .leading, spacing: 0) {
+            if hasRows || hasInvite {
+                rows(waiting: waiting, cardsOpen: cardsOpen, anInkToPick: anInkToPick, hasRows: hasRows, hasInvite: hasInvite)
+                    .padding(.top, 30)
+                    .transition(.opacity)
+            }
+        }
+        // Everything that comes and goes here — a note left, the cards
+        // opening, an ink to pick, the invite — settles in, and so does the
+        // section around the first of them. The cards and the ink used to
+        // arrive between two frames, and the section itself always did.
+        .animation(RibbonMotion.settle(still: reduceMotion), value: waiting.map(\.id))
+        .animation(RibbonMotion.settle(still: reduceMotion), value: cardsOpen)
+        .animation(RibbonMotion.settle(still: reduceMotion), value: anInkToPick)
+        .animation(RibbonMotion.settle(still: reduceMotion), value: hasInvite)
+    }
+
+    @ViewBuilder
+    private func rows(waiting: [Note], cardsOpen: Bool, anInkToPick: Bool, hasRows: Bool, hasInvite: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if hasRows {
+                SectionLabel(Copy.leftForYou)
+                    .padding(.bottom, 2)
+                    .transition(.opacity)
+            }
+            ForEach(waiting) { note in
+                if let author = model.person(note.authorID) {
+                    WaitingRow(
+                        text: note.kind == .voice
+                            ? Copy.leftYouAVoiceNote(firstName(author.name), note.verse.formatted)
+                            : Copy.leftYouANote(firstName(author.name), note.verse.formatted),
+                        action: { if let reading { onOpenReading(reading, note.verse) } }
+                    ) {
+                        NoteMark(
+                            kind: note.kind,
+                            ink: model.membership(of: note.authorID, in: room.id)?.ink ?? .clay,
+                            found: false, mine: false, pending: false)
                     }
-                }
-                if cardsOpen, let reading {
-                    WaitingRow(text: Copy.notifCardsOpen, action: { onOpenReading(reading, nil) }) {
-                        Circle().fill(Palette.chartreuse).frame(width: 6, height: 6)
-                    }
-                }
-                if anInkToPick {
-                    WaitingRow(text: Copy.pickAnInk, action: onPickAnInk) {
-                        Circle().fill(Palette.text.opacity(0.55)).frame(width: 8, height: 8)
-                    }
-                }
-                if hasInvite {
-                    // Room of one, invite still out — the state, not the person.
-                    HStack(spacing: 6) {
-                        SmallCaps(Copy.inviteStillOut, size: 12)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        QuietControl(title: Copy.sendItAgain, action: onSendItAgain)
-                    }
-                    .padding(.leading, 16)
-                    .padding(.trailing, 8)
-                    .padding(.vertical, 8)
-                    .frame(minHeight: RoomMetrics.touch + 8)
-                    .paper(.row)
-                    .padding(.top, hasRows ? 10 : 0)
                     .transition(.opacity)
                 }
             }
-            .padding(.top, 30)
-            .animation(RibbonMotion.settle(still: reduceMotion), value: waiting.map(\.id))
-            .animation(RibbonMotion.settle(still: reduceMotion), value: hasInvite)
+            if cardsOpen, let reading {
+                WaitingRow(text: Copy.notifCardsOpen, action: { onOpenReading(reading, nil) }) {
+                    Circle().fill(Palette.chartreuse).frame(width: 6, height: 6)
+                }
+                .transition(.opacity)
+            }
+            if anInkToPick {
+                WaitingRow(text: Copy.pickAnInk, action: onPickAnInk) {
+                    Circle().fill(Palette.text.opacity(0.55)).frame(width: 8, height: 8)
+                }
+                .transition(.opacity)
+            }
+            if hasInvite {
+                // Room of one, invite still out — the state, not the person.
+                HStack(spacing: 6) {
+                    SmallCaps(Copy.inviteStillOut, size: 12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    QuietControl(title: Copy.sendItAgain, action: onSendItAgain)
+                }
+                .padding(.leading, 16)
+                .padding(.trailing, 8)
+                .padding(.vertical, 8)
+                .frame(minHeight: RoomMetrics.touch + 8)
+                .paper(.row)
+                .padding(.top, hasRows ? 10 : 0)
+                .transition(.opacity)
+            }
         }
     }
 }

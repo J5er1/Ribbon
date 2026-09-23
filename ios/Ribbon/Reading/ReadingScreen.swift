@@ -9,6 +9,7 @@ import RibbonCore
 struct ReadingScreen: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let room: Room
     let reading: Reading
     /// A named place to open at (a waiting row's note, a quoted verse) —
@@ -109,7 +110,9 @@ struct ReadingScreen: View {
                                 reading: reading,
                                 chapter: n,
                                 nextChapterTitle: book?.chapterHeading(n + 1) ?? "\(n + 1)",
-                                onContinue: { withAnimation(RibbonMotion.settle) { proxy.scrollTo(n + 1, anchor: .top) } },
+                                // Under reduce motion the page does not fly a
+                                // chapter's length: it is simply there (§11).
+                                onContinue: { withAnimation(RibbonMotion.settle(still: reduceMotion)) { proxy.scrollTo(n + 1, anchor: .top) } },
                                 onClose: close)
                         }
                     }
@@ -177,7 +180,7 @@ struct ReadingScreen: View {
             .onChange(of: scrollCommand) { _, command in
                 if let command {
                     programmaticScrollUntil = Date().addingTimeInterval(1.5)
-                    withAnimation(RibbonMotion.settle) {
+                    withAnimation(RibbonMotion.settle(still: reduceMotion)) {
                         proxy.scrollTo(command, anchor: .top)
                     }
                     scrollCommand = nil
@@ -194,7 +197,15 @@ struct ReadingScreen: View {
             }
         }
         .overlay(alignment: .topTrailing) {
-            if model.followingPersonID != nil { FollowThread() }
+            ZStack {
+                if model.followingPersonID != nil {
+                    FollowThread()
+                        .transition(.opacity)
+                }
+            }
+            // The thread is drawn in and let go of, never switched: it
+            // fades both ways, reduce motion or not.
+            .animation(RibbonMotion.arrive, value: model.followingPersonID != nil)
         }
         .overlay(alignment: .bottom) { bottomChrome }
         .overlay(alignment: .center) { highlightLabelOverlay }
@@ -518,7 +529,10 @@ struct ReadingScreen: View {
                             model.takeBack(note)
                             if stack.count <= 1 { closeNote() }
                         },
-                        onEdit: { editingNote = note; composer = .write(note.verse) })
+                        onEdit: {
+                            editingNote = note
+                            withAnimation(RibbonMotion.arrive) { composer = .write(note.verse) }
+                        })
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -548,8 +562,18 @@ struct ReadingScreen: View {
                         justMarked = made?.id
                         clearLift()
                     },
-                    onWrite: { composer = .write(VerseAddress(bookID: reading.bookID, chapter: chapter, verse: lifted.startVerse)) },
-                    onSpeak: { composer = .speak(VerseAddress(bookID: reading.bookID, chapter: chapter, verse: lifted.startVerse)) })
+                    // The toolbar gives way to what it opened: a
+                    // cross-fade in the same place, rather than a cut.
+                    onWrite: {
+                        withAnimation(RibbonMotion.arrive) {
+                            composer = .write(VerseAddress(bookID: reading.bookID, chapter: chapter, verse: lifted.startVerse))
+                        }
+                    },
+                    onSpeak: {
+                        withAnimation(RibbonMotion.arrive) {
+                            composer = .speak(VerseAddress(bookID: reading.bookID, chapter: chapter, verse: lifted.startVerse))
+                        }
+                    })
                 .padding(.bottom, 14)
             }
         case .write(let address):
@@ -569,6 +593,7 @@ struct ReadingScreen: View {
                 },
                 onCancel: { editingNote = nil; clearLift() })
             .padding(.bottom, 10)
+            .transition(.opacity)
         case .speak(let address):
             SpeakControl(
                 ink: model.inkForNewHighlight(in: room) ?? model.lastUsedInk,
@@ -582,6 +607,7 @@ struct ReadingScreen: View {
             .padding(.horizontal, 40)
             .padding(.bottom, 14)
             .readableColumn()
+            .transition(.opacity)
         case nil:
             VStack(spacing: 10) {
                 // After a follow ends: the quiet offer back, for about two
@@ -591,7 +617,15 @@ struct ReadingScreen: View {
                    model.followingPersonID == nil {
                     QuietControl(title: Copy.backToWhereYouWere) {
                         scrollCommand = offer.address.chapter
-                        followBackOffer = nil
+                        withAnimation(RibbonMotion.arrive) { followBackOffer = nil }
+                    }
+                    .transition(.opacity)
+                    .task(id: offer.until) {
+                        // It forgets on its own, when the two minutes are
+                        // up — not whenever the page next happens to redraw.
+                        try? await Task.sleep(for: .seconds(max(0, offer.until.timeIntervalSinceNow)))
+                        guard !Task.isCancelled else { return }
+                        withAnimation(RibbonMotion.arrive) { followBackOffer = nil }
                     }
                 }
                 // The way out: the Wave, ~20 pt, muted ivory, centred at
@@ -617,9 +651,14 @@ struct ReadingScreen: View {
                     HStack {
                         Button { showChapters = true } label: {
                             SmallCaps(book?.chapterHeading(currentChapter) ?? "", size: 12, color: Palette.text.opacity(0.7))
+                                // Turning into the next chapter, the running
+                                // head cross-fades and its capsule eases to
+                                // the new width, rather than both jumping.
+                                .contentTransition(.opacity)
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 9)
                                 .ribbonGlass(in: Capsule())
+                                .animation(RibbonMotion.settle, value: currentChapter)
                                 .frame(minHeight: 44)
                                 .contentShape(Rectangle())
                         }
@@ -631,6 +670,7 @@ struct ReadingScreen: View {
                 }
             }
             .padding(.bottom, 6)
+            .animation(RibbonMotion.arrive, value: model.followingPersonID == nil)
         }
     }
 
@@ -639,26 +679,33 @@ struct ReadingScreen: View {
         if let highlight = highlightLabel {
             // A small label naming who made it, and remove if it's yours
             // (S06).
-            VStack(spacing: 10) {
+            let mine = highlight.authorID == model.me?.id
+            VStack(spacing: 0) {
                 HStack(spacing: 8) {
                     InkDot(ink: highlight.ink)
                     Text(model.person(highlight.authorID)?.name ?? "")
                         .font(RibbonType.ui(15))
                         .foregroundStyle(Palette.text)
                 }
-                if highlight.authorID == model.me?.id {
+                if mine {
+                    // Small to read, a finger's width to take (§11): it was
+                    // the height of its own letters.
                     Button {
                         model.removeHighlight(highlight)
-                        highlightLabel = nil
+                        withAnimation(RibbonMotion.arrive) { highlightLabel = nil }
                     } label: {
                         SmallCaps(Copy.remove, size: 12, color: Palette.muted)
+                            .frame(minWidth: 88, minHeight: 44)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }
             }
-            .padding(16)
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            .padding(.bottom, mine ? 4 : 16)
             .ribbonGlass(in: RoundedRectangle(cornerRadius: 16))
-            .onTapGesture { highlightLabel = nil }
+            .onTapGesture { withAnimation(RibbonMotion.arrive) { highlightLabel = nil } }
             .task(id: highlight.id) {
                 try? await Task.sleep(for: .seconds(2.6))
                 withAnimation(RibbonMotion.arrive) { highlightLabel = nil }
@@ -675,7 +722,12 @@ struct ReadingScreen: View {
         // no confetti, no badge, and no number.
         VStack(spacing: 18) {
             Spacer().frame(height: 70)
-            FireBecomesEmber(scale: reading.handiwork.scale, coalDepth: reading.handiwork.coalDepth)
+            FireBecomesEmber(
+                scale: reading.handiwork.scale, coalDepth: reading.handiwork.coalDepth,
+                begin: didReachEnd,
+                // `reading` is the book as it was opened: finished then
+                // means it has already been through this once.
+                alreadyAnEmber: reading.isFinished)
             Text(book?.name ?? "")
                 .font(RibbonType.display(30))
                 .foregroundStyle(Palette.text)
@@ -920,6 +972,9 @@ struct PassageEndView: View {
                 if card.state != .setDown {
                     ReflectionCardView(card: card, reading: reading, room: room)
                         .padding(.horizontal, 24)
+                        // Set down, it leaves without ceremony — which is
+                        // not the same as leaving between two frames.
+                        .transition(.opacity)
                 }
             }
 

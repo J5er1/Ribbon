@@ -20,6 +20,13 @@ struct PresenceForm: View {
     @State private var expanded = false
     @State private var holdTarget: UUID?
     @State private var holdProgress: CGFloat = 0
+    /// The portrait just thought of: its ring stays full a moment and then
+    /// lets go, so the hold ends on what it did instead of vanishing on the
+    /// frame it succeeded.
+    @State private var sentTo: UUID?
+    /// The roster has been read once. Whoever is on it then was already in
+    /// the book when you opened it — they are not arriving.
+    @State private var rosterSeen = false
     /// "Ruth is with you" appears once per follower, then rests.
     @State private var announcedFollowers: Set<UUID> = []
 
@@ -44,23 +51,43 @@ struct PresenceForm: View {
                 EmptyView()
             } else if expanded {
                 expandedPanel
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
+                    .transition(fromTheEdge)
             } else {
                 collapsedForm
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
+                    .transition(fromTheEdge)
             }
         }
-        .animation(RibbonMotion.open(still: reduceMotion), value: expanded)
-        .animation(RibbonMotion.arrive(still: reduceMotion), value: people)
+        .animation(RibbonMotion.open, value: expanded)
+        .animation(RibbonMotion.arrive, value: people)
         .onChange(of: model.presentPeople, initial: true) { _, now in
             holdRoster(now)
         }
+    }
+
+    /// The form eases out of the edge it lives on. Under reduce motion it
+    /// fades there instead (§11: morphs become cross-fades) — it used to
+    /// cut, which is not the same thing as holding still.
+    private var fromTheEdge: AnyTransition {
+        reduceMotion
+            ? AnyTransition.opacity
+            : AnyTransition.move(edge: .trailing).combined(with: .opacity)
     }
 
     /// Arrivals and changes land at once; departures are held for one
     /// arrive so the lozenge can fade out reading the name.
     private func holdRoster(_ now: [PresentPerson]) {
         let nowIDs = Set(now.map(\.id))
+        // Someone arriving in the book: the one soft transient §9.3 and S07
+        // give it, which had never been played. Not for the people already
+        // here when the book opened, not for yourself, and not for somebody
+        // coming back inside the fade — as far as the page knows they never
+        // left.
+        let shownIDs = Set(shown.map(\.id))
+        let me = model.me?.id
+        if rosterSeen, nowIDs.contains(where: { !shownIDs.contains($0) && $0 != me }) {
+            Haptics.shared.someoneArrives()
+        }
+        rosterSeen = true
         // Somebody who came back inside the fade is not leaving.
         leaving.subtract(nowIDs)
         var next = now
@@ -197,6 +224,8 @@ struct PresenceForm: View {
             } label: {
                 SmallCaps(Copy.readQuietly, size: 12,
                           color: model.readingQuietly ? Palette.chartreuse : Palette.muted)
+                    .frame(minHeight: 44, alignment: .leading)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
         }
@@ -220,14 +249,15 @@ struct PresenceForm: View {
             portrait(person)
                 .frame(width: 34, height: 34)
                 .overlay {
-                    if holdTarget == person.id {
+                    if holdTarget == person.id || sentTo == person.id {
                         // Thinking of you (§4.3): the portrait fills with
                         // your ink over ~700 ms; release completes it.
                         Circle()
-                            .trim(from: 0, to: holdProgress)
+                            .trim(from: 0, to: sentTo == person.id ? 1 : holdProgress)
                             .stroke(myInk.color, lineWidth: 2.5)
                             .rotationEffect(.degrees(-90))
                             .frame(width: 38, height: 38)
+                            .transition(.opacity)
                     }
                 }
             VStack(alignment: .leading, spacing: 2) {
@@ -243,13 +273,22 @@ struct PresenceForm: View {
         .contentShape(Rectangle())
         .onTapGesture { onFollow(person) }
         .onLongPressGesture(minimumDuration: 0.7) {
-            holdProgress = 1
             Haptics.shared.completeThinkingOfYouHold()
             Task { await model.presence.sendThinkingOfYou(to: person.id) }
+            // The ring stays full for a moment and then lets go, so what
+            // the hold did is seen as well as felt.
+            sentTo = person.id
             holdTarget = nil
             holdProgress = 0
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(600))
+                withAnimation(RibbonMotion.settle) {
+                    if sentTo == person.id { sentTo = nil }
+                }
+            }
         } onPressingChanged: { pressing in
             if pressing {
+                sentTo = nil
                 holdTarget = person.id
                 Haptics.shared.beginThinkingOfYouHold()
                 if reduceMotion {
@@ -259,9 +298,13 @@ struct PresenceForm: View {
                     withAnimation(RibbonMotion.inkFill) { holdProgress = 1 }
                 }
             } else if holdTarget == person.id {
+                // Let go short: the ring lets go on the let-go curve
+                // (it had a speed of its own no token names).
                 Haptics.shared.cancelThinkingOfYouHold()
-                holdTarget = nil
-                withAnimation(.easeOut(duration: 0.15)) { holdProgress = 0 }
+                withAnimation(RibbonMotion.release) {
+                    holdTarget = nil
+                    holdProgress = 0
+                }
             }
         }
         .accessibilityElement(children: .combine)

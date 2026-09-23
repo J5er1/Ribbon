@@ -50,8 +50,8 @@ struct SignInInline: View {
                 .focused($focused)
                 WayInButton(title: Copy.sendTheCode) { sendCode() }
                     .padding(.horizontal, 40)
-                    .disabled(!email.contains("@"))
-                    .opacity(email.contains("@") ? 1 : 0.3)
+                    .disabled(!emailReady || busy)
+                    .opacity(readiness(emailReady))
             case .code:
                 Text(Copy.codeOnItsWay)
                     .font(RibbonType.ui(15))
@@ -63,8 +63,8 @@ struct SignInInline: View {
                 .focused($focused)
                 WayInButton(title: Copy.signIn) { verify() }
                     .padding(.horizontal, 40)
-                    .disabled(code.trimmingCharacters(in: .whitespaces).isEmpty)
-                    .opacity(code.trimmingCharacters(in: .whitespaces).isEmpty ? 0.3 : 1)
+                    .disabled(!codeReady || busy)
+                    .opacity(readiness(codeReady))
                 QuietControl(title: Copy.sendANewCode) { sendCode() }
             }
             if let errorLine {
@@ -72,13 +72,31 @@ struct SignInInline: View {
                     .font(RibbonType.ui(14))
                     .foregroundStyle(Palette.muted)
                     .multilineTextAlignment(.center)
+                    .transition(.opacity)
             }
             if let onCancel {
                 QuietControl(title: Copy.neverMind, action: onCancel)
             }
         }
+        // The line that says what went wrong fades in and out, the control
+        // wakes as the address or the code becomes whole, and it lowers
+        // while the code is on its way — the only sign, before, that the
+        // tap had been heard was the network answering.
+        .animation(RibbonMotion.arrive, value: errorLine)
+        .animation(RibbonMotion.arrive, value: busy)
+        .animation(RibbonMotion.arrive, value: phase == .email ? emailReady : codeReady)
         .onAppear { focused = true }
         .onChange(of: phase) { _, _ in focused = true }
+    }
+
+    private var emailReady: Bool { email.contains("@") }
+    private var codeReady: Bool { !code.trimmingCharacters(in: .whitespaces).isEmpty }
+
+    /// Faint until there is something to send, lowered while it is being
+    /// sent, whole otherwise.
+    private func readiness(_ ready: Bool) -> Double {
+        guard ready else { return 0.3 }
+        return busy ? 0.55 : 1
     }
 
     private func signInWithAuth0() {
