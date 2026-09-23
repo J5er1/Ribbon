@@ -626,6 +626,10 @@ struct ReadingScreen: View {
                     toggleNote(at: VerseAddress(bookID: reading.bookID, chapter: chapter, verse: verse))
                 }
                 .position(x: 14, y: y)
+                // A note opening above moves the verses under it down over
+                // 400 ms (S04, I32), and their marks go with them rather
+                // than arriving first.
+                .animation(RibbonMotion.settle(still: reduceMotion), value: y)
             }
         }
     }

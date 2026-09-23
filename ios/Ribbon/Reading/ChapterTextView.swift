@@ -154,6 +154,40 @@ private extension NSAttributedString.Key {
     static let ribbonVerse = NSAttributedString.Key("ribbonVerse")
 }
 
+/// A stretch of the page the carve has moved (S04): its glyphs, and how far
+/// they were from where they are now laid out when the move began.
+struct CarveStretch: Equatable {
+    var range: NSRange
+    var offset: CGFloat
+}
+
+/// An open note's carve, as the page knows it: the first glyph below it — the
+/// start of the line after the note's verse ends — and how tall it is.
+struct Carve: Equatable {
+    var split: Int
+    var height: CGFloat
+
+    /// What a change of carve moves, and by how much: every glyph that was
+    /// below the old carve and is not below the new one, or the other way
+    /// round, or below both at different heights. A line's old place minus
+    /// its new one, stretch by stretch.
+    static func travel(from old: Carve?, to new: Carve?, glyphCount: Int) -> [CarveStretch] {
+        var cuts: Set<Int> = [0, glyphCount]
+        if let old { cuts.insert(min(old.split, glyphCount)) }
+        if let new { cuts.insert(min(new.split, glyphCount)) }
+        let sorted = cuts.sorted()
+        var stretches: [CarveStretch] = []
+        for (from, to) in zip(sorted, sorted.dropFirst()) where to > from {
+            let was = old.map { from >= $0.split ? $0.height : 0 } ?? 0
+            let now = new.map { from >= $0.split ? $0.height : 0 } ?? 0
+            if was != now {
+                stretches.append(CarveStretch(range: NSRange(location: from, length: to - from), offset: was - now))
+            }
+        }
+        return stretches
+    }
+}
+
 // MARK: - Layout manager with ink washes
 
 /// Draws highlight washes behind the glyphs (A41b/d/f).
@@ -171,6 +205,12 @@ private extension NSAttributedString.Key {
 /// words the way a stroke does and the leading stays open.
 final class InkLayoutManager: NSLayoutManager {
     var washes: [WashSpec] = []
+    /// The carve under an open note, moving (S04): stretches of the page
+    /// drawn away from where they are now laid out — where they were before
+    /// the carve opened, closed or grew — and when the move began. Each eases
+    /// home over `settle`, so the line height opens over 400 ms while the
+    /// page is laid out once.
+    var carveMove: (stretches: [CarveStretch], startedAt: CFTimeInterval)?
     /// The body font's point size, scaled — what the band is measured in.
     var bodySize: CGFloat = 19
     var reduceMotion = false
@@ -260,12 +300,90 @@ final class InkLayoutManager: NSLayoutManager {
             }
             context.restoreGState()
         }
-        super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
+        let remaining = carveRemaining(at: CACurrentMediaTime())
+        forEachStretch(of: glyphsToShow, remaining: remaining) { range, dy in
+            super.drawBackground(forGlyphRange: range, at: CGPoint(x: origin.x, y: origin.y + dy))
+        }
+    }
+
+    override func drawGlyphs(forGlyphRange glyphsToShow: NSRange, at origin: CGPoint) {
+        let remaining = carveRemaining(at: CACurrentMediaTime())
+        forEachStretch(of: glyphsToShow, remaining: remaining) { range, dy in
+            super.drawGlyphs(forGlyphRange: range, at: CGPoint(x: origin.x, y: origin.y + dy))
+        }
+    }
+
+    /// A new move of the carve, begun from wherever the lines are drawn this
+    /// frame: a card that measures itself taller while it is still opening
+    /// carries the gap on from there, rather than jumping it.
+    func carveMoves(_ fresh: [CarveStretch]) {
+        let now = CACurrentMediaTime()
+        let remaining = carveRemaining(at: now)
+        var cuts: Set<Int> = []
+        for stretch in fresh {
+            cuts.insert(stretch.range.location)
+            cuts.insert(NSMaxRange(stretch.range))
+        }
+        if remaining > 0, let move = carveMove {
+            for stretch in move.stretches {
+                cuts.insert(stretch.range.location)
+                cuts.insert(NSMaxRange(stretch.range))
+            }
+        }
+        let sorted = cuts.sorted()
+        var merged: [CarveStretch] = []
+        for (from, to) in zip(sorted, sorted.dropFirst()) where to > from {
+            let carried = carveOffset(forGlyph: from, remaining: remaining)
+            let added = fresh.first { NSLocationInRange(from, $0.range) }?.offset ?? 0
+            if carried + added != 0 {
+                merged.append(CarveStretch(range: NSRange(location: from, length: to - from), offset: carried + added))
+            }
+        }
+        carveMove = merged.isEmpty ? nil : (merged, now)
+    }
+
+    /// How much of the carve's move is still to go: 1 as it begins, 0 once
+    /// the lines are home. Ease-out, the curve `settle` names.
+    private func carveRemaining(at now: CFTimeInterval) -> CGFloat {
+        guard let move = carveMove else { return 0 }
+        let raw = max(0, min(1, (now - move.startedAt) / RibbonMotion.settleDuration))
+        let eased = 1 - pow(1 - raw, 2)
+        return CGFloat(1 - eased)
+    }
+
+    /// Where a glyph is drawn relative to where it is laid out, this frame.
+    private func carveOffset(forGlyph glyph: Int, remaining: CGFloat) -> CGFloat {
+        guard remaining > 0, let move = carveMove else { return 0 }
+        for stretch in move.stretches where NSLocationInRange(glyph, stretch.range) {
+            return stretch.offset * remaining
+        }
+        return 0
+    }
+
+    /// A range of glyphs, cut where the moving stretches begin and end, each
+    /// piece handed on with how far it is drawn from home this frame.
+    private func forEachStretch(of glyphs: NSRange, remaining: CGFloat, _ body: (NSRange, CGFloat) -> Void) {
+        guard remaining > 0, let move = carveMove, !move.stretches.isEmpty else {
+            body(glyphs, 0)
+            return
+        }
+        var cuts: Set<Int> = [glyphs.location, NSMaxRange(glyphs)]
+        for stretch in move.stretches {
+            for edge in [stretch.range.location, NSMaxRange(stretch.range)]
+            where edge > glyphs.location && edge < NSMaxRange(glyphs) {
+                cuts.insert(edge)
+            }
+        }
+        let sorted = cuts.sorted()
+        for (from, to) in zip(sorted, sorted.dropFirst()) where to > from {
+            body(NSRange(location: from, length: to - from), carveOffset(forGlyph: from, remaining: remaining))
+        }
     }
 
     /// Whether every wash has settled — the display link's stop signal.
     var isAnimating: Bool {
         let now = CACurrentMediaTime()
+        if carveMove != nil, carveRemaining(at: now) > 0 { return true }
         return washes.contains { wash in
             if let left = wash.leftAt { return now - left < RibbonMotion.arriveDuration }
             return arrival(of: wash, at: now).drawn < 1 || wash.arrivedAt.map { now - $0 < RibbonMotion.settleDuration } == true
@@ -296,6 +414,7 @@ final class InkLayoutManager: NSLayoutManager {
     private func bands(for wash: WashSpec, origin: CGPoint) -> [Band] {
         var bands: [Band] = []
         var index = 0
+        let remaining = carveRemaining(at: CACurrentMediaTime())
         for range in wash.ranges {
             let glyphRange = self.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
             guard glyphRange.location != NSNotFound, glyphRange.length > 0,
@@ -316,9 +435,10 @@ final class InkLayoutManager: NSLayoutManager {
                 let wobble = CGFloat((range.location &* 31 &+ index &* 7) % 3 - 1) * Self.wobble
                 let top = max(rect.minY, baseline - above) - Self.bleedY
                 let bottom = min(rect.maxY, baseline + below) + Self.bleedY
+                // A wash rides with its words while the carve moves them.
                 let band = CGRect(
                     x: rect.minX - Self.bleedX + origin.x,
-                    y: top + origin.y,
+                    y: top + origin.y + self.carveOffset(forGlyph: glyph, remaining: remaining),
                     width: rect.width + Self.bleedX * 2 + wobble,
                     height: max(1, bottom - top))
                 bands.append(Band(rect: band))
@@ -446,7 +566,8 @@ struct ChapterTextView: UIViewRepresentable {
             lifted.map(String.init(describing:)) ?? "-",
             String(isFirstChapter), String(showMarginHint),
         ].joined(separator: "|")
-        if context.coordinator.builtKey != buildKey {
+        let rebuilt = context.coordinator.builtKey != buildKey
+        if rebuilt {
             context.coordinator.builtKey = buildKey
             let (text, page) = Self.attributedText(
                 chapter: chapter, runningHead: runningHead, theme: theme,
@@ -463,19 +584,27 @@ struct ChapterTextView: UIViewRepresentable {
         }
         // The open note carves space beneath its verse's last line.
         var exclusions: [UIBezierPath] = []
+        var carve: Carve?
         if let openNote,
            let range = Self.characterRange(ofVerse: openNote.verse, in: view.attributedText) {
             let glyphRange = view.layoutManager.glyphRange(
                 forCharacterRange: range, actualCharacterRange: nil)
             if glyphRange.length > 0 {
+                let lastGlyph = max(glyphRange.location, glyphRange.location + glyphRange.length - 1)
                 let end = view.layoutManager.boundingRect(
-                    forGlyphRange: NSRange(location: max(glyphRange.location, glyphRange.location + glyphRange.length - 1), length: 1),
+                    forGlyphRange: NSRange(location: lastGlyph, length: 1),
                     in: view.textContainer)
                 let slotTop = end.maxY + 6
                 exclusions.append(UIBezierPath(rect: CGRect(
                     x: 0, y: slotTop,
                     width: view.textContainer.size.width > 0 ? view.textContainer.size.width : 10_000,
                     height: openNote.height + 12)))
+                // What the carve moves begins on the line after the verse
+                // ends: the next verse can start on the verse's last line,
+                // and those words stay where they are.
+                var lastLine = NSRange()
+                _ = view.layoutManager.lineFragmentRect(forGlyphAt: lastGlyph, effectiveRange: &lastLine)
+                carve = Carve(split: NSMaxRange(lastLine), height: openNote.height + 12)
                 DispatchQueue.main.async {
                     onNoteSlot(slotTop + view.textContainerInset.top + 6)
                 }
@@ -484,7 +613,24 @@ struct ChapterTextView: UIViewRepresentable {
         // Reassigning exclusion paths invalidates layout even when nothing
         // changed — only touch them on a real change.
         if view.textContainer.exclusionPaths.map(\.bounds) != exclusions.map(\.bounds) {
+            let before = context.coordinator.carve
             view.textContainer.exclusionPaths = exclusions
+            context.coordinator.carve = carve
+            // S04: the verse's line height opens over 400 ms (deviation 6,
+            // I32). The page is laid out once, with the carve where it now
+            // is, and the lines it moved are drawn from where they were,
+            // easing home: the gap opens, or closes, without TextKit setting
+            // the chapter again every frame. A page just set anew has no
+            // "where they were" to start from, and under reduce motion the
+            // carve is a change of state rather than a movement (§11).
+            if let ink = view.layoutManager as? InkLayoutManager {
+                if !rebuilt, !UIAccessibility.isReduceMotionEnabled {
+                    ink.carveMoves(Carve.travel(from: before, to: carve, glyphCount: ink.numberOfGlyphs))
+                    if ink.carveMove != nil { context.coordinator.startAnimating(on: ink) }
+                } else {
+                    ink.carveMove = nil
+                }
+            }
         }
         context.coordinator.reportLayoutSoon()
     }
@@ -508,6 +654,9 @@ struct ChapterTextView: UIViewRepresentable {
         /// arriving over.
         private var settled: [SpanKey: WashSpec] = [:]
         private var displayLink: CADisplayLink?
+        /// The open note's carve as it was last applied: what the next one
+        /// moves from.
+        var carve: Carve?
 
         init(_ parent: ChapterTextView) {
             self.parent = parent
@@ -644,7 +793,7 @@ struct ChapterTextView: UIViewRepresentable {
             }
         }
 
-        private func startAnimating(on ink: InkLayoutManager) {
+        fileprivate func startAnimating(on ink: InkLayoutManager) {
             guard displayLink == nil else { return }
             let link = CADisplayLink(target: self, selector: #selector(tick))
             link.add(to: .main, forMode: .common)
@@ -661,7 +810,9 @@ struct ChapterTextView: UIViewRepresentable {
             if !ink.isAnimating {
                 displayLink?.invalidate()
                 displayLink = nil
-                // What was lifting off has gone.
+                // What was lifting off has gone, and the carve's lines are
+                // home.
+                ink.carveMove = nil
                 settled = settled.filter { $0.value.leftAt == nil }
                 for key in settled.keys { settled[key]?.arrivedAt = nil; settled[key]?.beneath = nil }
                 ink.washes = settled.values.sorted { ($0.ranges.first?.location ?? 0) < ($1.ranges.first?.location ?? 0) }

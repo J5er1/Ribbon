@@ -47,11 +47,14 @@ reasoning.
    full irregular-edge treatment (per-run noise outlines) is a refinement
    pass on device, not a redesign.
 
-6. **The note unfurl opens instantly, then the card settles in.** S04
-   wants the line height to open over 400 ms. TextKit exclusion paths
-   don't animate; animating them per-frame during layout is jank. The
-   carve appears, and the card fades/settles over 400 ms. Revisit on
-   device.
+6. **The note unfurl opens over 400 ms.** It opened instantly: S04 wants
+   the line height to open over 400 ms, TextKit exclusion paths don't
+   animate, and animating one per frame means setting the chapter again
+   every frame. It is no longer a deviation (September 2026; I32). The page
+   is laid out once with the carve, and the lines it moved are drawn from
+   where they were, easing home — the drawing animates, not the layout.
+   Android's carve, an inline placeholder, has animated all along. Still
+   worth measuring on a device.
 
 7. **Position restore lands on the verse.** It was chapter-anchored:
    reading reopened at the head of your chapter, and scroll-to-exact-verse
@@ -3623,17 +3626,17 @@ I28. **The fire becomes an ember in front of the reader, and once.** The
     it was opened this time ends on its ember rather than burning down again:
     §9.1 has fire → ember once per book.
 
-I29. **Not changed: a note's line height still opens at once.** S04 asks for
-    400 ms. Deviation 6 says why iOS does not — the carve is an exclusion
-    path, and opening it per frame means TextKit laying out the chapter and
-    SwiftUI measuring it every frame — and says to revisit on a device. This
-    pass had no device either, so the card still settles into a carve that is
-    already there, as before. The honest way to do it is to animate the
-    drawing rather than the layout (lay out once, draw the lines under the
-    carve lifted and let them down), and it wants measuring on a phone before
-    it is trusted. Everything above was built by CI's simulator compile and
-    reasoned through against the SwiftUI documentation, and none of it has
-    yet been run on a device.
+I29. **Not changed then, and done since (I32): a note's line height opened at
+    once.** S04 asks for 400 ms. Deviation 6 says why iOS did not — the carve
+    is an exclusion path, and opening it per frame means TextKit laying out
+    the chapter and SwiftUI measuring it every frame — and says to revisit on
+    a device. This pass had no device either, so the card still settles into a
+    carve that is already there, as before. The honest way to do it is to
+    animate the drawing rather than the layout (lay out once, draw the lines
+    under the carve lifted and let them down), and it wants measuring on a
+    phone before it is trusted. Everything above was built by CI's simulator
+    compile and reasoned through against the SwiftUI documentation, and none
+    of it has yet been run on a device.
 
 I30. **The book opens on your verse (A54).** The decision and the hold are
     A54's; what is different on iOS is the aim. A `ScrollViewReader` can
@@ -3698,6 +3701,34 @@ I31. **Four small things the motion pass saw and left.** I29 closed on what
       them"), and the hold is published as an action, "Thinking of you", as
       it always has been on Android (§11: every gesture has an equivalent
       that is not a gesture).
+
+I32. **The note unfurls: the line height opens over 400 ms (S04).** I29 left
+    this with a way to do it; this is that way. Opening a note carves space
+    under its verse with a TextKit exclusion path, which cannot animate, and
+    moving one frame by frame would set the chapter again every frame. So the
+    chapter is set once, with the carve where it now is, and the drawing is
+    what moves. The layout manager draws the glyphs the carve displaced — and
+    their washes — from where they were, and they ease home over `settle`:
+    opening, the lines under the verse slide down to make the gap as the
+    card fades into it; closing, they rise into it as the card goes.
+
+    - **What moves** is worked out by glyph, not by height on the page: the
+      lines after the verse's last line (the next verse can begin on that
+      line, and its words stay put), below the old carve, the new one, or
+      both. Opening one note while another is open moves each stretch by its
+      own difference.
+    - **A card that measures itself** while it is still opening — it starts
+      at a guessed height — carries the gap on from wherever it is drawn
+      that frame rather than jumping it.
+    - **The margin's marks** are placed from the chapter's layout, so they
+      would have arrived first; they ease to their new places on the same
+      token.
+    - **Not moved:** the chapter's own height, which changes at once. The
+      foot of a long chapter is off the screen while a note opens in the
+      middle of it; a note open near a chapter's end will show the passage
+      end below stepping rather than sliding. Under reduce motion the carve
+      is a change of state, as on Android (§11). Worth measuring on a device
+      before it is trusted: a display link redraws the chapter for 400 ms.
 
 ## Licensed translations (decided: API.Bible)
 
