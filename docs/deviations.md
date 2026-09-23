@@ -3022,6 +3022,44 @@ A51. **The page is now built before the pull, not by it.** A50 named its own
     held for as long as the reader is in a room. That is the trade, and it is
     the right way round — the memory is idle, the milliseconds were not.
 
+A52. **The invite the backend never heard of.** Owner, on two Auth0
+    accounts, both iOS: every link answered "That invite isn't there any
+    more. Ask for a new one."
+
+    It was telling the truth, and it was not the half of it. `rooms`,
+    `memberships` and `invites` were **all empty**. Four profiles, and
+    nothing else: for an Auth0 account every write after `profiles` had been
+    failing since the day Auth0 was switched on, silently, because
+    `pushInviteIfNeeded` logs and forgets and §6.10 says the app working is
+    not news.
+
+    **The blocker is `rooms_select`, of all things.** It reads
+    `is_member(id)`. Every PostgREST write carries a RETURNING clause, and
+    Postgres applies the SELECT policy to the row a write returns — so
+    creating a room meant being refused sight of the row you had just
+    written. The membership that would satisfy `is_member` is pushed *after*
+    the room, so it never resolved. `INSERT` passes and `INSERT ... RETURNING`
+    does not, which is why it read as a write permission fault and was not
+    one. A room with no members holds nobody's content and no invite can
+    point at it, so it is now visible to whoever is making it — the rule
+    `memberships_insert` already used for a room's first member.
+
+    **Two more underneath it**, each enough on its own. `memberships_insert`
+    asked `NOT EXISTS (SELECT 1 FROM memberships …)` *inside a policy on
+    memberships*, so seating the first member was 42P17 infinite recursion —
+    shipped by the migration named for fixing memberships RLS. And
+    `ribbons_insert`/`ribbons_update` still called `auth.uid()`, which casts
+    the subject to uuid and throws 22P02 on `google-oauth2|…`; the Auth0
+    pass updated every other table and missed that one, because `ribbons`
+    was added by a migration that never reached `migrations/`.
+
+    All three are policy faults. Nothing in either client had to change, and
+    the first fix attempted here — sending `ignore-duplicates` so the upsert
+    would not touch `rooms_update` — was wrong twice over: the check that
+    fails is the SELECT policy, and it is applied to `DO NOTHING` just the
+    same. Reproduced against the live project before and after, as the
+    `authenticated` role with a real Auth0 subject, and rolled back.
+
 ## iOS (phase four): the second pass
 
 Android took a design pass of its own (A18–A51) and the two platforms
