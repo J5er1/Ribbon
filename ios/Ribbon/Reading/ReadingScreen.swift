@@ -72,6 +72,11 @@ struct ReadingScreen: View {
     @State private var programmaticScrollUntil = Date.distantPast
     /// Asks the ScrollViewReader to go somewhere, from outside its closure.
     @State private var scrollCommand: Int?
+    /// Who the page has been carried for, and to which chapter. The roster
+    /// says the same thing every tick, and `myPosition` lags behind it by a
+    /// throttle — so without this the page would be yanked back to the top
+    /// of a chapter they are still reading down, once a tick.
+    @State private var carriedTo: (person: UUID, chapter: Int)?
 
     enum ComposerState: Equatable {
         case toolbar
@@ -177,6 +182,9 @@ struct ReadingScreen: View {
                     }
                     scrollCommand = nil
                 }
+            }
+            .onChange(of: model.presentPeople) { _, roster in
+                followAlong(roster)
             }
         }
         .overlay(alignment: .trailing) {
@@ -781,6 +789,7 @@ struct ReadingScreen: View {
         followBackOffer = (model.myPosition(in: reading), Date().addingTimeInterval(120))
         model.followingPersonID = person.id
         if let position = person.position {
+            carriedTo = (person.id, position.chapter)
             scrollCommand = position.chapter
         }
         // "Ruth is with you" is the other end of this, and it only ever
@@ -793,6 +802,38 @@ struct ReadingScreen: View {
                     isIdle: false, following: person.id)
             }
         }
+    }
+
+    /// Following is a thread, not a jump (§4.2).
+    ///
+    /// Tapping a portrait moved the page once and then let go: they read on,
+    /// and you sat where they had been, still called a follower by the
+    /// thread at the top and by their own "Ruth is with you". The page has
+    /// to keep up, or the word means nothing.
+    ///
+    /// Through `scrollCommand`, not the proxy, for two reasons. It eases —
+    /// the page carries you, it does not cut. And it opens the same grace
+    /// window a tap does: without it the app's own move would read as a
+    /// scroll of your own in `trackReading`, and the follow would cut itself
+    /// on the first page they turned.
+    ///
+    /// Only their chapter, and only when it changes. Their scroll within a
+    /// chapter is a finer signal than this page can honestly answer, and a
+    /// command per roster tick would be the page twitching under a reader.
+    private func followAlong(_ roster: [PresentPerson]) {
+        guard let followed = model.followingPersonID,
+              let them = roster.first(where: { $0.id == followed }),
+              let there = them.position,
+              // A room reads one book at a time, but a roster can still
+              // carry somebody who has moved on to another one — and their
+              // chapter 3 is not this book's.
+              there.bookID == reading.bookID
+        else { return }
+        if let carriedTo, carriedTo.person == followed, carriedTo.chapter == there.chapter {
+            return
+        }
+        carriedTo = (followed, there.chapter)
+        scrollCommand = there.chapter
     }
 
     private func close() {

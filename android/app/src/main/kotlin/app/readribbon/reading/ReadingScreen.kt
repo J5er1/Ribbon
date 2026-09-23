@@ -495,6 +495,8 @@ fun ReadingScreen(
      * lagged the page by three seconds would be telling you where you were.
      */
     var readingChapter by remember { mutableIntStateOf(model.myPosition(reading).chapter) }
+    /** Who the page has been carried for, and to which chapter (see below). */
+    var carriedTo by remember { mutableStateOf<Pair<Uuid, Int>?>(null) }
 
 
     /**
@@ -627,7 +629,10 @@ fun ReadingScreen(
         // (§4.2).
         followBackOffer.beganFollowing(model.myPosition(reading))
         model.followingPersonID = person.id
-        person.position?.let { goToChapter(it.chapter) }
+        person.position?.let {
+            carriedTo = person.id to it.chapter
+            goToChapter(it.chapter)
+        }
         // "Ruth is with you" is the other end of this, and it only ever
         // appears because the follow travels: without this the flag was set
         // on this phone and never left it.
@@ -840,6 +845,41 @@ fun ReadingScreen(
             programmaticScrollUntil = Clock.System.now() + PROGRAMMATIC_SCROLL_GRACE
             listState.scrollToItem(index)
         }
+    }
+
+    // Following is a thread, not a jump (§4.2).
+    //
+    // Tapping a portrait moved the page once and then let go: they read on,
+    // and you sat where they had been, still called a follower by the thread
+    // at the top and by their own "Ruth is with you". The page has to keep
+    // up, or the word means nothing.
+    //
+    // Through `goToChapter`, not `scrollToChapter`, for two reasons. It eases
+    // — the page carries you, it does not cut — and it opens the same grace
+    // window a tap does: without it the app's own move would read as a scroll
+    // of your own in `trackReading`, and the follow would cut itself on the
+    // first page they turned.
+    //
+    // Only their chapter, and only when it changes. Their scroll within a
+    // chapter is a finer signal than this page can honestly answer, and a
+    // move per roster tick would be the page twitching under a reader.
+    LaunchedEffect(model.presentPeople, model.followingPersonID) {
+        val followed = model.followingPersonID ?: return@LaunchedEffect
+        val there = model.presentPeople
+            .firstOrNull { it.id == followed }
+            ?.position
+            ?: return@LaunchedEffect
+        // A room reads one book at a time, but a roster can still carry
+        // somebody who has moved on to another one — and their chapter 3 is
+        // not this book's.
+        if (there.bookID != reading.bookID) return@LaunchedEffect
+        // The roster says the same thing every tick, and `readingChapter`
+        // lags behind it by a throttle — so without this the page would be
+        // yanked back to the top of a chapter they are still reading down,
+        // once a tick.
+        if (carriedTo == (followed to there.chapter)) return@LaunchedEffect
+        carriedTo = (followed to there.chapter)
+        goToChapter(there.chapter)
     }
 
     // And everything that means *being in the book* waits for the pull to

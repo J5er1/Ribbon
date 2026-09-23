@@ -1184,6 +1184,20 @@ private fun YouIdentity(model: AppModel) {
             }
         }
 
+        // The one field in the app that wears no paper: your name, in the
+        // room's own display face, edited where it is written (S18). With
+        // nothing under it there was nothing to say it was a field at all —
+        // it read as a heading, and the way to your own name was a tap nobody
+        // had a reason to make. A hairline is the smallest thing that says
+        // this line is yours to change, and it belongs to the block rather
+        // than to either state, so it stays put while the two trade places.
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(if (editingName) Palette.text else Palette.rule),
+        )
+
         // The face's own label, and why any of it is asked for, in one line
         // rather than two.
         //

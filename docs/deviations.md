@@ -3060,6 +3060,42 @@ A52. **The invite the backend never heard of.** Owner, on two Auth0
     same. Reproduced against the live project before and after, as the
     `authenticated` role with a real Auth0 subject, and rolled back.
 
+A53. **Following did not follow, and your own name did not look like
+    yours to change.** Owner, reading: *"it doesn't automatically follow on
+    click smoothly — can we do that with easing?"* Two things, one of them
+    the word not meaning what it says.
+
+    **A follow was a jump.** Tapping a portrait moved the page once, to the
+    chapter they were in at that instant, and then let go of them entirely.
+    They read on; you sat where they had been — still wearing the thread at
+    the top of the page, still announcing yourself as following, still
+    raising "Ruth is with you" on their phone. Everything said follow and
+    nothing followed. The roster carries their position and arrives on every
+    tick; the page simply never read it after the first.
+
+    It does now, and it does it the way a tap already did — through
+    `scrollCommand` on Swift and `goToChapter` on Kotlin, so the move eases
+    rather than cuts *and* opens the grace window. That second half is not a
+    nicety: any scroll of your own breaks a follow (§4.2), and a page that
+    moved itself without claiming the grace would have read its own move as
+    yours and cut the thread on the first page they turned.
+
+    Two bounds keep it from twitching. Only their **chapter** — their scroll
+    within one is a finer signal than a page can honestly answer — and only
+    when it **changes**, tracked as the chapter this page has already been
+    carried to rather than against your own saved position, which lags behind
+    the roster by a throttle and would have let a steady roster yank the page
+    back to a chapter top once a tick.
+
+    **And the name.** S18 says the name is "editable in place", and it was —
+    in the room's own display face, 26pt, beside your portrait, with no
+    paper, no rule and nothing else on the screen saying a field was what it
+    was. It read as a heading. The way to your own name was a tap nobody had
+    a reason to make, and the answer to "how do I change my name" was that
+    you already could. A hairline under it, brightening under the caret, is
+    the smallest thing that says otherwise; the in-place edit S18 asks for is
+    untouched.
+
 ## iOS (phase four): the second pass
 
 Android took a design pass of its own (A18–A51) and the two platforms
