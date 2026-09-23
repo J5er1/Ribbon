@@ -655,7 +655,7 @@ class AppModel(
             }.getOrNull()
         }
         remote.push(profile = me, portraitData = portraitData)
-        remote.ensure(room = room)
+        remote.push(room = room)
         val membership = myMembership(room)
         if (membership != null) {
             remote.push(membership = membership)

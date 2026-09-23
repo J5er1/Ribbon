@@ -396,7 +396,7 @@ final class AppModel {
             portraitData = try? Data(contentsOf: await store.portraitFileURL(path))
         }
         try await remote.push(profile: me, portraitData: portraitData)
-        try await remote.ensure(room: room)
+        try await remote.push(room: room)
         if let membership = myMembership(in: room) {
             try await remote.push(membership: membership)
         }

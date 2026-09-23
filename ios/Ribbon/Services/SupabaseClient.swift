@@ -247,14 +247,7 @@ actor SupabaseClient {
     /// columns when the merge key isn't the primary key (memberships merge
     /// on room_id,person_id — a joiner's row was minted server-side with
     /// its own id).
-    /// `ignoreDuplicates` leaves a row that is already there alone
-    /// (`ON CONFLICT DO NOTHING`) instead of rewriting it. It is for the
-    /// writes that only need the row to *exist* — an FK target — and have
-    /// no business updating one somebody else's policy guards.
-    func upsert(
-        into table: String, rows: some Encodable, onConflict: String? = nil,
-        ignoreDuplicates: Bool = false
-    ) async throws {
+    func upsert(into table: String, rows: some Encodable, onConflict: String? = nil) async throws {
         var url = base.appending(path: "rest/v1/\(table)")
         if let onConflict {
             url = url.appending(queryItems: [URLQueryItem(name: "on_conflict", value: onConflict)])
@@ -263,8 +256,7 @@ actor SupabaseClient {
         request.httpMethod = "POST"
         request.httpBody = try Self.encoder.encode(rows)
         try apply(headers: &request)
-        let resolution = ignoreDuplicates ? "ignore-duplicates" : "merge-duplicates"
-        request.setValue("resolution=\(resolution),return=minimal", forHTTPHeaderField: "Prefer")
+        request.setValue("resolution=merge-duplicates,return=minimal", forHTTPHeaderField: "Prefer")
         _ = try await run(request)
     }
 
