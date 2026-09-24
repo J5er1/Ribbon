@@ -13,6 +13,21 @@ struct PendingInvite: Identifiable, Equatable {
     var id: UUID { token }
 }
 
+/// The latest word on where somebody in the book is reading, as this phone
+/// heard it. In memory only, and only for as long as they are here.
+struct HeardReading {
+    var book: String
+    /// Which of their phones it came from — the one a follow sticks to.
+    var source: String
+    var report: ReadingReport
+    /// Made from their presence, because their app is too old to say
+    /// more: a verse, and always a scroll behind.
+    var fromPresence: Bool
+    /// Where each of their phones last said it was, so that one resting
+    /// still somewhere else is not taken for news.
+    var lastSaid: [String: ReadingPoint]
+}
+
 @MainActor
 @Observable
 final class AppModel {
@@ -45,6 +60,16 @@ final class AppModel {
     var readingQuietly = false
     /// The person being followed, if any.
     var followingPersonID: UUID?
+    /// Where each person present last said their reading line was (§4.2)
+    /// — read by the follow's own loop, never by a view, so a report
+    /// arriving redraws nothing.
+    @ObservationIgnored private var readingHeard: [UUID: HeardReading] = [:]
+    /// Everyone who has sent a reading line this session. For anyone not
+    /// here, presence is all their app says, and a follow makes do with it.
+    @ObservationIgnored private var speaksReading: Set<UUID> = []
+    /// Counts the times the room's line has opened with a book on screen,
+    /// so the page can say again where it is.
+    private(set) var channelOpens = 0
 
     /// Portraits cache (person id → image).
     private var portraits: [UUID: UIImage] = [:]
@@ -124,6 +149,7 @@ final class AppModel {
                 case .roster(let people):
                     self.someoneOpenedTheBook(people)
                     self.presentPeople = people
+                    self.heardPresence(people)
                     // Only a roster heard with the room on screen is the
                     // truth: the one a closing socket sends on its way out
                     // is empty because the line is, not because the book is.
@@ -134,9 +160,81 @@ final class AppModel {
                     self.thinkingOfYouArrived(fromName)
                 case .roomChanged(let roomID):
                     self.roomChangedRemotely(roomID)
+                case .reading(let personID, let source, let book, let report):
+                    self.heardReading(personID, source: source, book: book, report: report)
                 }
             }
         }
+    }
+
+    // MARK: - Where the people you might follow are reading (§4.2)
+
+    /// What this phone last heard about where someone is reading.
+    func heard(from personID: UUID) -> HeardReading? {
+        readingHeard[personID]
+    }
+
+    /// A reading line arrived. One person can have the book open on two
+    /// phones, and a follow sticks to one of them: whichever last said
+    /// something new — a different place, or a scroll under way. A phone
+    /// saying again where it is resting is news only if it is the one
+    /// being followed; an iPad left open on chapter 3 does not pull the
+    /// page back from chapter 6 every twenty seconds.
+    private func heardReading(_ personID: UUID, source: String, book: String, report: ReadingReport) {
+        speaksReading.insert(personID)
+        let current = readingHeard[personID]
+        var lastSaid = current?.lastSaid ?? [:]
+        let before = lastSaid[source]
+        lastSaid[source] = report.at
+        let isRepeat = report.settled && PagePoint.same(report.at, before)
+        if let current, !current.fromPresence, current.source != source, isRepeat {
+            readingHeard[personID]?.lastSaid = lastSaid
+            return
+        }
+        readingHeard[personID] = HeardReading(
+            book: book, source: source, report: report, fromPresence: false, lastSaid: lastSaid)
+    }
+
+    /// The roster arrived. Whoever has left takes what was heard about
+    /// them with them. For anyone whose app says nothing finer, a place
+    /// that has genuinely changed becomes a report of its own — the verse,
+    /// at its first line. A roster rebuilt by a reconnect says the same
+    /// places again, and is not news.
+    ///
+    /// Reading quietly, nobody can see you follow, so nobody sends you
+    /// their line (Law 3): a quiet follower follows at presence's
+    /// precision — the line of someone another follower is keeping sent,
+    /// while it keeps coming, and their presence once it stops.
+    private func heardPresence(_ people: [PresentPerson]) {
+        let here = Set(people.map(\.id))
+        readingHeard = readingHeard.filter { here.contains($0.key) }
+        let now = Date()
+        for person in people {
+            guard let position = person.position else { continue }
+            let heard = readingHeard[person.id]
+            if speaksReading.contains(person.id) {
+                let lineHasStopped = heard.map {
+                    $0.fromPresence || now.timeIntervalSince($0.report.received) > 45
+                } ?? true
+                guard readingQuietly, lineHasStopped else { continue }
+            }
+            if let heard, heard.fromPresence, heard.book == position.bookID,
+               heard.report.at.chapter == position.chapter, heard.report.at.verse == position.verse {
+                continue
+            }
+            readingHeard[person.id] = HeardReading(
+                book: position.bookID, source: "",
+                report: ReadingReport(
+                    at: ReadingPoint(chapter: position.chapter, verse: position.verse, part: 0),
+                    settled: true, received: now),
+                fromPresence: true, lastSaid: [:])
+        }
+    }
+
+    /// Another room, or nobody signed in: nothing heard is about anyone
+    /// here any more.
+    private func forgetWhereTheyRead() {
+        readingHeard = [:]
     }
 
     // MARK: - What presence tells the phone (S19)
@@ -215,22 +313,77 @@ final class AppModel {
     /// already where it should be.
     func openRoomChannel() async {
         guard let room = currentRoom, let me = state.me, isSignedIn else {
+            forgetWhereTheyRead()
             await presence.disconnect()
             return
         }
         await presence.connect(roomID: room.id, person: me)
+        // The line is back with the book still open: the page says again
+        // where it is. It keeps its own announcement through a suspend,
+        // and this is the belt to that — here, and not at the scene
+        // change, which runs before the channel has reopened.
+        if bookOnScreen != nil { channelOpens += 1 }
     }
 
-    /// The app going away. The socket goes with it: a phone in a pocket is
-    /// not present, and saying otherwise is the one lie presence must never
-    /// tell (§4.2).
+    /// The app has been away for the whole of its grace. The socket goes: a
+    /// phone in a pocket is not present, and saying otherwise is the one lie
+    /// presence must never tell (§4.2). What it was saying is kept, for
+    /// when the app comes back.
     func closeRoomChannel() async {
         catchUpTask?.cancel()
         catchUpTask = nil
         // The next roster is a baseline again.
         wasReading = []
         haveARoster = false
-        await presence.disconnect()
+        await presence.suspend()
+    }
+
+    /// "Backgrounding the app removes them after a short grace so a glance
+    /// at a text message doesn't read as leaving" (§4.2). The line stays up
+    /// for fifteen seconds on a background task, and comes down only if
+    /// the app has not come back by then.
+    private var awayTask: Task<Void, Never>?
+    private var awayGrace: UIBackgroundTaskIdentifier = .invalid
+    private static let awayFor: Duration = .seconds(15)
+
+    func wentAway() {
+        awayTask?.cancel()
+        if awayGrace == .invalid {
+            awayGrace = UIApplication.shared.beginBackgroundTask(withName: "Ribbon.presence") { [weak self] in
+                // The system wants its time back first: the line goes now.
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.leaveNow()
+                }
+            }
+        }
+        awayTask = Task { [weak self] in
+            try? await Task.sleep(for: AppModel.awayFor)
+            guard !Task.isCancelled, let self else { return }
+            self.awayTask = nil
+            await self.closeRoomChannel()
+            self.endAwayGrace()
+        }
+    }
+
+    /// Back inside the grace: nothing was closed, and nothing needs to be.
+    func cameBack() {
+        awayTask?.cancel()
+        awayTask = nil
+        endAwayGrace()
+    }
+
+    private func leaveNow() {
+        awayTask?.cancel()
+        awayTask = nil
+        Task { await closeRoomChannel() }
+        endAwayGrace()
+    }
+
+    private func endAwayGrace() {
+        guard awayGrace != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(awayGrace)
+        awayGrace = .invalid
     }
 
     /// Something this device changed that the room renders from. The other
@@ -366,6 +519,7 @@ final class AppModel {
         state.currentRoomID = roomID
         followingPersonID = nil
         presentPeople = []
+        forgetWhereTheyRead()
         wasReading = []
         haveARoster = false
         if visibleRoomID != nil { visibleRoomID = roomID }

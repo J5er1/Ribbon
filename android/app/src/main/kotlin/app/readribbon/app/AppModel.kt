@@ -37,7 +37,9 @@ import app.readribbon.core.NoteKind
 import app.readribbon.core.Person
 import app.readribbon.core.QuietDay
 import app.readribbon.core.Reading
+import app.readribbon.core.ReadingPoint
 import app.readribbon.core.ReadingPosition
+import app.readribbon.core.ReadingReport
 import app.readribbon.core.Ribbon
 import app.readribbon.core.RibbonClock
 import app.readribbon.core.Room
@@ -60,6 +62,7 @@ import app.readribbon.services.LocalPresenceService
 import app.readribbon.services.NotificationKind
 import app.readribbon.services.Notifications
 import app.readribbon.services.notesLeftLine
+import app.readribbon.services.HeardReading
 import app.readribbon.services.PresenceEvent
 import app.readribbon.services.PresenceService
 import app.readribbon.services.PresentPerson
@@ -85,6 +88,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.TimeZone
 import java.io.File
+import kotlin.math.abs
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
@@ -217,7 +221,12 @@ class AppModel(
      */
     var readingQuietly by mutableStateOf(false)
 
-    /** The person being followed, if any. */
+    /**
+     * The person being followed, if any. The reading screen starts and ends a
+     * follow; everything on the page that ends one goes through its
+     * `endFollow`, so that the room is told and the way back is offered. A
+     * room switch simply forgets it, with the rest of the room.
+     */
     var followingPersonID: Uuid? by mutableStateOf(null)
 
     /** OTA updates (GitHub Releases / in-app updater) */
@@ -237,12 +246,44 @@ class AppModel(
      */
     private val haptics = Haptics(appContext)
 
+    // Where the people you might follow are reading (§4.2). Memory only, and
+    // not snapshot state: the follow reads these on its own clock, and a page
+    // that recomposed for every sample would be the page twitching under a
+    // reader. Nothing here is ever persisted, and nothing here is a time
+    // anybody sent — only when a word arrived. Declared ahead of `init`: its
+    // collector runs on the spot, and can hand these a roster before the
+    // rest of the model exists.
+
+    /** The latest word of where each person is reading, by person. */
+    private val readingHeard = HashMap<Uuid, HeardReading>()
+
+    /**
+     * Everyone who has sent a `reading` line this session. Their presence
+     * verse is always a scroll behind it, so from then on it is not taken as
+     * a report. Kept through a disconnect: an app that speaks the line once
+     * speaks it every time it is followed.
+     */
+    private val speaksReading = HashSet<Uuid>()
+
+    /**
+     * Where each of a person's devices last said it was, by person and
+     * source, so that one resting still somewhere else is not taken for news.
+     */
+    private val lastBySource = HashMap<Pair<Uuid, String>, ReadingPoint>()
+
+    /** Each person's last position on the roster, to tell a move from a rebuild. */
+    private val rosterPositions = HashMap<Uuid, VerseAddress>()
+
+    /** The same verse, as a word of its own, for everybody — see [heardReading]. */
+    private val rosterHeard = HashMap<Uuid, HeardReading>()
+
     init {
         viewModelScope.launch {
             presence.events.collect { event ->
                 when (event) {
                     is PresenceEvent.Roster -> {
                         someoneOpenedTheBook(event.people)
+                        heardPositions(event.people)
                         presentPeople = event.people
                     }
                     is PresenceEvent.ThinkingOfYou -> {
@@ -251,10 +292,98 @@ class AppModel(
                     is PresenceEvent.RoomChanged -> {
                         roomChangedRemotely(event.roomID)
                     }
+                    is PresenceEvent.Reading -> {
+                        heardReading(event)
+                    }
                 }
             }
         }
     }
+
+    // MARK: - Where the people you might follow are reading (§4.2)
+    //
+    // The store itself is declared above `init`, whose collector can deliver
+    // into it at once.
+
+    /**
+     * The latest word of where [personID] is reading, if there is one.
+     *
+     * Reading quietly, it is the verse their presence carries and nothing
+     * finer. Nobody can see a quiet follower, so nobody sends the line for
+     * them, and a follow nobody can see keeps to the precision everybody has
+     * (Law 3).
+     */
+    fun heardReading(personID: Uuid): HeardReading? =
+        if (readingQuietly) rosterHeard[personID] else readingHeard[personID]
+
+    /**
+     * A `reading` line arrived. One person can be reading on two devices at
+     * once, and the two lines would pull a follow back and forth: the line
+     * followed is the one that last said something new, and the other one's
+     * keepalives — the place that device itself last said, at rest — are not
+     * news, wherever the followed line has gone since.
+     */
+    private fun heardReading(event: PresenceEvent.Reading) {
+        speaksReading += event.personID
+        val before = readingHeard[event.personID]
+        val report = event.report
+        val previous = lastBySource.put(event.personID to event.source, report.at)
+        if (before != null && !before.fromPresence && before.source != event.source &&
+            report.settled && previous != null && samePlace(report.at, previous)
+        ) {
+            return
+        }
+        readingHeard[event.personID] = HeardReading(
+            book = event.book,
+            report = report,
+            source = event.source,
+        )
+    }
+
+    /**
+     * The roster spoke. Someone who has left takes their word with them; and
+     * for an older app, which never sends the line, a verse that has really
+     * moved on the roster is the best word there is — at the start of the
+     * verse, and at rest. A roster rebuilt by a reconnect says what it said
+     * before, and is not news.
+     */
+    private fun heardPositions(people: List<PresentPerson>) {
+        val here = people.mapTo(HashSet()) { it.id }
+        readingHeard.keys.retainAll(here)
+        lastBySource.keys.retainAll { it.first in here }
+        rosterPositions.keys.retainAll(here)
+        rosterHeard.keys.retainAll(here)
+        val now = Clock.System.now()
+        for (person in people) {
+            val position = person.position ?: continue
+            val before = rosterPositions.put(person.id, position)
+            if (before == position) continue
+            val heard = HeardReading(
+                book = position.bookID,
+                report = ReadingReport(
+                    at = ReadingPoint(chapter = position.chapter, verse = position.verse),
+                    end = null,
+                    settled = true,
+                    received = now,
+                ),
+                source = null,
+                fromPresence = true,
+            )
+            rosterHeard[person.id] = heard
+            if (person.id !in speaksReading) readingHeard[person.id] = heard
+        }
+    }
+
+    /** The room has changed, or the line was let go of: nobody's word stands. */
+    private fun forgetReadings() {
+        readingHeard.clear()
+        lastBySource.clear()
+        rosterPositions.clear()
+        rosterHeard.clear()
+    }
+
+    private fun samePlace(a: ReadingPoint, b: ReadingPoint): Boolean =
+        a.chapter == b.chapter && a.verse == b.verse && abs(a.part - b.part) < 0.02
 
     /** Who was in the book last time the roster spoke. */
     private var wasReading: Set<Uuid> = emptySet()
@@ -416,21 +545,118 @@ class AppModel(
         val room = currentRoom
         val me = state.me
         if (room == null || me == null || !isSignedIn) {
+            forgetReadings()
             presence.disconnect()
             return
         }
         presence.connect(room.id, me)
+        // Said again once the line is open, and not at the lifecycle change
+        // that asked for it: a book on screen is a reader in the book, and
+        // coming back to the app is theirs. Idempotent — a line that never
+        // went down already says it, and the budget sends nothing new.
+        val book = bookOnScreen
+        val position = lastPresented
+        if (book != null && book.roomID == room.id && !readingQuietly &&
+            position != null && position.bookID == book.bookID
+        ) {
+            presence.present(position, 0.0, isIdle = false, following = followingPersonID)
+        }
     }
 
     /**
-     * The app going away. The socket goes with it: a phone in a pocket is not
-     * present, and saying otherwise is the one lie presence must never tell
-     * (§4.2).
+     * The app has stopped being looked at. A phone in a pocket is not present,
+     * and saying otherwise is the one lie presence must never tell (§4.2) —
+     * but a glance at a message is not leaving either: "backgrounding the app
+     * removes them after a short grace". So the line is put down a little
+     * later, and only put down: coming back to the same room picks up what it
+     * was saying without anybody saying it again.
+     *
+     * On the model's own scope, which outlives the pause that asked for it.
+     */
+    fun setRoomChannelAside() {
+        settingAside?.cancel()
+        settingAside = viewModelScope.launch {
+            delay(CHANNEL_GRACE_MS)
+            settingAside = null
+            catchUpJob?.cancel()
+            catchUpJob = null
+            presence.suspend()
+        }
+    }
+
+    /**
+     * Back in front of the person. If the grace had not run out, the line
+     * never went down at all.
+     */
+    fun cameBackToTheRoom() {
+        settingAside?.cancel()
+        settingAside = null
+        if (outOfSight) {
+            outOfSight = false
+            cameBack += 1
+        }
+    }
+
+    /**
+     * The app can no longer be seen at all — gone to the background, not
+     * merely paused behind a dialog of its own or a share sheet.
+     */
+    fun wentOutOfSight() {
+        outOfSight = true
+    }
+
+    /** The line going down after its grace; see [setRoomChannelAside]. */
+    private var settingAside: Job? = null
+
+    /** Whether the app has been out of sight since it was last resumed. */
+    private var outOfSight = false
+
+    /**
+     * How many times the app has come back from the background. A follow
+     * reads it on its own clock: whatever it had guessed before the app went
+     * away is stale, and it starts again from the next word. A pause that
+     * never left the screen — the notification question, a share sheet over
+     * the page — guessed nothing wrong, and keeps what it learned.
+     */
+    var cameBack: Int = 0
+        private set
+
+    /**
+     * Let the room's line go and forget it — the model is being put away.
+     * Everything this device was saying about itself goes with it.
      */
     suspend fun closeRoomChannel() {
+        settingAside?.cancel()
+        settingAside = null
         catchUpJob?.cancel()
         catchUpJob = null
+        forgetReadings()
         presence.disconnect()
+    }
+
+    /**
+     * Where this phone last told the book it was, so a line that reopens can
+     * say it again (see [openRoomChannel]).
+     */
+    private var lastPresented: VerseAddress? = null
+
+    /**
+     * Say where you are in the book — who you follow is read from
+     * [followingPersonID] as it stands.
+     *
+     * @param activity false for a page carried by a follow: it moves the verse
+     *   the room sees, and not the clock that turns a reader "here, but
+     *   still" (§4.2).
+     */
+    suspend fun present(position: VerseAddress, scrollFraction: Double = 0.0, activity: Boolean = true) {
+        lastPresented = position
+        presence.present(
+            position = position,
+            scrollFraction = scrollFraction,
+            isIdle = false,
+            following = followingPersonID,
+            activity = activity,
+        )
     }
 
     /**
@@ -651,6 +877,7 @@ class AppModel(
         state = state.copy(currentRoomID = roomID)
         followingPersonID = null
         presentPeople = emptyList()
+        forgetReadings()
         persist()
         viewModelScope.launch { openRoomChannel() }
     }
@@ -3303,6 +3530,13 @@ class AppModel(
          * arrive.
          */
         private val PORTRAIT_RECHECK = 15.minutes
+
+        /**
+         * How long the room's line stays up once the app is out of sight —
+         * long enough that answering a message is not leaving the book, short
+         * enough that a phone put away is soon not there (§4.2).
+         */
+        private const val CHANNEL_GRACE_MS = 15_000L
 
         /**
          * @param forBackgroundPull skips everything a launch does that a

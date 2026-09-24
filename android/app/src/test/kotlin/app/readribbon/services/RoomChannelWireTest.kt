@@ -3,14 +3,18 @@
 package app.readribbon.services
 
 import app.readribbon.core.Person
+import app.readribbon.core.ReadingPoint
 import app.readribbon.core.VerseAddress
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -178,6 +182,160 @@ class RoomChannelWireTest {
         // The nudge names the room and nothing else: the database stays the
         // only copy of the truth, and the other phone pulls it.
         assertEquals(setOf("roomID"), outer["payload"]!!.jsonObject.keys)
+    }
+
+    /**
+     * Where a reader's line is, for the person following them: a point and
+     * never a time (§13). No timestamp, no rate, no duration — a follower
+     * stamps it when it arrives — and the chapter and verse are whole
+     * numbers, because the Swift side reads them as `Int`.
+     */
+    @Test
+    fun testReadingCarriesAPointNeverATime() {
+        val message = RoomChannelWire.reading(
+            roomID = room,
+            personID = me,
+            source = "0a1b2c3d",
+            book = "MRK",
+            at = ReadingPoint(chapter = 6, verse = 12, part = 0.42),
+            end = ReadingPoint(chapter = 6, verse = 19, part = 0.7),
+            settled = true,
+            carried = true,
+            ref = "10",
+        )
+        assertEquals("broadcast", message.str("event"))
+        assertEquals(RoomChannelWire.topic(room), message.str("topic"))
+        val outer = message["payload"]!!.jsonObject
+        assertEquals("broadcast", outer.str("type"))
+        assertEquals("reading", outer.str("event"))
+
+        val body = outer["payload"]!!.jsonObject
+        assertEquals(
+            setOf("id", "source", "book", "chapter", "verse", "part", "end", "settled", "carried"),
+            body.keys,
+        )
+        assertEquals(RoomChannelWire.id(me), body.str("id"))
+        assertEquals("0a1b2c3d", body.str("source"))
+        assertEquals("MRK", body.str("book"))
+        assertEquals("6", body.str("chapter"))
+        assertEquals("12", body.str("verse"))
+        assertFalse(body["chapter"]!!.jsonPrimitive.isString)
+        assertFalse(body["verse"]!!.jsonPrimitive.isString)
+        assertEquals("0.42", body.str("part"))
+        assertEquals(true, body["settled"]?.jsonPrimitive?.booleanOrNull)
+        assertEquals(true, body["carried"]?.jsonPrimitive?.booleanOrNull)
+
+        val end = body["end"]!!.jsonObject
+        assertEquals(setOf("chapter", "verse", "part"), end.keys)
+        assertEquals("6", end.str("chapter"))
+        assertEquals("19", end.str("verse"))
+        assertEquals("0.7", end.str("part"))
+    }
+
+    /**
+     * Absent is absent, as it is for presence: no `end` when the sender
+     * could not say, and no `carried` when their page is their own.
+     */
+    @Test
+    fun testReadingOmitsAnAbsentEndAndCarried() {
+        val message = RoomChannelWire.reading(
+            roomID = room, personID = me, source = "0a1b2c3d", book = "MRK",
+            at = ReadingPoint(chapter = 1, verse = 1), end = null,
+            settled = false, carried = false, ref = "11")
+        val body = message["payload"]!!.jsonObject["payload"]!!.jsonObject
+        assertEquals(
+            setOf("id", "source", "book", "chapter", "verse", "part", "settled"),
+            body.keys,
+        )
+        assertEquals(false, body["settled"]?.jsonPrimitive?.booleanOrNull)
+        assertEquals(0.0, body["part"]!!.jsonPrimitive.doubleOrNull!!, 0.0)
+    }
+
+    /**
+     * Two verses that begin on one line leave nothing to divide by, and a
+     * NaN serialises as a bare `NaN` — not JSON, and fatal to the Swift
+     * decoder. Whatever goes in, what goes out is a number inside 0…1 that
+     * parses.
+     */
+    @Test
+    fun testReadingNeverSendsANonFinitePart() {
+        val cases = listOf(
+            Double.NaN to 0.0,
+            Double.POSITIVE_INFINITY to 1.0,
+            Double.NEGATIVE_INFINITY to 0.0,
+            1.7 to 1.0,
+            -0.3 to 0.0,
+            0.126 to 0.13,
+        )
+        for ((given, sent) in cases) {
+            val message = RoomChannelWire.reading(
+                roomID = room, personID = me, source = "0a1b2c3d", book = "MRK",
+                at = ReadingPoint(chapter = 4, verse = 14, part = given),
+                end = ReadingPoint(chapter = 4, verse = 15, part = given),
+                settled = true, carried = false, ref = "12")
+            val parsed = Json.parseToJsonElement(message.toString()).jsonObject
+            val body = parsed["payload"]!!.jsonObject["payload"]!!.jsonObject
+            val part = body["part"]!!.jsonPrimitive.doubleOrNull
+            assertNotNull("a part of $given should parse as a number", part)
+            assertEquals("a part of $given", sent, part!!, 1e-9)
+            val endPart = body["end"]!!.jsonObject["part"]!!.jsonPrimitive.doubleOrNull
+            assertEquals("an end part of $given", sent, endPart!!, 1e-9)
+        }
+    }
+
+    /** What this build hears back is what it sends. */
+    @Test
+    fun testReadingIsHeardAsItWasSent() {
+        val message = RoomChannelWire.reading(
+            roomID = room, personID = other, source = "0a1b2c3d", book = "MRK",
+            at = ReadingPoint(chapter = 6, verse = 12, part = 0.42),
+            end = ReadingPoint(chapter = 7, verse = 1, part = 0.0),
+            settled = true, carried = false, ref = "13")
+        val heard = RoomChannelWire.heard(message["payload"]!!.jsonObject["payload"])
+        assertNotNull(heard)
+        assertEquals(other, heard!!.personID)
+        assertEquals("0a1b2c3d", heard.source)
+        assertEquals("MRK", heard.book)
+        assertEquals(ReadingPoint(chapter = 6, verse = 12, part = 0.42), heard.at)
+        assertEquals(ReadingPoint(chapter = 7, verse = 1, part = 0.0), heard.end)
+        assertTrue(heard.settled)
+        assertFalse(heard.carried)
+    }
+
+    /**
+     * Somebody else's shape is read defensively: anything malformed drops
+     * the report rather than guessing at it, and a missing `settled` is a
+     * report at rest.
+     */
+    @Test
+    fun testReadingIsHeardDefensively() {
+        fun heard(json: String) = RoomChannelWire.heard(Json.parseToJsonElement(json))
+        val id = RoomChannelWire.id(other)
+        fun body(extra: String = "", chapter: String = "6", part: String = "0.5") =
+            """{"id":"$id","source":"a","book":"MRK","chapter":$chapter,"verse":12,"part":$part$extra}"""
+
+        val good = heard(body())
+        assertNotNull(good)
+        assertEquals(true, good!!.settled)
+        assertEquals(false, good.carried)
+        assertNull(good.end)
+        // Keys this build does not know are somebody newer's, and harmless.
+        assertNotNull(heard(body(extra = ""","later":{"x":1}""")))
+
+        assertNull(heard("null"))
+        assertNull(heard("[1,2]"))
+        assertNull(heard("\"reading\""))
+        assertNull(heard(body(chapter = "\"6\"")))
+        assertNull(heard(body(chapter = "6.5")))
+        assertNull(heard(body(part = "null")))
+        assertNull(heard(body(part = "\"0.5\"")))
+        assertNull(heard(body(extra = ""","settled":"yes"""")))
+        assertNull(heard(body(extra = ""","end":7""")))
+        assertNull(heard(body(extra = ""","end":{"chapter":6}""")))
+        assertNull(heard("""{"id":"nobody","source":"a","book":"MRK","chapter":6,"verse":12,"part":0.5}"""))
+        assertNull(heard("""{"id":"$id","book":"MRK","chapter":6,"verse":12,"part":0.5}"""))
+        // Out of range is held inside it, not dropped.
+        assertEquals(1.0, heard(body(part = "3"))!!.at.part, 0.0)
     }
 
     @Test

@@ -49,11 +49,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -253,6 +251,8 @@ fun RibbonRoot(
     if (model != null) {
         LaunchedEffect(model, lifecycle) {
             lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                // Back before the grace ran out, the line never went down.
+                model.cameBackToTheRoom()
                 model.refreshFromRemote()
                 // Asked again, because the first ask can fail. A launch with
                 // no network leaves the answer unknown, and unknown draws no
@@ -277,9 +277,13 @@ fun RibbonRoot(
                 // The room's live line comes back with the app, and only
                 // with it: a phone in a pocket is not present, and saying
                 // otherwise is the one lie presence must never tell (§4.2).
-                // `repeatOnLifecycle` cancels this block on the way out, so
-                // the socket closes exactly when the app stops being looked
-                // at — Swift does the same from `.background`.
+                // `repeatOnLifecycle` cancels this block on the way out, and
+                // the socket is put down a short grace after that — "so a
+                // glance at a text message doesn't read as leaving". It is
+                // put down, not closed: coming back to the same room says
+                // what it was saying again, which a close on every pause
+                // used to forget. Swift keeps the same grace from
+                // `.background`.
                 try {
                     model.openRoomChannel()
                     awaitCancellation()
@@ -291,7 +295,19 @@ fun RibbonRoot(
                     model.sayIveLeft()
                     // The home screen is about to be seen again (S24).
                     model.refreshWidget()
-                    withContext(NonCancellable) { model.closeRoomChannel() }
+                    model.setRoomChannelAside()
+                }
+            }
+        }
+        // Out of sight, as opposed to only paused: a dialog over the app —
+        // the notification question the page itself asks — pauses it without
+        // hiding it, and a follow coming back from that has nothing to forget.
+        LaunchedEffect(model, lifecycle) {
+            lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                try {
+                    awaitCancellation()
+                } finally {
+                    model.wentOutOfSight()
                 }
             }
         }

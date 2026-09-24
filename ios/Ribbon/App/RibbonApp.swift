@@ -120,18 +120,25 @@ struct RibbonApp: App {
                 guard let model else { return }
                 switch phase {
                 case .active:
+                    // Back inside the grace, the line never went down.
+                    model.cameBack()
                     // The room is on screen again: a note left here is not
                     // something the phone needs to tell you about (S19).
                     model.visibleRoomID = model.currentRoom?.id
                     // Back in the book, if the book is where it was left.
                     model.sayImReading()
                     Task {
-                        await Notifications.refreshAllowed()
-                        await model.refreshFromRemote()
                         // The room's live line comes back with the app, and
                         // only with it: a phone in a pocket is not present,
                         // and saying otherwise is the one lie presence must
-                        // never tell (§4.2).
+                        // never tell (§4.2). First, before the pull: the
+                        // person you follow should not wait on the network
+                        // to find you again.
+                        await model.openRoomChannel()
+                        await Notifications.refreshAllowed()
+                        await model.refreshFromRemote()
+                        // And again after it, in case the pull moved you to
+                        // another room; the same room is a no-op.
                         await model.openRoomChannel()
                         // A new zone, a new token, a switch changed in
                         // Settings: the server hears all of it again.
@@ -145,7 +152,9 @@ struct RibbonApp: App {
                     model.sayIveLeft()
                     // The home screen is about to be seen again.
                     model.refreshWidget()
-                    Task { await model.closeRoomChannel() }
+                    // The line itself goes after a short grace, so a glance
+                    // at a message is not leaving (§4.2).
+                    model.wentAway()
                 default:
                     break
                 }
@@ -303,6 +312,10 @@ struct RootView: View {
                             room: room,
                             reading: reading,
                             openAt: openTarget,
+                            // Only a page that has been let up is open. One
+                            // still rising under a pull neither follows
+                            // anyone nor tells anyone where it is.
+                            isOpen: openReading != nil,
                             onClose: closeBook,
                             onFinished: closeBook,
                             onStartAnother: {

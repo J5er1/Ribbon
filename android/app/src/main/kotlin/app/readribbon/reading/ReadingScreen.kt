@@ -8,6 +8,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -16,6 +18,8 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -62,6 +66,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -89,16 +94,23 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import app.readribbon.app.AppModel
 import app.readribbon.app.Copy
 import app.readribbon.app.firstName
 import app.readribbon.core.Bible
 import app.readribbon.core.BibleBook
 import app.readribbon.core.CardState
+import app.readribbon.core.ChapterRuler
+import app.readribbon.core.FollowCarriage
+import app.readribbon.core.FollowMove
 import app.readribbon.core.Highlight
 import app.readribbon.core.Ink
 import app.readribbon.core.Note
 import app.readribbon.core.Reading
+import app.readribbon.core.ReadingEstimate
+import app.readribbon.core.ReadingPoint
 import app.readribbon.core.RibbonClock
 import app.readribbon.core.Room
 import app.readribbon.core.ScriptureChapter
@@ -107,6 +119,7 @@ import app.readribbon.core.TranslationRegistry
 import app.readribbon.core.VerseAddress
 import app.readribbon.core.VerseRange
 import app.readribbon.design.BookSheet
+import app.readribbon.design.FadesUnderReduceMotion
 import app.readribbon.design.HairlineRule
 import app.readribbon.design.InkDot
 import app.readribbon.design.Measure
@@ -140,10 +153,17 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 // S02 — the surface everything else exists to protect. No top bar, no back
 // button, no toolbar until you ask for one. Two ways out, both at the
@@ -162,10 +182,37 @@ import kotlinx.coroutines.launch
 // parameter, exactly as it is in NoteCard and PresenceForm.
 
 /**
- * How long a scroll we asked for ourselves stays ours. Inside this window a
- * moving page is the app moving, not you, so it does not break a follow.
+ * The line a page reads its own place from: a little under the upper third
+ * of this screen (see `trackReading`), and the line `reading` reports.
  */
-private val PROGRAMMATIC_SCROLL_GRACE = 1500.milliseconds
+private const val READING_LINE = 0.3f
+
+/** How often a follow looks again at where the person followed is. */
+private val FOLLOW_TICK = 250.milliseconds
+
+/**
+ * A step smaller than this share of the screen — about two lines — is not
+ * worth moving the page for.
+ */
+private const val FOLLOW_MIN_STEP = 0.06
+
+/** A fly that has not landed by now has not; the follow holds. */
+private val FLIGHT_TIMEOUT = 3.seconds
+
+/** How long a fly waits for its chapter to be set before giving up on it. */
+private val LINES_TIMEOUT = 1500.milliseconds
+
+/** The reading line has come to rest this long after the page last moved. */
+private val LINE_SETTLES = 300.milliseconds
+
+/** While the page is moving, where the line is goes no oftener than this. */
+private val LINE_IN_FLIGHT = 1.seconds
+
+/** And while nothing moves, it is said again this often to whoever follows. */
+private val LINE_KEEPALIVE = 20.seconds
+
+/** The room under each chapter's last line, before the passage end. */
+private val CHAPTER_FOOT = 8.dp
 
 /** Position saves are cheap but not free (see `trackReading`). */
 private val POSITION_SAVE_INTERVAL = 2.seconds
@@ -373,10 +420,29 @@ fun ReadingScreen(
     val followBackOffer = rememberFollowBackOffer()
 
     /**
-     * Ignore self-originated (programmatic) scrolls when deciding whether a
-     * scroll of your own breaks a follow.
+     * The reader's hands, as a follow needs to know them: a finger on the
+     * page, a move of the follow's own in flight, the rubber band.
      */
-    var programmaticScrollUntil by remember { mutableStateOf(Instant.DISTANT_PAST) }
+    val hands = remember { FollowHands() }
+
+    /** Bumped by every follow, so that following again starts afresh. */
+    var followEpoch by remember { mutableIntStateOf(0) }
+
+    /** Whether the viewport has been measured, rather than guessed at. */
+    var viewportMeasured by remember { mutableStateOf(false) }
+
+    /** The presence panel is open, with its rows under a finger. */
+    var panelOpen by remember { mutableStateOf(false) }
+
+    /**
+     * The page's own opacity, for a follow's step under reduce motion: the
+     * text fades, is moved, and fades back — never a cut, and never a
+     * travel (§11, I22). The text only: the form and the thread stay.
+     */
+    val pageFade = remember { Animatable(1f) }
+
+    val screenReader = rememberScreenReaderOn()
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
 
     /** The verse the page has been sent to, and whether it is there (I30). */
     var landing by remember { mutableStateOf<Landing?>(null) }
@@ -438,8 +504,7 @@ fun ReadingScreen(
         if (!model.readingQuietly && model.me != null) {
             // The channel is the room's and is already open; this is the
             // book's half — saying you are in it (§4.2).
-            val pos = addressOf(openAt)
-            model.presence.present(pos, 0.0, isIdle = false, following = model.followingPersonID)
+            model.present(addressOf(openAt))
         } else {
             model.presence.withdraw()
         }
@@ -476,31 +541,18 @@ fun ReadingScreen(
      * proxy only exists inside its own closure. A `LazyListState` is an
      * ordinary value held here, so the command is just a call.
      *
-     * This is the plain move, the one the passage end makes: Swift's
-     * `onContinue` reaches for the proxy directly and claims no grace, so
-     * carrying on to the next chapter is still a scroll of your own and
-     * still breaks a follow (§4.2).
+     * The plain move, the one the passage end and the chapter list make.
+     * Both are your own going somewhere, and both end a follow before they
+     * move (see `endFollow`) — this only moves.
      */
     fun scrollToChapter(n: Int) {
-        // A chapter chosen, or a follow carrying the page: either way it is
-        // somewhere else now, and a landing lets go.
+        // Somewhere else now, and a landing lets go.
         landing = null
         scope.launch {
             val index = itemIndexOfChapter(n).coerceIn(0, (chapterCount - 1) * 2)
             // Under reduce motion the page is simply already there (§11).
             if (reduceMotion) listState.scrollToItem(index) else listState.animateScrollToItem(index)
         }
-    }
-
-    /**
-     * The same move, but ours: the page moving because the app moved it —
-     * following someone, or taking the offer back to where you were. Swift's
-     * `scrollCommand` path opens the grace window for exactly these two, so
-     * the app's own scroll does not read as yours and break the follow.
-     */
-    fun goToChapter(n: Int) {
-        programmaticScrollUntil = Clock.System.now() + PROGRAMMATIC_SCROLL_GRACE
-        scrollToChapter(n)
     }
 
     /**
@@ -541,7 +593,6 @@ fun ReadingScreen(
         val id = ++landingsMade
         landing = Landing(id = id, address = address)
         latestAddress = address
-        programmaticScrollUntil = Clock.System.now() + PROGRAMMATIC_SCROLL_GRACE
         val layout = chapterLayouts[chapter] ?: run {
             listState.scrollToItem(index)
             snapshotFlow { chapterLayouts[chapter] }.filterNotNull().first()
@@ -552,10 +603,9 @@ fun ReadingScreen(
         val offset = layout.firstLineOf(address.verse)?.let { verseY ->
             with(density) {
                 listState.layoutInfo.beforeContentPadding + verseY.toPx() -
-                    (viewportHeight * 0.3f - LANDING_LEAD.toPx())
+                    (viewportHeight * READING_LINE - LANDING_LEAD.toPx())
             }.roundToInt().coerceAtLeast(0)
         } ?: 0
-        programmaticScrollUntil = Clock.System.now() + PROGRAMMATIC_SCROLL_GRACE
         if (animated && !reduceMotion) {
             listState.animateScrollToItem(index, offset)
         } else {
@@ -585,7 +635,6 @@ fun ReadingScreen(
         }
         keepYourPlace()
         landing = null
-        programmaticScrollUntil = Clock.System.now() + PROGRAMMATIC_SCROLL_GRACE
         listState.scrollToItem(itemIndexOfChapter(chapter) + 1)
     }
 
@@ -620,6 +669,40 @@ fun ReadingScreen(
     }
 
     /**
+     * The one way a follow ends, whatever ended it (§4.2): the second scroll
+     * of your own (the first meets the band), a chapter chosen, the passage
+     * end's way on, a named place, the book closing, a tap on the person you
+     * follow, or a scroll no finger made. Nothing is said — no haptic, no
+     * toast, no words.
+     *
+     * Where the page is now is yours: it was carried there and is staying,
+     * so it is kept as your place. The room hears that you follow nobody, on
+     * the slot presence keeps for exactly that. And the way back is offered
+     * from now — it used to be timed from the follow's start.
+     *
+     * @param telling false when the book is about to be put down anyway (the
+     *   finishing's two ways out, as Swift's `endFollow(telling: false)`):
+     *   leaving is the untrack, which says this and more.
+     */
+    fun endFollow(telling: Boolean = true) {
+        if (model.followingPersonID == null) return
+        model.followingPersonID = null
+        followBackOffer.endedFollowing()
+        hands.freshBand()
+        val here = latestAddress
+        if (here != null && here != model.myPosition(reading)) {
+            model.savePosition(reading = reading, address = here)
+        }
+        // A book on its way down withdraws from the room a moment later, and
+        // saying anything first would only spend presence's budget — and
+        // could take the slot the untrack needs, leaving you in the book for
+        // a window after you had put it down.
+        if (telling && sheet.committed && !closing && !model.readingQuietly && model.me != null) {
+            scope.launch { model.present(here ?: model.myPosition(reading)) }
+        }
+    }
+
+    /**
      * Where this session started, so that closing the book without having
      * read moves nothing.
      *
@@ -637,15 +720,30 @@ fun ReadingScreen(
     var openedAt by remember(reading.id) { mutableStateOf(model.myPosition(reading)) }
 
     /**
+     * A follow was carrying the page as the book started down. A close by
+     * drag un-commits the book before it lands, and that ends the follow
+     * before [laidDown] runs — so it is noted as the book starts to leave.
+     */
+    var wentDownCarried by remember { mutableStateOf(false) }
+
+    /**
      * The book has been put down: the last things that belong to having been
      * in it. Separate from [close] because a page can also leave under a
      * finger, which is not a close *request* but a close that has happened.
      */
     fun laidDown() {
-        if (!model.state.hasSeenMarginHint) {
-            model.markMarginHintSeen()
+        // A page a follow was carrying was not read past the hint, and fed
+        // nothing (§4.2: carried is not reading) — as Swift's `close` has it.
+        val carried = model.followingPersonID != null || wentDownCarried
+        // Closing the book ends a follow — or reopening it at your own place
+        // would be carried off again at once.
+        endFollow()
+        if (!carried) {
+            if (!model.state.hasSeenMarginHint) {
+                model.markMarginHintSeen()
+            }
+            recordFuel()
         }
-        recordFuel()
         // Where you stopped, ahead of the throttled save — unless the page is
         // still held where it was sent, which is not somewhere you read to
         // (I30). Then it is your own place, untouched.
@@ -685,7 +783,14 @@ fun ReadingScreen(
      * was no way out of the book at all.
      */
     LaunchedEffect(sheet.committed) {
-        if (sheet.committed) closing = false
+        if (sheet.committed) {
+            closing = false
+            wentDownCarried = false
+        } else {
+            // However the book was put down, a follow does not outlive it.
+            if (model.followingPersonID != null) wentDownCarried = true
+            endFollow()
+        }
     }
 
     /** The chapter list is up (A31). */
@@ -699,9 +804,6 @@ fun ReadingScreen(
      * lagged the page by three seconds would be telling you where you were.
      */
     var readingChapter by remember { mutableIntStateOf(model.myPosition(reading).chapter) }
-    /** Who the page has been carried for, and to which chapter (see below). */
-    var carriedTo by remember { mutableStateOf<Pair<Uuid, Int>?>(null) }
-
 
     /**
      * The running head, repeated at the foot as the way into the chapter
@@ -829,28 +931,34 @@ fun ReadingScreen(
     }
 
     fun follow(person: PresentPerson) {
-        // Tap a portrait to follow — a page-fly, no confirmation dialog
-        // (§4.2).
-        // Where you were is where the page says, not the last throttled save
-        // of it.
-        followBackOffer.beganFollowing(latestAddress ?: model.myPosition(reading))
-        model.followingPersonID = person.id
-        person.position?.let {
-            carriedTo = person.id to it.chapter
-            goToChapter(it.chapter)
+        // The person you already follow: tapping them again stops it — the
+        // web's "F: Follow, or stop following", and the way out of a follow
+        // that is not a gesture (§11).
+        if (model.followingPersonID == person.id) {
+            endFollow()
+            return
         }
+        // Tap a portrait to follow — no confirmation dialog (§4.2). The page
+        // goes to them on the follow's first look (below).
+        //
+        // Where you were is where the page says, not the last throttled save
+        // of it — and following somebody else next keeps the place you first
+        // left, rather than wherever the last follow had carried you.
+        if (model.followingPersonID == null) {
+            followBackOffer.beganFollowing(latestAddress ?: model.myPosition(reading))
+        }
+        model.followingPersonID = person.id
+        followEpoch += 1
+        hands.freshBand()
+        landing = null
+        // Joining somebody reading is reading together: one feeding, which
+        // is what lets two people keep a fire steady, and a tap of your own.
+        recordFuel(latestAddress)
         // "Ruth is with you" is the other end of this, and it only ever
         // appears because the follow travels: without this the flag was set
         // on this phone and never left it.
         if (!model.readingQuietly) {
-            scope.launch {
-                model.presence.present(
-                    position = model.myPosition(reading),
-                    scrollFraction = 0.0,
-                    isIdle = false,
-                    following = person.id,
-                )
-            }
+            scope.launch { model.present(latestAddress ?: model.myPosition(reading)) }
         }
     }
 
@@ -869,49 +977,50 @@ fun ReadingScreen(
         if (!astir) return
         // The chapter whose top has crossed the upper third is where you
         // are.
-        val threshold = viewportHeight * 0.3f
+        val threshold = viewportHeight * READING_LINE
         if (frame.top >= threshold || frame.bottom <= threshold) return
         val now = Clock.System.now()
-        // Any scroll of your own breaks the follow — no modal, no "stop
-        // following?", you just have your own scroll back (§4.2).
-        if (model.followingPersonID != null && now > programmaticScrollUntil) {
-            model.followingPersonID = null
-        }
         readingChapter = chapter
-        val layout = chapterLayouts[chapter]
-        val yInChapter = with(density) { (threshold - frame.top).toDp() }
-        val verse = layout?.verseFirstLineY
-            ?.filterValues { it <= yInChapter }
-            ?.maxByOrNull { it.value }
-            ?.key ?: 1
+        // The verse the line is in — among verses that begin on one line,
+        // the last of them, which is what the reading line says too.
+        val verse = chapterLayouts[chapter]?.let { layout ->
+            with(density) { layout.pointAt(chapter, (threshold - frame.top).toDp(), 1f.toDp()).verse }
+        } ?: 1
         val measured = VerseAddress(bookID = reading.bookID, chapter = chapter, verse = verse)
         // A verse the page was sent to stays where you are until you move
         // off it (I30).
         val held = heldLanding(measured)
         val address = held ?: measured
         latestAddress = address
+        // The band holds the page somewhere it is about to come back from:
+        // that is nowhere, and nothing is said about it.
+        if (hands.banding) return
+        // A page a follow is carrying is not a page being read (§4.2). Its
+        // place is kept when the follow ends and when the book closes, not
+        // on every step; it feeds no fire; and it does not wake a reader who
+        // has not touched it — presence still carries the verse, so "Mark 6"
+        // stays true, but a follower who puts the phone down goes "here, but
+        // still" like anybody else.
+        val carried = model.followingPersonID != null
         // Position saves are cheap but not free — a scroll emits geometry
         // every frame, and the store persists on mutation.
         if (now - lastPositionSave > POSITION_SAVE_INTERVAL) {
             lastPositionSave = now
             // Being sent to a verse is not reading to it: your own place
             // waits until you do.
-            if (held == null) {
+            if (held == null && !carried) {
                 model.savePosition(reading = reading, address = address)
             }
             if (!model.readingQuietly) {
-                val fraction = (yInChapter.value / maxOf(1f, frame.height)).toDouble().coerceIn(0.0, 1.0)
-                scope.launch {
-                    model.presence.present(
-                        position = address,
-                        scrollFraction = fraction,
-                        isIdle = false,
-                        following = model.followingPersonID,
-                    )
-                }
+                // How far down its chapter the line is, pixels over pixels.
+                // It was the line's depth in dp over the frame's in px, which
+                // put everybody a density's worth nearer the top.
+                val fraction = ((threshold - frame.top) / maxOf(1f, frame.height))
+                    .toDouble().coerceIn(0.0, 1.0)
+                scope.launch { model.present(address, fraction, activity = !carried) }
             }
         }
-        if (now - lastFuelRecord > FUEL_INTERVAL) {
+        if (!carried && now - lastFuelRecord > FUEL_INTERVAL) {
             recordFuel(address)
         }
     }
@@ -943,6 +1052,97 @@ fun ReadingScreen(
      * instead of scrolling Scripture.
      */
     var closingByDrag by remember { mutableStateOf(false) }
+
+    /**
+     * Whether the person followed is here and in this book — whether a band
+     * has anything to hand the page back to.
+     */
+    fun followedIsHere(): Boolean {
+        val followed = model.followingPersonID ?: return false
+        val person = model.presentPeople.firstOrNull { it.id == followed } ?: return false
+        val book = model.heardReading(followed)?.book ?: person.position?.bookID ?: return false
+        return book == reading.bookID
+    }
+
+    /**
+     * A finger's scroll, arriving at the list while a follow carries the
+     * page. "A gentle rubber-band on the first gesture so it never happens
+     * by accident" (§4.2): the page gives less and less the further it is
+     * pulled, and goes back when it is let go. The second gesture is yours —
+     * the follow ends at its first movement, and the rest of it is an
+     * ordinary scroll. One band a follow, and none at all when there is
+     * nothing to go back to. A touch that never drags — a tap, a lift, a
+     * note — never reaches here.
+     *
+     * Returns what the band keeps of the movement.
+     */
+    fun rubberBand(available: Offset): Offset {
+        if (model.followingPersonID == null) return Offset.Zero
+        // A band already held keeps the last of its drag, which can arrive
+        // with the finger already lifting.
+        if (!hands.fingerDown && !hands.bandHeld) return Offset.Zero
+        if (hands.bandSpent || hands.bandReturning || !followedIsHere()) {
+            endFollow()
+            return Offset.Zero
+        }
+        if (!hands.bandHeld) {
+            // At the top of the book a pull downward is the book closing, and
+            // that gesture keeps its priority.
+            if (available.y > 0f && !listState.canScrollBackward) return Offset.Zero
+            hands.bandHeld = true
+            hands.stretched = 0f
+            // The band is pulled by the reader's own hand, and that is them,
+            // here: it wakes a reader the follow had let go still.
+            if (!model.readingQuietly && sheet.committed) {
+                scope.launch { model.present(latestAddress ?: model.myPosition(reading)) }
+            }
+        }
+        val allowed = available.y * bandGive(hands.stretched, viewportHeight)
+        return Offset(0f, available.y - allowed)
+    }
+
+    /**
+     * The band let go of: the page goes back to where the follow was holding
+     * it — on the spring a held thing is let go on, carrying the finger's
+     * speed (A21), or simply back under reduce motion. Nothing flings; the
+     * band keeps the whole of the throw.
+     */
+    fun bandLetGo(velocity: Float) {
+        if (!hands.bandHeld) return
+        val back = hands.stretched
+        // The page was taking only the band's share of the finger's speed,
+        // and it scrolls the other way from the drag.
+        val speed = -velocity * bandGive(back, viewportHeight)
+        hands.bandHeld = false
+        hands.bandSpent = true
+        hands.bandReturning = true
+        hands.stretched = 0f
+        scope.launch {
+            hands.ownMove = true
+            try {
+                listState.scroll {
+                    if (reduceMotion) {
+                        scrollBy(back)
+                    } else {
+                        var gone = 0f
+                        animate(0f, back, initialVelocity = speed, animationSpec = RibbonMotion.cover()) { value, _ ->
+                            scrollBy(value - gone)
+                            gone = value
+                        }
+                    }
+                }
+            } finally {
+                // A finger that caught it on the way back has it now.
+                hands.ownMove = false
+                hands.bandReturning = false
+            }
+        }
+    }
+
+    // Held rather than captured, for the connection below, as `laidDownNow`
+    // is.
+    val rubberBandNow by rememberUpdatedState(::rubberBand)
+    val bandLetGoNow by rememberUpdatedState(::bandLetGo)
 
     /**
      * Drag down from scroll-top and the book comes with you (S02).
@@ -977,7 +1177,9 @@ fun ReadingScreen(
                 // Once the book is coming down it owns the gesture in both
                 // directions. Without this, pushing back up would scroll
                 // Scripture underneath a page that is halfway off the screen.
-                if (!closingByDrag) return Offset.Zero
+                // Otherwise the gesture is Scripture's — or, while a follow
+                // carries the page, the band's.
+                if (!closingByDrag) return rubberBandNow(available)
                 // Changed your mind and pushed it back up: once the page is
                 // fully up the gesture is over, and the rest of the movement
                 // belongs to Scripture again. Holding it until the finger
@@ -997,6 +1199,9 @@ fun ReadingScreen(
                 source: NestedScrollSource,
             ): Offset {
                 if (source != NestedScrollSource.UserInput) return Offset.Zero
+                // What the list actually moved is how far the band is
+                // stretched — at an end of the book, less than it was given.
+                if (hands.bandHeld) hands.stretched += consumed.y
                 // A downward drag the list could not spend is a drag at the
                 // top of the page, which is the gesture S02 describes. A
                 // momentum overscroll arrives as a different source and is
@@ -1012,8 +1217,15 @@ fun ReadingScreen(
             }
 
             override suspend fun onPreFling(available: Velocity): Velocity {
-                if (!closingByDrag) return Velocity.Zero
+                if (!closingByDrag) {
+                    if (!hands.bandHeld) return Velocity.Zero
+                    bandLetGoNow(available.y)
+                    return available
+                }
                 closingByDrag = false
+                // A band pulled before the book was goes back where it was;
+                // if the book goes, the follow goes with it.
+                bandLetGoNow(0f)
                 // Down is positive here and opening is positive there.
                 sheet.release(
                     velocity = -available.y,
@@ -1056,9 +1268,10 @@ fun ReadingScreen(
     // already where it is asked to be does not move.
     LaunchedEffect(openAt) {
         // A named place is your own going somewhere, and a follow still
-        // running from before ends here (§4.2) — or the roster's next tick
-        // would carry the page off the verse it was sent to.
-        if (openAt != null) model.followingPersonID = null
+        // running from before ends here (§4.2) — or its next look would carry
+        // the page off the verse it was sent to. Through `endFollow`, so the
+        // room hears it too.
+        if (openAt != null) endFollow()
         // On the verse, not the top of its chapter (deviation 7, I30) — or
         // on the card.
         when (val place = openAt) {
@@ -1067,39 +1280,494 @@ fun ReadingScreen(
         }
     }
 
-    // Following is a thread, not a jump (§4.2).
+    // MARK: Following (§4.2) — "Your scroll is theirs."
     //
-    // Tapping a portrait moved the page once and then let go: they read on,
-    // and you sat where they had been, still called a follower by the thread
-    // at the top and by their own "Ruth is with you". The page has to keep
-    // up, or the word means nothing.
+    // The phone of the person you follow says where their reading line is
+    // now and then; between those words the guess (core's `ReadingEstimate`)
+    // reads on at their pace, never past the scroll they would make next, and
+    // this page is moved the way they move their own — held still while they
+    // read down it, then carried several lines at once (core's
+    // `FollowCarriage`). It used to follow their chapter only, and only when
+    // it changed (A53): a follower sat at the head of a chapter the other
+    // person was halfway down.
     //
-    // Through `goToChapter`, not `scrollToChapter`, for two reasons. It eases
-    // — the page carries you, it does not cut — and it opens the same grace
-    // window a tap does: without it the app's own move would read as a scroll
-    // of your own in `trackReading`, and the follow would cut itself on the
-    // first page they turned.
+    // One look every quarter second, for as long as the follow lasts. The
+    // guess and each chapter's ruler live in the loop and go with it —
+    // nothing here is state the page draws from, so the page never
+    // recomposes on the follow's clock.
+
+    val reduceMotionNow by rememberUpdatedState(reduceMotion)
+    val screenReaderNow by rememberUpdatedState(screenReader)
+    val contentNow by rememberUpdatedState(::chapterContent)
+
+    /**
+     * Anything on the page that is the reader's own doing, or a page not yet
+     * there to move: the follow keeps its place and moves nothing until it
+     * clears — then brings them back in one step if one is due.
+     */
+    fun holdsTheFollow(): Boolean =
+        !sheet.committed || sheet.progress < 1f || closing || closingByDrag || peel.pulled ||
+            !viewportMeasured ||
+            // A finger resting on the page, a scroll under way, a move of
+            // the follow's own, or the band.
+            hands.fingerDown || listState.isScrollInProgress || hands.ownMove || hands.banding ||
+            // One of the reader's own landings, still on its way.
+            landing?.arrived == false ||
+            // A verse lifted, the toolbar, the composer, a note open or
+            // opening, the chapter list, the presence panel, a highlight's
+            // label, the one question: what a finger is reaching for must not
+            // move out from under it.
+            lifted != null || composer != null || editingNote != null ||
+            openNoteVerse != null || showChapters || panelOpen ||
+            highlightLabel != null || askAboutNotifications
+
+    /**
+     * Where a point is on this screen right now, from the viewport's top.
+     *
+     * Only a chapter that is set and whose lines are current has a height:
+     * one on screen, or the one directly below a passage end that is. A
+     * chapter on screen whose lines are behind it — a note's carve opening,
+     * a size changing, a licensed chapter still arriving — is waited for, not
+     * flown to. Anywhere else is off the page.
+     */
+    fun placeOnScreen(point: ReadingPoint): Placed {
+        val chapter = point.chapter
+        if (chapter < 1 || chapter > chapterCount) return Placed.Unsettled
+        val info = listState.layoutInfo
+        val items = info.visibleItemsInfo
+        val before = info.beforeContentPadding
+        val lines = chapterLayouts[chapter]
+        val item = items.firstOrNull { it.key == "chapter-$chapter" }
+        val top = if (item != null) {
+            if (lines == null) return Placed.Unsettled
+            val expected = with(density) { (lines.height + CHAPTER_FOOT).toPx() }
+            if (abs(item.size - expected) > 2f) return Placed.Unsettled
+            item.offset + before
+        } else {
+            val above = items.firstOrNull { it.key == "passage-end-${chapter - 1}" }
+                ?: return Placed.Away
+            above.offset + above.size + before
+        }
+        val height = (lines ?: return Placed.Away).heightOf(point) ?: return Placed.Unsettled
+        return Placed.At(top + with(density) { height.toPx() }.toDouble())
+    }
+
+    /**
+     * A move of the follow's was cut off by a scroll that was not the
+     * follow's. A finger's is the band's, and the list's scroll connection
+     * has it already; anything else — TalkBack's scroll, a wheel, a key — is
+     * a deliberate scroll of the reader's own, and ends the follow.
+     */
+    fun takenBack() {
+        if (!hands.fingerDown && !hands.banding) endFollow()
+    }
+
+    /** A step's fade, if one was left halfway, comes back up. */
+    fun fadeBackIn() {
+        if (pageFade.value >= 1f && pageFade.targetValue >= 1f) return
+        scope.launch {
+            withContext(FadesUnderReduceMotion) { pageFade.animateTo(1f, RibbonMotion.arrive()) }
+        }
+    }
+
+    /**
+     * One step of the follow, the way this reader's page moves. Returns how
+     * far the page actually went, or null when the step was taken back.
+     *
+     * Every move here can be cut off: a finger, or anything else scrolling
+     * the list, takes it through the list's own mutex, and what arrives here
+     * is a cancellation. That is the reader, not the end of the follow's
+     * loop — unless the loop itself is what was cancelled.
+     */
+    suspend fun step(by: Float, manner: FollowCarriage.Manner): Float? {
+        hands.ownMove = true
+        try {
+            return when (manner) {
+                // An eased move of the whole page, as a scroll of theirs is.
+                FollowCarriage.Manner.Moving -> listState.animateScrollBy(by, RibbonMotion.settle())
+                // The reported verse, landed on; simply there under reduce
+                // motion.
+                FollowCarriage.Manner.Spoken ->
+                    listState.animateScrollBy(by, RibbonMotion.settle(reduceMotionNow))
+                // Reduce motion: the text fades, is moved while it cannot be
+                // seen, and fades back. A fade, never a cut (I22) — so on the
+                // clock that keeps opacity's curve.
+                FollowCarriage.Manner.Calm -> {
+                    withContext(FadesUnderReduceMotion) {
+                        pageFade.animateTo(0f, RibbonMotion.release())
+                    }
+                    // A finger arrived while it faded: it is theirs now.
+                    val moved = if (hands.fingerDown) null else listState.scrollBy(by)
+                    withContext(FadesUnderReduceMotion) {
+                        pageFade.animateTo(1f, RibbonMotion.arrive())
+                    }
+                    moved
+                }
+            }
+        } catch (interrupted: CancellationException) {
+            if (!currentCoroutineContext().isActive) throw interrupted
+            takenBack()
+            return null
+        } finally {
+            hands.ownMove = false
+            fadeBackIn()
+        }
+    }
+
+    /**
+     * To a point this page has not set out: the chapter, and then the point
+     * on the landing line. Not a landing of the reader's own — nothing is
+     * held, and no place is kept: a follow's destination is theirs, not
+     * yours. Under reduce motion, or read aloud, it is simply there (I22).
+     */
+    suspend fun flyTo(point: ReadingPoint, manner: FollowCarriage.Manner): Flight {
+        val chapter = point.chapter
+        if (chapter < 1 || chapter > chapterCount) return Flight.Grounded
+        val index = itemIndexOfChapter(chapter)
+        hands.ownMove = true
+        try {
+            val lines = chapterLayouts[chapter] ?: run {
+                // Its lines only exist once it is set, and it is only set
+                // once it is on screen. A chapter that will not come — a
+                // licensed one that failed — is given up on.
+                listState.scrollToItem(index)
+                withTimeoutOrNull(LINES_TIMEOUT) {
+                    snapshotFlow { chapterLayouts[chapter] }.filterNotNull().first()
+                }
+            } ?: return Flight.Grounded
+            val height = lines.heightOf(point) ?: 0.dp
+            val offset = with(density) {
+                listState.layoutInfo.beforeContentPadding + height.toPx() -
+                    FollowCarriage.LANDING_LINE.toFloat() * viewportHeight
+            }.roundToInt().coerceAtLeast(0)
+            if (manner == FollowCarriage.Manner.Moving) {
+                listState.animateScrollToItem(index, offset)
+            } else {
+                listState.scrollToItem(index, offset)
+            }
+            return Flight.Landed
+        } catch (interrupted: CancellationException) {
+            if (!currentCoroutineContext().isActive) throw interrupted
+            takenBack()
+            return Flight.TakenBack
+        } finally {
+            hands.ownMove = false
+        }
+    }
+
+    val following = model.followingPersonID
+    LaunchedEffect(following, followEpoch, sheet.committed) {
+        val followed = following ?: return@LaunchedEffect
+        if (!sheet.committed) return@LaunchedEffect
+        val rulers = HashMap<Int, ChapterRuler>()
+        val ruler: (Int) -> ChapterRuler? = { n ->
+            rulers[n] ?: contentNow(n)?.let(ChapterRuler::measuring)?.also { rulers[n] = it }
+        }
+        var estimate = ReadingEstimate()
+        // The last word given to the guess, by when it arrived.
+        var fed: Instant? = null
+        var fedAt: ReadingPoint? = null
+        // When they last said something new: another place, or a scroll.
+        var news: Instant? = null
+        // The first move of a follow brings them to the landing line from
+        // wherever they are on this screen.
+        var realign = true
+        var backedAt: Instant? = null
+        var stuck: Stuck? = null
+        var grounded: Pair<Int, Instant?>? = null
+        var here = false
+        var cameBack = model.cameBack
+        fun startOver() {
+            estimate = ReadingEstimate()
+            fed = null
+            fedAt = null
+        }
+        try {
+            while (true) {
+                delay(FOLLOW_TICK)
+                val now = Clock.System.now()
+                // Back from the background: whatever was guessed is stale.
+                if (model.cameBack != cameBack) {
+                    cameBack = model.cameBack
+                    startOver()
+                }
+                if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) continue
+                val person = model.presentPeople.firstOrNull { it.id == followed }
+                if (person == null) {
+                    // Gone from the room: the follow is kept, and waits. What
+                    // was guessed about them goes.
+                    if (here) startOver()
+                    here = false
+                    continue
+                }
+                here = true
+                val heard = model.heardReading(followed)
+                if (heard != null && heard.report.received != fed) {
+                    val report = heard.report
+                    val last = fedAt
+                    if (last == null || !report.settled || !samePlace(report.at, last)) {
+                        news = report.received
+                    }
+                    fed = report.received
+                    fedAt = report.at
+                    if (heard.book == reading.bookID) estimate.observe(report, ruler)
+                }
+                // "Here, but still": the guess stops where it is.
+                if (person.isIdle) estimate.hold(now, ruler)
+                // In another book, the follow waits for them to come back.
+                if (heard == null || heard.book != reading.bookID) continue
+                if (person.position != null && person.position.bookID != reading.bookID) continue
+                if (holdsTheFollow()) continue
+                val point = estimate.point(now, ruler) ?: continue
+                val placed = placeOnScreen(point)
+                if (placed is Placed.Unsettled) continue
+                val y = (placed as? Placed.At)?.y
+                val viewport = viewportHeight.toDouble()
+                // Where their own phone last said, which a step never lifts
+                // off the top of this screen — unless it came from an older
+                // app's presence, which is always a scroll behind.
+                val reported = if (heard.fromPresence) {
+                    null
+                } else {
+                    estimate.reported?.let { (placeOnScreen(it) as? Placed.At)?.y }
+                }
+                val manner = when {
+                    screenReaderNow -> FollowCarriage.Manner.Spoken
+                    reduceMotionNow -> FollowCarriage.Manner.Calm
+                    else -> FollowCarriage.Manner.Moving
+                }
+                // The line the page is moved by: the guess, or read aloud,
+                // the place their phone actually said.
+                val line = if (manner == FollowCarriage.Manner.Spoken) reported ?: y else y
+                // A step that went nowhere — the top or the end of the book —
+                // is not tried again until the guess has moved on or they
+                // have said something new.
+                val wasStuck = stuck
+                if (wasStuck != null) {
+                    val movedOn = line == null || abs(line - wasStuck.y) >= 0.1 * viewport
+                    if (!movedOn && news == wasStuck.news) continue
+                    stuck = null
+                }
+                // Where a fly goes: the guess, or read aloud, the verse their
+                // phone actually said — never a place nobody reported.
+                val target = if (manner == FollowCarriage.Manner.Spoken) estimate.reported ?: point else point
+                // Nor is a fly that never landed.
+                val lost = grounded
+                if (line == null && lost != null && lost.first == target.chapter && lost.second == news) continue
+                val back = estimate.wentBackAt
+                val wentBack = back != null && backedAt.let { it == null || back > it }
+                val move = FollowCarriage.move(
+                    y = y,
+                    reported = reported,
+                    viewport = viewport,
+                    minStep = FOLLOW_MIN_STEP * viewport,
+                    realign = realign,
+                    wentBack = wentBack,
+                    manner = manner,
+                )
+                realign = false
+                when (move) {
+                    FollowMove.Hold -> Unit
+                    is FollowMove.Step -> {
+                        val by = move.by.toFloat()
+                        val moved = step(by, manner) ?: continue
+                        if (by < 0f) backedAt = now
+                        if (abs(moved) < 1f && line != null) stuck = Stuck(y = line, news = news)
+                    }
+                    FollowMove.Fly -> {
+                        val flight = withTimeoutOrNull(FLIGHT_TIMEOUT) { flyTo(target, manner) }
+                            ?: Flight.Grounded
+                        grounded = when (flight) {
+                            Flight.Landed -> null
+                            Flight.Grounded -> target.chapter to news
+                            Flight.TakenBack -> grounded
+                        }
+                    }
+                }
+            }
+        } finally {
+            hands.ownMove = false
+            fadeBackIn()
+        }
+    }
+
+    // A scroll of your own that no finger made — TalkBack's scroll actions, a
+    // wheel, a key — ends a follow outright (§4.2, §11). It was deliberate,
+    // so there is no band. The follow's own moves, a finger's drag and the
+    // band's return are all accounted for before this looks.
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.isScrollInProgress }.collect { scrolling ->
+            if (scrolling && model.followingPersonID != null && !hands.ownMove &&
+                !hands.fingerDown && !hands.banding && landing?.arrived != false
+            ) {
+                endFollow()
+            }
+        }
+    }
+
+    // MARK: The reading line (§4.2) — the other end of a follow.
     //
-    // Only their chapter, and only when it changes. Their scroll within a
-    // chapter is a finer signal than this page can honestly answer, and a
-    // move per roster tick would be the page twitching under a reader.
-    LaunchedEffect(model.presentPeople, model.followingPersonID) {
-        val followed = model.followingPersonID ?: return@LaunchedEffect
-        val there = model.presentPeople
-            .firstOrNull { it.id == followed }
-            ?.position
-            ?: return@LaunchedEffect
-        // A room reads one book at a time, but a roster can still carry
-        // somebody who has moved on to another one — and their chapter 3 is
-        // not this book's.
-        if (there.bookID != reading.bookID) return@LaunchedEffect
-        // The roster says the same thing every tick, and `readingChapter`
-        // lags behind it by a throttle — so without this the page would be
-        // yanked back to the top of a chapter they are still reading down,
-        // once a tick.
-        if (carriedTo == (followed to there.chapter)) return@LaunchedEffect
-        carriedTo = (followed to there.chapter)
-        goToChapter(there.chapter)
+    // Where your reading line is, for whoever follows you: said only while
+    // somebody can be seen following — their portrait tucked against yours,
+    // "Ruth is with you" — never while reading quietly, and never from a
+    // page that is not open. A quiet follower follows at the verse presence
+    // carries (Law 3).
+
+    /** The point at a line across the viewport, px down from its top. */
+    fun pointAtLine(line: Float): ReadingPoint? {
+        val info = listState.layoutInfo
+        val items = info.visibleItemsInfo
+        if (items.isEmpty()) return null
+        val before = info.beforeContentPadding
+        val item = items.firstOrNull { line >= it.offset + before && line < it.offset + before + it.size }
+            ?: if (line < items.first().offset + before) items.first() else items.last()
+        val key = item.key as? String ?: return null
+        fun endOf(chapter: Int): ReadingPoint? {
+            val verse = chapterLayouts[chapter]?.lastVerse
+                ?: contentNow(chapter)?.let(ChapterRuler::measuring)?.verses?.lastOrNull()
+                ?: return null
+            return ReadingPoint(chapter = chapter, verse = verse, part = 1.0)
+        }
+        return when {
+            key.startsWith("chapter-") -> {
+                val chapter = key.removePrefix("chapter-").toIntOrNull() ?: return null
+                val lines = chapterLayouts[chapter] ?: return null
+                val into = (line - (item.offset + before)).coerceAtLeast(0f)
+                with(density) { lines.pointAt(chapter, into.toDp(), 1f.toDp()) }
+            }
+            // Past a chapter's end — its passage end, a card — is the end of
+            // that chapter; past the book's, the end of its last.
+            key.startsWith("passage-end-") ->
+                key.removePrefix("passage-end-").toIntOrNull()?.let(::endOf)
+            key == "finishing" -> endOf(chapterCount)
+            else -> null
+        }
+    }
+
+    /**
+     * Where your line is, and the bottom of what your screen shows — above
+     * the room the list keeps for the Wave, never two chapters on.
+     */
+    fun myLine(): Pair<ReadingPoint, ReadingPoint?>? {
+        if (!viewportMeasured) return null
+        val at = pointAtLine(viewportHeight * READING_LINE) ?: return null
+        val bottom = viewportHeight - listState.layoutInfo.afterContentPadding
+        var end = pointAtLine(bottom)
+        if (end != null && end.chapter > at.chapter + 1) {
+            end = chapterLayouts[at.chapter + 1]?.lastVerse
+                ?.let { ReadingPoint(chapter = at.chapter + 1, verse = it, part = 1.0) }
+        }
+        if (end != null && isBefore(end, at)) end = null
+        return at to end
+    }
+
+    /** Whether anybody here is following you — what the tucked portrait shows. */
+    fun followedByAnybody(): Boolean {
+        val me = model.me?.id ?: return false
+        return model.presentPeople.any { it.followingPersonID == me }
+    }
+
+    fun mayTellMyLine(): Boolean =
+        sheet.committed && !closing && !model.readingQuietly && followedByAnybody() && !hands.banding
+
+    /** Say where your line is, if it may be said. */
+    fun tellMyLine(settled: Boolean) {
+        if (!mayTellMyLine()) return
+        val (at, end) = myLine() ?: return
+        hands.lineSentAt = System.currentTimeMillis()
+        // A page being carried by a follow of yours is where the page is,
+        // not where you read to.
+        val carried = model.followingPersonID != null
+        val book = reading.bookID
+        scope.launch { model.presence.sendReading(book, at, end, settled, carried) }
+    }
+
+    // At rest: a short while after the page last moved or was laid out
+    // again, with no finger on it and nothing scrolling. That covers a
+    // fling's end, a jump, a landing, a reflow — every way a page comes to
+    // rest, including the ones that never report a scroll at all.
+    LaunchedEffect(listState, reading.bookID) {
+        snapshotFlow {
+            if (listState.isScrollInProgress || hands.fingerDown || !mayTellMyLine()) null else myLine()
+        }
+            .distinctUntilChanged()
+            .collectLatest { line ->
+                if (line == null) return@collectLatest
+                delay(LINE_SETTLES)
+                tellMyLine(settled = true)
+            }
+    }
+
+    /**
+     * How far down [chapter] the reading line is, pixels over pixels — what
+     * `trackReading` works out from the chapter's frame, read from the list.
+     */
+    fun lineDepth(chapter: Int): Double {
+        val info = listState.layoutInfo
+        val item = info.visibleItemsInfo.firstOrNull { it.key == "chapter-$chapter" } ?: return 0.0
+        val into = viewportHeight * READING_LINE - (item.offset + info.beforeContentPadding)
+        return (into / maxOf(1f, item.size.toFloat())).toDouble().coerceIn(0.0, 1.0)
+    }
+
+    // And presence, where the page came to rest — whoever is or is not
+    // following. `trackReading` speaks at the start of a move and then not
+    // for two seconds, so a scroll that crossed into Mark 7 and stopped
+    // inside them left the room reading Mark 6, and a carried page told the
+    // room the verse before each step. Once the page is still, it says where
+    // it is. Not activity: the scroll that got here already was, and a
+    // carried page never is. A verse the room already has costs nothing —
+    // the budget knows what it last heard.
+    LaunchedEffect(listState, reading.bookID) {
+        snapshotFlow {
+            val still = !listState.isScrollInProgress && !hands.fingerDown
+            if (still && sheet.committed && !closing && !model.readingQuietly) latestAddress else null
+        }
+            .distinctUntilChanged()
+            .collectLatest { address ->
+                if (address == null) return@collectLatest
+                delay(LINE_SETTLES)
+                // The band holds the page somewhere it is about to leave.
+                if (hands.banding) return@collectLatest
+                model.present(address, lineDepth(address.chapter), activity = false)
+            }
+    }
+
+    // In flight: a sample a second while the page is actually moving.
+    LaunchedEffect(listState, reading.bookID) {
+        snapshotFlow { listState.isScrollInProgress }.collectLatest { scrolling ->
+            while (scrolling) {
+                delay(LINE_IN_FLIGHT)
+                tellMyLine(settled = false)
+            }
+        }
+    }
+
+    // The moment somebody starts following, they hear where you are at once.
+    LaunchedEffect(listState, reading.bookID) {
+        var before = emptySet<Uuid>()
+        snapshotFlow {
+            val me = model.me?.id
+            model.presentPeople.filter { me != null && it.followingPersonID == me }.map { it.id }.toSet()
+        }.collect { followers ->
+            val gained = (followers - before).isNotEmpty()
+            before = followers
+            if (gained) tellMyLine(settled = !listState.isScrollInProgress)
+        }
+    }
+
+    // And while nothing moves, now and then — the same place is fine; a
+    // follower takes a repeat as no news.
+    LaunchedEffect(listState, reading.bookID) {
+        while (true) {
+            val since = System.currentTimeMillis() - hands.lineSentAt
+            val wait = LINE_KEEPALIVE.inWholeMilliseconds - since
+            if (wait > 0) {
+                delay(wait)
+                continue
+            }
+            if (!listState.isScrollInProgress && !hands.fingerDown) tellMyLine(settled = true)
+            delay(LINE_KEEPALIVE)
+        }
     }
 
     // And everything that means *being in the book* waits for the pull to
@@ -1153,9 +1821,16 @@ fun ReadingScreen(
                 state = listState,
                 modifier = Modifier
                     .fillMaxSize()
+                    // Only the text fades for a calm step; the form and the
+                    // thread beside it stay where they are.
+                    .graphicsLayer { alpha = pageFade.value }
+                    .noticingFingers(hands)
                     .nestedScroll(closingDrag)
                     .onSizeChanged { size ->
-                        if (size.height > 0) viewportHeight = size.height.toFloat()
+                        if (size.height > 0) {
+                            viewportHeight = size.height.toFloat()
+                            viewportMeasured = true
+                        }
                     }
                     .onGloballyPositioned { container = it },
                 contentPadding = PaddingValues(
@@ -1218,7 +1893,12 @@ fun ReadingScreen(
                                 chapter = n,
                                 model = model,
                                 nextChapterTitle = book?.chapterHeading(n + 1) ?: "${n + 1}",
-                                onContinue = { scrollToChapter(n + 1) },
+                                // Carrying on is your own going somewhere,
+                                // and it ends a follow before it moves.
+                                onContinue = {
+                                    endFollow()
+                                    scrollToChapter(n + 1)
+                                },
                                 onClose = ::close,
                                 modifier = Modifier.readingMeasure(presenceInset),
                             )
@@ -1240,8 +1920,16 @@ fun ReadingScreen(
                                 if (!reading.isFinished) model.finishReading(reading)
                             }
                         },
-                        onFinished = onFinished,
-                        onStartAnother = onStartAnother,
+                        // Both put the book down, and a follow with it. The
+                        // untrack that follows says so; nothing first.
+                        onFinished = {
+                            endFollow(telling = false)
+                            onFinished()
+                        },
+                        onStartAnother = {
+                            endFollow(telling = false)
+                            onStartAnother()
+                        },
                         modifier = Modifier.readingMeasure(presenceInset),
                     )
                 }
@@ -1263,22 +1951,18 @@ fun ReadingScreen(
                     measure = Measure.reading,
                     astir = astir,
                     onMeasureInset = { presenceInset = it },
+                    onExpandedChange = { panelOpen = it },
                 )
             }
 
             // The thread down the edge is a full-height hairline that used
             // to be switched on and off. Following somebody and stopping are
             // among the quietest things in the product (§4.2); neither is a
-            // cut.
-            AnimatedVisibility(
-                visible = model.followingPersonID != null,
-                enter = fadeIn(RibbonMotion.arrive(reduceMotion)),
-                exit = fadeOut(RibbonMotion.arrive(reduceMotion)),
+            // cut — under reduce motion either, where it cut until now.
+            FadingFollowThread(
+                shown = model.followingPersonID != null,
                 modifier = Modifier.align(Alignment.TopEnd),
-                label = "the-follow-thread",
-            ) {
-                FollowThread()
-            }
+            )
 
             // The way out, or the composer.
             BottomChrome(
@@ -1398,13 +2082,62 @@ fun ReadingScreen(
             onDismiss = { showChapters = false },
             onGo = { address ->
                 showChapters = false
-                // The same jump the follow uses, so arriving from the list and
-                // arriving from somebody else's shoulder land the same way —
-                // and the grace window keeps the scroll from being read as a
-                // scroll of your own, which would break a follow in progress.
-                goToChapter(address.chapter)
+                // A chapter chosen is your own going somewhere: a follow
+                // ends first, and then the page goes.
+                endFollow()
+                scrollToChapter(address.chapter)
             },
         )
+    }
+}
+
+// MARK: Following, as this page does it
+
+/** Where a point is on this screen, as far as the follow can tell. */
+private sealed interface Placed {
+    /** This far down the viewport, in px. */
+    data class At(val y: Double) : Placed
+
+    /** Not set out on this page: the follow flies there. */
+    data object Away : Placed
+
+    /** On the page, but not measured as it now stands: the follow waits. */
+    data object Unsettled : Placed
+}
+
+/** How a follow's fly ended. */
+private enum class Flight { Landed, Grounded, TakenBack }
+
+/** A step the page could not take: where the guess was, and the news then. */
+private data class Stuck(val y: Double, val news: Instant?)
+
+/** The same place, as core's guess counts it. */
+private fun samePlace(a: ReadingPoint, b: ReadingPoint): Boolean =
+    a.chapter == b.chapter && a.verse == b.verse && abs(a.part - b.part) < 0.02
+
+/** Whether [a] comes before [b] in the book. */
+private fun isBefore(a: ReadingPoint, b: ReadingPoint): Boolean = when {
+    a.chapter != b.chapter -> a.chapter < b.chapter
+    a.verse != b.verse -> a.verse < b.verse
+    else -> a.part < b.part
+}
+
+/**
+ * The thread down the edge while you follow, fading in and out on `arrive`
+ * — and fading under reduce motion too, as the iOS thread does (I24): it is
+ * only opacity, so it keeps its curve (I22). Read in its own scope so a fade
+ * redraws the hairline and nothing else.
+ */
+@Composable
+private fun FadingFollowThread(shown: Boolean, modifier: Modifier = Modifier) {
+    val thread = remember { Animatable(if (shown) 1f else 0f) }
+    LaunchedEffect(shown) {
+        withContext(FadesUnderReduceMotion) {
+            thread.animateTo(if (shown) 1f else 0f, RibbonMotion.arrive())
+        }
+    }
+    if (shown || thread.value > 0f) {
+        FollowThread(modifier.graphicsLayer { alpha = thread.value })
     }
 }
 
@@ -1477,7 +2210,7 @@ private fun ChapterSection(
             modifier = Modifier
                 .readingMeasure(measureInset)
                 .alpha(arrival)
-                .padding(bottom = 8.dp)
+                .padding(bottom = CHAPTER_FOOT)
                 .trackedIn(container, onFrame),
             contentAlignment = Alignment.TopStart,
         ) {

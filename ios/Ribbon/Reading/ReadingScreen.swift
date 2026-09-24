@@ -19,11 +19,15 @@ struct ReadingScreen: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
     let room: Room
     let reading: Reading
     /// A named place to open at (a waiting row's note, a quoted verse, a
     /// card that has opened) — nil opens at your own position.
     var openAt: ReadingPlace?
+    /// The page has been let up: the book is open, not still rising under
+    /// a pull that may yet be let go.
+    var isOpen = true
     var onClose: () -> Void
     var onFinished: () -> Void
     /// "Start another" at the finishing (§6.5) — lands in the chooser
@@ -81,18 +85,24 @@ struct ReadingScreen: View {
     @State private var highlightLabel: Highlight?
     @State private var didReachEnd = false
     /// After a follow ends, the form quietly offers "back to where you
-    /// were" for about two minutes, then forgets (§4.2).
+    /// were" for about two minutes from its end, then forgets (§4.2). The
+    /// place is where you were when the follow began.
     @State private var followBackOffer: (address: VerseAddress, until: Date)?
-    /// Ignore self-originated (programmatic) scrolls when deciding whether
-    /// a scroll of your own breaks a follow.
-    @State private var programmaticScrollUntil = Date.distantPast
     /// Asks the ScrollViewReader to go somewhere, from outside its closure.
     @State private var scrollCommand: Int?
-    /// Who the page has been carried for, and to which chapter. The roster
-    /// says the same thing every tick, and `myPosition` lags behind it by a
-    /// throttle — so without this the page would be yanked back to the top
-    /// of a chapter they are still reading down, once a tick.
-    @State private var carriedTo: (person: UUID, chapter: Int)?
+
+    // Following (§4.2)
+    /// Every follow gets its own number, so that following someone else —
+    /// or the same person again — starts the loop afresh.
+    @State private var followEpoch = 0
+    /// Where the follow's mark sits, in its chapter's own space.
+    @State private var followMark: FollowPlace?
+    /// The follow's next move, for the ScrollViewReader to make.
+    @State private var followStep: FollowStep?
+    /// The text, faded out for the length of a step under reduce motion.
+    @State private var pageOpacity: Double = 1
+    /// Everything following keeps between ticks. Never read by the body.
+    @State private var followState = FollowLoopState()
 
     // Landing on a verse (deviation 7, I30)
     /// The verse the page has been sent to, and how far it has got.
@@ -150,6 +160,9 @@ struct ReadingScreen: View {
         /// Where `trackReading` found the reading line once the page came to
         /// rest: the hold lasts until it finds it somewhere else.
         var line: VerseAddress?
+        /// A follow's landing under VoiceOver: arriving, it hands the
+        /// listener the verse it came to.
+        var speaks = false
     }
 
     private struct LandingMove: Equatable {
@@ -165,8 +178,30 @@ struct ReadingScreen: View {
 
     /// The landing's mark, as the ScrollViewReader knows it.
     private struct LandingMark: Hashable {}
+    /// The follow's mark — the landing's, for a page that follows.
+    private struct FollowMark: Hashable {}
     /// A chapter's passage end, as the ScrollViewReader knows it.
     private struct PassageEndMark: Hashable { var chapter: Int }
+
+    /// What the follow loop is started and stopped by: who, which follow,
+    /// and whether there is an open page in an app that is not in the
+    /// background to carry. Coming back from the background starts it
+    /// again, with a fresh guess — the last one has been running on for as
+    /// long as the phone was away. A moment of `.inactive` — Control Center
+    /// pulled down, a call's banner, Siri — is not away: the loop, and what
+    /// it has learned of their pace, carries on.
+    private struct FollowKey: Equatable {
+        var person: UUID?
+        var epoch: Int
+        var open: Bool
+        var active: Bool
+    }
+
+    private var followKey: FollowKey {
+        FollowKey(
+            person: model.followingPersonID, epoch: followEpoch,
+            open: isOpen, active: scenePhase != .background)
+    }
 
     /// How far above the reading line a landed verse's first line rests.
     /// Just above, not on it: the page counts a verse as yours once its
@@ -204,7 +239,10 @@ struct ReadingScreen: View {
                                 nextChapterTitle: book?.chapterHeading(n + 1) ?? "\(n + 1)",
                                 // Under reduce motion the page does not fly a
                                 // chapter's length: it is simply there (§11).
+                                // Going on is your own move, and a follow
+                                // ends before it.
                                 onContinue: {
+                                    endFollow()
                                     endLanding()
                                     withAnimation(RibbonMotion.settle(still: reduceMotion)) { proxy.scrollTo(n + 1, anchor: .top) }
                                 },
@@ -219,6 +257,9 @@ struct ReadingScreen: View {
                 // any canvas — the reading surface is the product, and a
                 // 150-character line is not reading.
                 .readableColumn(maxWidth: 680)
+                // The text alone fades for a step under reduce motion; the
+                // presence form and the thread are not the page.
+                .opacity(pageOpacity)
             }
             .scrollIndicators(.hidden)
             .onScrollGeometryChange(for: CGFloat.self) { geometry in
@@ -230,28 +271,51 @@ struct ReadingScreen: View {
                 if offset < -90, fingerDown, !closing {
                     close()
                 }
+                watchForOwnScroll(offset)
+                sayWhileScrolling()
+                settleSoon()
             }
             .onScrollGeometryChange(for: CGFloat.self) { geometry in
                 geometry.containerSize.height
             } action: { _, height in
-                if height > 0 { viewportHeight = height }
+                if height > 0 {
+                    viewportHeight = height
+                    followState.viewportMeasured = true
+                }
             }
             .onScrollGeometryChange(for: CGFloat.self) { geometry in
                 geometry.contentInsets.top
             } action: { _, top in
                 topInset = top
             }
-            .onScrollPhaseChange { _, newPhase in
+            .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                geometry.contentInsets.bottom
+            } action: { _, bottom in
+                followState.bottomInset = bottom
+            }
+            .onScrollPhaseChange { oldPhase, newPhase in
                 fingerDown = newPhase == .interacting || newPhase == .tracking
+                followState.phase = newPhase
+                // A gesture is a drag that scrolls, and nothing less. A
+                // finger resting on the page — a tap on a verse, a note's
+                // mark, a long press to lift — only holds the follow still
+                // while it is there.
+                if newPhase == .tracking, oldPhase == .idle { followState.restAtTouch = restingPlace() }
+                if newPhase == .interacting, oldPhase != .interacting { gestureBegan() }
+                if oldPhase == .interacting, newPhase != .interacting { gestureEnded() }
+                if newPhase == .idle {
+                    followState.restAtTouch = nil
+                    settleSoon()
+                }
             }
             .onAppear {
                 let position = address(of: openAt)
                 openedAt = model.myPosition(in: reading)
+                followState.isOpen = isOpen
                 // A named place is your own going somewhere, and a follow
-                // still running from before ends here (§4.2) — or the
-                // roster's next tick would carry the page off the verse it
-                // was sent to.
-                if openAt != nil { model.followingPersonID = nil }
+                // still running from before ends here (§4.2) — or it would
+                // carry the page off the verse it was sent to.
+                if openAt != nil { endFollow() }
                 // On the verse, not the top of its chapter (deviation 7,
                 // I30), or on the card. The page is rising while this
                 // happens, so the moves are made without animation: it
@@ -264,7 +328,7 @@ struct ReadingScreen: View {
                     Task {
                         await model.presence.present(
                             position: position, scrollFraction: 0,
-                            isIdle: false, following: model.followingPersonID)
+                            isIdle: false, following: model.followingPersonID, activity: true)
                     }
                 }
                 // The same fact, told to the server for the phones the
@@ -276,6 +340,22 @@ struct ReadingScreen: View {
                 // the room keeps hearing about itself.
                 Task { await model.presence.withdraw() }
                 model.bookDisappeared(reading)
+                // A follow does not outlive its page. Leaving the book is
+                // the untrack, which says it.
+                if model.followingPersonID != nil { model.followingPersonID = nil }
+                followState.settleTask?.cancel()
+                followState.settleTask = nil
+            }
+            .onChange(of: isOpen) { _, open in
+                followState.isOpen = open
+                // Let up from the pull: where the page is can be said now.
+                if open { settleSoon() }
+            }
+            .onChange(of: model.channelOpens) { _, _ in
+                // The room's line is back after the app was away. The
+                // announcement it kept goes up with the join; this says
+                // where the page is now, if that has changed since.
+                presentHere(activity: true)
             }
             .onChange(of: model.readingQuietly) { _, quietly in
                 if quietly {
@@ -283,22 +363,25 @@ struct ReadingScreen: View {
                 } else {
                     model.sayImReading()
                 }
+                let position = latestAddress ?? model.myPosition(in: reading)
+                let fraction = followState.lastFraction
+                let following = model.followingPersonID
                 Task {
                     if quietly {
                         await model.presence.withdraw()
                     } else {
                         await model.presence.present(
-                            position: model.myPosition(in: reading), scrollFraction: 0,
-                            isIdle: false, following: model.followingPersonID)
+                            position: position, scrollFraction: fraction,
+                            isIdle: false, following: following, activity: true)
                     }
                 }
+                if !quietly { settleSoon() }
             }
             .onChange(of: scrollCommand) { _, command in
                 if let command {
-                    // A chapter chosen, or a follow carrying the page: either
-                    // way it is somewhere else now, and a landing lets go.
+                    // A chapter chosen: it is somewhere else now, and a
+                    // landing lets go.
                     endLanding()
-                    programmaticScrollUntil = Date().addingTimeInterval(1.5)
                     withAnimation(RibbonMotion.settle(still: reduceMotion)) {
                         proxy.scrollTo(command, anchor: .top)
                     }
@@ -308,7 +391,7 @@ struct ReadingScreen: View {
             .onChange(of: landingMove) { _, move in
                 guard let move else { return }
                 landingMove = nil
-                programmaticScrollUntil = Date().addingTimeInterval(1.5)
+                followState.movingUntil = Date().addingTimeInterval(3)
                 withAnimation(move.animated ? RibbonMotion.settle(still: reduceMotion) : nil) {
                     switch move.target {
                     case .chapter(let n, let anchor):
@@ -321,27 +404,33 @@ struct ReadingScreen: View {
                 } completion: {
                     // Straight away when nothing animated, at the end of the
                     // ease when something did.
+                    followState.movingUntil = Date().addingTimeInterval(0.15)
                     landingMoved(move)
                 }
+            }
+            .onChange(of: followStep) { _, step in
+                if let step { take(step, with: proxy) }
             }
             .onChange(of: openAt) { _, target in
                 // A named place asked for while the book is already open — a
                 // notification tapped over the page (S19). This page used to
                 // stay where it was. It goes there now as it would have
                 // opened there: at once, the way Android has always taken
-                // it. Going somewhere is your own move, so a follow ends, as
-                // a scroll of your own would end it (§4.2).
+                // it. Going somewhere is your own move, so a follow ends
+                // (§4.2).
                 guard let target else { return }
-                model.followingPersonID = nil
+                endFollow()
                 go(to: target, opening: false)
             }
-            .onChange(of: model.presentPeople) { _, roster in
-                followAlong(roster)
+            .task(id: followKey) {
+                await carryThePage(followKey)
             }
         }
         .overlay(alignment: .trailing) {
             if !room.isPaused {
-                PresenceForm(room: room, onFollow: follow)
+                PresenceForm(
+                    room: room, onFollow: follow,
+                    onExpand: { open in followState.panelOpen = open })
                     .padding(.trailing, 0)
             }
         }
@@ -356,13 +445,23 @@ struct ReadingScreen: View {
             // fades both ways, reduce motion or not.
             .animation(RibbonMotion.arrive, value: model.followingPersonID != nil)
         }
-        .overlay(alignment: .bottom) { bottomChrome }
+        .overlay(alignment: .bottom) {
+            bottomChrome
+                // What the chrome covers is not what the page shows: the
+                // bottom of your screen, for whoever follows you, is above it.
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                    followState.chromeHeight = height
+                }
+        }
         .overlay(alignment: .center) { highlightLabelOverlay }
         .room()
         .preferredColorScheme(.dark)
         .sheet(isPresented: $showChapters) {
             ChaptersSheet(reading: reading, currentChapter: currentChapter) { chapter in
                 showChapters = false
+                // A chapter chosen is your own going somewhere: a follow ends
+                // before the page moves.
+                endFollow()
                 scrollCommand = chapter
             }
         }
@@ -437,6 +536,7 @@ struct ReadingScreen: View {
                     onLayout: { layout in
                         chapterLayouts[n] = layout
                         continueLanding(in: n)
+                        settleSoon()
                     },
                     onLongPressVerse: { verse in beginLift(chapter: n, verse: verse) },
                     onDragToVerse: { verse in extendLift(chapter: n, verse: verse) },
@@ -457,6 +557,19 @@ struct ReadingScreen: View {
                     Color.clear
                         .frame(width: 1, height: 1)
                         .id(LandingMark())
+                        .position(x: 0.5, y: mark.y + 0.5)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+                if let mark = followMark, mark.chapter == n {
+                    // The follow's point to aim at: put at the top of the
+                    // screen, it leaves the page as far on as the step asks.
+                    // A rubber band's rest can be outside the chapter's own
+                    // lines, below them or above its head; a point there is
+                    // found all the same.
+                    Color.clear
+                        .frame(width: 1, height: 1)
+                        .id(FollowMark())
                         .position(x: 0.5, y: mark.y + 0.5)
                         .allowsHitTesting(false)
                         .accessibilityHidden(true)
@@ -910,10 +1023,13 @@ struct ReadingScreen: View {
                 RibbonClock.emberRange(start: reading.startedAt, end: reading.finishedAt ?? Date()),
                 size: 13)
             VStack(spacing: 16) {
+                // Both close the book, and closing ends a follow.
                 WayInButton(title: Copy.putItOnTheShelf) {
+                    endFollow(telling: false)
                     onFinished()
                 }
                 QuietControl(title: Copy.startAnother) {
+                    endFollow(telling: false)
                     onStartAnother()
                 }
             }
@@ -984,6 +1100,7 @@ struct ReadingScreen: View {
     }
 
     private func toggleNote(at address: VerseAddress) {
+        followState.noteMovedAt = Date()
         withAnimation(RibbonMotion.settle) {
             if openNoteVerse == address {
                 closeNote()
@@ -1004,6 +1121,7 @@ struct ReadingScreen: View {
     }
 
     private func closeNote() {
+        followState.noteMovedAt = Date()
         withAnimation(RibbonMotion.settle) {
             openNoteVerse = nil
             noteSlotY = [:]
@@ -1011,57 +1129,486 @@ struct ReadingScreen: View {
     }
 
     private func follow(_ person: PresentPerson) {
-        // Tap a portrait to follow — a page-fly, no confirmation dialog
-        // (§4.2). Where you were is where the page says, not the last
-        // throttled save of it.
-        followBackOffer = (latestAddress ?? model.myPosition(in: reading), Date().addingTimeInterval(120))
-        model.followingPersonID = person.id
-        if let position = person.position {
-            carriedTo = (person.id, position.chapter)
-            scrollCommand = position.chapter
+        // The portrait of the person you already follow: this is the way to
+        // stop (the web's "F: Follow, or stop following"). The way back to
+        // where you were stays where it was.
+        if model.followingPersonID == person.id {
+            endFollow()
+            return
         }
+        // Tap a portrait to follow — no confirmation dialog (§4.2). Where
+        // you were is where the page says, not the last throttled save of
+        // it; and following someone else instead keeps the place you were
+        // before either.
+        if model.followingPersonID == nil {
+            followBackOffer = (latestAddress ?? model.myPosition(in: reading), Date().addingTimeInterval(120))
+        }
+        // Joining someone who is reading is reading together: the tap feeds
+        // the fire once, as your own scroll would. Being carried after it
+        // does not.
+        recordFuel(at: latestAddress)
+        model.followingPersonID = person.id
+        followEpoch += 1
+        followState.band = .unused
         // "Ruth is with you" is the other end of this, and it only ever
         // appears because the follow travels: without this the flag was set
         // on this phone and never left it.
-        if !model.readingQuietly {
-            Task {
-                await model.presence.present(
-                    position: model.myPosition(in: reading), scrollFraction: 0,
-                    isIdle: false, following: person.id)
+        presentHere(activity: true)
+    }
+
+    /// The one way a follow ends (§4.2): your own scroll after the rubber
+    /// band, a chapter chosen, going on at a passage end, a named place,
+    /// closing the book, their portrait tapped again, or a scroll VoiceOver
+    /// or a keyboard made for you. No dialog, no words, no haptic — you just
+    /// have your own scroll back, and for two minutes from now a quiet way
+    /// back to where you were before it.
+    ///
+    /// `telling` is false when the book is closing: leaving it is the
+    /// untrack, which says this and more.
+    private func endFollow(telling: Bool = true) {
+        guard model.followingPersonID != nil else { return }
+        model.followingPersonID = nil
+        followState.band = .unused
+        if let offer = followBackOffer {
+            withAnimation(RibbonMotion.arrive) {
+                followBackOffer = (offer.address, Date().addingTimeInterval(120))
+            }
+        }
+        // Being carried saved nothing on the way (§4.2): where the follow
+        // left you is kept now, once.
+        if let latestAddress, latestAddress != model.myPosition(in: reading) {
+            model.savePosition(reading: reading, address: latestAddress)
+        }
+        if telling { presentHere(activity: true) }
+    }
+
+    /// Where the page is, said again through the channel's budget — which
+    /// sends it only if it is news.
+    private func presentHere(activity: Bool) {
+        guard !model.readingQuietly else { return }
+        let position = latestAddress ?? model.myPosition(in: reading)
+        let fraction = followState.lastFraction
+        let following = model.followingPersonID
+        Task {
+            await model.presence.present(
+                position: position, scrollFraction: fraction,
+                isIdle: false, following: following, activity: activity)
+        }
+    }
+
+    // MARK: Following (§4.2)
+
+    /// Following is a thread, not a jump: "Your scroll is theirs."
+    ///
+    /// One loop for as long as the follow lasts, a tick every quarter of a
+    /// second. Each tick gives the guess whatever their phone has said
+    /// since, asks it where they are reading now, finds that place on this
+    /// page — set at this phone's width and size — and lets FollowCarriage
+    /// decide: hold still while they read down the screen, step when they
+    /// have read on, fly when the place isn't laid out here yet. It used to
+    /// carry the page only when their chapter changed, and sat you at the
+    /// top of it while they read on down.
+    ///
+    /// Nothing the loop keeps is state the body reads. Only a move itself
+    /// redraws the page, once, when there is somewhere to go.
+    private func carryThePage(_ key: FollowKey) async {
+        guard let person = key.person, key.open, key.active else { return }
+        let run = FollowRun(person: person)
+        followState.run = run
+        defer {
+            if followState.run === run { followState.run = nil }
+        }
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled, model.followingPersonID == person else { return }
+            followTick(run, epoch: key.epoch)
+        }
+    }
+
+    private func followTick(_ run: FollowRun, epoch: Int) {
+        let now = Date()
+        // Gone from the room: the follow holds, and the guess starts again
+        // from whatever they say when they are back.
+        guard let them = model.presentPeople.first(where: { $0.id == run.person }) else {
+            run.forget()
+            return
+        }
+        let chapterCount = book?.chapterCount ?? 1
+        if let heard = model.heard(from: run.person), heard.report.received != run.fed {
+            run.fed = heard.report.received
+            if heard.book == reading.bookID {
+                var report = heard.report
+                // A word from before this page was listening — the follow
+                // has just begun, or the phone has come back — is where they
+                // were, not a start to read on from for however long it has
+                // been. The guess starts from it now, and the word their
+                // phone sends on seeing you follow carries it on.
+                if run.estimate.reported == nil, !heard.fromPresence, now.timeIntervalSince(report.received) > 25 {
+                    report.received = now
+                }
+                let news = !report.settled || !PagePoint.same(report.at, run.estimate.reported)
+                let measured = run.measure(around: report.at.chapter, count: chapterCount, text: { chapterContent($0) })
+                run.estimate.observe(report, rulers: { measured[$0] })
+                run.fromPresence = heard.fromPresence
+                if news {
+                    run.stuckAt = nil
+                    run.noFlyTo = nil
+                }
+            }
+        }
+        // In another book, as far as their presence says: held.
+        if let there = them.position, there.bookID != reading.bookID { return }
+        guard let reported = run.estimate.reported else { return }
+        let rulers = run.measure(around: reported.chapter, count: chapterCount, text: { chapterContent($0) })
+        // "Here, but still": the guess stops where it is.
+        if them.isIdle { run.estimate.hold(at: now, rulers: { rulers[$0] }) }
+        guard let guess = run.estimate.point(at: now, rulers: { rulers[$0] }),
+              !pageIsBusy(run, now: now)
+        else { return }
+
+        let viewport = viewportHeight
+        let y = screenY(of: guess)
+        if let stuckAt = run.stuckAt {
+            guard let y, abs(y - stuckAt) >= viewport * 0.1 else { return }
+            run.stuckAt = nil
+        }
+        // What their phone actually said, which no step lifts off the top
+        // of the screen — unless it came from presence, which is always a
+        // scroll behind.
+        let reportedY = run.fromPresence ? nil : screenY(of: reported)
+        let manner: FollowCarriage.Manner = UIAccessibility.isVoiceOverRunning
+            ? .spoken
+            : (UIAccessibility.isReduceMotionEnabled ? .calm : .moving)
+        var wentBack = false
+        if let back = run.estimate.wentBackAt {
+            wentBack = run.backStepAt.map { back > $0 } ?? true
+        }
+        let move = FollowCarriage.move(
+            y: y.map { Double($0) }, reported: reportedY.map { Double($0) },
+            viewport: Double(viewport), minStep: Double(viewport * 0.06),
+            realign: followState.realignedEpoch != epoch, wentBack: wentBack, manner: manner)
+        // The first move of a follow may bring the guess to the line from
+        // inside the band; that first decision is the move, even when it is
+        // to stay — or a hair's drift later would be a one-point step.
+        followState.realignedEpoch = epoch
+        switch move {
+        case .hold:
+            return
+        case .step(let distance):
+            if distance < 0 { run.backStepAt = now }
+            if manner == .spoken {
+                // A screen reader moves only when their line has left the
+                // screen, and then as a landing on the verse their phone
+                // said — not on a guess — which reads itself out.
+                flyTo(reported, run: run, now: now, speaking: true)
+            } else if let y {
+                stepPage(by: CGFloat(distance), in: guess.chapter, guessAt: y, run: run, calm: manner == .calm)
+            }
+        case .fly:
+            let target = manner == .spoken ? reported : guess
+            guard run.noFlyTo != target.chapter else { return }
+            flyTo(target, run: run, now: now, speaking: manner == .spoken)
+        }
+    }
+
+    /// Everything that keeps the page still for now, whatever the guess
+    /// says: a finger on it, a scroll or a move of ours under way, the
+    /// rubber band, and anything the reader is doing on the page — a verse
+    /// lifted, the toolbar or a composer up, a note open or unfurling, the
+    /// chapter list, the presence panel, a highlight's label, the book
+    /// closing. The page never moves out from under what you are doing.
+    private func pageIsBusy(_ run: FollowRun, now: Date) -> Bool {
+        let state = followState
+        if let landing, !landing.arrived {
+            // A flight that has not arrived in three seconds is not going
+            // to — a chapter that would not come, or was never downloaded.
+            // It lets go, and that chapter is not tried again until they
+            // say something new. Timed from when this loop first saw it if
+            // the loop did not send it: one started before a restart, or
+            // the page's own opening landing, stuck when the follow began —
+            // or nothing would ever let go of it.
+            let chapter = landing.address.chapter
+            if run.flying?.chapter != chapter { run.flying = (chapter: chapter, since: now) }
+            if let flying = run.flying, now.timeIntervalSince(flying.since) > 3 {
+                endLanding()
+                run.noFlyTo = flying.chapter
+                run.flying = nil
+            }
+            return true
+        }
+        run.flying = nil
+        return fingerDown || state.phase != .idle || now < state.movingUntil
+            || state.bandInPlay || !state.viewportMeasured || closing
+            || lifted != nil || composer != nil || openNoteVerse != nil
+            || now.timeIntervalSince(state.noteMovedAt) < RibbonMotion.settleDuration + 0.1
+            || showChapters || state.panelOpen || highlightLabel != nil
+    }
+
+    /// Where a point is on this screen, from the viewport's top — only if
+    /// its chapter is built and typeset here, and nil otherwise, which is a
+    /// flight rather than a step aimed at a chapter that isn't there.
+    private func screenY(of point: ReadingPoint) -> CGFloat? {
+        guard chaptersOnPage.contains(point.chapter),
+              let layout = chapterLayouts[point.chapter],
+              let frame = chapterFrames[point.chapter],
+              let y = PagePoint.y(of: point, in: layout)
+        else { return nil }
+        return frame.minY + y
+    }
+
+    /// A step: the whole page moved on by `distance`, the way they move
+    /// their own. The mark is set first and aimed at on the next turn of
+    /// the main queue, as a landing's is — it has to be on the page before
+    /// the scroll view can find it.
+    private func stepPage(by distance: CGFloat, in chapter: Int, guessAt y: CGFloat, run: FollowRun, calm: Bool) {
+        guard let frame = chapterFrames[chapter] else { return }
+        // Put at the top of the screen — where `.top` really puts a view,
+        // as the landing does — the mark leaves the chapter `distance`
+        // further up it, never above the chapter's own top.
+        let top = scrollTop ?? topInset
+        followMark = FollowPlace(chapter: chapter, y: max(0, top - frame.minY + distance))
+        run.step = (chapter: chapter, top: frame.minY, guess: y)
+        followState.movingUntil = Date().addingTimeInterval(3)
+        let step = followState.nextStep(calm ? .fade : .ease)
+        DispatchQueue.main.async { followStep = step }
+    }
+
+    /// The follow's move, made by the ScrollViewReader.
+    private func take(_ step: FollowStep, with proxy: ScrollViewProxy) {
+        switch step.way {
+        case .ease:
+            withAnimation(RibbonMotion.settle) {
+                proxy.scrollTo(FollowMark(), anchor: .top)
+            } completion: {
+                followStepped()
+            }
+        case .fade:
+            // Reduce motion: the text lets go, is there, and comes back — a
+            // fade, which §11 turns movement into, and not a cut, which it
+            // does not. Opacity, so the plain tokens.
+            //
+            // The jump comes a fade after the step was asked for, and the
+            // page may no longer be the follow's by then: a finger came
+            // down, the rubber band took it, "continue" ended the follow and
+            // went on. Then it stays where the reader has it, and only the
+            // text comes back.
+            withAnimation(RibbonMotion.release) {
+                pageOpacity = 0
+            } completion: {
+                let still = model.followingPersonID != nil && followState.phase == .idle
+                    && !followState.bandInPlay && !fingerDown && !closing
+                if still { proxy.scrollTo(FollowMark(), anchor: .top) }
+                withAnimation(RibbonMotion.arrive) {
+                    pageOpacity = 1
+                } completion: {
+                    followStepped(made: still)
+                }
+            }
+        case .back:
+            // The rubber band letting go: whatever the fling was still
+            // doing, the page goes back where it was resting, on `release`
+            // — a gesture let go of halfway, back where it was — and under
+            // reduce motion it is simply back.
+            withAnimation(RibbonMotion.release(still: reduceMotion)) {
+                proxy.scrollTo(FollowMark(), anchor: .top)
+            } completion: {
+                bandReturned()
             }
         }
     }
 
-    /// Following is a thread, not a jump (§4.2).
+    /// A step has come to rest. One that moved the page by less than a
+    /// point — the foot of the book, a page that would not go — is not
+    /// asked for again until the guess has moved on or they have said
+    /// something new. A step that was never made (`made` false: the page
+    /// was the reader's again by the time it could be) says nothing about
+    /// whether the page would go.
+    private func followStepped(made: Bool = true) {
+        followState.movingUntil = Date().addingTimeInterval(0.15)
+        guard let run = followState.run, let step = run.step else { return }
+        run.step = nil
+        guard made else { return }
+        if let top = chapterFrames[step.chapter]?.minY, abs(top - step.top) >= 1 { return }
+        run.stuckAt = step.guess
+    }
+
+    /// A flight of the follow's own. The landing's page-fly, without its
+    /// keeping of your place: being sent after someone is not your own
+    /// going somewhere. Under reduce motion it is simply there (I22).
+    private func flyTo(_ point: ReadingPoint, run: FollowRun, now: Date, speaking: Bool) {
+        run.flying = (chapter: point.chapter, since: now)
+        land(
+            at: VerseAddress(bookID: reading.bookID, chapter: point.chapter, verse: point.verse),
+            animated: true, keepingYourPlace: false, speaking: speaking)
+    }
+
+    // MARK: The rubber band
+
+    /// A drag began while following. The first one of a follow is the
+    /// rubber band (§4.2: "a gentle rubber-band on the first gesture so it
+    /// never happens by accident"): it scrolls, and on letting go the page
+    /// goes back where it was resting. Any later one — one that starts
+    /// while the band is still going back included — ends the follow at
+    /// its first movement, and the scroll is all yours. With nothing to go
+    /// back to, the first one ends it.
     ///
-    /// Tapping a portrait moved the page once and then let go: they read on,
-    /// and you sat where they had been, still called a follower by the
-    /// thread at the top and by their own "Ruth is with you". The page has
-    /// to keep up, or the word means nothing.
-    ///
-    /// Through `scrollCommand`, not the proxy, for two reasons. It eases —
-    /// the page carries you, it does not cut. And it opens the same grace
-    /// window a tap does: without it the app's own move would read as a
-    /// scroll of your own in `trackReading`, and the follow would cut itself
-    /// on the first page they turned.
-    ///
-    /// Only their chapter, and only when it changes. Their scroll within a
-    /// chapter is a finer signal than this page can honestly answer, and a
-    /// command per roster tick would be the page twitching under a reader.
-    private func followAlong(_ roster: [PresentPerson]) {
-        guard let followed = model.followingPersonID,
-              let them = roster.first(where: { $0.id == followed }),
-              let there = them.position,
-              // A room reads one book at a time, but a roster can still
-              // carry somebody who has moved on to another one — and their
-              // chapter 3 is not this book's.
-              there.bookID == reading.bookID
-        else { return }
-        if let carriedTo, carriedTo.person == followed, carriedTo.chapter == there.chapter {
+    /// SwiftUI gives a scroll view no way to resist a finger, so the band
+    /// scrolls freely under it and resists only by returning.
+    private func gestureBegan() {
+        let touched = followState.restAtTouch
+        followState.restAtTouch = nil
+        guard model.followingPersonID != nil else { return }
+        guard followState.band == .unused, followedIsHere, let rest = touched ?? restingPlace() else {
+            endFollow()
             return
         }
-        carriedTo = (followed, there.chapter)
-        scrollCommand = there.chapter
+        followState.band = .held(rest: rest)
+        // The band's own drag is you, and counts as being here.
+        presentHere(activity: true)
+    }
+
+    /// The finger has let go of the band: back at once, whatever the fling
+    /// had in mind.
+    private func gestureEnded() {
+        guard case .held(let rest) = followState.band else { return }
+        followState.band = .returning
+        followMark = rest
+        followState.movingUntil = Date().addingTimeInterval(3)
+        let step = followState.nextStep(.back)
+        DispatchQueue.main.async { followStep = step }
+    }
+
+    private func bandReturned() {
+        followState.movingUntil = Date().addingTimeInterval(0.15)
+        if followState.band == .returning { followState.band = .spent }
+    }
+
+    /// The person you follow is in the room and in this book.
+    private var followedIsHere: Bool {
+        guard let id = model.followingPersonID,
+              let them = model.presentPeople.first(where: { $0.id == id })
+        else { return false }
+        return them.position.map { $0.bookID == reading.bookID } ?? true
+    }
+
+    /// Where the page rests now, as a mark would find it again: the last
+    /// chapter on the page whose top is at or above the top of the screen,
+    /// and how far below its top the screen's is. That can be past the
+    /// chapter's own lines — in the passage end under it, on the card —
+    /// or, with no chapter above the top (the book's top margin), above
+    /// the first chapter's head. The mark goes there all the same, and is
+    /// never pulled back inside the chapter: it is a point, and put at the
+    /// top of the screen it leaves the page exactly where it was, where a
+    /// mark held to the chapter would bring the next chapter's head up.
+    private func restingPlace() -> FollowPlace? {
+        let top = scrollTop ?? topInset
+        var rest: FollowPlace?
+        for n in chaptersOnPage.sorted() {
+            guard let frame = chapterFrames[n] else { continue }
+            if frame.minY <= top || rest == nil {
+                rest = FollowPlace(chapter: n, y: top - frame.minY)
+            }
+            if frame.minY > top { break }
+        }
+        return rest
+    }
+
+    /// A scroll nobody accounts for — not a finger's, not its momentum,
+    /// not a move of ours — is still yours: VoiceOver's three-finger
+    /// scroll, a keyboard's, a trackpad's. More than a quarter of a screen
+    /// of it ends a follow, with no rubber band, because nobody does it by
+    /// accident. A page laid out again does not move the offset, so a note
+    /// opening or a chapter arriving is not taken for one.
+    private func watchForOwnScroll(_ offset: CGFloat) {
+        let state = followState
+        let accounted = state.phase == .interacting || state.phase == .decelerating
+            || state.phase == .tracking || Date() < state.movingUntil
+            || (landing.map { !$0.arrived } ?? false)
+        guard model.followingPersonID != nil, !accounted, let quiet = state.quietOffset else {
+            state.quietOffset = offset
+            return
+        }
+        if abs(offset - quiet) > viewportHeight * 0.25 {
+            state.quietOffset = offset
+            endFollow()
+        }
+    }
+
+    // MARK: Being followed (§4.2)
+
+    /// Where this page's reading line is, in the words both phones share,
+    /// for whoever follows you: the point at the upper third, and the last
+    /// thing you can actually see — above the home indicator and whatever
+    /// the bottom chrome is covering. Measured from the page every time,
+    /// never taken from where a landing is holding it. The channel keeps
+    /// it and sends it only while somebody present follows you.
+    private func sayWhereImReading(settled: Bool) {
+        guard followState.isOpen, !model.readingQuietly, !closing, !followState.bandInPlay else { return }
+        let line = viewportHeight * 0.3
+        guard let at = pagePoint(at: line) else { return }
+        let bottom = viewportHeight - followState.bottomInset - followState.chromeHeight
+        var seen = pagePoint(at: max(line, bottom))
+        // Never two chapters on: a short chapter wholly on screen ends
+        // where the next one does.
+        if let last = seen, last.chapter > at.chapter + 1 {
+            seen = chapterLayouts[at.chapter + 1].flatMap { PagePoint.end(of: at.chapter + 1, in: $0) }
+        }
+        let end = seen
+        let book = reading.bookID
+        let carried = model.followingPersonID != nil
+        Task {
+            await model.presence.sendReading(
+                book: book, at: at, end: end, settled: settled, carried: carried)
+        }
+    }
+
+    /// A line at this height on the screen, as a point. Over a passage end
+    /// or a card it is the chapter above, read to its end; over the
+    /// finishing, the last chapter's.
+    private func pagePoint(at line: CGFloat) -> ReadingPoint? {
+        var above: (chapter: Int, layout: ChapterLayout)?
+        for n in chaptersOnPage.sorted() {
+            guard let frame = chapterFrames[n], let layout = chapterLayouts[n] else { continue }
+            if line < frame.minY { break }
+            if line < frame.maxY { return PagePoint.at(line - frame.minY, chapter: n, in: layout) }
+            above = (chapter: n, layout: layout)
+        }
+        guard let above else { return nil }
+        return PagePoint.end(of: above.chapter, in: above.layout)
+    }
+
+    /// Mid-scroll, once a second at most, while somebody follows you.
+    private func sayWhileScrolling() {
+        let state = followState
+        guard state.phase != .idle, Date().timeIntervalSince(state.lastInFlight) >= 1,
+              let me = model.me?.id,
+              model.presentPeople.contains(where: { $0.followingPersonID == me })
+        else { return }
+        state.lastInFlight = Date()
+        sayWhereImReading(settled: false)
+    }
+
+    /// The page at rest: a moment after the last movement of the scroll or
+    /// of the layout, with no finger on it and nothing under way. However
+    /// it came to rest — a fling, a jump with no animation, a landing, a
+    /// note opening — its resting place is said, to presence (which a
+    /// throttle that only ever fires as a scroll begins had never heard)
+    /// and to whoever follows.
+    private func settleSoon() {
+        let state = followState
+        state.settleDue = Date().addingTimeInterval(0.3)
+        guard state.settleTask == nil else { return }
+        state.settleTask = Task {
+            while let due = state.settleDue, due > Date(), !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(max(0, due.timeIntervalSinceNow)))
+            }
+            state.settleTask = nil
+            state.settleDue = nil
+            guard !Task.isCancelled, state.phase == .idle, !fingerDown else { return }
+            // Not activity: the scroll that got here already said so.
+            presentHere(activity: false)
+            sayWhereImReading(settled: true)
+        }
     }
 
     // MARK: Landing on a verse (deviation 7, I30)
@@ -1139,9 +1686,15 @@ struct ReadingScreen: View {
     /// only if it carries on the same way. A verse it would have to turn back
     /// for is already on the screen, and turning back is the overshoot §9.1
     /// forbids.
-    private func land(at address: VerseAddress, animated: Bool, opening: Bool = false) {
+    ///
+    /// A follow's flight uses the same moves, but it is not your own going
+    /// somewhere, so it keeps nothing (`keepingYourPlace: false`).
+    private func land(
+        at address: VerseAddress, animated: Bool, opening: Bool = false,
+        keepingYourPlace: Bool = true, speaking: Bool = false
+    ) {
         guard address.bookID == reading.bookID else { return }
-        keepYourPlace()
+        if keepingYourPlace { keepYourPlace() }
         let from = latestAddress ?? model.myPosition(in: reading)
         latestAddress = address
         landingMark = nil
@@ -1156,11 +1709,13 @@ struct ReadingScreen: View {
                 landingMove = LandingMove(target: .chapter(chapter, .top), animated: false)
             }
         } else if chaptersOnPage.contains(chapter), chapterLayouts[chapter] != nil {
-            landing = Landing(address: address, animated: animated, approach: .onPage)
+            landing = Landing(address: address, animated: animated, approach: .onPage, speaks: speaking)
             continueLanding(in: chapter)
         } else {
             let down = address >= from
-            landing = Landing(address: address, animated: animated, approach: .travelling(down: down, done: false))
+            landing = Landing(
+                address: address, animated: animated,
+                approach: .travelling(down: down, done: false), speaks: speaking)
             landingMove = LandingMove(target: .chapter(chapter, down ? .top : .bottom), animated: animated)
         }
     }
@@ -1253,6 +1808,12 @@ struct ReadingScreen: View {
     private func arrive() {
         landing?.arrived = true
         landing?.line = nil
+        // Under VoiceOver a follow's landing hands the listener the verse it
+        // came to, which reads itself — no new words.
+        if let landing, landing.speaks,
+           let element = pages[landing.address.chapter]?.accessibilityElement(forVerse: landing.address.verse) {
+            UIAccessibility.post(notification: .layoutChanged, argument: element)
+        }
     }
 
     /// The page is yours again.
@@ -1308,10 +1869,17 @@ struct ReadingScreen: View {
     private func close() {
         guard !closing else { return }
         closing = true
-        if !model.state.hasSeenMarginHint {
-            model.markMarginHintSeen()
+        // Closing ends a follow. A page only ever carried by one was not
+        // read past the hint, and fed nothing (§4.2: carried is not
+        // reading).
+        let carried = model.followingPersonID != nil
+        endFollow(telling: false)
+        if !carried {
+            if !model.state.hasSeenMarginHint {
+                model.markMarginHintSeen()
+            }
+            recordFuel()
         }
-        recordFuel()
         // Where you stopped: the page's own last word on it, ahead of the
         // throttled save — unless the page is still held where it was sent,
         // which is not somewhere you read to (I30). Then it is your own
@@ -1333,16 +1901,10 @@ struct ReadingScreen: View {
         // are.
         let threshold = viewportHeight * 0.3
         guard frame.minY < threshold, frame.maxY > threshold else { return }
-        // Any scroll of your own breaks the follow — no modal, no "stop
-        // following?", you just have your own scroll back (§4.2).
-        if model.followingPersonID != nil, Date() > programmaticScrollUntil {
-            model.followingPersonID = nil
-        }
-        let layout = chapterLayouts[chapter]
         let yInChapter = threshold - frame.minY
-        let verse = layout?.verseFirstLineY
-            .filter { $0.value <= yInChapter }
-            .max { $0.value < $1.value }?.key ?? 1
+        // The same measure the reading line is sent with: of verses that
+        // begin on one line, the last.
+        let verse = chapterLayouts[chapter].flatMap { PagePoint.at(yInChapter, chapter: chapter, in: $0)?.verse } ?? 1
         let measured = VerseAddress(bookID: reading.bookID, chapter: chapter, verse: verse)
         // A verse the page was sent to stays where you are until you move
         // off it (I30).
@@ -1350,25 +1912,34 @@ struct ReadingScreen: View {
         let address = held ?? measured
         latestAddress = address
         if headChapter != address.chapter { headChapter = address.chapter }
+        let fraction = max(0, min(1, Double(yInChapter / max(1, frame.height))))
+        followState.lastFraction = fraction
+        // Carried is not reading (§4.2). While a follow moves the page, the
+        // movement is the follow's: your place is not saved on the way (the
+        // follow's end keeps it, and so does closing), the fire is not fed,
+        // and the stillness clock does not reset — a follower who never
+        // touches the page goes "here, but still" like anyone else. The
+        // place itself still travels, so "Mark 6" stays right.
+        let carried = model.followingPersonID != nil
         // Position saves are cheap but not free — a scroll emits geometry
         // every frame, and the store persists on mutation.
         if Date().timeIntervalSince(lastPositionSave) > 2 {
             lastPositionSave = Date()
             // Being sent to a verse is not reading to it: your own place
             // waits until you do.
-            if held == nil {
+            if held == nil, !carried {
                 model.savePosition(reading: reading, address: address)
             }
             if !model.readingQuietly {
-                let fraction = max(0, min(1, Double(yInChapter / max(1, frame.height))))
+                let following = model.followingPersonID
                 Task {
                     await model.presence.present(
                         position: address, scrollFraction: fraction,
-                        isIdle: false, following: model.followingPersonID)
+                        isIdle: false, following: following, activity: !carried)
                 }
             }
         }
-        if Date().timeIntervalSince(lastFuelRecord) > 25 {
+        if !carried, Date().timeIntervalSince(lastFuelRecord) > 25 {
             recordFuel(at: address)
         }
     }

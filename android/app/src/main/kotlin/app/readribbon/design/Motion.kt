@@ -16,6 +16,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.MotionDurationScale
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
@@ -225,6 +226,22 @@ object RibbonMotion {
 }
 
 /**
+ * The clock a fade keeps under reduce motion (I22).
+ *
+ * Android's reduce motion is the system animator scale at zero, and Compose
+ * honours that scale itself: every animation run on the composition's clock
+ * ends on its first frame, whatever token it was handed. So a plain `arrive`
+ * asked for *because* it is only opacity was a cut all the same — and "reduce
+ * motion fades; it does not cut". An opacity that must stay a fade runs under
+ * this instead: `withContext(FadesUnderReduceMotion) { alpha.animateTo(…) }`.
+ * Only ever for opacity. Anything that travels still takes the scale, and its
+ * `still:` token, as it always has.
+ */
+object FadesUnderReduceMotion : MotionDurationScale {
+    override val scaleFactor: Float get() = 1f
+}
+
+/**
  * The pull of a back gesture on something drawn over the room (§12.2).
  *
  * Android's predictive back is a *progress*, not a commitment: the book, the
@@ -253,6 +270,12 @@ class BackPeel internal constructor(
      * simply doesn't move it on the way (§11).
      */
     val progress: Float get() = if (still) 0f else pull.value
+
+    /**
+     * Whether a back gesture has hold of the screen at all, on its way off or
+     * settling back — under reduce motion as well, where [progress] stays 0.
+     */
+    val pulled: Boolean get() = pull.value > 0f
 }
 
 /**
