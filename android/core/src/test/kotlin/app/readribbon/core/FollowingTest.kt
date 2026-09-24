@@ -344,13 +344,30 @@ class FollowingTest {
             FollowCarriage.move(y = 40.0, reported = 40.0, viewport = 1000.0, wentBack = true),
         )
         assertEquals(FollowMove.Step(-210.0), FollowCarriage.move(y = 40.0, reported = -50.0, viewport = 1000.0))
-        assertEquals(FollowMove.Step(-210.0), FollowCarriage.move(y = 40.0, viewport = 1000.0))
+        // An older app's presence says no line: only going back goes back.
+        assertEquals(FollowMove.Hold, FollowCarriage.move(y = 40.0, viewport = 1000.0))
+        assertEquals(FollowMove.Step(-210.0), FollowCarriage.move(y = 40.0, viewport = 1000.0, wentBack = true))
     }
 
     @Test
     fun testCarriageFliesWhenThePlaceIsNotLaidOut() {
         assertEquals(FollowMove.Fly, FollowCarriage.move(y = null, viewport = 1000.0))
         assertEquals(FollowMove.Fly, FollowCarriage.move(y = 300.0, viewport = 0.0))
+        assertEquals(FollowMove.Fly, FollowCarriage.move(y = null, reported = 1200.0, viewport = 1000.0))
+    }
+
+    @Test
+    fun testCarriageNeverFliesPastTheirLine() {
+        // The guess is in the next chapter, not yet set out; their line is
+        // still on screen: the page goes as far as their line allows.
+        assertEquals(
+            FollowMove.Step(320.0),
+            FollowCarriage.move(y = null, reported = 400.0, viewport = 1000.0, minStep = 60.0),
+        )
+        assertEquals(
+            FollowMove.Hold,
+            FollowCarriage.move(y = null, reported = 100.0, viewport = 1000.0, minStep = 60.0),
+        )
     }
 
     @Test

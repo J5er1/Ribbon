@@ -379,12 +379,22 @@ final class FollowingTests: XCTestCase {
         XCTAssertEqual(FollowCarriage.move(y: 40, reported: 40, viewport: 1000), .hold)
         XCTAssertEqual(FollowCarriage.move(y: 40, reported: 40, viewport: 1000, wentBack: true), .step(by: -210))
         XCTAssertEqual(FollowCarriage.move(y: 40, reported: -50, viewport: 1000), .step(by: -210))
-        XCTAssertEqual(FollowCarriage.move(y: 40, viewport: 1000), .step(by: -210))
+        // An older app's presence says no line: only going back goes back.
+        XCTAssertEqual(FollowCarriage.move(y: 40, viewport: 1000), .hold)
+        XCTAssertEqual(FollowCarriage.move(y: 40, viewport: 1000, wentBack: true), .step(by: -210))
     }
 
     func testCarriageFliesWhenThePlaceIsNotLaidOut() {
         XCTAssertEqual(FollowCarriage.move(y: nil, viewport: 1000), .fly)
         XCTAssertEqual(FollowCarriage.move(y: 300, viewport: 0), .fly)
+        XCTAssertEqual(FollowCarriage.move(y: nil, reported: 1200, viewport: 1000), .fly)
+    }
+
+    func testCarriageNeverFliesPastTheirLine() {
+        // The guess is in the next chapter, not yet set out; their line is
+        // still on screen: the page goes as far as their line allows.
+        XCTAssertEqual(FollowCarriage.move(y: nil, reported: 400, viewport: 1000, minStep: 60), .step(by: 320))
+        XCTAssertEqual(FollowCarriage.move(y: nil, reported: 100, viewport: 1000, minStep: 60), .hold)
     }
 
     func testCarriageRealigns() {

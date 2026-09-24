@@ -427,7 +427,8 @@ public enum FollowCarriage {
     /// - Parameters:
     ///   - y: The guess's height on this screen, from the top of the
     ///     viewport, in the page's own units; nil when this page hasn't
-    ///     laid out the place yet.
+    ///     laid out the place yet (then the page flies there, unless their
+    ///     reported line is on screen, which it may step toward instead).
     ///   - reported: The height of the line their phone last reported, in
     ///     the same units; nil when it isn't laid out or came from an older
     ///     app's presence, which is always a scroll behind.
@@ -447,7 +448,15 @@ public enum FollowCarriage {
             let distance = line - landingLine * viewport
             return abs(distance) < 1 ? .hold : .step(by: distance)
         }
-        guard let y else { return .fly }
+        guard let y else {
+            // The guess has run on into a place this page hasn't set out —
+            // the next chapter, below a passage end — while their own line
+            // is still here. Flying there would put the page past them;
+            // it goes as far as their line allows, and waits.
+            guard let reported, reported >= 0, reported <= viewport else { return .fly }
+            let step = reported - reportedLine * viewport
+            return step < max(minStep, 1) ? .hold : .step(by: step)
+        }
         let distance = y - landingLine * viewport
         if realign {
             return abs(distance) < 1 ? .hold : .step(by: distance)
@@ -463,8 +472,9 @@ public enum FollowCarriage {
             // report behind a guess that ran on is the guess being wrong,
             // and turning the page back for it is the overshoot §9.1
             // forbids (I30). Their going back, or their line having left
-            // the top of the screen, is theirs.
-            guard wentBack || reported.map({ $0 < 0 }) ?? true else { return .hold }
+            // the top of the screen, is theirs. An older app's presence,
+            // which says no line at all, only ever goes back by going back.
+            guard wentBack || reported.map({ $0 < 0 }) ?? false else { return .hold }
             return .step(by: distance)
         }
         return .hold

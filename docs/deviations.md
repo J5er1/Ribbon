@@ -3298,8 +3298,11 @@ A58. **Following follows the page (supersedes A53's chapter-only rule and
     same rules in `RoomChannel.swift`): four a window, the fifth kept for
     leaving or for a change of who you follow, coalesced to the latest wish,
     counted only when the frame was written, and never spent on a scroll
-    fraction alone. The join always re-tracks. The server's `system` event
-    is logged by its status only, and a rate-limit one fills the window.
+    fraction alone. Appearing, like leaving, may use the fifth: coming back
+    into the book is not held behind a minute's scrolling. The join always
+    re-tracks. The server's `system` event is logged by its status only, and
+    a rate-limit one fills the window. The window is kept on the phone's
+    monotonic clock, so setting the clock back cannot stall it.
     Deviation 20's "a position already rides presence" still holds for the
     verse; it no longer carries where on the page.
 
@@ -3344,15 +3347,20 @@ A58. **Following follows the page (supersedes A53's chapter-only rule and
     leaves, in `settle`'s ease. Never past the line their phone actually
     reported, which a step never lifts off the top of your screen; and
     never back to correct its own guess — only their going back, or their
-    line leaving the top, moves the page up (I30's one-way rule). A glide at
-    reading pace was considered and refused: still text read in steps beats
-    moving text (Kolers 1981; Öquist & Lundin 2007), and their own page is
-    still between their scrolls. In simulation (forty sessions of Mark,
-    ten per cent of messages lost) a phone following a phone had the
-    leader's line on screen 96% of the time, against 9% with the chapter
-    rule, at about four steps a minute. An iPad followed on a phone is
-    worse, about 71%: a large screen's reading line says less about where
-    on it the eyes are.
+    line leaving the top, moves the page up (I30's one-way rule). A guess
+    that has run into a chapter this page has not set out yet, while their
+    line is still on screen, is followed as far as their line and no
+    further, never flown to. A follow's first move waits a moment for the
+    line their phone sends on seeing you follow, rather than going to a
+    place heard minutes ago; if none comes it goes to their presence verse.
+    A glide at reading pace was considered and refused: still text read in
+    steps beats moving text (Kolers 1981; Öquist & Lundin 2007), and their
+    own page is still between their scrolls. In simulation (forty sessions
+    of Mark, ten per cent of messages lost) a phone following a phone had
+    the leader's line on screen 96% of the time, against 9% with the
+    chapter rule, at about four steps a minute. An iPad followed on a phone
+    is worse, about 71%: a large screen's reading line says less about
+    where on it the eyes are.
 
     - **Reduce motion** fades each step — out on `release`, the jump, in on
       `arrive` — and takes fewer, larger ones; a fly is simply there
@@ -3397,7 +3405,10 @@ A58. **Following follows the page (supersedes A53's chapter-only rule and
     message dropped the person you were following out of your roster. The
     channel now stays up for fifteen seconds after the app leaves the
     screen, then suspends — the socket goes, what you were announcing does
-    not — and on return it re-announces you once the line is back.
+    not — and on return it re-announces you once the line is back, before
+    the room's pull rather than after it. The people you could see go with
+    the socket, as they always did: a roster from before you left is not
+    shown as if it were now.
 
     **Not changed.** Presence's meta, keys and `scrollFraction` are as they
     were (Android's `scrollFraction` was px over dp, about a third of the

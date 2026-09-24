@@ -497,7 +497,8 @@ object FollowCarriage {
     /**
      * @param y The guess's height on this screen, from the top of the
      *   viewport, in the page's own units; null when this page hasn't laid
-     *   out the place yet.
+     *   out the place yet (then the page flies there, unless their reported
+     *   line is on screen, which it may step toward instead).
      * @param reported The height of the line their phone last reported, in
      *   the same units; null when it isn't laid out or came from an older
      *   app's presence, which is always a scroll behind.
@@ -523,7 +524,15 @@ object FollowCarriage {
             val distance = line - LANDING_LINE * viewport
             return if (abs(distance) < 1) FollowMove.Hold else FollowMove.Step(distance)
         }
-        if (y == null) return FollowMove.Fly
+        if (y == null) {
+            // The guess has run on into a place this page hasn't set out —
+            // the next chapter, below a passage end — while their own line is
+            // still here. Flying there would put the page past them; it goes
+            // as far as their line allows, and waits.
+            if (reported == null || reported < 0 || reported > viewport) return FollowMove.Fly
+            val step = reported - REPORTED_LINE * viewport
+            return if (step < maxOf(minStep, 1.0)) FollowMove.Hold else FollowMove.Step(step)
+        }
         val distance = y - LANDING_LINE * viewport
         if (realign) {
             return if (abs(distance) < 1) FollowMove.Hold else FollowMove.Step(distance)
@@ -539,8 +548,9 @@ object FollowCarriage {
             // report behind a guess that ran on is the guess being wrong, and
             // turning the page back for it is the overshoot §9.1 forbids
             // (I30). Their going back, or their line having left the top of
-            // the screen, is theirs.
-            if (!wentBack && reported != null && reported >= 0) return FollowMove.Hold
+            // the screen, is theirs. An older app's presence, which says no
+            // line at all, only ever goes back by going back.
+            if (!wentBack && (reported == null || reported >= 0)) return FollowMove.Hold
             return FollowMove.Step(distance)
         }
         return FollowMove.Hold
