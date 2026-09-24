@@ -8,10 +8,37 @@
 
 /* Begin PBXBuildFile section */
 		ABCD00000000000000000001 /* RibbonCore in Frameworks */ = {isa = PBXBuildFile; productRef = ABCD00000000000000000018 /* RibbonCore */; };
+		ABCD00000000000000000029 /* RibbonCore in Frameworks */ = {isa = PBXBuildFile; productRef = ABCD00000000000000000030 /* RibbonCore */; };
+		ABCD00000000000000000031 /* RibbonWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = ABCD00000000000000000021 /* RibbonWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		ABCD00000000000000000033 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = ABCD00000000000000000008 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = ABCD00000000000000000022;
+			remoteInfo = RibbonWidgets;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		ABCD00000000000000000032 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				ABCD00000000000000000031 /* RibbonWidgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		ABCD00000000000000000002 /* Ribbon.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Ribbon.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		ABCD00000000000000000021 /* RibbonWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RibbonWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -25,6 +52,24 @@
 			path = Ribbon;
 			sourceTree = "<group>";
 		};
+		ABCD00000000000000000019 /* Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			explicitFileTypes = {
+			};
+			explicitFolders = (
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		ABCD00000000000000000020 /* RibbonWidgets */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			explicitFileTypes = {
+			};
+			explicitFolders = (
+			);
+			path = RibbonWidgets;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -36,6 +81,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		ABCD00000000000000000024 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				ABCD00000000000000000029 /* RibbonCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -43,6 +96,8 @@
 			isa = PBXGroup;
 			children = (
 				ABCD00000000000000000003 /* Ribbon */,
+				ABCD00000000000000000019 /* Shared */,
+				ABCD00000000000000000020 /* RibbonWidgets */,
 				ABCD00000000000000000006 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -51,6 +106,7 @@
 			isa = PBXGroup;
 			children = (
 				ABCD00000000000000000002 /* Ribbon.app */,
+				ABCD00000000000000000021 /* RibbonWidgets.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -65,13 +121,16 @@
 				ABCD00000000000000000010 /* Sources */,
 				ABCD00000000000000000004 /* Frameworks */,
 				ABCD00000000000000000009 /* Resources */,
+				ABCD00000000000000000032 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				ABCD00000000000000000034 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				ABCD00000000000000000003 /* Ribbon */,
+				ABCD00000000000000000019 /* Shared */,
 			);
 			name = Ribbon;
 			packageProductDependencies = (
@@ -80,6 +139,30 @@
 			productName = Ribbon;
 			productReference = ABCD00000000000000000002 /* Ribbon.app */;
 			productType = "com.apple.product-type.application";
+		};
+		ABCD00000000000000000022 /* RibbonWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = ABCD00000000000000000026 /* Build configuration list for PBXNativeTarget "RibbonWidgets" */;
+			buildPhases = (
+				ABCD00000000000000000023 /* Sources */,
+				ABCD00000000000000000024 /* Frameworks */,
+				ABCD00000000000000000025 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				ABCD00000000000000000020 /* RibbonWidgets */,
+				ABCD00000000000000000019 /* Shared */,
+			);
+			name = RibbonWidgets;
+			packageProductDependencies = (
+				ABCD00000000000000000030 /* RibbonCore */,
+			);
+			productName = RibbonWidgets;
+			productReference = ABCD00000000000000000021 /* RibbonWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -91,6 +174,9 @@
 				LastUpgradeCheck = 2600;
 				TargetAttributes = {
 					ABCD00000000000000000007 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+					ABCD00000000000000000022 = {
 						CreatedOnToolsVersion = 26.0;
 					};
 				};
@@ -113,12 +199,20 @@
 			projectRoot = "";
 			targets = (
 				ABCD00000000000000000007 /* Ribbon */,
+				ABCD00000000000000000022 /* RibbonWidgets */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		ABCD00000000000000000009 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		ABCD00000000000000000025 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -135,7 +229,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		ABCD00000000000000000023 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		ABCD00000000000000000034 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = ABCD00000000000000000022 /* RibbonWidgets */;
+			targetProxy = ABCD00000000000000000033 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		ABCD00000000000000000012 /* Debug */ = {
@@ -314,6 +423,56 @@
 			};
 			name = Release;
 		};
+		ABCD00000000000000000027 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Support/RibbonWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = 8R6K2A2K9U;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Support/RibbonWidgets-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = Ribbon;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.2.0;
+				PRODUCT_BUNDLE_IDENTIFIER = bible.ribbon.app.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		ABCD00000000000000000028 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Support/RibbonWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = 8R6K2A2K9U;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Support/RibbonWidgets-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = Ribbon;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.2.0;
+				PRODUCT_BUNDLE_IDENTIFIER = bible.ribbon.app.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -335,6 +494,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		ABCD00000000000000000026 /* Build configuration list for PBXNativeTarget "RibbonWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				ABCD00000000000000000027 /* Debug */,
+				ABCD00000000000000000028 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
@@ -346,6 +514,10 @@
 
 /* Begin XCSwiftPackageProductDependency section */
 		ABCD00000000000000000018 /* RibbonCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = RibbonCore;
+		};
+		ABCD00000000000000000030 /* RibbonCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = RibbonCore;
 		};

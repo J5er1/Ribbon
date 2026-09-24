@@ -9,6 +9,13 @@
 	     needs the Push Notifications capability for either. -->
 	<key>aps-environment</key>
 	<string>development</string>
+	<!-- The widgets' shared shelf (S24): the room's fire and the faces the
+	     Live Activity draws, written by the app and read by the extension.
+	     The group has to exist in the developer portal, on both App IDs. -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.bible.ribbon.app</string>
+	</array>
 	<!-- Invite links (readribbon.app/i/<token>) open the app when it's
 	     installed. The site serves the matching
 	     /.well-known/apple-app-site-association (web/build.mjs). -->

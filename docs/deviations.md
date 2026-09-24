@@ -105,12 +105,12 @@ reasoning.
 
 11. **Phase-two surfaces remaining:** Cards (S08/S09) are now implemented on
     iOS and Android at the passage end. Notifications are delivered by push
-    now (I33, A56). Remaining phase-two items: widgets and Live Activity
-    (S24), rooms of three-plus ink-transition moment (model supports it; the
-    invitation row on S01 is not yet built), StoreKit (S22 shows the model's
-    promise only), and the web *join* (S16's browser half — the app-side
-    join is built, deviation 10; the web page still previews and reads
-    only).
+    now (I33, A56), and the widgets and Live Activity are built (I34, A57).
+    Remaining phase-two items: rooms of three-plus ink-transition moment
+    (model supports it; the invitation row on S01 is not yet built),
+    StoreKit (S22 shows the model's promise only), and the web *join* (S16's
+    browser half — the app-side join is built, deviation 10; the web page
+    still previews and reads only).
 
 12. **iPad is a considered surface now, one readable column wide.** The
     book designs phone screens; the target includes iPad (all
@@ -3811,6 +3811,45 @@ I33. **Push: the six arrive when they happen (S19).** Every notification was
       capability on the App ID with the profiles made again. Until both
       exist nothing changes: the sender answers that it cannot reach
       APNs, and every phone keeps posting for itself.
+
+I34. **The widgets and the Live Activity (S24).** A second target, the
+    widget extension, carries all three of S24's surfaces, and nothing on
+    any of them answers how much or how often.
+
+    - **The small widget** is the room's fire at its state on the unlit
+      ground, and the book's name in small caps. The fire is drawn by the
+      room's own painter (`FirePainter`, moved into `ios/Shared` so both
+      targets compile it), held at one instant: a widget is a still.
+    - **The lock screen:** the fire alone in the circle; the book and its
+      state inline, in the slot's own face.
+    - **The fire cools without the app.** The app writes the room's open
+      reading's handiwork to the app group's container — not a state, the
+      thing a state is worked out from — and the widget's timeline asks the
+      core's engine for the state an hour at a time, so the home screen
+      reports what the room would. The app rewrites it when it goes away
+      and after every pull, and reloads the widget only when it changed.
+    - **No book open is the unlit ground and nothing on it.** §08: an empty
+      state is a reproach, so the widget is absent rather than empty.
+    - **"Ruth is reading Mark"** is a Live Activity started by push (the
+      server's `i_am_reading`, I33) on the phones whose "When they open the
+      book" is on — the switch it belongs to, and off by default for the
+      reason S19 gives. Her portrait and the sentence; nothing else. It is
+      kept current by her phone's ten-minute heartbeat and ended when she
+      leaves. A phone that dies mid-chapter never says it left, so the line
+      goes into the past tense once the heartbeat has stopped for twenty
+      minutes — "Ruth was reading Mark" — rather than go on claiming a
+      presence nobody can vouch for (§4.2); and when this phone can hear the
+      room's presence itself, it takes down any activity whose reader is not
+      in the book.
+    - **The faces** the Live Activity draws are small copies the app keeps
+      in the group's container, because the extension cannot reach the
+      app's own cache. A tap on any of it opens the room
+      (`ribbon://room/<id>`).
+    - **What it needs:** the App Group `group.bible.ribbon.app` on both App
+      IDs, a `bible.ribbon.app.widgets` App ID, and profiles made again with
+      them (the TestFlight workflow's "refresh profiles"). Until then the
+      simulator build is unaffected; a signed build is not, which is the
+      trade the owner chose.
 
 ## Licensed translations (decided: API.Bible)
 

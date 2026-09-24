@@ -25,7 +25,10 @@ import UIKit
 enum Push {
     /// This install's APNs token, hex. Nil until the system hands one over,
     /// and on a simulator or a build without the push entitlement, forever.
-    private(set) static var deviceToken: String?
+    /// Remembered, because a wake to hand over a Live Activity's token (S24)
+    /// happens before anything has asked APNs for this one.
+    private(set) static var deviceToken: String? = UserDefaults.standard.string(forKey: tokenKey)
+    private static let tokenKey = "push.token"
 
     /// Called when the token arrives or changes: the model registers again.
     static var tokenChanged: (() -> Void)?
@@ -54,6 +57,7 @@ enum Push {
         let hex = data.map { String(format: "%02x", $0) }.joined()
         guard hex != deviceToken else { return }
         deviceToken = hex
+        UserDefaults.standard.set(hex, forKey: tokenKey)
         tokenChanged?()
     }
 

@@ -274,6 +274,30 @@ final class RemoteSync {
         }
     }
 
+    /// A Live Activity the server started here (S24) has handed over the
+    /// token that can keep it current and end it.
+    func registerLiveActivity(device: String, room: UUID, reader: UUID, token: String) async throws {
+        _ = try await withAuthRetry {
+            try await self.client.rpc("register_live_activity", body: [
+                "device_token": device,
+                "room": room.uuidString.lowercased(),
+                "reader": reader.uuidString.lowercased(),
+                "activity_token": token,
+            ])
+        }
+    }
+
+    /// The person took it down, or the app did: stop keeping it current.
+    func forgetLiveActivity(device: String, room: UUID, reader: UUID) async {
+        _ = try? await withAuthRetry {
+            try await self.client.rpc("forget_live_activity", body: [
+                "device_token": device,
+                "room": room.uuidString.lowercased(),
+                "reader": reader.uuidString.lowercased(),
+            ])
+        }
+    }
+
     /// Thinking of you (§4.3), for a phone the room's socket cannot reach.
     func thinkOf(room: UUID, person: UUID) async throws {
         _ = try await withAuthRetry {

@@ -22,6 +22,9 @@ core/        RibbonCore — Swift package, Foundation only.
              anywhere Swift runs, including Linux CI.
 ios/         The iOS app. Xcode 26+, SwiftUI, iOS 26, dark-only (dark is
              the product). Open ios/Ribbon.xcodeproj — no generators, no pods.
+             Two targets: the app, and RibbonWidgets (the fire on the home
+             and lock screens, and the Live Activity); ios/Shared is
+             compiled into both.
 android/     The Android app (phase three). Jetpack Compose, Material 3
              Expressive, dark-only, and — unlike iOS — coloured from the
              wallpaper by default (Material You; Appearance turns it off,
@@ -182,8 +185,13 @@ The one deliberate difference is colour: Android takes it from the wallpaper
   edges and a VoiceOver equivalent for every drag; and the washes redrawn
   as one shape per mark, screened where they overlap.
 - **Notifications, gated three ways** and never a badge; the one ask made in
-  context; while signed in, a background pull is asked for no sooner than
-  every fifteen minutes (the phone decides when, and whether).
+  context. They arrive by push the moment the thing happens — a note, the
+  cards, a finished book, "Ruth is reading Mark", thinking of you — once the
+  keys are set (supabase/README.md); until then the phone keeps posting for
+  itself from a background pull (I33, A56).
+- **The widgets:** the room's fire at its state and the book's name, on the
+  home screen and the lock screen, and "Ruth is reading Mark" as a Live
+  Activity while she reads — an ongoing line on Android (I34, A56, A57).
 - **There is a look book on Android.** `./gradlew :app:testDebugUnitTest`
   renders every screen this touched, on both palettes, to
   `android/app/build/shots` — and CI keeps them as an artifact.

@@ -35,9 +35,23 @@ platform :ios do
       key_filepath: key_path
     )
 
+    # Two things are signed now: the app, and the widget extension it carries
+    # (S24). Each needs its own App Store profile, and both App IDs need the
+    # capabilities their entitlements ask for — Push Notifications and the
+    # App Group on the app, the App Group on the widget. After turning those
+    # on in the developer portal, run the TestFlight workflow once with
+    # "refresh profiles" ticked so match makes the profiles again with them.
+    app_identifier = ENV["APP_IDENTIFIER"] || "bible.ribbon.app"
+    targets = {
+      "Ribbon" => app_identifier,
+      "RibbonWidgets" => "#{app_identifier}.widgets"
+    }
+
     match(
       type: "appstore",
-      api_key: api_key
+      app_identifier: targets.values,
+      api_key: api_key,
+      force: ENV["MATCH_FORCE"] == "true"
     )
 
     latest_build = latest_testflight_build_number(api_key: api_key)
@@ -46,21 +60,31 @@ platform :ios do
       build_number: latest_build + 1
     )
 
-    profile_specifier = "match AppStore #{ENV['APP_IDENTIFIER'] || 'bible.ribbon.app'}"
+    # Each target signed with its own profile. A profile named on the command
+    # line would apply to every target at once, and the widget cannot be
+    # signed with the app's; so the names go into each target's own settings
+    # in this checkout instead.
+    targets.each do |target, identifier|
+      update_code_signing_settings(
+        path: XCODEPROJ,
+        use_automatic_signing: false,
+        targets: [target],
+        team_id: ENV["TEAM_ID"],
+        bundle_identifier: identifier,
+        profile_name: "match AppStore #{identifier}"
+      )
+    end
 
     build_app(
       project: XCODEPROJ,
       scheme: SCHEME,
       export_method: "app-store",
       export_options: {
-        provisioningProfiles: {
-          (ENV["APP_IDENTIFIER"] || "bible.ribbon.app") => profile_specifier
-        }
+        provisioningProfiles: targets.values.to_h { |identifier| [identifier, "match AppStore #{identifier}"] }
       },
       xcargs: [
         "CODE_SIGN_STYLE=Manual",
-        "DEVELOPMENT_TEAM=#{ENV['TEAM_ID']}",
-        "PROVISIONING_PROFILE_SPECIFIER='#{profile_specifier}'"
+        "DEVELOPMENT_TEAM=#{ENV['TEAM_ID']}"
       ].join(" ")
     )
 

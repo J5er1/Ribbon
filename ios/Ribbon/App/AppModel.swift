@@ -124,6 +124,12 @@ final class AppModel {
                 case .roster(let people):
                     self.someoneOpenedTheBook(people)
                     self.presentPeople = people
+                    // Only a roster heard with the room on screen is the
+                    // truth: the one a closing socket sends on its way out
+                    // is empty because the line is, not because the book is.
+                    if let room = self.currentRoom, self.visibleRoomID == room.id {
+                        LiveReading.reconcile(room: room.id, present: Set(people.map(\.id)))
+                    }
                 case .thinkingOfYou(let fromName):
                     self.thinkingOfYouArrived(fromName)
                 case .roomChanged(let roomID):
@@ -1371,6 +1377,21 @@ final class AppModel {
         RoomWatch.stop()
     }
 
+    // MARK: - The widgets (S24)
+
+    /// What the widgets draw: the current room's open book and its fire, and
+    /// small copies of the room's faces for the Live Activity. Written when
+    /// the app goes away and after every pull — the home screen cannot be
+    /// seen while the app is open, so there is nothing to keep current then.
+    func refreshWidget() {
+        let room = currentRoom
+        let reading = room.flatMap { openReading(in: $0) }
+        LiveReading.updateWidget(
+            room: room, reading: reading,
+            banked: room.map { quietDays(for: $0).bankedIntervals } ?? [])
+        LiveReading.keepPortraits(portraits)
+    }
+
     // MARK: - Push (S19)
 
     /// Tell the server about this phone — the token, every room's switches,
@@ -1391,7 +1412,7 @@ final class AppModel {
                 zone: TimeZone.current.identifier,
                 quietFrom: state.settings.quietHoursStart,
                 quietUntil: state.settings.quietHoursEnd,
-                rooms: rooms, liveStart: nil)
+                rooms: rooms, liveStart: LiveReading.startTokenIfAllowed)
             Push.registration(succeeded: true)
         } catch {
             Push.registration(succeeded: false)
@@ -1618,6 +1639,7 @@ final class AppModel {
         guard let graph = try? await remote.pullRooms() else { return .none }
         let landed = merge(graph)
         announce(landed)
+        refreshWidget()
         return landed
     }
 
@@ -1731,8 +1753,21 @@ final class AppModel {
     }
 
     func handleInviteURL(_ url: URL) {
+        if let roomID = Self.roomID(from: url) {
+            pendingDestination = .room(roomID: roomID)
+            return
+        }
         guard let token = Self.inviteToken(from: url) else { return }
         pendingInvite = PendingInvite(token: token)
+    }
+
+    /// ribbon://room/<id> — a tapped widget or Live Activity (S24) opens the
+    /// room it was about.
+    static func roomID(from url: URL) -> UUID? {
+        guard url.scheme?.lowercased() == "ribbon", url.host()?.lowercased() == "room",
+              let last = url.pathComponents.last
+        else { return nil }
+        return UUID(uuidString: last)
     }
 
     /// https://readribbon.app/i/<token> or ribbon://i/<token>.

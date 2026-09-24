@@ -22,6 +22,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         NotificationRouter.shared.install()
+        // A Live Activity started by push wakes the app to hand over its
+        // token (S24); the token goes only to whoever is already listening.
+        LiveReading.watch()
         // The closure before the registration, and both before launch
         // finishes: a wake can be delivered the moment the handler exists.
         RoomWatch.pull = {
@@ -140,6 +143,8 @@ struct RibbonApp: App {
                     // is not reading, and the Live Activity on the other
                     // phones ends.
                     model.sayIveLeft()
+                    // The home screen is about to be seen again.
+                    model.refreshWidget()
                     Task { await model.closeRoomChannel() }
                 default:
                     break
