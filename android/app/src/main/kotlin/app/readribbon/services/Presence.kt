@@ -104,7 +104,8 @@ interface PresenceService {
      * Put the line down for a while — the app has been away past its grace
      * (§4.2). The socket closes, but what this device was saying about
      * itself is kept, so that [connect] to the same room says it again
-     * without anybody having to ask.
+     * without anybody having to ask. What it heard is not: the roster goes
+     * empty, as on a close, until the line is back to say who is here.
      */
     suspend fun suspend()
 

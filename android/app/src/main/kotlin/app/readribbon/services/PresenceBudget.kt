@@ -28,20 +28,25 @@ internal data class Stance(
  * of times a day: a scroll re-tracked every two seconds, and a follow made
  * that worse, not better. So every presence send goes through here.
  *
- * Four tracks in a window are anybody's; the fifth slot is kept for the two
- * things that must travel at once — leaving the book, and starting or ending
- * a follow, which is what "Ruth is with you" appears and goes on. Anything
- * else waits for the window to open again, and what goes then is whatever is
- * true by then, not a queue of what was true on the way.
+ * Four tracks in a window are anybody's; the fifth slot is kept for the
+ * things that must travel at once — leaving the book, coming back into it,
+ * and starting or ending a follow, which is what "Ruth is with you" appears
+ * and goes on. Anything else waits for the window to open again, and what
+ * goes then is whatever is true by then, not a queue of what was true on the
+ * way.
  *
  * A join always says where you are, budget or no budget: appearing matters
  * more than the rule, and a join is its own channel on the server's side.
  *
  * The send times outlive a reconnect — they are this client's, not one
  * socket's — and the clock is handed in so the rule can be tested without
- * waiting thirty seconds for it.
+ * waiting thirty seconds for it. The channel hands in one that only ever
+ * runs forward (`SystemClock.elapsedRealtime`): a window measured on the
+ * wall clock never opens again once the phone's time is set back, and every
+ * send after that — leaving the book among them — waits as long as the
+ * clock went back.
  */
-internal class PresenceBudget(private val clock: () -> Long = System::currentTimeMillis) {
+internal class PresenceBudget(private val clock: () -> Long) {
 
     /** What to do with the announcement as it now stands. */
     sealed interface Verdict {
@@ -78,7 +83,9 @@ internal class PresenceBudget(private val clock: () -> Long = System::currentTim
         if (desired == said) return Verdict.Quiet
         val send = if (desired == null) Verdict.Untrack else Verdict.Track
         if (joining) return send
-        val urgent = desired == null || desired.following != said?.following
+        // Appearing is as urgent as leaving: a reader back in the book a
+        // moment after closing it is not a scroll to be rationed.
+        val urgent = desired == null || said == null || desired.following != said?.following
         val allowed = if (urgent) SLOTS else TRACKS
         if (sends.size < allowed) return send
         // Enough of the window has to pass for one slot to open.

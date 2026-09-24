@@ -284,7 +284,7 @@ struct PresenceForm: View {
             Spacer(minLength: 0)
         }
         .contentShape(Rectangle())
-        .onTapGesture { onFollow(person) }
+        .onTapGesture { follow(person) }
         .onLongPressGesture(minimumDuration: 0.7) {
             thinkOf(person)
         } onPressingChanged: { pressing in
@@ -318,6 +318,15 @@ struct PresenceForm: View {
         // holding would send it, and had nothing to do instead of holding.
         // Android has always published it this way.
         .accessibilityAction(named: Copy.thinkingOfYou) { thinkOf(person) }
+    }
+
+    /// A row used to follow someone, or to stop: the panel folds away as it
+    /// does. The page holds still while the panel is open, so a follow
+    /// started from it would never move the page until you closed it
+    /// yourself — and a screen reader had no way to.
+    private func follow(_ person: PresentPerson) {
+        onFollow(person)
+        withAnimation(RibbonMotion.open) { expanded = false }
     }
 
     /// The hold completed, or the action taken: the tap on the shoulder goes

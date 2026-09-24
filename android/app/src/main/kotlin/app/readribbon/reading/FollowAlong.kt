@@ -131,7 +131,11 @@ internal class FollowHands {
     /** How far the band has been pulled, in the drag's own direction and px. */
     var stretched = 0f
 
-    /** When the page last said where its line is, on the system clock. */
+    /**
+     * When the page last said where its line is, on the clock that only runs
+     * forward (`SystemClock.elapsedRealtime`): set back, the wall clock would
+     * leave the line unsaid for as long as it went back.
+     */
     var lineSentAt = 0L
 
     /** In the band, or on the way back from it: nothing moves or speaks. */

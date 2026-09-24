@@ -246,11 +246,17 @@ final class AppModel {
     /// not an arrival: the people in it were already reading before this
     /// phone was listening.
     private var haveARoster = false
+    /// The line was put down for the app going away. The suspend's own
+    /// empty roster lands as a baseline, so the roster that greets the
+    /// line's return would otherwise count everyone already reading as an
+    /// arrival — and, if the app has gone again within its grace, say so.
+    private var lineWasPutDown = false
 
     /// "When they open the book" (§10.3): from the roster, and only while
-    /// the room's channel is up — which is to say, only while this phone is
-    /// in the room. The switch is off by default, per room, because it is
-    /// the killer feature for couples and the creepiest one for a study.
+    /// the room's channel is up — while this phone is in the room, or has
+    /// left it within the channel's short grace. The switch is off by
+    /// default, per room, because it is the killer feature for couples and
+    /// the creepiest one for a study.
     private func someoneOpenedTheBook(_ people: [PresentPerson]) {
         let now = Set(people.map(\.id))
         let arrived = now.subtracting(wasReading)
@@ -317,6 +323,13 @@ final class AppModel {
             await presence.disconnect()
             return
         }
+        if lineWasPutDown {
+            // What the room says on the line's return is a baseline, as a
+            // connect's first roster is.
+            lineWasPutDown = false
+            wasReading = []
+            haveARoster = false
+        }
         await presence.connect(roomID: room.id, person: me)
         // The line is back with the book still open: the page says again
         // where it is. It keeps its own announcement through a suspend,
@@ -332,9 +345,8 @@ final class AppModel {
     func closeRoomChannel() async {
         catchUpTask?.cancel()
         catchUpTask = nil
-        // The next roster is a baseline again.
-        wasReading = []
-        haveARoster = false
+        // The roster that greets the line's return is a baseline again.
+        lineWasPutDown = true
         await presence.suspend()
     }
 

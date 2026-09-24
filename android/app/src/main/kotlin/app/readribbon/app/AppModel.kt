@@ -397,6 +397,20 @@ class AppModel(
     private var wasReading: Set<Uuid> = emptySet()
 
     /**
+     * The line was put down after its grace, and the roster went with it
+     * (see [setRoomChannelAside]). Only noted there; it becomes
+     * [rosterIsWhereTheRoomWas] when the line is picked up again, so that the
+     * empty roster of the putting-down is not the one taken for it.
+     */
+    private var lineWasPutDown = false
+
+    /**
+     * The next roster is where the room already was, as the line comes back
+     * — not everybody in it opening the book at once. Swift's `haveARoster`.
+     */
+    private var rosterIsWhereTheRoomWas = false
+
+    /**
      * §10.3's fourth notification — "Ruth is reading Mark" — which had a
      * switch on S19, a channel in Android's settings and no post anywhere.
      *
@@ -404,8 +418,10 @@ class AppModel(
      * presence is ephemeral and lives only on the socket, and its own switch
      * subtitle is "So you can read at the same time", which a quarter-hour-old
      * version of would be a lie. So it posts from the live roster and only
-     * while Ribbon is running — which is the honest shape of the feature and
-     * is written down in `RoomWatch`'s header and in docs/deviations.md A34.
+     * while Ribbon is running — on screen, or in the short grace after it
+     * leaves, while the line is still up — which is the honest shape of the
+     * feature and is written down in `RoomWatch`'s header and in
+     * docs/deviations.md A34.
      *
      * Once per arrival rather than per heartbeat: the roster repeats, and a
      * notification for every beat of somebody else's presence would be the
@@ -418,6 +434,15 @@ class AppModel(
         val now = people.map { it.id }.toSet()
         val arrived = now - wasReading
         wasReading = now
+        // The line back after being put down: whoever is here was here
+        // before this phone was listening again. On screen the room would
+        // keep quiet about them anyway; left again before the room answered,
+        // in the grace, it would otherwise be one "is reading" for somebody
+        // who has been reading all along.
+        if (rosterIsWhereTheRoomWas) {
+            rosterIsWhereTheRoomWas = false
+            return
+        }
         if (arrived.isEmpty()) return
 
         val room = currentRoom ?: return
@@ -557,17 +582,25 @@ class AppModel(
             presence.disconnect()
             return
         }
+        // Picked up after it was put down: the roster it comes back to is
+        // the room as it already was — see [someoneOpenedTheBook].
+        if (lineWasPutDown) {
+            lineWasPutDown = false
+            rosterIsWhereTheRoomWas = true
+        }
         presence.connect(room.id, me)
         // Said again once the line is open, and not at the lifecycle change
-        // that asked for it: a book on screen is a reader in the book, and
-        // coming back to the app is theirs. Idempotent — a line that never
-        // went down already says it, and the budget sends nothing new.
+        // that asked for it: a book on screen is a reader in the book.
+        // Idempotent — a line that never went down already says it, and the
+        // budget sends nothing new. Not as activity: a glance back at the app
+        // does not wake a reader who had gone still; the rejoin after a real
+        // suspension does that on its own.
         val book = bookOnScreen
         val position = lastPresented
         if (book != null && book.roomID == room.id && !readingQuietly &&
             position != null && position.bookID == book.bookID
         ) {
-            presence.present(position, 0.0, isIdle = false, following = followingPersonID)
+            presence.present(position, 0.0, isIdle = false, following = followingPersonID, activity = false)
         }
     }
 
@@ -589,6 +622,7 @@ class AppModel(
             catchUpJob?.cancel()
             catchUpJob = null
             presence.suspend()
+            lineWasPutDown = true
         }
     }
 

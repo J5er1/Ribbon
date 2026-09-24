@@ -41,8 +41,8 @@ import RibbonCore
 /// that happening dozens of times a day. So every announcement goes
 /// through one place, `reconcilePresence`, which says only what has
 /// changed, keeps four sends a window for places and the fifth for what
-/// cannot wait (leaving, or starting and ending a follow), and folds
-/// everything else into one send when the window opens again.
+/// cannot wait (leaving, appearing, or starting and ending a follow), and
+/// folds everything else into one send when the window opens again.
 @MainActor
 final class RoomChannel: PresenceService {
     let events: AsyncStream<PresenceEvent>
@@ -105,7 +105,12 @@ final class RoomChannel: PresenceService {
     /// seconds. Kept across reconnects: whether the server counts a limit
     /// per socket or per client, a window that forgot itself on every
     /// reconnect could be the one that trips it.
-    private var presenceSends: [Date] = []
+    ///
+    /// On the continuous clock, as every interval here is: the wall clock
+    /// can be set back — by hand, or by the network correcting a phone that
+    /// ran fast — and sends it had recorded in the future never aged out,
+    /// holding every place back for as long as the clock had jumped.
+    private var presenceSends: [ContinuousClock.Instant] = []
     /// The one send waiting for the window to open again. It carries
     /// whatever the announcement is by then, not what it was.
     private var pendingPresence: Task<Void, Never>?
@@ -116,8 +121,8 @@ final class RoomChannel: PresenceService {
     /// The people present who are following you right now.
     private var followers: Set<UUID> = []
     private var readingKeepalive: Task<Void, Never>?
-    private var lastReadingSent = Date.distantPast
-    private var lastInFlightSent = Date.distantPast
+    private var lastReadingSent: ContinuousClock.Instant?
+    private var lastInFlightSent: ContinuousClock.Instant?
     /// This connection's name for itself on the reading line: eight random
     /// hex digits, new with every socket and never kept. Two phones of one
     /// person send two streams, and a follower sticks to one of them.
@@ -152,12 +157,14 @@ final class RoomChannel: PresenceService {
     /// Supabase's presence limit: five tracks or untracks a client, a
     /// window. Four are for places; the fifth is held back for what must
     /// not wait behind them.
-    private static let presenceWindow: TimeInterval = 30
+    private static let presenceWindow: Duration = .seconds(30)
     private static let presenceSendsForPlaces = 4
     private static let presenceSendsAtAll = 5
     /// A reading line that has not moved still says so this often, while
     /// somebody follows it — a still screen is somewhere, not nowhere.
-    private static let readingKeepaliveEvery: TimeInterval = 20
+    private static let readingKeepaliveEvery: Duration = .seconds(20)
+    /// Every chapter and verse number a book has, with room to spare.
+    private static let places = 1...999
 
     private nonisolated static func newSource() -> String {
         String(format: "%08x", UInt32.random(in: .min ... .max))
@@ -202,13 +209,15 @@ final class RoomChannel: PresenceService {
 
     /// The app has gone away (after its grace): the socket closes, and the
     /// room, the announcement and the reading line stay, for the join that
-    /// brings them back. The roster the room last heard stays on screen
-    /// too, the way it does through a reconnect — the next presence state
-    /// replaces it the moment the line is back.
+    /// brings them back. The roster does not. A reconnect is seconds and
+    /// keeps it; a phone put away can be away for hours, and whoever was
+    /// reading when it went may long since have closed the book. Until the
+    /// line is back nobody is shown as here, as a disconnect has it.
     func suspend() async {
         guard roomID != nil else { return }
         close()
         suspended = true
+        continuation.yield(.roster([]))
     }
 
     /// Everything a closed socket stops doing.
@@ -273,10 +282,11 @@ final class RoomChannel: PresenceService {
         if !settled {
             // A scroll in flight is sampled once a second at most; its
             // resting place follows it.
-            guard Date().timeIntervalSince(lastInFlightSent) >= 1 else { return }
-            lastInFlightSent = Date()
+            let now = ContinuousClock.now
+            if let last = lastInFlightSent, now - last < .seconds(1) { return }
+            lastInFlightSent = now
         }
-        sayReading(settled: settled)
+        sayReading()
     }
 
     func sendThinkingOfYou(to personID: UUID) async {
@@ -464,15 +474,17 @@ final class RoomChannel: PresenceService {
             pendingPresence?.cancel(); pendingPresence = nil
             return
         }
-        let now = Date()
-        presenceSends.removeAll { now.timeIntervalSince($0) >= Self.presenceWindow }
-        // Leaving, and starting or ending a follow, take the slot held back
-        // for them: "Ruth is with you", and the end of it, travel at once.
-        let urgent = want == nil || want?.following != said?.following
+        let now = ContinuousClock.now
+        presenceSends.removeAll { now - $0 >= Self.presenceWindow }
+        // Leaving, appearing, and starting or ending a follow take the slot
+        // held back for them: "Ruth is with you", and the end of it, travel
+        // at once — and so does the book opened again a moment after it was
+        // closed, which is not news to wait behind the scrolls before it.
+        let urgent = want == nil || said == nil || want?.following != said?.following
         let allowed = urgent ? Self.presenceSendsAtAll : Self.presenceSendsForPlaces
         guard joining || presenceSends.count < allowed else {
             let oldest = presenceSends.min() ?? now
-            waitForPresence(until: oldest.addingTimeInterval(Self.presenceWindow + 0.25))
+            waitForPresence(until: oldest + Self.presenceWindow + .milliseconds(250))
             return
         }
         pendingPresence?.cancel(); pendingPresence = nil
@@ -483,11 +495,11 @@ final class RoomChannel: PresenceService {
         }
     }
 
-    private func waitForPresence(until time: Date) {
+    private func waitForPresence(until time: ContinuousClock.Instant) {
         guard pendingPresence == nil else { return }
         let mine = generation
         pendingPresence = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(max(0, time.timeIntervalSinceNow)))
+            try? await Task.sleep(until: time, clock: .continuous)
             guard !Task.isCancelled, let self, mine == self.generation else { return }
             self.pendingPresence = nil
             self.reconcilePresence()
@@ -538,14 +550,17 @@ final class RoomChannel: PresenceService {
     /// The reading line, to whoever is following — only while somebody
     /// is, only while you are in the book, and never while reading
     /// quietly, which never announces and so never has anyone following.
-    private func sayReading(settled: Bool) {
+    /// Sent as it was kept: a point taken in the middle of a scroll is
+    /// still one, said again by the keepalive or to a new follower, and
+    /// not a resting place for their guess to learn from.
+    private func sayReading() {
         guard phase == .joined, announcement != nil, !followers.isEmpty,
               let person, let reading
         else { return }
         broadcast("reading", payload: ReadingWire.payload(
             personID: person.id, source: source, book: reading.book,
-            at: reading.at, end: reading.end, settled: settled, carried: reading.carried))
-        lastReadingSent = Date()
+            at: reading.at, end: reading.end, settled: reading.settled, carried: reading.carried))
+        lastReadingSent = ContinuousClock.now
     }
 
     /// While somebody follows, a still line says where it is every twenty
@@ -562,8 +577,8 @@ final class RoomChannel: PresenceService {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(5))
                 guard !Task.isCancelled, let self, mine == self.generation else { return }
-                guard Date().timeIntervalSince(self.lastReadingSent) >= Self.readingKeepaliveEvery else { continue }
-                self.sayReading(settled: true)
+                if let last = self.lastReadingSent, ContinuousClock.now - last < Self.readingKeepaliveEvery { continue }
+                self.sayReading()
             }
         }
     }
@@ -651,8 +666,7 @@ final class RoomChannel: PresenceService {
         let kind = payload?["extension"] as? String
         print("[RoomChannel] system: \(kind ?? "-") \(status ?? "-")")
         if Self.isPresenceLimit(message: payload?["message"] as? String, kind: kind) {
-            let now = Date()
-            presenceSends = Array(repeating: now, count: Self.presenceSendsAtAll)
+            presenceSends = Array(repeating: ContinuousClock.now, count: Self.presenceSendsAtAll)
         }
     }
 
@@ -768,11 +782,14 @@ final class RoomChannel: PresenceService {
             let name = (meta["name"] as? String) ?? ""
             guard !name.isEmpty else { continue }
 
+            // A place no book has — a chapter or verse outside 1...999, from
+            // a phone that is broken or worse — is no place: the person is
+            // still here, and where is simply not said.
             var position: VerseAddress?
             if let raw = meta["position"] as? [String: Any],
                let book = raw["book"] as? String,
-               let chapter = (raw["chapter"] as? NSNumber)?.intValue,
-               let verse = (raw["verse"] as? NSNumber)?.intValue {
+               let chapter = (raw["chapter"] as? NSNumber)?.intValue, Self.places.contains(chapter),
+               let verse = (raw["verse"] as? NSNumber)?.intValue, Self.places.contains(verse) {
                 position = VerseAddress(bookID: book, chapter: chapter, verse: verse)
             }
             roster.append(PresentPerson(
@@ -798,7 +815,7 @@ final class RoomChannel: PresenceService {
         let arrived = !now.subtracting(followers).isEmpty
         followers = now
         keepReadingAlive()
-        if arrived { sayReading(settled: true) }
+        if arrived { sayReading() }
     }
 }
 

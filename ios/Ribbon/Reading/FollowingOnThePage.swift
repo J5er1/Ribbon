@@ -193,47 +193,89 @@ final class FollowLoopState {
 /// reading speed, and lives only as long as the follow (§13).
 @MainActor
 final class FollowRun {
+    /// How long a follow waits for the line their phone sends on seeing it
+    /// begin, before it makes do with their presence.
+    static let waitForTheirLine: TimeInterval = 1.5
+    /// How long before the follow began a line may have arrived and still
+    /// be where they are — one another follower is keeping sent. Older,
+    /// it is where they were when an earlier follow ended: their phone
+    /// stops sending when nobody follows. A kept line comes every twenty
+    /// seconds or so, checked every five, and then crosses the network.
+    static let freshLine: TimeInterval = 30
+
     let person: UUID
     var estimate = ReadingEstimate()
     /// Each chapter measured in words, once.
     var rulers: [Int: ChapterRuler] = [:]
+    /// When this run began listening for them: the loop's start, or their
+    /// coming back into the room.
+    var startedAt: Date
     /// The arrival of the last report the guess was given.
     var fed: Date?
     /// The guess is running on from their presence alone.
     var fromPresence = false
+    /// Their own line has been given to this guess, not only their
+    /// presence.
+    var heardTheirLine = false
+    /// The verse a landing under VoiceOver last went to. Not landed on
+    /// again until they say something new.
+    var spokenTo: (chapter: Int, verse: Int)?
     /// When the page last stepped back.
     var backStepAt: Date?
     /// Where the guess stood when a step moved nothing — the foot of the
     /// book, or a page that would not go. Held there until the guess moves
-    /// a tenth of a screen or they say something new.
+    /// a tenth of a screen or they say something new. A guess that was not
+    /// on the page at all is stuck at infinity: anywhere it is found on the
+    /// page is somewhere new.
     var stuckAt: CGFloat?
-    /// A step on its way: where its chapter stood, and the guess, when it
-    /// set off.
-    var step: (chapter: Int, top: CGFloat, guess: CGFloat)?
+    /// A step on its way: where the chapter it was measured from stood,
+    /// and the guess, when it set off.
+    var step: (chapter: Int, top: CGFloat, guess: CGFloat?)?
     /// A flight of the follow's own on its way.
     var flying: (chapter: Int, since: Date)?
     /// A chapter a flight could not reach. Not tried again until they say
     /// something new.
     var noFlyTo: Int?
 
-    init(person: UUID) {
+    init(person: UUID, startedAt: Date = Date()) {
         self.person = person
+        self.startedAt = startedAt
     }
 
     /// They have left the room. The follow stays, and the guess starts
-    /// again from whatever they say when they are back.
-    func forget() {
+    /// again from whatever they say when they are back — waiting, as a
+    /// follow's start does, for the line their phone sends on seeing it.
+    func forget(at now: Date) {
         estimate = ReadingEstimate()
+        startedAt = now
         fed = nil
         fromPresence = false
+        heardTheirLine = false
+        spokenTo = nil
         stuckAt = nil
         noFlyTo = nil
     }
 
+    /// Whether what this phone last heard about them may be given to the
+    /// guess. Nothing it has already had, or older. Their line, if it came
+    /// since a little before this run began. Their presence, only once the
+    /// guess has something: at the start, the follow waits for their line
+    /// and then takes where their presence says they are now, not a word
+    /// kept from a roster minutes ago.
+    func takes(_ heard: HeardReading) -> Bool {
+        if let fed, heard.report.received <= fed { return false }
+        if heard.fromPresence { return fed != nil }
+        return heard.report.received >= startedAt.addingTimeInterval(-Self.freshLine)
+    }
+
     /// The rulers the guess can need around a chapter — the one before it
-    /// for a look back, and two after for reading on into the next.
+    /// for a look back, and two after for reading on into the next. The
+    /// chapter is held inside the book first: one out of range, from
+    /// someone else's phone, must not overflow the sum.
     func measure(around chapter: Int, count: Int, text: (Int) -> ScriptureChapter?) -> [Int: ChapterRuler] {
-        for n in max(1, chapter - 1)...max(1, chapter + 2) where n <= count && rulers[n] == nil {
+        let last = max(1, count)
+        let at = min(max(chapter, 1), last)
+        for n in max(1, at - 1)...min(last, at + 2) where rulers[n] == nil {
             if let chapterText = text(n), let ruler = ChapterRuler(measuring: chapterText) {
                 rulers[n] = ruler
             }

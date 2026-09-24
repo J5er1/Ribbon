@@ -84,6 +84,21 @@ class PresenceBudgetTest {
     }
 
     @Test
+    fun comingBackIntoTheBookTakesTheKeptSlot() {
+        // Open the book, read a little, close it: four sends, the last of
+        // them the untrack.
+        repeat(3) { say(at(it + 1)); now += 100 }
+        assertEquals(Verdict.Untrack, say(null))
+        now += 100
+        // Back in a moment later: appearing is as urgent as leaving, and
+        // goes at once rather than waiting out the window.
+        assertEquals(Verdict.Track, say(at(4)))
+        // And the slot is spent: an ordinary move now waits.
+        now += 100
+        assertTrue(say(at(5)) is Verdict.Later)
+    }
+
+    @Test
     fun aJoinAlwaysSaysWhereYouAre() {
         repeat(5) { say(at(it + 1, following = if (it % 2 == 0) ruth else null)); now += 100 }
         budget.joined()

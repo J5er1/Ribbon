@@ -3,6 +3,7 @@
 package app.readribbon.reading
 
 import android.Manifest
+import android.os.SystemClock
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
@@ -111,6 +112,7 @@ import app.readribbon.core.Note
 import app.readribbon.core.Reading
 import app.readribbon.core.ReadingEstimate
 import app.readribbon.core.ReadingPoint
+import app.readribbon.core.ReadingReport
 import app.readribbon.core.RibbonClock
 import app.readribbon.core.Room
 import app.readribbon.core.ScriptureChapter
@@ -141,6 +143,7 @@ import app.readribbon.design.room
 import app.readribbon.fire.FireBecomesEmber
 import app.readribbon.screens.ConfirmChoice
 import app.readribbon.screens.RibbonConfirmDialog
+import app.readribbon.services.HeardReading
 import app.readribbon.services.PresentPerson
 import app.readribbon.services.VoiceRecorder
 import app.readribbon.services.ensureRemoteChapter
@@ -190,8 +193,19 @@ private const val READING_LINE = 0.3f
 /** How often a follow looks again at where the person followed is. */
 private val FOLLOW_TICK = 250.milliseconds
 
-/** A word older than this when a follow first hears it is where they were. */
-private val STALE_FIRST_WORD = 25.seconds
+/**
+ * A line heard more than this before a follow began listening is where they
+ * were a follow ago — their phone stopped sending when that one ended — not
+ * where they are. Anything younger is a line somebody else's follow is
+ * keeping sent, which is as good as one sent for this.
+ */
+private val STALE_FIRST_WORD = 30.seconds
+
+/**
+ * How long a follow waits for the line their phone sends on seeing it, before
+ * it goes by the verse the roster has them at instead.
+ */
+private val LINE_AWAITED = 1500.milliseconds
 
 /**
  * A step smaller than this share of the screen — about two lines — is not
@@ -1092,6 +1106,9 @@ fun ReadingScreen(
             // At the top of the book a pull downward is the book closing, and
             // that gesture keeps its priority.
             if (available.y > 0f && !listState.canScrollBackward) return Offset.Zero
+            // At its end a push upward moves nothing, and a band that stretched
+            // nothing would still be spent — and still swing on its way back.
+            if (available.y < 0f && !listState.canScrollForward) return Offset.Zero
             hands.bandHeld = true
             hands.stretched = 0f
             // The band is pulled by the reader's own hand, and that is them,
@@ -1127,11 +1144,19 @@ fun ReadingScreen(
                     if (reduceMotion) {
                         scrollBy(back)
                     } else {
+                        // The spring carries the finger's speed, so it can
+                        // swing past before it comes back — and at an end of
+                        // the book the list cannot follow the swing out, only
+                        // the way back. What it actually moved is counted, and
+                        // whatever is still owed is given back at the end, so
+                        // the page is where the follow was holding it.
                         var gone = 0f
+                        var moved = 0f
                         animate(0f, back, initialVelocity = speed, animationSpec = RibbonMotion.cover()) { value, _ ->
-                            scrollBy(value - gone)
+                            moved += scrollBy(value - gone)
                             gone = value
                         }
+                        scrollBy(back - moved)
                     }
                 }
             } finally {
@@ -1467,9 +1492,17 @@ fun ReadingScreen(
             rulers[n] ?: contentNow(n)?.let(ChapterRuler::measuring)?.also { rulers[n] = it }
         }
         var estimate = ReadingEstimate()
-        // The last word given to the guess, by when it arrived.
+        // When this follow began listening for their line: now, again when
+        // the app comes back, and while they are out of the room.
+        var startedAt = Clock.System.now()
+        // The last word given to the guess, by when it arrived; where it
+        // was, and in which book; and whether it was presence's.
         var fed: Instant? = null
         var fedAt: ReadingPoint? = null
+        var fedBook: String? = null
+        var fedPresence = false
+        // Nothing but presence has reached the guess since it began.
+        var onPresence = false
         // When they last said something new: another place, or a scroll.
         var news: Instant? = null
         // The first move of a follow brings them to the landing line from
@@ -1484,51 +1517,88 @@ fun ReadingScreen(
             estimate = ReadingEstimate()
             fed = null
             fedAt = null
+            fedBook = null
+            fedPresence = false
+            onPresence = false
         }
         try {
             while (true) {
                 delay(FOLLOW_TICK)
                 val now = Clock.System.now()
-                // Back from the background: whatever was guessed is stale.
+                // Back from the background: whatever was guessed is stale,
+                // and so is any line heard before it went.
                 if (model.cameBack != cameBack) {
                     cameBack = model.cameBack
                     startOver()
+                    startedAt = now
                 }
                 if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) continue
                 val person = model.presentPeople.firstOrNull { it.id == followed }
                 if (person == null) {
                     // Gone from the room: the follow is kept, and waits. What
-                    // was guessed about them goes.
+                    // was guessed about them goes, and their line is waited
+                    // for afresh once they are back — their phone sends it on
+                    // seeing you follow.
                     if (here) startOver()
                     here = false
+                    startedAt = now
                     continue
                 }
                 here = true
                 val heard = model.heardReading(followed)
-                if (heard != null && heard.report.received != fed) {
-                    var report = heard.report
-                    // A word from before this page was listening — the follow
-                    // has just begun, or the phone has come back — is where
-                    // they were, not a start to read on from for however long
-                    // it has been. The guess starts from it now, and the word
-                    // their phone sends on seeing you follow carries it on.
-                    if (estimate.reported == null && !heard.fromPresence &&
-                        now - report.received > STALE_FIRST_WORD
-                    ) {
-                        report = report.copy(received = now)
+                // Their line, if it is theirs now. One heard well before this
+                // follow began listening is where they were a follow ago, and
+                // the page does not go there first.
+                val theirLine = heard?.takeIf {
+                    !it.fromPresence && it.report.received >= startedAt - STALE_FIRST_WORD
+                }
+                val word = when {
+                    theirLine != null -> theirLine
+                    // A moment for the line their phone sends on seeing you
+                    // follow, before the page goes anywhere.
+                    now - startedAt < LINE_AWAITED -> null
+                    // It has not come — an older app never sends one, and
+                    // nobody sends it to a quiet follower — so the roster's
+                    // verse, as the roster moves it.
+                    fedAt != null -> heard?.takeIf { it.fromPresence }
+                    // And to begin from, where the roster has them now: at
+                    // the start of their verse, at rest, as of this moment —
+                    // not as of whenever the roster last said it.
+                    else -> person.position?.let { position ->
+                        HeardReading(
+                            book = position.bookID,
+                            report = ReadingReport(
+                                at = ReadingPoint(chapter = position.chapter, verse = position.verse),
+                                settled = true,
+                                received = now,
+                            ),
+                            source = null,
+                            fromPresence = true,
+                        )
                     }
+                }
+                if (word != null && word.report.received != fed) {
+                    val report = word.report
+                    // Presence stood in until their line came. A guess begun
+                    // from the first word of a verse would learn their pace
+                    // and their scroll from a place they never were, so the
+                    // line starts a guess of its own.
+                    if (!word.fromPresence && onPresence) startOver()
+                    if (fedAt == null) onPresence = word.fromPresence
                     val last = fedAt
                     if (last == null || !report.settled || !samePlace(report.at, last)) {
                         news = report.received
                     }
-                    fed = heard.report.received
+                    fed = report.received
                     fedAt = report.at
-                    if (heard.book == reading.bookID) estimate.observe(report, ruler)
+                    fedBook = word.book
+                    fedPresence = word.fromPresence
+                    if (word.book == reading.bookID) estimate.observe(report, ruler)
                 }
                 // "Here, but still": the guess stops where it is.
                 if (person.isIdle) estimate.hold(now, ruler)
                 // In another book, the follow waits for them to come back.
-                if (heard == null || heard.book != reading.bookID) continue
+                if (fedBook != reading.bookID) continue
                 if (person.position != null && person.position.bookID != reading.bookID) continue
                 if (holdsTheFollow()) continue
                 val point = estimate.point(now, ruler) ?: continue
@@ -1539,7 +1609,7 @@ fun ReadingScreen(
                 // Where their own phone last said, which a step never lifts
                 // off the top of this screen — unless it came from an older
                 // app's presence, which is always a scroll behind.
-                val reported = if (heard.fromPresence) {
+                val reported = if (fedPresence) {
                     null
                 } else {
                     estimate.reported?.let { (placeOnScreen(it) as? Placed.At)?.y }
@@ -1687,7 +1757,7 @@ fun ReadingScreen(
     fun tellMyLine(settled: Boolean) {
         if (!mayTellMyLine()) return
         val (at, end) = myLine() ?: return
-        hands.lineSentAt = System.currentTimeMillis()
+        hands.lineSentAt = SystemClock.elapsedRealtime()
         // A page being carried by a follow of yours is where the page is,
         // not where you read to.
         val carried = model.followingPersonID != null
@@ -1772,7 +1842,7 @@ fun ReadingScreen(
     // follower takes a repeat as no news.
     LaunchedEffect(listState, reading.bookID) {
         while (true) {
-            val since = System.currentTimeMillis() - hands.lineSentAt
+            val since = SystemClock.elapsedRealtime() - hands.lineSentAt
             val wait = LINE_KEEPALIVE.inWholeMilliseconds - since
             if (wait > 0) {
                 delay(wait)

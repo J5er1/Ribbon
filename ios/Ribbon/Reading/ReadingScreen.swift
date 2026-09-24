@@ -163,6 +163,16 @@ struct ReadingScreen: View {
         /// A follow's landing under VoiceOver: arriving, it hands the
         /// listener the verse it came to.
         var speaks = false
+        /// Where the page was when it was sent.
+        var from: VerseAddress?
+
+        /// The page moved for it: a chapter's travel, or the move to the
+        /// line.
+        var moved: Bool {
+            if placed { return true }
+            if case .travelling = approach { return true }
+            return false
+        }
     }
 
     private struct LandingMove: Equatable {
@@ -354,8 +364,12 @@ struct ReadingScreen: View {
             .onChange(of: model.channelOpens) { _, _ in
                 // The room's line is back after the app was away. The
                 // announcement it kept goes up with the join; this says
-                // where the page is now, if that has changed since.
-                presentHere(activity: true)
+                // where the page is now, if that has changed since. Not
+                // activity: this is asked on every return to the app, a
+                // glance at Control Center included, and a still reader is
+                // still. Coming back from a suspension is the join's to
+                // count as being here.
+                presentHere(activity: false)
             }
             .onChange(of: model.readingQuietly) { _, quietly in
                 if quietly {
@@ -1230,31 +1244,28 @@ struct ReadingScreen: View {
         // Gone from the room: the follow holds, and the guess starts again
         // from whatever they say when they are back.
         guard let them = model.presentPeople.first(where: { $0.id == run.person }) else {
-            run.forget()
+            run.forget(at: now)
             return
         }
         let chapterCount = book?.chapterCount ?? 1
-        if let heard = model.heard(from: run.person), heard.report.received != run.fed {
+        if let heard = model.heard(from: run.person), run.takes(heard) {
             run.fed = heard.report.received
             if heard.book == reading.bookID {
-                var report = heard.report
-                // A word from before this page was listening — the follow
-                // has just begun, or the phone has come back — is where they
-                // were, not a start to read on from for however long it has
-                // been. The guess starts from it now, and the word their
-                // phone sends on seeing you follow carries it on.
-                if run.estimate.reported == nil, !heard.fromPresence, now.timeIntervalSince(report.received) > 25 {
-                    report.received = now
-                }
-                let news = !report.settled || !PagePoint.same(report.at, run.estimate.reported)
-                let measured = run.measure(around: report.at.chapter, count: chapterCount, text: { chapterContent($0) })
-                run.estimate.observe(report, rulers: { measured[$0] })
-                run.fromPresence = heard.fromPresence
-                if news {
-                    run.stuckAt = nil
-                    run.noFlyTo = nil
-                }
+                feed(heard.report, fromPresence: heard.fromPresence, to: run, chapterCount: chapterCount)
             }
+        } else if run.fed == nil, now.timeIntervalSince(run.startedAt) >= FollowRun.waitForTheirLine,
+                  let there = them.position, there.bookID == reading.bookID {
+            // Nothing yet this run can take. A line kept from well before it
+            // began is where they were — an earlier follow's, from a phone
+            // that stopped sending when it ended — so the page has waited a
+            // moment for the one their phone sends on seeing you follow. It
+            // has not come: their presence, where it says they are now,
+            // will do until it does. Marked as taken from when the follow
+            // began, so a line already on its way is still taken.
+            run.fed = run.startedAt
+            let report = ReadingReport(
+                at: ReadingPoint(chapter: there.chapter, verse: there.verse), settled: true, received: now)
+            feed(report, fromPresence: true, to: run, chapterCount: chapterCount)
         }
         // In another book, as far as their presence says: held.
         if let there = them.position, there.bookID != reading.bookID { return }
@@ -1279,6 +1290,7 @@ struct ReadingScreen: View {
         let manner: FollowCarriage.Manner = UIAccessibility.isVoiceOverRunning
             ? .spoken
             : (UIAccessibility.isReduceMotionEnabled ? .calm : .moving)
+        if manner != .spoken { run.spokenTo = nil }
         var wentBack = false
         if let back = run.estimate.wentBackAt {
             wentBack = run.backStepAt.map { back > $0 } ?? true
@@ -1300,15 +1312,51 @@ struct ReadingScreen: View {
                 // A screen reader moves only when their line has left the
                 // screen, and then as a landing on the verse their phone
                 // said — not on a guess — which reads itself out.
-                flyTo(reported, run: run, now: now, speaking: true)
-            } else if let y {
-                stepPage(by: CGFloat(distance), in: guess.chapter, guessAt: y, run: run, calm: manner == .calm)
+                speakTo(reported, run: run, now: now)
+            } else {
+                // A guess this page hasn't set out yet steps too, as far
+                // as their own line on screen allows.
+                stepPage(by: CGFloat(distance), guessAt: y, run: run, calm: manner == .calm)
             }
         case .fly:
             let target = manner == .spoken ? reported : guess
             guard run.noFlyTo != target.chapter else { return }
-            flyTo(target, run: run, now: now, speaking: manner == .spoken)
+            if manner == .spoken {
+                speakTo(target, run: run, now: now)
+            } else {
+                flyTo(target, run: run, now: now, speaking: false)
+            }
         }
+    }
+
+    /// A word from their phone, given to the guess. Their own line, after
+    /// only their presence, starts the guess afresh: a verse's first line,
+    /// always a scroll behind, is no rest to learn a pace or a scroll from.
+    private func feed(_ report: ReadingReport, fromPresence: Bool, to run: FollowRun, chapterCount: Int) {
+        if !fromPresence {
+            if !run.heardTheirLine, run.estimate.reported != nil { run.estimate = ReadingEstimate() }
+            run.heardTheirLine = true
+        }
+        let news = !report.settled || !PagePoint.same(report.at, run.estimate.reported)
+        let measured = run.measure(around: report.at.chapter, count: chapterCount, text: { chapterContent($0) })
+        run.estimate.observe(report, rulers: { measured[$0] })
+        run.fromPresence = fromPresence
+        if news {
+            run.stuckAt = nil
+            run.noFlyTo = nil
+            run.spokenTo = nil
+        }
+    }
+
+    /// Under VoiceOver, a landing on the verse their phone said. The same
+    /// verse is not landed on again until they say something new: a verse
+    /// taller than the screen never brings their line onto it, and landing
+    /// there again every tick pulled the voice back to the verse's start
+    /// four times a second.
+    private func speakTo(_ point: ReadingPoint, run: FollowRun, now: Date) {
+        if let last = run.spokenTo, last.chapter == point.chapter, last.verse == point.verse { return }
+        run.spokenTo = (chapter: point.chapter, verse: point.verse)
+        flyTo(point, run: run, now: now, speaking: true)
     }
 
     /// Everything that keeps the page still for now, whatever the guess
@@ -1360,14 +1408,17 @@ struct ReadingScreen: View {
     /// their own. The mark is set first and aimed at on the next turn of
     /// the main queue, as a landing's is — it has to be on the page before
     /// the scroll view can find it.
-    private func stepPage(by distance: CGFloat, in chapter: Int, guessAt y: CGFloat, run: FollowRun, calm: Bool) {
-        guard let frame = chapterFrames[chapter] else { return }
+    private func stepPage(by distance: CGFloat, guessAt y: CGFloat?, run: FollowRun, calm: Bool) {
         // Put at the top of the screen — where `.top` really puts a view,
-        // as the landing does — the mark leaves the chapter `distance`
-        // further up it, never above the chapter's own top.
-        let top = scrollTop ?? topInset
-        followMark = FollowPlace(chapter: chapter, y: max(0, top - frame.minY + distance))
-        run.step = (chapter: chapter, top: frame.minY, guess: y)
+        // as the landing does — the mark leaves the page exactly `distance`
+        // on from where it rests: measured from the chapter the screen's
+        // top is in, not the guess's, and never held inside that chapter.
+        // Held to the top of the guess's chapter, a step into the next one
+        // brought its head all the way up, past their passage end and past
+        // the line their phone had said.
+        guard let rest = restingPlace(), let frame = chapterFrames[rest.chapter] else { return }
+        followMark = FollowPlace(chapter: rest.chapter, y: rest.y + distance)
+        run.step = (chapter: rest.chapter, top: frame.minY, guess: y)
         followState.movingUntil = Date().addingTimeInterval(3)
         let step = followState.nextStep(calm ? .fade : .ease)
         DispatchQueue.main.async { followStep = step }
@@ -1429,7 +1480,7 @@ struct ReadingScreen: View {
         run.step = nil
         guard made else { return }
         if let top = chapterFrames[step.chapter]?.minY, abs(top - step.top) >= 1 { return }
-        run.stuckAt = step.guess
+        run.stuckAt = step.guess ?? .infinity
     }
 
     /// A flight of the follow's own. The landing's page-fly, without its
@@ -1709,13 +1760,13 @@ struct ReadingScreen: View {
                 landingMove = LandingMove(target: .chapter(chapter, .top), animated: false)
             }
         } else if chaptersOnPage.contains(chapter), chapterLayouts[chapter] != nil {
-            landing = Landing(address: address, animated: animated, approach: .onPage, speaks: speaking)
+            landing = Landing(address: address, animated: animated, approach: .onPage, speaks: speaking, from: from)
             continueLanding(in: chapter)
         } else {
             let down = address >= from
             landing = Landing(
                 address: address, animated: animated,
-                approach: .travelling(down: down, done: false), speaks: speaking)
+                approach: .travelling(down: down, done: false), speaks: speaking, from: from)
             landingMove = LandingMove(target: .chapter(chapter, down ? .top : .bottom), animated: animated)
         }
     }
@@ -1809,8 +1860,10 @@ struct ReadingScreen: View {
         landing?.arrived = true
         landing?.line = nil
         // Under VoiceOver a follow's landing hands the listener the verse it
-        // came to, which reads itself — no new words.
-        if let landing, landing.speaks,
+        // came to, which reads itself — no new words. Only when it took
+        // them somewhere: a landing where the page already was, on the verse
+        // it was already on, leaves the voice where it is.
+        if let landing, landing.speaks, landing.moved || landing.address != landing.from,
            let element = pages[landing.address.chapter]?.accessibilityElement(forVerse: landing.address.verse) {
             UIAccessibility.post(notification: .layoutChanged, argument: element)
         }

@@ -253,27 +253,6 @@ fun RibbonRoot(
             lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 // Back before the grace ran out, the line never went down.
                 model.cameBackToTheRoom()
-                model.refreshFromRemote()
-                // Asked again, because the first ask can fail. A launch with
-                // no network leaves the answer unknown, and unknown draws no
-                // passkey control — which is right for that moment and wrong
-                // for the rest of the process, since nothing else would ever
-                // ask again. It is idempotent and free once answered
-                // (`RemoteSync.learnWhatAuthOffers` returns at once), so only
-                // a launch that actually failed pays for this.
-                model.learnWhatAuthOffers()
-                // What the person is actually looking at, as opposed to
-                // which room is selected. Set here and cleared in the same
-                // `finally` as the socket, so a process that went away can
-                // never leave it reading true and silence the notifications
-                // it was supposed to suppress (§6.3).
-                model.visibleRoomID = model.currentRoom?.id
-                // A new zone, a new token, a switch changed in Android's own
-                // settings: the server hears all of it again (S19). Launched,
-                // not awaited — the socket below does not wait on it.
-                launch { model.registerForPush() }
-                // Back in the book, if the book is where it was left.
-                model.sayImReading()
                 // The room's live line comes back with the app, and only
                 // with it: a phone in a pocket is not present, and saying
                 // otherwise is the one lie presence must never tell (§4.2).
@@ -284,7 +263,45 @@ fun RibbonRoot(
                 // what it was saying again, which a close on every pause
                 // used to forget. Swift keeps the same grace from
                 // `.background`.
+                //
+                // Everything from here is inside the `try`: the grace was
+                // just called off, and a block cancelled anywhere below must
+                // still put the line down again.
                 try {
+                    // What the person is actually looking at, as opposed to
+                    // which room is selected. Set here and cleared in the
+                    // same `finally` as the socket, so a process that went
+                    // away can never leave it reading true and silence the
+                    // notifications it was supposed to suppress (§6.3) — and
+                    // set before the line opens, so the roster it comes back
+                    // to is not announced as people opening the book.
+                    model.visibleRoomID = model.currentRoom?.id
+                    // First, before the pull, as Swift does: the person you
+                    // follow should not wait on the network to find you
+                    // again.
+                    model.openRoomChannel()
+                    model.refreshFromRemote()
+                    // Asked again, because the first ask can fail. A launch
+                    // with no network leaves the answer unknown, and unknown
+                    // draws no passkey control — which is right for that
+                    // moment and wrong for the rest of the process, since
+                    // nothing else would ever ask again. It is idempotent and
+                    // free once answered (`RemoteSync.learnWhatAuthOffers`
+                    // returns at once), so only a launch that actually failed
+                    // pays for this.
+                    model.learnWhatAuthOffers()
+                    // Again after the pull, which can have moved you to
+                    // another room.
+                    model.visibleRoomID = model.currentRoom?.id
+                    // A new zone, a new token, a switch changed in Android's
+                    // own settings: the server hears all of it again (S19).
+                    // Launched, not awaited — the socket below does not wait
+                    // on it.
+                    launch { model.registerForPush() }
+                    // Back in the book, if the book is where it was left.
+                    model.sayImReading()
+                    // And the line again, in case the pull moved the room;
+                    // the same room is a no-op.
                     model.openRoomChannel()
                     awaitCancellation()
                 } finally {

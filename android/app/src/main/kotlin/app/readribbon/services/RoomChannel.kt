@@ -2,6 +2,7 @@
 
 package app.readribbon.services
 
+import android.os.SystemClock
 import app.readribbon.core.Person
 import app.readribbon.core.ReadingPoint
 import app.readribbon.core.ReadingReport
@@ -124,9 +125,9 @@ class RoomChannel(
     private val presenceStore = mutableMapOf<String, JsonObject>()
 
     /** Every presence send, rationed — across reconnects, not per socket. */
-    private val budget = PresenceBudget()
+    private val budget = PresenceBudget(clock = SystemClock::elapsedRealtime)
 
-    /** A send the budget held back, and when it is due. */
+    /** A send the budget held back, and when it is due, on the budget's clock. */
     private var pendingJob: Job? = null
     private var pendingDue = 0L
 
@@ -251,8 +252,11 @@ class RoomChannel(
             shutLocked()
             suspended = true
         }
-        // No empty roster: the room it last knew stays as it was, exactly as
-        // it does through a reconnect, and comes back true with the line.
+        // The room it last knew goes, as it does on a close. A reconnect keeps
+        // it for the seconds a flapping network takes; a phone put away can
+        // be gone for hours, and whoever left in that time would still be
+        // reading on this one — offline, for as long as the line stays down.
+        _events.tryEmit(PresenceEvent.Roster(emptyList()))
     }
 
     override suspend fun present(
@@ -550,7 +554,7 @@ class RoomChannel(
     }
 
     private fun schedulePendingLocked(inMs: Long) {
-        val due = System.currentTimeMillis() + inMs
+        val due = SystemClock.elapsedRealtime() + inMs
         // One look is enough; an earlier one is kept.
         if (pendingJob != null && pendingDue <= due) return
         pendingJob?.cancel()

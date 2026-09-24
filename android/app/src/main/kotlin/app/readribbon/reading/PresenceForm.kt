@@ -665,6 +665,7 @@ private fun PresencePanel(
                         person = person,
                         reduceMotion = reduceMotion,
                         onFollow = onFollow,
+                        onCollapse = onCollapse,
                     )
                 }
             }
@@ -702,6 +703,11 @@ private fun PresencePanel(
  * One person in the panel: tap to follow, hold to let them know you're
  * thinking of them (§4.3).
  *
+ * Following, or stopping, closes the panel on the way: a follow holds the
+ * page still while the panel is open, and one begun from it would otherwise
+ * wait for a panel nobody means to keep open — with TalkBack, for a back
+ * gesture nobody knew was owed.
+ *
  * Swift hoists `holdTarget` beside `holdProgress` because one `@State` pair
  * serves every row; here the pair lives in the row that is being held. Only
  * one row can be under a finger, so the two are the same state — this one
@@ -715,6 +721,7 @@ private fun PersonRow(
     person: PresentPerson,
     reduceMotion: Boolean,
     onFollow: (PresentPerson) -> Unit,
+    onCollapse: () -> Unit,
 ) {
     val haptics = LocalHaptics.current
     val scope = rememberCoroutineScope()
@@ -729,6 +736,10 @@ private fun PersonRow(
     val sendThinkingOfYou = {
         haptics?.completeThinkingOfYouHold()
         model.thinkOf(person.id)
+    }
+    val follow = {
+        onFollow(person)
+        onCollapse()
     }
 
     Row(
@@ -780,7 +791,7 @@ private fun PersonRow(
                         // the reduce-motion branch, which the raw tween never
                         // did.
                         scope.launch { fill.animateTo(0f, RibbonMotion.arrive(reduceMotion)) }
-                        if (released) onFollow(person)
+                        if (released) follow()
                     }
                 }
             }
@@ -795,7 +806,7 @@ private fun PersonRow(
                 // Every gesture has an equivalent that is not a gesture
                 // (§11): the hold is published as an action, so it is
                 // reachable without holding a press.
-                onClick(label = if (followed) null else Copy.FOLLOW) { onFollow(person); true }
+                onClick(label = if (followed) null else Copy.FOLLOW) { follow(); true }
                 customActions = listOf(
                     CustomAccessibilityAction(Copy.THINKING_OF_YOU) {
                         sendThinkingOfYou()
