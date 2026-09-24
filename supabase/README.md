@@ -35,6 +35,34 @@ What the schema enforces structurally (see the comments in the SQL):
   restart the app: the private join is retried every time a room is
   opened, so nothing else needs doing.
 
+- **Push is a fact in the database first (S19, S24).**
+  `20260924010000_ribbon_push.sql` adds the phones (`push_devices`: a
+  token, the per-room switches, quiet hours and time zone the phone holds),
+  the Live Activities running on them (`live_activities`), and an outbox.
+  Triggers on notes, cards and readings — and the phone's own calls,
+  `i_am_reading`, `i_have_left` and `think_of` — write outbox rows, and
+  every insert wakes the `push` function over pg_net. The function asks
+  `push_claim()` who should hear what and delivers it through APNs or FCM;
+  it takes nothing from its caller, so it is deployed with JWT
+  verification off. Presence-like rows are gone five minutes after they
+  are sent and the rest after a day: nothing here becomes a history (§13).
+
+  It delivers once its secrets are set (Edge Functions → Secrets, or
+  `supabase secrets set ... --project-ref noyccfkaotuvhhaoccck`):
+
+  | Secret | What it is |
+  | --- | --- |
+  | `APNS_KEY_ID` | The APNs auth key's id (Keys, in the Apple developer portal) |
+  | `APNS_TEAM_ID` | The team the key belongs to |
+  | `APNS_PRIVATE_KEY` | The `.p8` file's contents, whole |
+  | `APNS_TOPIC` | Optional; defaults to `bible.ribbon.app` |
+  | `FCM_SERVICE_ACCOUNT` | The Firebase service account JSON, whole |
+
+  `GET /functions/v1/push` answers `{"ios": …, "android": …}` — whether
+  each is configured. The apps ask it, and a phone keeps posting its own
+  notifications until the server can say them for it, so nothing is lost
+  before the keys exist and nothing is said twice after.
+
 Auth is Auth0 where the build is configured for it (see `auth0/`), with
 Supabase's own emailed code underneath; there are no passwords either way,
 and every surface that needs an account goes through the one sign-in

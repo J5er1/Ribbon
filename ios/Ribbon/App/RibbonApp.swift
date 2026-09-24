@@ -38,6 +38,22 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         RoomWatch.register()
         return true
     }
+
+    // The token push is delivered to (S19). It can change at any launch;
+    // each new one is registered again with everything else the phone holds.
+    func application(
+        _ application: UIApplication,
+        didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+    ) {
+        Push.tokenArrived(deviceToken)
+    }
+
+    // A simulator, or a build without the push entitlement. Nothing to do:
+    // with no token the phone is on no list, and keeps posting for itself.
+    func application(
+        _ application: UIApplication,
+        didFailToRegisterForRemoteNotificationsWithError error: Error
+    ) {}
 }
 
 @main
@@ -104,6 +120,8 @@ struct RibbonApp: App {
                     // The room is on screen again: a note left here is not
                     // something the phone needs to tell you about (S19).
                     model.visibleRoomID = model.currentRoom?.id
+                    // Back in the book, if the book is where it was left.
+                    model.sayImReading()
                     Task {
                         await Notifications.refreshAllowed()
                         await model.refreshFromRemote()
@@ -112,9 +130,16 @@ struct RibbonApp: App {
                         // and saying otherwise is the one lie presence must
                         // never tell (§4.2).
                         await model.openRoomChannel()
+                        // A new zone, a new token, a switch changed in
+                        // Settings: the server hears all of it again.
+                        await model.registerForPush()
                     }
                 case .background:
                     model.visibleRoomID = nil
+                    // The same lie, told to the server: a phone in a pocket
+                    // is not reading, and the Live Activity on the other
+                    // phones ends.
+                    model.sayIveLeft()
                     Task { await model.closeRoomChannel() }
                 default:
                     break

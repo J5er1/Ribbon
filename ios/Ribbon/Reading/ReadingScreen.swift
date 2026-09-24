@@ -267,13 +267,22 @@ struct ReadingScreen: View {
                             isIdle: false, following: model.followingPersonID)
                     }
                 }
+                // The same fact, told to the server for the phones the
+                // socket cannot reach (S19, S24). Quietly, it tells nobody.
+                model.bookAppeared(reading)
             }
             .onDisappear {
                 // Out of the book, still in the room: the line stays open so
                 // the room keeps hearing about itself.
                 Task { await model.presence.withdraw() }
+                model.bookDisappeared(reading)
             }
             .onChange(of: model.readingQuietly) { _, quietly in
+                if quietly {
+                    model.sayIveLeft()
+                } else {
+                    model.sayImReading()
+                }
                 Task {
                     if quietly {
                         await model.presence.withdraw()

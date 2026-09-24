@@ -2,6 +2,13 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- Push (S19). "development" here is what a build run from Xcode
+	     signs with; exporting for TestFlight and the store re-signs it as
+	     "production" from the App Store profile, which is why the app says
+	     which APNs world its token belongs to (Push.environment). The App ID
+	     needs the Push Notifications capability for either. -->
+	<key>aps-environment</key>
+	<string>development</string>
 	<!-- Invite links (readribbon.app/i/<token>) open the app when it's
 	     installed. The site serves the matching
 	     /.well-known/apple-app-site-association (web/build.mjs). -->

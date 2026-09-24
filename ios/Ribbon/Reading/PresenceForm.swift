@@ -308,7 +308,7 @@ struct PresenceForm: View {
     /// (§4.3).
     private func thinkOf(_ person: PresentPerson) {
         Haptics.shared.completeThinkingOfYouHold()
-        Task { await model.presence.sendThinkingOfYou(to: person.id) }
+        model.thinkOf(person.id)
         // The ring stays full for a moment and then lets go, so what
         // the hold did is seen as well as felt.
         sentTo = person.id

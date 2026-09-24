@@ -176,10 +176,23 @@ final class NotificationRouter: NSObject, UNUserNotificationCenterDelegate, @unc
     func userNotificationCenter(
         _ center: UNUserNotificationCenter, willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
-        // In the foreground the room is on screen and the model has already
-        // decided not to post about it; what does arrive is for another
-        // room, and a banner is right. Never a badge.
-        [.banner, .sound]
+        // What the phone posts itself has already been through the three
+        // gates. A push has been through two — the switch and the quiet
+        // hours, judged by the server — and the third is only knowable
+        // here: a phone in your hand is not told what it is showing you.
+        // A finished book and a touch on the shoulder pass it regardless,
+        // as they do in `shouldPost`. Never a badge.
+        let info = notification.request.content.userInfo
+        guard let kind = (info["notify"] as? String).flatMap(NotificationKind.init(rawValue:)),
+              let room = (info["room"] as? String).flatMap(UUID.init(uuidString:))
+        else { return [.banner, .sound] }
+        switch kind {
+        case .notesLeft, .cardsOpen, .inTheBook:
+            let visible = await MainActor.run { AppSession.model?.visibleRoomID }
+            return room == visible ? [] : [.banner, .sound]
+        case .thinkingOfYou, .bookFinished:
+            return [.banner, .sound]
+        }
     }
 
     func userNotificationCenter(

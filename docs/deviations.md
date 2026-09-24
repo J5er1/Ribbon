@@ -103,15 +103,14 @@ reasoning.
     mutations queue with hairline `isPending` state and automatically
     push upon reconnection. Deletions and "take back" propagate remotely.
 
-11. **Phase-two surfaces remaining:**
-    Cards (S08/S09) are now implemented on iOS and Android at the passage
-    end. Remaining phase-two items: notifications delivery (S19 stores per-room
-    switches locally; there is no push infrastructure yet), widgets and
-    Live Activity (S24), rooms of three-plus ink-transition moment
-    (model supports it; the invitation row on S01 is not yet built),
-    StoreKit (S22 shows the model's promise only), and the web *join*
-    (S16's browser half — the app-side join is built, deviation 10; the
-    web page still previews and reads only).
+11. **Phase-two surfaces remaining:** Cards (S08/S09) are now implemented on
+    iOS and Android at the passage end. Notifications are delivered by push
+    now (I33, A56). Remaining phase-two items: widgets and Live Activity
+    (S24), rooms of three-plus ink-transition moment (model supports it; the
+    invitation row on S01 is not yet built), StoreKit (S22 shows the model's
+    promise only), and the web *join* (S16's browser half — the app-side
+    join is built, deviation 10; the web page still previews and reads
+    only).
 
 12. **iPad is a considered surface now, one readable column wide.** The
     book designs phone screens; the target includes iPad (all
@@ -3729,6 +3728,61 @@ I32. **The note unfurls: the line height opens over 400 ms (S04).** I29 left
       end below stepping rather than sliding. Under reduce motion the carve
       is a change of state, as on Android (§11). Worth measuring on a device
       before it is trusted: a display link redraws the chapter for 400 ms.
+
+I33. **Push: the six arrive when they happen (S19).** Every notification was
+    the phone's own work until now — a background pull whenever the system
+    allowed one, fifteen minutes apart at best (A34), and nothing at all
+    for the two things with no row behind them, "Ruth is reading Mark" and
+    a thinking-of-you sent to a closed app. The backend can send now, and
+    this is the shape of it, on both platforms (Android's end is A56).
+
+    - **Every push is a fact in the database first.** A trigger on notes,
+      cards and readings — or a call from the phone for reading, leaving
+      and thinking of you — writes a row to `push_outbox`, and the insert
+      wakes the `push` function. The database says who hears what
+      (`push_claim`); the function only words it and delivers it. So the
+      function needs no secret to be safe to call: anyone who finds it can
+      only make it deliver what was waiting, once.
+    - **The switches are the phone's, as the phone holds them.** Each phone
+      registers its token with every room's four switches, its quiet hours
+      and its time zone — at launch, on every return to the foreground, and
+      a second after a switch changes. The server judges quiet hours in the
+      phone's own zone, because a phone that is asleep cannot judge
+      anything.
+    - **One voice, never two.** While the sender says it can reach APNs and
+      this phone's registration went through, the phone posts none of the
+      six itself; the background pull still merges, and the watermark still
+      moves. A phone that is not registered — no permission, no token, the
+      key not set yet — keeps speaking for itself exactly as before. The
+      last answer is remembered, because a background pull runs before
+      anything could ask.
+    - **The third gate is the phone's.** A note about the room on screen is
+      not presented (`willPresent`): a phone in your hand is not told what
+      it is showing you. A finished book and a touch pass, as they always
+      have.
+    - **"When they open the book"** is said on an *arrival*: the book opened
+      after half an hour away from it. The phone says it is reading on
+      opening and every ten minutes while it stays open, and that it has
+      left when the book closes, reading turns quiet, or the app goes away.
+      Reading quietly tells the server nothing. The server keeps no record
+      of any of it beyond `last_read`, the one stamp per person per room
+      §13 already allows, overwritten in place.
+    - **Thinking of you:** the socket still carries the touch to a phone in
+      the room; the server carries the name to one that is not. In quiet
+      hours nothing is pushed — S19 lets the touch arrive silently "as a
+      haptic on an already-woken device", which is the socket's to give.
+    - **Several notes:** a second note from the same person inside half an
+      hour replaces the first, without a sound, and names only the person
+      (§10.3). It is the same collapse the phones have always done, told by
+      the server now.
+    - **Nothing becomes history.** "Reading", "left" and thinking-of-you
+      rows go five minutes after they are sent; note, card and book rows,
+      which only point at rows that exist anyway, go after a day.
+    - **What it needs to be heard:** the APNs key as secrets on the
+      function (`supabase/README.md`), and the Push Notifications
+      capability on the App ID with the profiles made again. Until both
+      exist nothing changes: the sender answers that it cannot reach
+      APNs, and every phone keeps posting for itself.
 
 ## Licensed translations (decided: API.Bible)
 
