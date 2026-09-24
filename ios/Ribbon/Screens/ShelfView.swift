@@ -10,10 +10,99 @@ struct ShelfView: View {
     let room: Room
     let readings: [Reading]
     var onStartAnother: () -> Void
+    /// A note found, opened where it was left — in its own book (S23).
+    var onOpenNote: (Reading, VerseAddress) -> Void
+
+    @State private var query = ""
+    @FocusState private var searchFocused: Bool
 
     private let columns = [GridItem(.adaptive(minimum: 88), spacing: 18, alignment: .bottom)]
 
+    private var trimmedQuery: String { query.trimmingCharacters(in: .whitespaces) }
+    /// Two characters is where a search begins (S13, S23).
+    private var searching: Bool { trimmedQuery.count >= 2 }
+
     var body: some View {
+        let found = searching ? model.notes(in: room, matching: query) : []
+        VStack(alignment: .leading, spacing: 20) {
+            // Note search lives here, where what it searches lives (S23): not
+            // a bar across the front door, but a field on the room's memory.
+            CentredTextField(
+                text: $query, prompt: Copy.findSomethingSaid, submitLabel: .search,
+                centred: false, focus: $searchFocused)
+                .autocorrectionDisabled()
+                .padding(.horizontal, 24)
+
+            if !found.isEmpty {
+                VStack(alignment: .leading, spacing: 14) {
+                    ForEach(found) { note in
+                        foundRow(note)
+                    }
+                }
+                .padding(.horizontal, 24)
+                .transition(.opacity)
+            } else {
+                // Finding nothing says so over the shelf, which stays
+                // beneath, as the chooser's list does (S13).
+                if searching {
+                    Text(Copy.nothingMatches)
+                        .font(RibbonType.ui(15))
+                        .foregroundStyle(Palette.muted)
+                        .padding(.horizontal, 24)
+                        .transition(.opacity)
+                }
+                shelf
+                    .transition(.opacity)
+            }
+        }
+        .animation(RibbonMotion.arrive, value: searching)
+        .animation(RibbonMotion.arrive, value: found.map(\.id))
+    }
+
+    /// One note found: where it is and whose, then its words around what was
+    /// searched for.
+    private func foundRow(_ note: Note) -> some View {
+        let said = note.body ?? note.transcript ?? ""
+        let name = note.authorID == model.me?.id ? Copy.you : firstName(model.person(note.authorID)?.name ?? "")
+        return Button {
+            // The keyboard goes with the room: the book comes up over it.
+            searchFocused = false
+            if let reading = model.state.readings.first(where: { $0.id == note.readingID }) {
+                onOpenNote(reading, note.verse)
+            }
+        } label: {
+            VStack(alignment: .leading, spacing: 3) {
+                SmallCaps("\(note.verse.formatted) · \(name)", size: 12, color: Palette.text.opacity(0.8))
+                Text(excerpt(said, around: trimmedQuery))
+                    .font(RibbonType.ui(15))
+                    .foregroundStyle(Palette.muted)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+            }
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Copy.noteFound(note.verse.formatted, by: name) + ". " + said)
+        .accessibilityAddTraits(.isButton)
+    }
+
+    /// The words around the match, so one late in a long note is still on
+    /// the two lines a row has: from the start of a word a little before it.
+    private func excerpt(_ said: String, around query: String) -> String {
+        guard let match = said.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]),
+              said.distance(from: said.startIndex, to: match.lowerBound) > 48
+        else { return said }
+        var start = said.index(match.lowerBound, offsetBy: -40)
+        while start > said.startIndex, !said[said.index(before: start)].isWhitespace {
+            start = said.index(before: start)
+        }
+        return "…" + said[start...]
+    }
+
+    /// The embers, the keepsake line and the way to another book.
+    private var shelf: some View {
         VStack(alignment: .leading, spacing: 20) {
             LazyVGrid(columns: columns, alignment: .leading, spacing: 26) {
                 ForEach(readings) { reading in
@@ -22,8 +111,10 @@ struct ShelfView: View {
                             EmberView(scale: reading.handiwork.scale)
                             SmallCaps(Bible.book(id: reading.bookID)?.name ?? reading.bookID, size: 12)
                         }
+                        .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    // An ember takes a press the way a tile does.
+                    .buttonStyle(.pressable)
                 }
             }
             .padding(.horizontal, 24)
@@ -44,6 +135,7 @@ struct ShelfView: View {
 // source of the printed keepsake.
 struct EmberRecordScreen: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
     let reading: Reading
     var onOpenVerse: (VerseAddress) -> Void
     var onReadAgain: (String) -> Void
@@ -53,6 +145,24 @@ struct EmberRecordScreen: View {
     private var highlights: [Highlight] { model.highlights(in: reading) }
 
     var body: some View {
+        VStack(spacing: 0) {
+            // The way back, pinned, in the room's own drawn chevron — the one
+            // pushed screen that still wore the system's bar and its glyph,
+            // where every other page the room pushes has this (A29).
+            HStack(spacing: 0) {
+                BackChevron { dismiss() }
+                Spacer()
+            }
+            .padding(.horizontal, 8)
+            .frame(height: 52)
+
+            record
+        }
+        .room()
+        .toolbar(.hidden, for: .navigationBar)
+    }
+
+    private var record: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 VStack(spacing: 10) {
@@ -79,7 +189,7 @@ struct EmberRecordScreen: View {
                                     size: 30,
                                     image: model.portrait(membership.personID))
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.pressable)
                         }
                     }
                     .padding(.top, 6)
@@ -126,7 +236,6 @@ struct EmberRecordScreen: View {
             .readableColumn()
         }
         .scrollIndicators(.hidden)
-        .room()
     }
 }
 
@@ -151,6 +260,11 @@ private struct EmberNoteRow: View {
                     SmallCaps(note.verse.formatted, size: 12, color: Palette.text.opacity(0.8))
                     Spacer()
                 }
+                // The whole row answers, a finger's height of it: only the
+                // mark and the verse's letters did, and the space between
+                // them — most of the row — did nothing.
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             if open {
@@ -195,6 +309,8 @@ private struct QuotedHighlight: View {
                 }
                 SmallCaps(highlight.range.formatted, size: 11)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }

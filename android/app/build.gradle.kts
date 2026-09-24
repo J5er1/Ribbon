@@ -6,6 +6,44 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+// Firebase, for push (S19), read out of `google-services.json` when the file
+// is there: the values the google-services plugin would have turned into
+// resources, as BuildConfig fields instead, one set per package. No plugin,
+// on purpose — a build without the file is a build without Firebase, and
+// nothing else about it changes (services/Push.kt). Register both packages,
+// app.readribbon and app.readribbon.debug, in the Firebase project.
+val firebaseClients: Map<String, Map<String, String>> = run {
+    val config = file("google-services.json")
+    if (!config.exists()) return@run emptyMap()
+    @Suppress("UNCHECKED_CAST")
+    val root = groovy.json.JsonSlurper().parse(config) as Map<String, Any?>
+    @Suppress("UNCHECKED_CAST")
+    val projectInfo = root["project_info"] as Map<String, Any?>
+    @Suppress("UNCHECKED_CAST")
+    val clients = root["client"] as List<Map<String, Any?>>
+    clients.associate { client ->
+        @Suppress("UNCHECKED_CAST")
+        val info = client["client_info"] as Map<String, Any?>
+        @Suppress("UNCHECKED_CAST")
+        val androidInfo = info["android_client_info"] as Map<String, Any?>
+        @Suppress("UNCHECKED_CAST")
+        val keys = client["api_key"] as List<Map<String, Any?>>? ?: emptyList()
+        (androidInfo["package_name"] as String) to mapOf(
+            "APP_ID" to (info["mobilesdk_app_id"] as String),
+            "API_KEY" to (keys.firstOrNull()?.get("current_key") as String? ?: ""),
+            "PROJECT_ID" to (projectInfo["project_id"] as String),
+            "SENDER_ID" to (projectInfo["project_number"] as String),
+        )
+    }
+}
+
+fun com.android.build.api.dsl.VariantDimension.firebase(packageName: String) {
+    val values = firebaseClients[packageName].orEmpty()
+    listOf("APP_ID", "API_KEY", "PROJECT_ID", "SENDER_ID").forEach { key ->
+        buildConfigField("String", "FIREBASE_$key", "\"${values[key].orEmpty()}\"")
+    }
+}
+
 android {
     namespace = "app.readribbon"
     // Compiled against 37 because the current AndroidX libraries require it.
@@ -49,10 +87,12 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            firebase("app.readribbon")
         }
         debug {
             applicationIdSuffix = ".debug"
             signingConfig = signingConfigs.getByName("debug")
+            firebase("app.readribbon.debug")
         }
     }
 
@@ -147,9 +187,11 @@ dependencies {
     implementation(libs.auth0)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation(libs.androidx.media3.exoplayer)
-    // The only way a notification can arrive while Ribbon is closed (S19).
-    // There is no FCM here and no foreground service — see services/RoomWatch.kt
-    // for why neither, and what this route can and cannot carry.
+    // Push (S19): the six arrive when they happen, once the build carries a
+    // Firebase configuration (see the top of this file, and services/Push.kt).
+    implementation(libs.firebase.messaging)
+    // The background pull — the route everything took before push, and still
+    // the one a build without Firebase takes (services/RoomWatch.kt).
     implementation(libs.androidx.work.runtime)
 
     implementation(libs.kotlinx.coroutines.android)

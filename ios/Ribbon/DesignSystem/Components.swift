@@ -73,7 +73,9 @@ struct NoteMark: View {
             .frame(width: 6, height: 6)
             .opacity(baseOpacity)
             .animation(RibbonMotion.settle(still: reduceMotion), value: lineWidth)
-            .animation(RibbonMotion.settle(still: reduceMotion), value: found)
+            // Found is a change of light, not of place: it fades under
+            // reduce motion too.
+            .animation(RibbonMotion.settle, value: found)
             .onAppear { setBreath() }
             .onChange(of: breathes) { _, _ in setBreath() }
             .accessibilityHidden(true)
@@ -85,7 +87,7 @@ struct NoteMark: View {
                 breathing = true
             }
         } else {
-            withAnimation(RibbonMotion.settle(still: reduceMotion)) { breathing = false }
+            withAnimation(RibbonMotion.settle) { breathing = false }
         }
     }
 }
@@ -113,7 +115,9 @@ struct WayInButton: View {
                 .background(Palette.chartreuse, in: Capsule())
                 .contentShape(Capsule())
         }
-        .buttonStyle(.plain)
+        // The same give as a tile: the room's one wide control answers a
+        // finger the way everything else in the room does.
+        .buttonStyle(.pressable)
         .hoverEffect(.lift)
     }
 }

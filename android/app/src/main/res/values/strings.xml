@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Ribbon</string>
+    <!-- The widget picker's words (S24), the same as the iOS widget's. -->
+    <string name="fire_widget_label">The fire</string>
+    <string name="fire_widget_description">The room\'s fire, and the book it is reading.</string>
 </resources>

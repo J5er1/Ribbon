@@ -1399,10 +1399,12 @@ class LookBookTest {
             OnTheGround {
                 Box(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
                     ShelfView(
+                        model = m,
                         room = m.state.rooms.first(),
                         readings = finished,
                         onStartAnother = {},
                         onOpenEmber = {},
+                        onOpenNote = { _, _ -> },
                     )
                 }
             }

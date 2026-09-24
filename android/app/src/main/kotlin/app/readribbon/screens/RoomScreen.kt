@@ -91,6 +91,7 @@ import app.readribbon.design.WayInButton
 import app.readribbon.design.flows
 import app.readribbon.design.opensTheBook
 import app.readribbon.design.opensTheRoom
+import app.readribbon.reading.ReadingPlace
 import app.readribbon.design.paper
 import app.readribbon.design.pressable
 import app.readribbon.design.pressablePaper
@@ -219,7 +220,7 @@ fun RoomScreen(
     sheet: BookSheet,
     chooserRequested: Boolean,
     onChooserHandled: () -> Unit,
-    onOpenReading: (Reading, VerseAddress?) -> Unit,
+    onOpenReading: (Reading, ReadingPlace?) -> Unit,
     onBeginOpening: (Reading) -> Unit,
     onAbandonOpening: () -> Unit,
     onOpenRooms: () -> Unit,
@@ -389,10 +390,14 @@ fun RoomScreen(
                     Column(Modifier.padding(top = 40.dp, start = GUTTER, end = GUTTER)) {
                         SectionLabel(Copy.THE_SHELF)
                         ShelfView(
+                            model = model,
                             room = room,
                             readings = shelf,
                             onStartAnother = { showChooser = true },
                             onOpenEmber = onOpenEmber,
+                            onOpenNote = { reading, verse ->
+                                onOpenReading(reading, ReadingPlace.Verse(verse))
+                            },
                         )
                     }
                 }
@@ -641,7 +646,7 @@ private fun Hearth(
     room: Room,
     reading: Reading?,
     sheet: BookSheet,
-    onOpenReading: (Reading, VerseAddress?) -> Unit,
+    onOpenReading: (Reading, ReadingPlace?) -> Unit,
     onBeginOpening: (Reading) -> Unit,
     onAbandonOpening: () -> Unit,
     onPickABook: () -> Unit,
@@ -1260,7 +1265,7 @@ private fun WayIn(
     reading: Reading?,
     book: app.readribbon.core.BibleBook?,
     sheet: BookSheet,
-    onOpenReading: (Reading, VerseAddress?) -> Unit,
+    onOpenReading: (Reading, ReadingPlace?) -> Unit,
     onBeginOpening: (Reading) -> Unit,
     onPickABook: () -> Unit,
     modifier: Modifier = Modifier,
@@ -1303,7 +1308,7 @@ private fun WayIn(
                     reading = reading,
                     ribbon = ribbon,
                     book = book,
-                    onGo = { address -> onOpenReading(reading, address) },
+                    onGo = { address -> onOpenReading(reading, ReadingPlace.Verse(address)) },
                 )
             }
             // The gesture, said once. It goes for good the first time the
@@ -1458,7 +1463,7 @@ private fun WaitingSection(
     model: AppModel,
     room: Room,
     reading: Reading?,
-    onOpenReading: (Reading, VerseAddress?) -> Unit,
+    onOpenReading: (Reading, ReadingPlace?) -> Unit,
     onSendItAgain: () -> Unit,
     onPickAnInk: () -> Unit,
     modifier: Modifier = Modifier,
@@ -1472,9 +1477,17 @@ private fun WaitingSection(
     // S01's anatomy lists "the cards are open" as a waiting row and the room
     // had never drawn one. One row however many cards are open — the plural
     // is in the noun, not in a number.
-    val cardsOpen = reading != null && !room.isPaused && model.state.cards.any {
-        it.readingID == reading.id && it.state == CardState.open
+    val openCard = if (reading == null || room.isPaused) {
+        null
+    } else {
+        // The card the row is about is the one that opened last, and the row
+        // goes to it, at the foot of its chapter, rather than to your own
+        // place.
+        model.state.cards
+            .filter { it.readingID == reading.id && it.state == CardState.open }
+            .maxByOrNull { it.openedAt?.toEpochMilliseconds() ?: Long.MIN_VALUE }
     }
+    val cardsOpen = openCard != null
 
     // Ink is identity from three people up (§4.5) and this membership has
     // none. Never in a room of two, where the whole palette is free per
@@ -1551,7 +1564,7 @@ private fun WaitingSection(
                                 onClick = {
                                     // Jumps to that note (§6.3): the reading
                                     // opens at its verse, the mark breathing.
-                                    if (reading != null) onOpenReading(reading, note.verse)
+                                    if (reading != null) onOpenReading(reading, ReadingPlace.Verse(note.verse))
                                 },
                             )
                         }
@@ -1559,7 +1572,7 @@ private fun WaitingSection(
                 }
             }
 
-            if (cardsOpen && reading != null) {
+            if (openCard != null && reading != null) {
                 WaitingRow(
                     mark = {
                         Box(
@@ -1570,7 +1583,7 @@ private fun WaitingSection(
                         )
                     },
                     text = Copy.NOTIF_CARDS_OPEN,
-                    onClick = { onOpenReading(reading, null) },
+                    onClick = { onOpenReading(reading, ReadingPlace.Card(openCard.chapter)) },
                 )
             }
 

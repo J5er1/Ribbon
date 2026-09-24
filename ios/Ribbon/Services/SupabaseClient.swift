@@ -275,6 +275,18 @@ actor SupabaseClient {
         try await post(path: "rest/v1/rpc/\(function)", body: body, authenticated: true)
     }
 
+    /// Call a database function whose arguments are not all strings, with
+    /// the body already written. The snake-casing encoder is kept away from
+    /// it on purpose: a map keyed by room ids and switch names has to reach
+    /// the database exactly as written (register_push_device).
+    func rpc(_ function: String, json body: Data) async throws -> Data {
+        var request = URLRequest(url: base.appending(path: "rest/v1/rpc/\(function)"))
+        request.httpMethod = "POST"
+        request.httpBody = body
+        try apply(headers: &request)
+        return try await run(request)
+    }
+
     /// Call an anon-callable function (invite_preview — the join screen
     /// shows who is inviting before any account exists).
     func rpcAnon(_ function: String, body: [String: String]) async throws -> Data {

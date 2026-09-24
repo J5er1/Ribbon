@@ -8,6 +8,7 @@ import RibbonCore
 
 struct OnboardingFlow: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var onDone: () -> Void
 
     enum Step: Equatable {
@@ -28,48 +29,34 @@ struct OnboardingFlow: View {
     @State private var portraitData: Data?
     @State private var pastedInvite = ""
     @State private var pasteMissed = false
+    /// The name has gone to the model and the room is being made. A second
+    /// tap on "That's me" while that is under way must not make a second
+    /// person — with a portrait there is an await before the first one
+    /// exists, and a quick finger fits inside it.
+    @State private var committing = false
+    /// Which way the thread is moving, read by the steps' transition at the
+    /// moment it runs (see `ThreadMove`).
+    @State private var direction = ThreadDirection()
     @FocusState private var nameFocused: Bool
 
     var body: some View {
-        ZStack {
-            switch step {
-            case .mark:
-                markMoment
-                    .transition(.opacity)
-            case .tour(let index):
-                tourStep(index)
-                    .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity),
-                                             removal: .move(edge: .leading).combined(with: .opacity)))
-            case .intent:
-                intentStep
-                    .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity),
-                                             removal: .move(edge: .leading).combined(with: .opacity)))
-            case .fromInvite:
-                fromInviteStep
-                    .transition(.opacity)
-            case .signIn:
-                signInStep
-                    .transition(.opacity)
-            case .name:
-                nameStep
-                    .transition(.opacity)
-            case .invite:
-                inviteStep
-                    .transition(.opacity)
-            case .join(let token):
-                JoinFlow(
-                    token: token,
-                    onDone: onDone,
-                    onStartInstead: {
-                        // Declining the join forgets it — otherwise the
-                        // pending token re-presents the join over the
-                        // room they start instead.
-                        model.pendingInvite = nil
-                        withAnimation(RibbonMotion.settle) { step = .name }
-                    })
-                .id(token)
+        VStack(spacing: 0) {
+            // One bar for the whole thread, standing still while the steps
+            // move under it. Each step used to carry its own, so the bar
+            // slid away with the card it was counting, and its fill was
+            // never once seen to fill.
+            if let progress {
+                OnboardingProgressBar(
+                    currentStep: progress.current,
+                    totalSteps: 6,
+                    onBack: progress.back,
+                    onSignIn: progress.signIn)
                 .transition(.opacity)
             }
+            ZStack {
+                steps
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .frame(maxWidth: 420)
@@ -80,12 +67,86 @@ struct OnboardingFlow: View {
         // intent — it wins over whatever step was showing (S16).
         .onChange(of: model.pendingInvite, initial: true) { _, pending in
             if let pending {
-                withAnimation(RibbonMotion.settle) { step = .join(pending.token) }
+                go(.join(pending.token))
             }
         }
     }
 
-    // The mark, and one line. It holds for about 750 ms and then dissolves into the tour.
+    @ViewBuilder
+    private var steps: some View {
+        switch step {
+        case .mark:
+            markMoment
+                .transition(.opacity)
+        case .tour(let index):
+            tourStep(index)
+                .transition(moving)
+        case .intent:
+            intentStep
+                .transition(moving)
+        case .fromInvite:
+            fromInviteStep
+                .transition(.opacity)
+        case .signIn:
+            signInStep
+                .transition(.opacity)
+        case .name:
+            nameStep
+                .transition(.opacity)
+        case .invite:
+            inviteStep
+                .transition(.opacity)
+        case .join(let token):
+            JoinFlow(
+                token: token,
+                onDone: onDone,
+                onStartInstead: {
+                    // Declining the join forgets it — otherwise the
+                    // pending token re-presents the join over the
+                    // room they start instead.
+                    model.pendingInvite = nil
+                    go(.name)
+                })
+            .id(token)
+            .transition(.opacity)
+        }
+    }
+
+    // MARK: - Moving along the thread
+
+    /// Onward, or back: `forward: false` for every way back.
+    private func go(_ next: Step, forward: Bool = true) {
+        direction.sign = forward ? 1 : -1
+        withAnimation(RibbonMotion.settle) { step = next }
+    }
+
+    /// A tour card or the intent step comes in from the side the thread is
+    /// moving toward and leaves by the other — so going back looks like
+    /// going back. Under reduce motion they only fade (§11).
+    private var moving: AnyTransition {
+        reduceMotion ? .opacity : AnyTransition(ThreadMove(direction: direction))
+    }
+
+    /// The bar over the steps that have one — the tour, the intent, the
+    /// name — with the way back and the way to sign in each of them offers.
+    private var progress: (current: Int, back: (() -> Void)?, signIn: (() -> Void)?)? {
+        switch step {
+        case .tour(let index):
+            return (
+                index,
+                index > 0 ? { go(.tour(index - 1), forward: false) } : nil,
+                { go(.signIn) })
+        case .intent:
+            return (4, { go(.tour(3), forward: false) }, { go(.signIn) })
+        case .name:
+            return (5, { go(.intent, forward: false) }, nil)
+        default:
+            return nil
+        }
+    }
+
+    // The mark, and one line. It holds for about 750 ms and then dissolves
+    // into the tour — a dissolve, in place: the first card does not slide.
     private var markMoment: some View {
         VStack(spacing: 22) {
             WaveMark()
@@ -96,46 +157,27 @@ struct OnboardingFlow: View {
         }
         .task {
             try? await Task.sleep(for: .milliseconds(750))
-            withAnimation(.easeInOut(duration: 0.5)) { step = .tour(0) }
+            guard !Task.isCancelled else { return }
+            direction.sign = 0
+            withAnimation(RibbonMotion.settle) { step = .tour(0) }
         }
     }
 
     // MARK: - Feature Tour Steps (Duolingo Style)
     private func tourStep(_ index: Int) -> some View {
         VStack(spacing: 0) {
-            OnboardingProgressBar(
-                currentStep: index,
-                totalSteps: 6,
-                onBack: index > 0 ? {
-                    withAnimation(RibbonMotion.settle) { step = .tour(index - 1) }
-                } : nil,
-                onSignIn: {
-                    withAnimation(RibbonMotion.settle) { step = .signIn }
-                }
-            )
-
             OnboardingTourCard(index: index)
 
             VStack(spacing: 12) {
                 WayInButton(title: Copy.continueTour) {
-                    withAnimation(RibbonMotion.settle) {
-                        if index < 3 {
-                            step = .tour(index + 1)
-                        } else {
-                            step = .intent
-                        }
-                    }
+                    go(index < 3 ? .tour(index + 1) : .intent)
                 }
                 .padding(.horizontal, 40)
 
                 if index == 0 {
-                    QuietControl(title: Copy.alreadyHaveAccount) {
-                        withAnimation(RibbonMotion.settle) { step = .signIn }
-                    }
+                    QuietControl(title: Copy.alreadyHaveAccount) { go(.signIn) }
                 } else {
-                    QuietControl(title: Copy.haveAnInvite) {
-                        withAnimation(RibbonMotion.settle) { step = .fromInvite }
-                    }
+                    QuietControl(title: Copy.haveAnInvite) { go(.fromInvite) }
                 }
             }
             .padding(.bottom, 24)
@@ -145,13 +187,6 @@ struct OnboardingFlow: View {
     // MARK: - Intent Step ("Who will you read with?")
     private var intentStep: some View {
         VStack(spacing: 20) {
-            OnboardingProgressBar(
-                currentStep: 4,
-                totalSteps: 6,
-                onBack: { withAnimation(RibbonMotion.settle) { step = .tour(3) } },
-                onSignIn: { withAnimation(RibbonMotion.settle) { step = .signIn } }
-            )
-
             Spacer()
 
             Text(Copy.walkthroughIntentTitle)
@@ -172,24 +207,24 @@ struct OnboardingFlow: View {
 
             Spacer()
 
-            WayInButton(title: Copy.continueTour) {
-                withAnimation(RibbonMotion.settle) { step = .name }
-            }
-            .padding(.horizontal, 40)
-            .padding(.bottom, 24)
+            WayInButton(title: Copy.continueTour) { go(.name) }
+                .padding(.horizontal, 40)
+                .padding(.bottom, 24)
         }
     }
 
+    /// No tick under the finger: §9.3 lists every haptic the product has,
+    /// and "no selection ticks" is on it by name. The check drawing itself
+    /// in is the answer to the tap.
     private func choose(_ index: Int) {
         selectedIntent = index
-        Haptics.light()
     }
 
     // The way back to a room you already have.
     private var signInStep: some View {
         VStack(spacing: 24) {
             HStack {
-                BackChevron { withAnimation(RibbonMotion.settle) { step = .tour(0) } }
+                BackChevron { go(.tour(0), forward: false) }
                 Spacer()
             }
             .padding(.horizontal, 12)
@@ -206,12 +241,10 @@ struct OnboardingFlow: View {
                     if model.me != nil {
                         onDone()
                     } else {
-                        withAnimation(RibbonMotion.settle) { step = .name }
+                        go(.name)
                     }
                 },
-                onCancel: {
-                    withAnimation(RibbonMotion.settle) { step = .tour(0) }
-                })
+                onCancel: { go(.tour(0), forward: false) })
                 .padding(.horizontal, 40)
             Spacer()
             Spacer()
@@ -220,13 +253,6 @@ struct OnboardingFlow: View {
 
     private var nameStep: some View {
         VStack(spacing: 24) {
-            OnboardingProgressBar(
-                currentStep: 5,
-                totalSteps: 6,
-                onBack: { withAnimation(RibbonMotion.settle) { step = .intent } },
-                onSignIn: nil
-            )
-
             Spacer()
             PhotosPicker(selection: $portraitItem, matching: .images) {
                 ZStack {
@@ -244,7 +270,11 @@ struct OnboardingFlow: View {
                         SmallCaps(Copy.addAPortrait, size: 11)
                     }
                 }
+                // The face you chose settles into the circle rather than
+                // replacing it between two frames.
+                .animation(RibbonMotion.arrive, value: portraitData)
             }
+            .buttonStyle(.pressable)
             .onChange(of: portraitItem) { _, item in
                 Task {
                     if let data = try? await item?.loadTransferable(type: Data.self) {
@@ -258,13 +288,14 @@ struct OnboardingFlow: View {
                 .font(RibbonType.ui(15))
                 .foregroundStyle(Palette.muted)
 
-            CentredTextField(text: $name, prompt: Copy.yourName, submitLabel: .done, contentType: .name, onSubmit: advanceFromName)
-                .focused($nameFocused)
+            CentredTextField(text: $name, prompt: Copy.yourName, submitLabel: .done, contentType: .name, focus: $nameFocused, onSubmit: advanceFromName)
                 .padding(.horizontal, 40)
 
             WayInButton(title: Copy.thatsMe) { advanceFromName() }
                 .padding(.horizontal, 80)
                 .opacity(name.trimmingCharacters(in: .whitespaces).isEmpty ? 0.3 : 1)
+                // It wakes with the first letter, rather than switching on.
+                .animation(RibbonMotion.arrive, value: name.trimmingCharacters(in: .whitespaces).isEmpty)
             Spacer()
             Spacer()
         }
@@ -294,13 +325,13 @@ struct OnboardingFlow: View {
                 Text(Copy.thatLinkIsntAnInvite)
                     .font(RibbonType.ui(14))
                     .foregroundStyle(Palette.muted)
+                    .transition(.opacity)
             }
-            QuietControl(title: Copy.startARoomInstead) {
-                withAnimation(RibbonMotion.settle) { step = .name }
-            }
+            QuietControl(title: Copy.startARoomInstead) { go(.name) }
             Spacer()
             Spacer()
         }
+        .animation(RibbonMotion.arrive, value: pasteMissed)
     }
 
     private func acceptPasted() {
@@ -310,15 +341,17 @@ struct OnboardingFlow: View {
             }
             return
         }
-        withAnimation(RibbonMotion.settle) { step = .join(token) }
+        go(.join(token))
     }
 
     private func advanceFromName() {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty, !committing else { return }
+        committing = true
         Task {
             await model.completeOnboarding(name: trimmed, portraitData: portraitData)
-            withAnimation(RibbonMotion.settle) { step = .invite }
+            go(.invite)
+            committing = false
         }
     }
 
@@ -358,7 +391,9 @@ struct OnboardingFlow: View {
                         .padding(.horizontal, 28)
                         .padding(.vertical, 13)
                         .background(Palette.chartreuse, in: Capsule())
+                        .contentShape(Capsule())
                 }
+                .buttonStyle(.pressable)
                 .simultaneousGesture(TapGesture().onEnded { model.inviteWasHandedOut(invite) })
             }
 
@@ -377,6 +412,40 @@ struct OnboardingFlow: View {
                 invite = live
                 try? await model.pushInvite(live, for: room)
             }
+        }
+    }
+}
+
+/// Which way the onboarding thread is moving: 1 on, -1 back, 0 a dissolve
+/// in place. A reference, deliberately: a transition leaving the screen is
+/// the one drawn with the step as it last was, so a direction held in view
+/// state reaches the outgoing step one move late — the bug that sent every
+/// step off to the left, going back included. Read through a reference,
+/// it is the direction of the move actually being made.
+final class ThreadDirection {
+    var sign: CGFloat = 1
+}
+
+/// A step arriving from the side the thread moves toward and leaving by
+/// the other, a whole width, fading as it goes.
+private struct ThreadMove: Transition {
+    let direction: ThreadDirection
+
+    func body(content: Content, phase: TransitionPhase) -> some View {
+        content
+            .visualEffect { [across = shift(at: phase)] effect, proxy in
+                effect.offset(x: across * proxy.size.width)
+            }
+            .opacity(phase.isIdentity ? 1 : 0)
+    }
+
+    /// Where the step is, in widths: in from the side the thread is going
+    /// to, out by the side it came from.
+    private func shift(at phase: TransitionPhase) -> CGFloat {
+        switch phase {
+        case .willAppear: return direction.sign
+        case .didDisappear: return -direction.sign
+        default: return 0
         }
     }
 }

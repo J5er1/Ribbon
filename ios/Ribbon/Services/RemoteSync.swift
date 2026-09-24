@@ -213,6 +213,101 @@ final class RemoteSync {
         return try JSONDecoder().decode(UUID.self, from: data)
     }
 
+    // MARK: - Push notifications (S19)
+
+    /// This phone, as it holds itself: the token, every room's switches,
+    /// the quiet hours and the zone they are kept in. All of it, every time
+    /// — it is small, and a partial update is a second way to be wrong.
+    func registerPushDevice(
+        token: String, environment: String, zone: String,
+        quietFrom: Int, quietUntil: Int,
+        rooms: [UUID: RoomNotificationPrefs], liveStart: String?
+    ) async throws {
+        var prefs: [String: Any] = [:]
+        for (roomID, room) in rooms {
+            prefs[roomID.uuidString.lowercased()] = [
+                "notesLeft": room.notesLeft,
+                "cardsOpen": room.cardsOpen,
+                "inTheBook": room.whenTheyOpenTheBook,
+                "thinkingOfYou": room.thinkingOfYou,
+            ]
+        }
+        var arguments: [String: Any] = [
+            "device_token": token,
+            "device_platform": "ios",
+            "apns_environment": environment,
+            "zone": zone,
+            "quiet_from": quietFrom,
+            "quiet_until": quietUntil,
+            "room_prefs": prefs,
+            "live_start": NSNull(),
+        ]
+        if let liveStart { arguments["live_start"] = liveStart }
+        let body = try JSONSerialization.data(withJSONObject: arguments)
+        _ = try await withAuthRetry {
+            try await self.client.rpc("register_push_device", json: body)
+        }
+    }
+
+    /// Signing out takes this phone off the server's list.
+    func forgetPushDevice(token: String) async {
+        _ = try? await withAuthRetry {
+            try await self.client.rpc("forget_push_device", body: ["device_token": token])
+        }
+    }
+
+    /// The book is open (§4.2) — said on opening and every ten minutes
+    /// after, never while reading quietly. The server turns an arrival into
+    /// "Ruth is reading Mark" for whoever asked to hear it.
+    func iAmReading(room: UUID, reading: UUID) async throws {
+        _ = try await withAuthRetry {
+            try await self.client.rpc("i_am_reading", body: [
+                "room": room.uuidString.lowercased(),
+                "reading": reading.uuidString.lowercased(),
+            ])
+        }
+    }
+
+    func iHaveLeft(room: UUID) async throws {
+        _ = try await withAuthRetry {
+            try await self.client.rpc("i_have_left", body: ["room": room.uuidString.lowercased()])
+        }
+    }
+
+    /// A Live Activity the server started here (S24) has handed over the
+    /// token that can keep it current and end it.
+    func registerLiveActivity(device: String, room: UUID, reader: UUID, token: String) async throws {
+        _ = try await withAuthRetry {
+            try await self.client.rpc("register_live_activity", body: [
+                "device_token": device,
+                "room": room.uuidString.lowercased(),
+                "reader": reader.uuidString.lowercased(),
+                "activity_token": token,
+            ])
+        }
+    }
+
+    /// The person took it down, or the app did: stop keeping it current.
+    func forgetLiveActivity(device: String, room: UUID, reader: UUID) async {
+        _ = try? await withAuthRetry {
+            try await self.client.rpc("forget_live_activity", body: [
+                "device_token": device,
+                "room": room.uuidString.lowercased(),
+                "reader": reader.uuidString.lowercased(),
+            ])
+        }
+    }
+
+    /// Thinking of you (§4.3), for a phone the room's socket cannot reach.
+    func thinkOf(room: UUID, person: UUID) async throws {
+        _ = try await withAuthRetry {
+            try await self.client.rpc("think_of", body: [
+                "room": room.uuidString.lowercased(),
+                "person": person.uuidString.lowercased(),
+            ])
+        }
+    }
+
     // MARK: - Push: the room surface this device knows
 
     func push(profile: Person, portraitData: Data?) async throws {

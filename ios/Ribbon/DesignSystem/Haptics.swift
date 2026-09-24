@@ -138,8 +138,4 @@ final class Haptics {
                 duration: 0.09),
         ])
     }
-
-    static func light() {
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-    }
 }

@@ -20,6 +20,13 @@ import SwiftUI
 // reduce motion (§11). A screen asks for `RibbonMotion.settle(still:)`
 // rather than writing the branch out, so that "under reduce motion this is
 // a cut" is decided in one place instead of ten.
+//
+// `still:` is for movement — a slide, a swell, a turn, a pill travelling.
+// A change that is nothing but opacity or colour asks for the plain token
+// and keeps its curve under reduce motion, because a cross-fade is what
+// §11 turns movement *into* ("morphs become cross-fades"), not a movement
+// to take away. Held still, a fade is a cut, and a snap is the one thing
+// §9.1 asks the room never to do.
 
 enum RibbonMotion {
     /// Presence appearing, sheets, cross-fades between rooms.
@@ -69,12 +76,33 @@ enum RibbonMotion {
     static func handled(still: Bool) -> Animation? { still ? nil : handled }
     static func touched(still: Bool) -> Animation? { still ? nil : touched }
 
-    /// The same springs, handed the velocity the finger let go at.
-    static func cover(velocity: CGFloat) -> Animation {
-        .interpolatingSpring(mass: 1, stiffness: 180, damping: 2 * (180.0).squareRoot(), initialVelocity: velocity)
+    /// The same springs, handed the speed the finger let go at. `rate` is
+    /// how fast the value was moving, in its own units per second; `distance`
+    /// is how far it still has to go — the target minus where it is now.
+    static func cover(rate: CGFloat, towards distance: CGFloat) -> Animation {
+        spring(stiffness: 180, handed: rate, over: distance)
     }
-    static func handled(velocity: CGFloat) -> Animation {
-        .interpolatingSpring(mass: 1, stiffness: 400, damping: 2 * (400.0).squareRoot(), initialVelocity: velocity)
+    static func handled(rate: CGFloat, towards distance: CGFloat) -> Animation {
+        spring(stiffness: 400, handed: rate, over: distance)
+    }
+
+    /// A critically damped spring, set off at the finger's speed.
+    ///
+    /// SwiftUI wants that speed relative to the distance still to travel,
+    /// and positive towards the mark — which is `rate / distance`, and why a
+    /// raw points-per-second figure handed straight in sends the thing the
+    /// wrong way at the wrong speed. And capped: a critically damped spring
+    /// stays on its own side of the mark only while it sets off slower than
+    /// its natural frequency (√stiffness) per unit of distance. A hard flick
+    /// would carry it through — the overshoot §9.1 forbids, arriving by way
+    /// of the one kind of animation built never to have it.
+    private static func spring(stiffness: Double, handed rate: CGFloat, over distance: CGFloat) -> Animation {
+        let frequency = stiffness.squareRoot()
+        let relative = abs(distance) < 0.001 ? 0 : Double(rate / distance)
+        let limit = frequency * 0.85
+        return .interpolatingSpring(
+            mass: 1, stiffness: stiffness, damping: 2 * frequency,
+            initialVelocity: min(limit, max(-limit, relative)))
     }
 
     // MARK: The hearth gesture (S01 → S02, ledger A48)

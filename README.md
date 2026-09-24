@@ -22,6 +22,9 @@ core/        RibbonCore — Swift package, Foundation only.
              anywhere Swift runs, including Linux CI.
 ios/         The iOS app. Xcode 26+, SwiftUI, iOS 26, dark-only (dark is
              the product). Open ios/Ribbon.xcodeproj — no generators, no pods.
+             Two targets: the app, and RibbonWidgets (the fire on the home
+             and lock screens, and the Live Activity); ios/Shared is
+             compiled into both.
 android/     The Android app (phase three). Jetpack Compose, Material 3
              Expressive, dark-only, and — unlike iOS — coloured from the
              wallpaper by default (Material You; Appearance turns it off,
@@ -143,10 +146,10 @@ through to the join flow and settings. It builds and its tests pass; it has
 not yet been run on a physical device.
 
 Android took a design pass of its own (docs/deviations.md A18–A51), and
-iOS has now taken the same pass (docs/deviations.md I1–I20), so the two
-platforms are level again. The one deliberate difference is colour: Android
-takes it from the wallpaper (Material You), iOS keeps the brand's
-chartreuse. What the pass gave both:
+iOS has now taken the same pass (docs/deviations.md I1–I20) and the motion
+sweep Android had after it (I21–I29), so the two platforms are level again.
+The one deliberate difference is colour: Android takes it from the wallpaper
+(Material You), iOS keeps the brand's chartreuse. What the pass gave both:
 
 - **Material You, unharmonised (Android only).** The room takes its colour
   from the wallpaper. The fire and the eight inks never move — they are
@@ -168,6 +171,12 @@ chartreuse. What the pass gave both:
 - **The ribbon.** The room keeps one place in the book — where whoever read
   last set it down. It is offered, never applied: one quiet sentence you may
   tap. Your own position is untouched and the book still opens where you are.
+- **The book opens on your verse**, not at the head of its chapter — and so
+  does every other way in: a waiting note, the ribbon, a quoted verse, a
+  tapped notification, the way back after a follow. "The cards are open"
+  opens on the card (A54, I30).
+- **Note search, on the shelf**: something someone said, across every book
+  the room has read, the open one included (A55).
 - **A chapter list**, reached from the foot of the page, marking where you
   are and where the ribbon is. Nothing else, because everything else a
   chapter grid usually shows is a count.
@@ -176,13 +185,22 @@ chartreuse. What the pass gave both:
   edges and a VoiceOver equivalent for every drag; and the washes redrawn
   as one shape per mark, screened where they overlap.
 - **Notifications, gated three ways** and never a badge; the one ask made in
-  context; while signed in, a background pull is asked for no sooner than
-  every fifteen minutes (the phone decides when, and whether).
+  context. They arrive by push the moment the thing happens — a note, the
+  cards, a finished book, "Ruth is reading Mark", thinking of you — once the
+  keys are set (supabase/README.md); until then the phone keeps posting for
+  itself from a background pull (I33, A56).
+- **The widgets:** the room's fire at its state and the book's name, on the
+  home screen and the lock screen, and "Ruth is reading Mark" as a Live
+  Activity while she reads — an ongoing line on Android (I34, A56, A57).
 - **There is a look book on Android.** `./gradlew :app:testDebugUnitTest`
   renders every screen this touched, on both palettes, to
   `android/app/build/shots` — and CI keeps them as an artifact.
 
-Still ahead on both platforms: the presence socket and the content half of
-sync (notes, highlights, positions), and everything §15 puts in phase two.
-`docs/deviations.md` is the honest ledger — §A is Android's, §I is the
-iOS pass that followed it.
+- **Joining in the browser.** The invite link is the whole join for
+  somebody without the app: Join, an emailed code, a name and a face, the
+  room — and the book, readable at once (deviation 22).
+
+**What is built but not yet switched on** — push notifications above all,
+which wait on the Apple and Firebase keys — is listed, with the steps, in
+`docs/still-to-do.md`. `docs/deviations.md` is the honest ledger — §A is
+Android's, §I is the iOS pass that followed it.

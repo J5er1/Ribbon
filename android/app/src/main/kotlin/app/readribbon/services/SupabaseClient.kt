@@ -175,6 +175,19 @@ class SupabaseClient(
         )
 
     /**
+     * Call a database function whose arguments are not all strings, with the
+     * body already written. Kept away from the snake-casing coder on purpose:
+     * a map keyed by room ids and switch names has to reach the database
+     * exactly as written (register_push_device).
+     */
+    suspend fun rpcJson(function: String, body: String): String =
+        post(
+            path = "rest/v1/rpc/$function",
+            body = body,
+            authenticated = true,
+        )
+
+    /**
      * Call an anon-callable function (invite_preview — the join screen shows
      * who is inviting before any account exists).
      */

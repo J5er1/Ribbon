@@ -77,10 +77,14 @@ struct NoteCard: View {
                     Text(Copy.noTranscript)
                         .font(RibbonType.ui(14))
                         .foregroundStyle(Palette.muted)
-                    Button(Copy.tryAgain) { model.retryTranscript(note) }
-                        .font(RibbonType.ui(14))
-                        .foregroundStyle(Palette.text)
-                        .buttonStyle(.plain)
+                    Button { model.retryTranscript(note) } label: {
+                        Text(Copy.tryAgain)
+                            .font(RibbonType.ui(14))
+                            .foregroundStyle(Palette.text)
+                            .frame(minHeight: 44)
+                            .contentShape(Rectangle().inset(by: -8))
+                    }
+                    .buttonStyle(.plain)
                 }
             case .ready, nil:
                 if let transcript = note.transcript {

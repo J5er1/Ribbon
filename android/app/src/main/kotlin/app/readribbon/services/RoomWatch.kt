@@ -29,10 +29,11 @@ import java.util.concurrent.TimeUnit
 // plumbing, always there, saying nothing to anybody. That is the opposite of
 // §1's room, and it would be the most visible thing the product does.
 //
-// Not push. Ribbon has no FCM and adding it means a Google dependency, a
-// server-side sender, and a device token per install — all of which is real
-// work and none of which is an Android-only change, since the sender would
-// belong to the shared backend. Worth doing one day; not this pass.
+// Not push, at the time — and push exists now (services/Push.kt, ledger
+// A56): the backend sends each of the six the moment its row is written,
+// and while it is delivering for this phone the pull below still merges but
+// posts nothing, so nothing is said twice. This worker is what a build
+// without Firebase, or a phone the server cannot reach, still relies on.
 //
 // **What this route can carry, and what it honestly cannot.** Worth stating
 // plainly rather than discovering later:

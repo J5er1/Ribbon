@@ -52,6 +52,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
@@ -62,7 +63,6 @@ import androidx.navigation.navArgument
 import app.readribbon.core.Reading
 import app.readribbon.services.Destination
 import app.readribbon.core.Room
-import app.readribbon.core.VerseAddress
 import app.readribbon.design.LaunchMark
 import app.readribbon.design.LocalFlowLayer
 import app.readribbon.design.LocalFlowRoot
@@ -73,6 +73,7 @@ import app.readribbon.design.rememberBookSheet
 import app.readribbon.design.rememberReduceMotion
 import app.readribbon.design.rememberSheetExit
 import app.readribbon.design.room
+import app.readribbon.reading.ReadingPlace
 import app.readribbon.reading.ReadingScreen
 import app.readribbon.screens.EmberRecordScreen
 import app.readribbon.screens.JoinFlow
@@ -267,6 +268,12 @@ fun RibbonRoot(
                 // never leave it reading true and silence the notifications
                 // it was supposed to suppress (§6.3).
                 model.visibleRoomID = model.currentRoom?.id
+                // A new zone, a new token, a switch changed in Android's own
+                // settings: the server hears all of it again (S19). Launched,
+                // not awaited — the socket below does not wait on it.
+                launch { model.registerForPush() }
+                // Back in the book, if the book is where it was left.
+                model.sayImReading()
                 // The room's live line comes back with the app, and only
                 // with it: a phone in a pocket is not present, and saying
                 // otherwise is the one lie presence must never tell (§4.2).
@@ -278,6 +285,12 @@ fun RibbonRoot(
                     awaitCancellation()
                 } finally {
                     model.visibleRoomID = null
+                    // The same lie, told to the server: a phone in a pocket
+                    // is not reading, and the line on the other phones comes
+                    // down.
+                    model.sayIveLeft()
+                    // The home screen is about to be seen again (S24).
+                    model.refreshWidget()
                     withContext(NonCancellable) { model.closeRoomChannel() }
                 }
             }
@@ -381,7 +394,7 @@ private fun RoomStack(model: AppModel, room: Room) {
      * Where the reading should open, when a row or a quoted verse named a
      * place (§6.3, S11). Null means your own position.
      */
-    var openTarget by remember { mutableStateOf<VerseAddress?>(null) }
+    var openTarget by remember { mutableStateOf<ReadingPlace?>(null) }
     /**
      * The menu, when it is open, and which of the room header's two doors was
      * used (S14 + S18 in one screen — MenuScreen.kt, deviations 14). Null is
@@ -451,7 +464,7 @@ private fun RoomStack(model: AppModel, room: Room) {
     }
 
     /** Open it outright — a waiting row, a quoted verse, the way in. */
-    fun openBook(reading: Reading, target: VerseAddress?) {
+    fun openBook(reading: Reading, target: ReadingPlace?) {
         openTarget = target
         openReading = reading
         sheet.animate(open = true)
@@ -506,25 +519,17 @@ private fun RoomStack(model: AppModel, room: Room) {
             is Destination.Verse -> {
                 val reading = model.state.readings
                     .firstOrNull { it.id == destination.readingID }
-                if (reading != null) openBook(reading, destination.verse)
+                if (reading != null) openBook(reading, ReadingPlace.Verse(destination.verse))
             }
 
             is Destination.Cards -> {
-                // The cards sit at the end of a chapter, so the chapter's
-                // last verse is where the page has to land for them to be
-                // on screen at all.
+                // The cards sit at the end of a chapter, below its last verse,
+                // so the page lands on the card itself. It used to say that
+                // here and then open at the chapter's first verse, a whole
+                // chapter above it.
                 val reading = model.state.readings
                     .firstOrNull { it.id == destination.readingID }
-                if (reading != null) {
-                    openBook(
-                        reading,
-                        VerseAddress(
-                            bookID = reading.bookID,
-                            chapter = destination.chapter,
-                            verse = 1,
-                        ),
-                    )
-                }
+                if (reading != null) openBook(reading, ReadingPlace.Card(destination.chapter))
             }
 
             // S01 is a destination in its own right, and switching the room
@@ -686,7 +691,7 @@ private fun RoomStack(model: AppModel, room: Room) {
                                 // A quoted verse opens the reading at that verse
                                 // (S11) — the finished book's own pages, not a
                                 // copy.
-                                openBook(reading, verse)
+                                openBook(reading, ReadingPlace.Verse(verse))
                             },
                             onReadAgain = { bookID ->
                                 navController.popBackStack(Route.ROOM, inclusive = false)
@@ -720,7 +725,7 @@ private fun RoomStack(model: AppModel, room: Room) {
                                 // The note names its reading — a finished book's
                                 // note opens that book, not the open one.
                                 val reading = model.state.readings.firstOrNull { it.id == readingID }
-                                if (reading != null) openBook(reading, verse)
+                                if (reading != null) openBook(reading, ReadingPlace.Verse(verse))
                             },
                             onDismiss = { navController.popBackStack() },
                         )

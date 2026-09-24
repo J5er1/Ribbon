@@ -45,6 +45,9 @@ struct JoinFlow: View {
     /// "Join as someone else": the person this phone already is, declined
     /// for this room. The name step then runs as it would for a stranger.
     @State private var asSomeoneElse = false
+    /// The name is on its way to the model: one person per tap, however
+    /// quick the second tap is.
+    @State private var committing = false
     @FocusState private var nameFocused: Bool
 
     var body: some View {
@@ -82,6 +85,9 @@ struct JoinFlow: View {
             Spacer()
             Spacer()
         }
+        // Every step of the join gives way to the next by cross-fade —
+        // including the dead end and "Joining", which used to cut in.
+        .animation(RibbonMotion.settle, value: phase)
         .frame(maxWidth: 420)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .room()
@@ -157,7 +163,9 @@ struct JoinFlow: View {
                         SmallCaps(Copy.addAPortrait, size: 11)
                     }
                 }
+                .animation(RibbonMotion.arrive, value: portraitData)
             }
+            .buttonStyle(.pressable)
             .onChange(of: portraitItem) { _, item in
                 Task {
                     if let data = try? await item?.loadTransferable(type: Data.self) {
@@ -168,13 +176,13 @@ struct JoinFlow: View {
             Text(Copy.portraitReason)
                 .font(RibbonType.ui(15))
                 .foregroundStyle(Palette.muted)
-            CentredTextField(text: $name, prompt: Copy.yourName, submitLabel: .done, contentType: .name, onSubmit: advanceFromName)
-                .focused($nameFocused)
+            CentredTextField(text: $name, prompt: Copy.yourName, submitLabel: .done, contentType: .name, focus: $nameFocused, onSubmit: advanceFromName)
                 .padding(.horizontal, 40)
             WayInButton(title: Copy.thatsMe) { advanceFromName() }
                 .padding(.horizontal, 80)
                 .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
                 .opacity(name.trimmingCharacters(in: .whitespaces).isEmpty ? 0.3 : 1)
+                .animation(RibbonMotion.arrive, value: name.trimmingCharacters(in: .whitespaces).isEmpty)
         }
         .onAppear { nameFocused = true }
     }
@@ -249,8 +257,10 @@ struct JoinFlow: View {
 
     private func advanceFromName() {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty, !committing else { return }
+        committing = true
         Task {
+            defer { committing = false }
             if asSomeoneElse, model.me != nil {
                 // A different person on the same phone: the name and face
                 // change, the account underneath does not — an account is

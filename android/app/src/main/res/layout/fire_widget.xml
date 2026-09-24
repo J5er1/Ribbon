@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The fire on the home screen (S24): one painting on the unlit ground,
+     drawn by services/FireWidget.kt. The ground is the frame's own, so an
+     empty room is the ground and nothing on it. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@android:id/background"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/fire_widget_ground"
+    android:clipToOutline="true">
+
+    <ImageView
+        android:id="@+id/fire_widget_image"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:contentDescription="@null"
+        android:scaleType="fitCenter" />
+</FrameLayout>

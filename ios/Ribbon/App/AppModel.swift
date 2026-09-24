@@ -105,8 +105,14 @@ final class AppModel {
         NotificationRouter.shared.deliver = { [weak model] destination in
             model?.pendingDestination = destination
         }
+        // The token arrives from APNs whenever it likes; each arrival is
+        // another registration, with everything else this phone holds.
+        Push.tokenChanged = { [weak model] in
+            Task { await model?.registerForPush() }
+        }
         Task { await remote?.learnWhatAuthOffers() }
         if remote?.isSignedIn == true { RoomWatch.start() }
+        Task { await model.registerForPush() }
         return model
     }
 
@@ -118,6 +124,12 @@ final class AppModel {
                 case .roster(let people):
                     self.someoneOpenedTheBook(people)
                     self.presentPeople = people
+                    // Only a roster heard with the room on screen is the
+                    // truth: the one a closing socket sends on its way out
+                    // is empty because the line is, not because the book is.
+                    if let room = self.currentRoom, self.visibleRoomID == room.id {
+                        LiveReading.reconcile(room: room.id, present: Set(people.map(\.id)))
+                    }
                 case .thinkingOfYou(let fromName):
                     self.thinkingOfYouArrived(fromName)
                 case .roomChanged(let roomID):
@@ -154,7 +166,9 @@ final class AppModel {
         else { return }
         let me = state.me?.id
         guard let newcomer = arrived.first(where: { $0 != me }), let name = person(newcomer)?.name else { return }
-        guard Notifications.shouldPost(
+        // While the server is delivering, it says this — to this phone and to
+        // every other one — and saying it here too would be saying it twice.
+        guard !Push.delivering, Notifications.shouldPost(
             kind: .inTheBook, roomID: room.id, prefs: notificationPrefs(for: room),
             settings: state.settings, visibleRoomID: visibleRoomID)
         else { return }
@@ -169,7 +183,9 @@ final class AppModel {
     private func thinkingOfYouArrived(_ fromName: String) {
         guard let room = currentRoom, notificationPrefs(for: room).thinkingOfYou else { return }
         Haptics.shared.tapOnTheShoulder()
-        guard !state.settings.isQuiet() else { return }
+        // The touch is the socket's to give; the name, while the server is
+        // delivering, is the push's.
+        guard !state.settings.isQuiet(), !Push.delivering else { return }
         Notifications.post(
             id: Notifications.id(roomID: room.id, kind: .thinkingOfYou), kind: .thinkingOfYou,
             line: Copy.notifThinkingOfYou(firstName(fromName)), to: .room(roomID: room.id))
@@ -834,6 +850,31 @@ final class AppModel {
         notes(in: reading).filter { $0.verse.chapter == chapter }
     }
 
+    /// What someone said, found (S23): every note the room has left, in
+    /// every reading it has done — the open one included, because the shelf
+    /// is the room's whole memory and not only its finished books. Written
+    /// notes by their words, voice notes by their transcripts; any case, any
+    /// accent.
+    ///
+    /// A note left for you and not yet found is not searched. Its words are
+    /// the verse's to give you (§6.3), and the room already lists it waiting.
+    ///
+    /// The open book first, then the shelf from the latest ember back; inside
+    /// a book, verse order. A search begins at two characters, as the
+    /// chooser's does (S13). Everything here is on the phone, so it works
+    /// offline and says nothing about what is not (S23).
+    func notes(in room: Room, matching query: String) -> [Note] {
+        let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard query.count >= 2, let me = state.me else { return [] }
+        let readings = [openReading(in: room)].compactMap { $0 } + shelf(of: room).reversed()
+        return readings.flatMap { reading in
+            notes(in: reading).filter { note in
+                guard note.authorID == me.id || note.foundBy.contains(me.id) else { return false }
+                return (note.body ?? note.transcript)?.localizedStandardContains(query) == true
+            }
+        }
+    }
+
     /// Notes left for me that I haven't found yet — the room's waiting rows
     /// (S01). Rows, never a count, never a badge.
     func waitingNotes(in room: Room) -> [Note] {
@@ -1074,8 +1115,13 @@ final class AppModel {
     var settings: AppSettings { state.settings }
 
     func updateSettings(_ transform: (inout AppSettings) -> Void) {
+        let before = state.settings
         transform(&state.settings)
         persist()
+        if state.settings.quietHoursStart != before.quietHoursStart
+            || state.settings.quietHoursEnd != before.quietHoursEnd {
+            pushSettingsChanged()
+        }
     }
 
     func notificationPrefs(for room: Room) -> RoomNotificationPrefs {
@@ -1085,6 +1131,7 @@ final class AppModel {
     func setNotificationPrefs(_ prefs: RoomNotificationPrefs, for room: Room) {
         state.settings.roomNotifications[room.id] = prefs
         persist()
+        pushSettingsChanged()
     }
 
     /// What the translation picker offers: the bundled two always, plus
@@ -1156,6 +1203,7 @@ final class AppModel {
     func askForNotifications() async {
         markAskedAboutNotifications()
         await Notifications.ask()
+        await registerForPush()
     }
 
     /// Account deletion (§6.8). The notes question is asked once, at
@@ -1185,6 +1233,8 @@ final class AppModel {
                     try? await remote.deleteNote(id: note.id, readingID: note.readingID, voice: note.kind == .voice)
                 }
                 await remote.forgetProfile(neutralName: Copy.someone)
+                if let token = Push.deviceToken { await remote.forgetPushDevice(token: token) }
+                Push.forgotten()
                 await remote.signOut()
             }
         }
@@ -1226,6 +1276,7 @@ final class AppModel {
         await refreshFromRemote()
         await pushLocalGraph()
         RoomWatch.start()
+        await registerForPush()
     }
 
     /// The account's profile, made this device's person. Nil means an
@@ -1295,6 +1346,7 @@ final class AppModel {
         await refreshFromRemote()
         await pushLocalGraph()
         RoomWatch.start()
+        await registerForPush()
     }
 
     /// Sign in using Auth0 Universal Login. Adopts the deterministic user UUID,
@@ -1316,11 +1368,131 @@ final class AppModel {
         await refreshFromRemote()
         await pushLocalGraph()
         RoomWatch.start()
+        await registerForPush()
     }
 
     func signOutRemote() async {
+        await forgetPush()
         await remote?.signOut()
         RoomWatch.stop()
+    }
+
+    // MARK: - The widgets (S24)
+
+    /// What the widgets draw: the current room's open book and its fire, and
+    /// small copies of the room's faces for the Live Activity. Written when
+    /// the app goes away and after every pull — the home screen cannot be
+    /// seen while the app is open, so there is nothing to keep current then.
+    func refreshWidget() {
+        let room = currentRoom
+        let reading = room.flatMap { openReading(in: $0) }
+        LiveReading.updateWidget(
+            room: room, reading: reading,
+            banked: room.map { quietDays(for: $0).bankedIntervals } ?? [])
+        LiveReading.keepPortraits(portraits)
+    }
+
+    // MARK: - Push (S19)
+
+    /// Tell the server about this phone — the token, every room's switches,
+    /// the quiet hours and the zone they are kept in. At launch, on every
+    /// return to the foreground (a new zone, a new token), after the one
+    /// ask, and when a switch changes. Nothing is sent until notifications
+    /// are allowed: a phone that said no is not on anybody's list.
+    func registerForPush() async {
+        guard let remote, remote.isSignedIn, Notifications.allowed else { return }
+        Push.requestToken()
+        await Push.learnWhetherTheServerDelivers()
+        guard let token = Push.deviceToken else { return }
+        var rooms: [UUID: RoomNotificationPrefs] = [:]
+        for room in state.rooms { rooms[room.id] = notificationPrefs(for: room) }
+        do {
+            try await remote.registerPushDevice(
+                token: token, environment: Push.environment,
+                zone: TimeZone.current.identifier,
+                quietFrom: state.settings.quietHoursStart,
+                quietUntil: state.settings.quietHoursEnd,
+                rooms: rooms, liveStart: LiveReading.startTokenIfAllowed)
+            Push.registration(succeeded: true)
+        } catch {
+            Push.registration(succeeded: false)
+        }
+    }
+
+    private var pushRegistration: Task<Void, Never>?
+
+    /// A switch or the quiet hours changed. The server hears it once, a
+    /// moment later, however many steps the stepper took on the way.
+    private func pushSettingsChanged() {
+        pushRegistration?.cancel()
+        pushRegistration = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled else { return }
+            await self?.registerForPush()
+        }
+    }
+
+    private func forgetPush() async {
+        if let token = Push.deviceToken { await remote?.forgetPushDevice(token: token) }
+        Push.forgotten()
+    }
+
+    /// The book on screen, whatever presence is saying about it — so that
+    /// coming back to the app can say it again.
+    private var bookOnScreen: Reading?
+    /// The heartbeat, and the room it is telling — which is the room the
+    /// book was in, not whichever room is current by the time it stops.
+    private var readingHeartbeat: (task: Task<Void, Never>, roomID: UUID, readingID: UUID)?
+
+    /// The reading screen appeared. Presence is the socket's (§4.2); this is
+    /// the same fact told to the server, for the phones the socket cannot
+    /// reach — "Ruth is reading Mark", and the Live Activity (S24).
+    func bookAppeared(_ reading: Reading) {
+        bookOnScreen = reading
+        sayImReading()
+    }
+
+    func bookDisappeared(_ reading: Reading) {
+        if bookOnScreen?.id == reading.id { bookOnScreen = nil }
+        sayIveLeft()
+    }
+
+    /// Said on opening and every ten minutes while the book stays open, and
+    /// never while reading quietly, which is the whole of what reading
+    /// quietly means. The repeats keep the Live Activity from going stale;
+    /// only an arrival is ever said aloud.
+    func sayImReading() {
+        guard let reading = bookOnScreen, !readingQuietly, !reading.isFinished,
+              let remote, remote.isSignedIn
+        else { return }
+        // Already saying it: a glance at Control Center is not an arrival.
+        if readingHeartbeat?.readingID == reading.id { return }
+        readingHeartbeat?.task.cancel()
+        let heartbeat = Task {
+            while !Task.isCancelled {
+                try? await remote.iAmReading(room: reading.roomID, reading: reading.id)
+                try? await Task.sleep(for: .seconds(600))
+            }
+        }
+        readingHeartbeat = (heartbeat, reading.roomID, reading.id)
+    }
+
+    /// The book closed, reading turned quiet, or the app went away: the
+    /// Live Activity on the other phones ends.
+    func sayIveLeft() {
+        guard let heartbeat = readingHeartbeat else { return }
+        heartbeat.task.cancel()
+        readingHeartbeat = nil
+        guard let remote, remote.isSignedIn else { return }
+        Task { try? await remote.iHaveLeft(room: heartbeat.roomID) }
+    }
+
+    /// Thinking of you (§4.3). The socket carries the touch to a phone in
+    /// the room; the server carries the name to one that is not.
+    func thinkOf(_ personID: UUID) {
+        Task { await presence.sendThinkingOfYou(to: personID) }
+        guard let remote, remote.isSignedIn, let room = currentRoom else { return }
+        Task { try? await remote.thinkOf(room: room.id, person: personID) }
     }
 
     /// A person exists once, ever. Before sign-in their id was minted on
@@ -1467,6 +1639,7 @@ final class AppModel {
         guard let graph = try? await remote.pullRooms() else { return .none }
         let landed = merge(graph)
         announce(landed)
+        refreshWidget()
         return landed
     }
 
@@ -1483,7 +1656,10 @@ final class AppModel {
     /// person, naming the verse for one note and only the person for
     /// several — never how many.
     private func announce(_ arrivals: Arrivals) {
-        guard !arrivals.isEmpty, Notifications.allowed else { return }
+        // While the server is delivering, every one of these has already
+        // arrived as a push, the moment its row was written. The watermark
+        // still moves; the phone just does not say it again.
+        guard !arrivals.isEmpty, Notifications.allowed, !Push.delivering else { return }
         let settings = state.settings
         func gate(_ kind: NotificationKind, _ roomID: UUID) -> Bool {
             guard let room = state.rooms.first(where: { $0.id == roomID }) else { return false }
@@ -1577,8 +1753,21 @@ final class AppModel {
     }
 
     func handleInviteURL(_ url: URL) {
+        if let roomID = Self.roomID(from: url) {
+            pendingDestination = .room(roomID: roomID)
+            return
+        }
         guard let token = Self.inviteToken(from: url) else { return }
         pendingInvite = PendingInvite(token: token)
+    }
+
+    /// ribbon://room/<id> — a tapped widget or Live Activity (S24) opens the
+    /// room it was about.
+    static func roomID(from url: URL) -> UUID? {
+        guard url.scheme?.lowercased() == "ribbon", url.host()?.lowercased() == "room",
+              let last = url.pathComponents.last
+        else { return nil }
+        return UUID(uuidString: last)
     }
 
     /// https://readribbon.app/i/<token> or ribbon://i/<token>.

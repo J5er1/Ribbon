@@ -42,19 +42,19 @@ struct ReflectionCardView: View {
             EmptyView()
         } else {
             let open = card.state == .open
-            // Past halfway the far face is showing; it is drawn already
-            // turned the other way, so that the words come out the right
-            // way round.
-            let showingOpen = turn >= 0.5
             ZStack {
-                if showingOpen {
-                    face(open: true)
-                        .rotation3DEffect(.degrees(180), axis: (x: 0, y: 1, z: 0))
+                if reduceMotion {
+                    // The card turn becomes a fade (§11) — the open face
+                    // cross-fades in where the sealed one was. It used to
+                    // cut.
+                    face(open: open)
+                        .id(open)
+                        .transition(.opacity)
                 } else {
-                    face(open: false)
+                    CardTurn(turn: turn, sealed: face(open: false), opened: face(open: true))
                 }
             }
-            .rotation3DEffect(.degrees(Double(turn) * 180), axis: (x: 0, y: 1, z: 0), perspective: 0.6)
+            .animation(reduceMotion ? RibbonMotion.open : nil, value: open)
             .onAppear {
                 turn = open ? 1 : 0
                 if let myAnswer { answerDraft = myAnswer }
@@ -105,7 +105,7 @@ struct ReflectionCardView: View {
                         .accessibilityLabel("\(Copy.yourAnswer). \(myAnswer)")
                     QuietControl(title: Copy.editYourAnswer) {
                         answerDraft = myAnswer
-                        isEditing = true
+                        withAnimation(RibbonMotion.arrive) { isEditing = true }
                         isFieldFocused = true
                     }
                 }
@@ -131,8 +131,12 @@ struct ReflectionCardView: View {
                             Button {
                                 let text = answerDraft.trimmingCharacters(in: .whitespacesAndNewlines)
                                 guard !text.isEmpty else { return }
-                                model.answerCard(card, answer: text, in: room)
-                                isEditing = false
+                                // The field gives way to the answer, and
+                                // the answer to the field, by cross-fade.
+                                withAnimation(RibbonMotion.arrive) {
+                                    model.answerCard(card, answer: text, in: room)
+                                    isEditing = false
+                                }
                                 isFieldFocused = false
                             } label: {
                                 Text(Copy.answer)
@@ -146,7 +150,7 @@ struct ReflectionCardView: View {
                             if isEditing {
                                 QuietControl(title: Copy.keepWhatIHad) {
                                     answerDraft = myAnswer ?? ""
-                                    isEditing = false
+                                    withAnimation(RibbonMotion.arrive) { isEditing = false }
                                     isFieldFocused = false
                                 }
                             }
@@ -155,7 +159,7 @@ struct ReflectionCardView: View {
                         .transition(.opacity)
                     }
                 }
-                .animation(RibbonMotion.arrive(still: reduceMotion), value: typed || isEditing)
+                .animation(RibbonMotion.arrive, value: typed || isEditing)
                 if !isEditing {
                     Text(Copy.cardOpensWhenEveryoneHasAnswered)
                         .font(RibbonType.ui(14))
@@ -166,8 +170,11 @@ struct ReflectionCardView: View {
             HStack {
                 Spacer()
                 // Any member may set a sealed card down for the room; it
-                // leaves without ceremony.
-                QuietControl(title: Copy.setItDown) { model.setDownCard(card) }
+                // leaves without ceremony — fading, so the page closes up
+                // behind it instead of jumping.
+                QuietControl(title: Copy.setItDown) {
+                    withAnimation(RibbonMotion.settle) { model.setDownCard(card) }
+                }
             }
         }
     }
@@ -203,5 +210,39 @@ struct ReflectionCardView: View {
                 }
             }
         }
+    }
+}
+
+/// The card, turning over (S08 → S09): 480 ms about its upright, no
+/// overshoot. Which face shows is decided by the angle the card has actually
+/// reached — the animated value, not where it is going — so the sealed face
+/// turns away, the card goes edge-on, and the open face turns in the right
+/// way round. Deciding it from the destination swapped the faces on the
+/// first frame, and the first half of every turn showed the open card
+/// mirrored.
+private struct CardTurn<Sealed: View, Opened: View>: View, Animatable {
+    var turn: CGFloat
+    let sealed: Sealed
+    let opened: Opened
+
+    var animatableData: CGFloat {
+        get { turn }
+        set { turn = newValue }
+    }
+
+    var body: some View {
+        ZStack {
+            if turn < 0.5 {
+                sealed
+                    .transition(.identity)
+            } else {
+                // Drawn already turned the other way, so that the words
+                // come out the right way round.
+                opened
+                    .rotation3DEffect(.degrees(180), axis: (x: 0, y: 1, z: 0))
+                    .transition(.identity)
+            }
+        }
+        .rotation3DEffect(.degrees(Double(turn) * 180), axis: (x: 0, y: 1, z: 0), perspective: 0.6)
     }
 }

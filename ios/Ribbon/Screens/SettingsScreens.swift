@@ -110,11 +110,19 @@ struct Segments: View {
             let width = proxy.size.width / CGFloat(max(1, options.count))
             ZStack(alignment: .leading) {
                 Color.clear.frame(maxWidth: .infinity, maxHeight: .infinity).well(.small)
-                Color.clear
-                    .frame(width: width - 4, height: proxy.size.height - 4)
-                    .paper(.init(RibbonShape.small - 2))
-                    .offset(x: 2 + width * CGFloat(selection))
-                    .animation(RibbonMotion.touched(still: reduceMotion), value: selection)
+                if reduceMotion {
+                    // Held still, the pill does not travel between stops:
+                    // it fades out of the old one and into the new (§11).
+                    // It used to jump.
+                    ForEach(options.indices, id: \.self) { index in
+                        pill(width: width, height: proxy.size.height)
+                            .offset(x: 2 + width * CGFloat(index))
+                            .opacity(index == selection ? 1 : 0)
+                    }
+                } else {
+                    pill(width: width, height: proxy.size.height)
+                        .offset(x: 2 + width * CGFloat(selection))
+                }
                 HStack(spacing: 0) {
                     ForEach(options.indices, id: \.self) { index in
                         Button {
@@ -131,8 +139,17 @@ struct Segments: View {
                     }
                 }
             }
+            // The pill and the words together: the chosen word brightens
+            // as the pill arrives under it, rather than before it does.
+            .animation(reduceMotion ? RibbonMotion.arrive : RibbonMotion.touched, value: selection)
         }
         .frame(height: 44)
+    }
+
+    private func pill(width: CGFloat, height: CGFloat) -> some View {
+        Color.clear
+            .frame(width: width - 4, height: height - 4)
+            .paper(.init(RibbonShape.small - 2))
     }
 }
 
@@ -181,7 +198,10 @@ struct NotificationSettingsScreen: View {
                 }
 
                 SettingsGroup(title: Copy.quietHours, footnote: Copy.thinkingOfYouStillArrives) {
-                    SettingRow(Copy.quietHoursFrom, value: clock(model.settings.quietHoursStart), chevron: false) {
+                    // The wheel opens under the row it sets, and that row's
+                    // time lights while it is open: with two times and one
+                    // wheel, the wheel has to say whose it is.
+                    SettingRow(Copy.quietHoursFrom, value: clock(model.settings.quietHoursStart), chevron: false, active: editing == .from) {
                         editing = editing == .from ? nil : .from
                     }
                     if editing == .from {
@@ -189,7 +209,7 @@ struct NotificationSettingsScreen: View {
                             get: { model.settings.quietHoursStart },
                             set: { m in model.updateSettings { $0.quietHoursStart = m } }))
                     }
-                    SettingRow(Copy.quietHoursUntil, value: clock(model.settings.quietHoursEnd), chevron: false) {
+                    SettingRow(Copy.quietHoursUntil, value: clock(model.settings.quietHoursEnd), chevron: false, active: editing == .until) {
                         editing = editing == .until ? nil : .until
                     }
                     if editing == .until {

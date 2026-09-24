@@ -710,8 +710,7 @@ private fun PersonRow(
 
     val sendThinkingOfYou = {
         haptics?.completeThinkingOfYouHold()
-        scope.launch { model.presence.sendThinkingOfYou(person.id) }
-        Unit
+        model.thinkOf(person.id)
     }
 
     Row(

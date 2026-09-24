@@ -591,6 +591,15 @@ object Copy {
     // The chooser (S13)
     const val GOOD_PLACES_TO_START = "Good places to start together"
     const val NOTHING_MATCHES = "Nothing matches that."
+
+    /**
+     * Note search's prompt, on the shelf (S23) — the book's own words for it:
+     * finding "something someone said".
+     */
+    const val FIND_SOMETHING_SAID = "Something someone said"
+
+    /** A note found by a search, read out: where, and who (never how many). */
+    fun noteFound(verse: String, name: String) = "$verse, from $name"
     const val SEARCH = "Search"
 
     /**

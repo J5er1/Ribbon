@@ -47,16 +47,26 @@ reasoning.
    full irregular-edge treatment (per-run noise outlines) is a refinement
    pass on device, not a redesign.
 
-6. **The note unfurl opens instantly, then the card settles in.** S04
-   wants the line height to open over 400 ms. TextKit exclusion paths
-   don't animate; animating them per-frame during layout is jank. The
-   carve appears, and the card fades/settles over 400 ms. Revisit on
-   device.
+6. **The note unfurl opens over 400 ms.** It opened instantly: S04 wants
+   the line height to open over 400 ms, TextKit exclusion paths don't
+   animate, and animating one per frame means setting the chapter again
+   every frame. It is no longer a deviation (September 2026; I32). The page
+   is laid out once with the carve, and the lines it moved are drawn from
+   where they were, easing home — the drawing animates, not the layout.
+   Android's carve, an inline placeholder, has animated all along. Still
+   worth measuring on a device.
 
-7. **Position restore is chapter-plus-verse tracked, chapter-anchored on
-   open.** Reading reopens at your chapter; scroll-to-exact-verse is a
-   device-tuning pass (`ScrollViewReader` needs laid-out geometry to
-   target a verse's line).
+7. **Position restore lands on the verse.** It was chapter-anchored:
+   reading reopened at the head of your chapter, and scroll-to-exact-verse
+   was left for a device-tuning pass because `ScrollViewReader` needs
+   laid-out geometry to aim at a verse's line. It is no longer a deviation
+   (September 2026; A54, I30). Every way into the book now lands the
+   verse's first line on the reading line. The chapter anchor had turned
+   out to cost more than precision: the page measured itself at the
+   chapter's head and saved what it found, so opening the book and closing
+   it again was enough to lose the verse. What still wants a device is the
+   aim itself: how far above the line the verse rests, and the one number
+   iOS reads off its own first landing (I30).
 
 8. **Word-boundary highlight extension is not built.** S06's "word
    boundaries when dragged slowly" — the current drag snaps to verse
@@ -93,15 +103,13 @@ reasoning.
     mutations queue with hairline `isPending` state and automatically
     push upon reconnection. Deletions and "take back" propagate remotely.
 
-11. **Phase-two surfaces remaining:**
-    Cards (S08/S09) are now implemented on iOS and Android at the passage
-    end. Remaining phase-two items: notifications delivery (S19 stores per-room
-    switches locally; there is no push infrastructure yet), widgets and
-    Live Activity (S24), rooms of three-plus ink-transition moment
+11. **Phase-two surfaces remaining:** Cards (S08/S09) are now implemented on
+    iOS and Android at the passage end. Notifications are delivered by push
+    now (I33, A56), and the widgets and Live Activity are built (I34, A57).
+    Remaining phase-two items: rooms of three-plus ink-transition moment
     (model supports it; the invitation row on S01 is not yet built),
-    StoreKit (S22 shows the model's promise only), and the web *join*
-    (S16's browser half — the app-side join is built, deviation 10; the
-    web page still previews and reads only).
+    StoreKit (S22 shows the model's promise only). The web join is built
+    (deviation 22).
 
 12. **iPad is a considered surface now, one readable column wide.** The
     book designs phone screens; the target includes iPad (all
@@ -439,6 +447,42 @@ reasoning.
     resolves a native Supabase subject to itself and an Auth0 subject to
     a UUIDv5 of it, so the two are not the same person and never become
     one. Both join screens now host `SignInInline` at that step.
+
+22. **Joining in the browser (S16's web half).** "The link opens the web
+    version of the same screen, and you can join and read immediately, in
+    the browser, without installing anything." The invite page did the
+    first line of that and stopped: who is inviting, and a button into an
+    app the person did not have. It is the whole join now, the app's steps
+    in the app's words — Join; an emailed code; a name and, if they like,
+    a face; the room — and S16's states: expired, full, already a member
+    (straight in), and signed in as someone else, which is offered as a
+    choice ("You'll join as Ruth." / "Join as someone else") and never
+    joined silently. The room it lands in is named as the app names it,
+    shows the book, and has one way in: the book, opened at the room's
+    ribbon. The app is offered underneath, once per browser, and never
+    again.
+
+    - **A face waits for the room.** The invite shows the inviter's
+      initial, not their portrait: a link can be forwarded, and a face is
+      the room's to see, which is what the portraits bucket's policy
+      already says. The joiner's own face goes up with their name.
+    - **The name comes before the seat.** A membership names a profile, so
+      the person is written first and the invite accepted after — the
+      order S16 gives anyway ("Join. Then name and portrait. Then you're in
+      the room.").
+    - **The browser signs in with the emailed code**, the thread that works
+      everywhere, and so a browser joiner's account is the emailed-code
+      kind. In the app, the same person is the same person by the same
+      door: the emailed code, with the same address. The browser sign-in
+      the app leads with (Auth0, deviation 21) would make them someone else,
+      and the fix is on Auth0's side — a web application for readribbon.app
+      — not the page's. It is on the list in `docs/still-to-do.md`.
+    - **Reading is the pages that were already there**, pre-rendered and
+      readable before any script runs. Presence, notes and the fire from a
+      browser are §15's phase four ("full web reading"); phase one's web
+      reading is the invite path's, which this is.
+    - `web/invite.js`; every state is driven in a headless browser against
+      a mocked backend, and the preview against the live one.
 
 ## Android (phase three)
 
@@ -3096,6 +3140,145 @@ A53. **Following did not follow, and your own name did not look like
     the smallest thing that says otherwise; the in-place edit S18 asks for is
     untouched.
 
+A54. **The book opens on your verse, not the head of its chapter.**
+    Deviation 7 left verse-level restore for a device, and it was a defect
+    rather than an imprecision. §6.2: "Reading opens at your position." §6.3:
+    "Tap → reading opens at that verse, the mark breathing." Every way into
+    the book — your own place, a waiting row's note, the ribbon, a quoted
+    verse, a tapped notification, "back to where you were" — scrolled to the
+    head of the verse's chapter. Then the page measured where it was, and the
+    verse under the reading line, a few verses into the chapter, went into
+    your position on the first pass. Opening the book and closing it again
+    was enough to lose the verse; and since your place had moved, closing
+    left the room's ribbon there too — the glance `openedAt` exists to make
+    harmless.
+
+    **Landing.** `landOn` puts the verse's first line 6 dp above the reading
+    line: the upper third, the same line `trackReading` reads your place
+    from, so the page measuring itself finds the verse it was sent to. Just
+    above rather than on it, because a verse sitting exactly on the line is a
+    coin toss between two. `scrollToItem` takes an offset into the item and
+    the list knows its own padding, so it is one exact move once the
+    chapter's lines are known; a chapter not yet typeset is brought on first
+    and waited for. A verse near the head of its chapter is already above the
+    line with the chapter at the top of the screen, and opens that way: the
+    page does not scroll back past the chapter's head to put it on the line.
+    A verse the room's version leaves out lands on the nearest verse before
+    it.
+
+    **Holding.** The landed verse is where you are until a scroll carries the
+    reading line off the verse it came to rest on; then the page's measure
+    has it again. Without the hold the aim would have to be exact to the
+    point, forever, or every open would move you a verse. With it, a line of
+    aim costs a line of where the verse sits, never the verse. Held, the page
+    saves no position, because being sent somewhere is not reading to it: a
+    note looked at and closed leaves your place and the ribbon where they
+    were. Presence still says where the page is. A finger on the page takes
+    back a landing still on its way.
+
+    **Three things it exposed.** `openedAt` was remembered once, and since
+    A51 the page outlives the reading of it, so after the first read every
+    later glance put the ribbon back where that read had stopped; it is taken
+    again whenever the book opens. The follow-back offer remembered the last
+    throttled save, and closing the book trusted one up to two seconds
+    behind; both now use the page's own last word (`latestAddress`, which
+    Swift already kept). And a named place opened with a follow still running
+    from before was taken away again on the roster's next tick. A named place
+    is your own going somewhere, and the follow ends, as your own scroll
+    would end it.
+
+    **The cards.** "The cards are open" opened at the head of the chapter
+    whose card had opened — Android's own comment said the page had to land
+    at the chapter's end for the card to be on screen, and then asked for
+    its first verse — and the room's row of the same name opened at your
+    own place. A card is not a verse: it sits below the chapter's last one
+    (§4.6). So the place the book is sent to is a verse or a card
+    (`ReadingPlace`), and a card brings its passage end to the top of the
+    screen. The row goes to the card that opened last. Nothing is held,
+    because nothing was read.
+
+    **Not changed.** Following still carries the page by chapter: A53's
+    reasoning holds, since their scroll inside a chapter is a finer signal
+    than the page can answer without twitching. None of this has run on a
+    device.
+
+A55. **Note search, on the shelf (S23).** "Two searches, deliberately
+    separate." Scripture search has lived in the chooser for some time; note
+    search, which S23 puts on the shelf, had never been built. It is now, on
+    both platforms.
+
+    - **Where.** A field at the head of the shelf: the room's memory, not a
+      bar across the front door. It is there when the shelf is — from the
+      first finished book, since S10 has no shelf before one — and it covers
+      every reading the room has done, the open one included.
+    - **What it matches.** A note's words, or a voice note's transcript; any
+      case, any accent (`localizedStandardContains` on Swift, a folded
+      compare on Kotlin that does the same). Two characters begin a search,
+      as in the chooser.
+    - **What it will not find.** A note left for you and not yet found. Its
+      words are the verse's to give you (§6.3), and the room already lists it
+      waiting; a search box that read it out first would be a read receipt
+      the other way round.
+    - **What it shows.** The open book's notes first, then the shelf from the
+      latest ember back, in verse order within each: the reference and who,
+      then the words around the match. No count of anything. A row opens its
+      own book at the note's verse, and the keyboard goes with the room.
+      Finding nothing says so over the shelf, which stays.
+    - **Offline.** Everything it searches is on the phone, so it works, and
+      says nothing about the rest (S23).
+
+    `NoteSearchTest` holds the rules.
+
+A56. **Push, Android's end (S19; the shape is I33's).** RoomWatch's header
+    said it plainly: a note left for you arrived fifteen minutes late at
+    best, "Ruth is reading Mark" only while Ribbon was open, and a
+    thinking-of-you sent to a closed app never. The backend sends now, and
+    Android takes it as FCM data messages — never a notification message —
+    so what arrives is posted by the same `Notifications.post` as what a
+    pull finds: the same five channels, the same ids (a push and a pull
+    about the same person replace each other), the same one line. The
+    third gate, the room on screen, is applied on arrival; the switches
+    and the quiet hours were applied by the server, in the phone's zone.
+
+    - **One voice, never two**, exactly as on iOS: while the sender says it
+      can reach FCM and this phone's registration went through, the app
+      posts none of the six itself. The answer is kept in preferences, since
+      the worker and the messaging service both run with no screen.
+    - **"Ruth is reading Mark" stands while she reads.** It is S24's Live
+      Activity in the only shape Android has for it: an ongoing line,
+      silent after the arrival that said it aloud, kept current by her
+      phone's heartbeat, taken down when she leaves — and gone by itself
+      twenty-five minutes after the heartbeat stops, for a phone that died
+      mid-chapter.
+    - **Firebase is optional in the build.** Its values come out of
+      `app/google-services.json` at build time, with no plugin; a build
+      without the file has no Firebase at all and is the app it was before.
+      Both packages — `app.readribbon` and `app.readribbon.debug` — go in
+      the Firebase project, and the service account goes to the function as
+      `FCM_SERVICE_ACCOUNT` (supabase/README.md).
+
+A57. **The fire on the home screen (S24).** §12.2 names Glance for Android's
+    widgets, "same content as iOS", and this is the content without the
+    Glance: the fire is a painting, and a RemoteViews — which is what Glance
+    compiles to — can hold a bitmap of a painting but not the painting, nor
+    the room's small-caps face. So `FireWidget` paints one bitmap with the
+    room's own `FirePainter`, held at one instant on the unlit ground, sets
+    the book's name under it in Alegreya Sans SC, and hands the system that
+    and a sentence for TalkBack ("The fire is burning. Mark."). A long name
+    is set smaller rather than cut.
+
+    - **It cools without the app**, as on iOS (I34): what the app leaves is
+      the open reading's handiwork and the room's banked spans, and the
+      state is worked out again from the room's own engine each time the
+      system updates the widget — on the hour, at most.
+    - **No book open is the ground and nothing on it** (§08).
+    - **A tap opens the room**, by the same private intent a notification
+      uses.
+    - **The Live Activity's Android shape** is the ongoing "Ruth is reading
+      Mark" line of A56, which is what Android 16 offers a thing that is
+      true for as long as it is true; a home-screen widget would be a second
+      surface saying the same sentence later.
+
 ## iOS (phase four): the second pass
 
 Android took a design pass of its own (A18–A51) and the two platforms
@@ -3359,6 +3542,372 @@ I20. **Not carried across, on purpose.** Appearance / Material You (A18,
     have; the parity is in the ledger, not in pictures — see the questions
     at the foot of the pull request.
 
+I21. **The fire's release had the wrong speed, pointed the wrong way.** The
+    hearth's pull (I3) is one number from the finger to the page, and the
+    number was sound; what it was handed at release was not.
+
+    *The flick was measured as a distance.* `predictedEndTranslation` minus
+    the translation is how much further a prediction says the finger would
+    have gone — a length, compared against `openFling`, which is points per
+    second (I3, A48). A flick had to be roughly twice as fast as the number
+    says before it counted. It is `DragGesture.Value.velocity` now.
+
+    *The spring was set off backwards.* SwiftUI takes a spring's starting
+    speed relative to the distance it has left, positive towards the mark.
+    It was given points per second over the travel — neither divided by the
+    distance nor signed for it — so a finger still moving up as it let go
+    sent the fire down fast, and one already coming back sent it up first.
+    `RibbonMotion.cover(rate:towards:)` and `handled(rate:towards:)` take the
+    rate and the distance left and do the division themselves, and cap the
+    result below the spring's natural frequency: a critically damped spring
+    started towards its mark faster than √k per unit of distance crosses the
+    mark, which is the overshoot §9.1 forbids, reached through the one kind
+    of animation built never to have it.
+
+    *The commit threw the speed away.* "The root carries the pull the rest of
+    the way, with the speed the finger let go at," said the comment, and the
+    root set off from rest. It carries the speed now.
+
+    *Let go short, the page vanished.* The fire animated itself back down,
+    and the root then asked for the same value again. The second request
+    changed nothing, so its completion ran at once and took the half-risen
+    page out of the tree while the fire was still falling: the page did not
+    go back down, it was simply gone. The root owns the release alone — one
+    spring, fire and page together — and takes the page away when it has
+    arrived, unless the fire has been taken hold of again in the meantime
+    (`pullHold`: a quick re-grab lands inside the last release).
+
+    And one movement from every door. Every other way into the book from the
+    room came up on `cover`; from a pushed screen — a quoted verse on an
+    ember, a note on somebody's page, "read it again" — it came up on
+    `arrive`, a curve two thirds as long. `openBook` is the one door.
+
+I22. **Reduce motion fades; it does not cut.** §11 is specific: "Morphs
+    become cross-fades. The card turn becomes a fade." The `still:` tokens
+    (I2) made every animated change under reduce motion a cut, including
+    changes that never moved anything — a word cross-fading under the fire,
+    a presence ring's opacity, the hairline under your name brightening. A
+    cut is not a cross-fade, and it is the one thing §9.1 asks the room never
+    to do.
+
+    `Motion.swift` now says what `still:` is for: movement. A change that is
+    only opacity or colour asks for the plain token and keeps its curve. And
+    where movement was being cut, it becomes the fade §11 asks for:
+
+    - The book fades in and out where it will be read rather than travelling
+      a screen's height. It is no longer built under the room during a pull,
+      since nothing moves under the finger (I3) and there is nothing to lift.
+    - The presence form fades at its edge. The leave toolbar, the confirm
+      card, a face taking its seat and the onboarding steps fade without the
+      slide or the swell.
+    - The card turn is a cross-fade (I23). The segmented control's pill fades
+      from one stop to the next. The presence ring cross-fades between whole
+      and half. A choice's check fades rather than drawing itself in.
+    - A tile under a finger dims to 72% rather than giving. Held still, it
+      used to answer a press with nothing at all.
+    - The other way: a scroll that flies the page a chapter's length — to the
+      person you follow, to a chapter from the list, on to the next — is now
+      simply there. That flight is exactly the movement §11 is written for,
+      and it was the one thing the reading surface still animated under it.
+
+    Layout that shifts because something arrived or left (a waiting row, the
+    quiet-hours wheel, the account section) still cuts under reduce motion,
+    as before: the fade there would carry a slide with it.
+
+I23. **The card turned the wrong face first.** The reflection card chose its
+    face from `turn >= 0.5`, and `turn` is the state — 1 from the first frame
+    of the turn, since that is where it is going. So the open face, drawn
+    already mirrored, replaced the sealed one at once, and the first half of
+    every turn showed the open card backwards with the sealed face nowhere.
+    `CardTurn` is `Animatable`: it is handed the angle actually reached, frame
+    by frame, and changes faces edge-on, which is what I13 says it does.
+    Setting a card down, answering it and taking an answer back to edit now
+    cross-fade; setting one down used to make the page jump up under the
+    thumb that had just tapped it.
+
+I24. **What still happened between two frames.** A38 and A41 swept Android
+    for these; this is the same sweep on iOS.
+
+    - A fire changing state — caught by the reading you have just closed,
+      banked by a quiet day while you look at it — was redrawn as another
+      fire. It cross-fades now, the two fires sharing their seed so they
+      breathe in step and only the state differs.
+    - The composer: the toolbar giving way to writing or speaking, editing a
+      note, and back — all cross-fades. Dragged away from a recording, the
+      waveform recedes and the line under it turns over on `release`.
+    - The follow thread fades in and out. "Back to where you were" fades, and
+      forgets on its own at two minutes; it only went when the page next
+      happened to redraw.
+    - The running head at the foot of the page cross-fades between chapters,
+      its capsule easing to the new width.
+    - The highlight label faded away only on its timeout; a tap and Remove
+      now fade it too.
+    - The room's "Left for you": notes and the invite settled in, but the
+      cards opening and an ink to pick arrived on one frame, and the section
+      itself always did.
+    - A present reader going still now unwinds their ring to its crown
+      (it jumped), and presence rings come and go on `arrive`, which is the
+      curve §9.1 files presence appearing under.
+    - Thinking of you: the filled ring rests a moment and then lets go. It
+      vanished on the frame the hold succeeded, so the one gesture in the
+      product with no words had no visible end either. Letting go short is
+      on `release`, where it had a 150 ms curve no token names.
+    - The ink picker dismissed on the same frame as the tap; the ring never
+      moved. It settles round the choice, and then the sheet goes.
+    - A choice's check draws itself in on `touched`; the words of the
+      segmented control brighten as the pill arrives under them, not before.
+    - The join's steps cross-fade, the dead end and "Joining" included. The
+      sign-in error line fades, and the control lowers while a code is on its
+      way — before, the only sign a tap had been heard was the network
+      answering.
+    - Portraits settle into their circles; "That's me" wakes with the first
+      letter rather than switching on.
+    - The way-in capsule, the invite's send button, embers on the shelf and
+      the faces on an ember take a press as a tile does. They took none, or
+      the system's dimming, beside tiles that gave.
+
+I25. **The haptics §9.3 lists, and only those.** "Someone arrives: one soft
+    transient, low intensity" — `someoneArrives()` has existed since phase
+    one and nothing called it. The presence form plays it when somebody opens
+    the book while you are reading; never for the people already there when
+    you opened it, and never for a reader coming back inside the fade, who as
+    far as the page is concerned never left. The other way: the intent step's
+    tiles played a `UIImpactFeedbackGenerator` tick on every tap — a
+    selection tick, which §9.3 names as unwanted, from a preset, which §12.1
+    rules out. It is gone, and `Haptics.light()` with it.
+
+I26. **Onboarding's thread moved one way.** Every step arrived from the right
+    and left by the left, going back included, so back looked like on. The
+    step leaving is drawn with the transition it last had, which means a
+    direction held in view state reaches it one move late; `ThreadMove` reads
+    the direction through a reference, at the moment the move is made. The
+    progress bar belonged to each step and slid away with it, so its fill —
+    the thing it is for — was never once seen to move. There is one bar now,
+    standing still over the thread, the accent running along each segment
+    (and back, going back). The mark dissolves into the first card in place
+    rather than the card sliding in over it.
+
+I27. **Places a finger could not land, and one tap that made two people.**
+    The book chooser's rows were 34 points tall and answered only on the
+    book's name and its fire, with a dead gap between them; the whole row
+    answers now, at 44. An ember's notes and its quoted highlights were the
+    same. Remove on a highlight's label, Read quietly, Try again under a
+    transcript, Take back in the composer and Open Settings after a refused
+    microphone were each the height of their own letters, and are 44 now.
+    The ember record was the one screen the room pushes that still wore the
+    system's navigation bar and its glyph; it has the drawn chevron (A29).
+
+    "That's me", at onboarding and at a join, started a task per tap. With a
+    portrait there is an await before the person exists, and a quick second
+    tap inside it made a second person and orphaned the first. One tap, one
+    person.
+
+I28. **The fire becomes an ember in front of the reader, and once.** The
+    finishing sequence began when the lazy page built it, which can be a
+    screen below the fold, so a slow reader could arrive at an ember that had
+    already settled without them. It begins now when the finishing is in
+    view — the same test that finishes the book. And a book finished before
+    it was opened this time ends on its ember rather than burning down again:
+    §9.1 has fire → ember once per book.
+
+I29. **Not changed then, and done since (I32): a note's line height opened at
+    once.** S04 asks for 400 ms. Deviation 6 says why iOS did not — the carve
+    is an exclusion path, and opening it per frame means TextKit laying out
+    the chapter and SwiftUI measuring it every frame — and says to revisit on
+    a device. This pass had no device either, so the card still settles into a
+    carve that is already there, as before. The honest way to do it is to
+    animate the drawing rather than the layout (lay out once, draw the lines
+    under the carve lifted and let them down), and it wants measuring on a
+    phone before it is trusted. Everything above was built by CI's simulator
+    compile and reasoned through against the SwiftUI documentation, and none
+    of it has yet been run on a device.
+
+I30. **The book opens on your verse (A54).** The decision and the hold are
+    A54's; what is different on iOS is the aim. A `ScrollViewReader` can
+    only aim at a view, and a chapter is one text view, so the landing sets
+    a point-sized mark inside the chapter — at the depth that, put at the top
+    of the screen, leaves the verse's line on the reading line — and scrolls
+    to that. A chapter not on the page is two moves: the chapter, then the
+    mark, once the chapter has been typeset and said where its lines are.
+
+    **The one number the page has to learn.** `scrollTo(_:anchor: .top)`
+    lines a view up with the top of the scroll view's visible area. The page
+    measures itself in the `.scrollView` space, and the documentation does
+    not say where one sits in the other — the safe area, give or take. So
+    the page reads it off its first landing, which always starts from a
+    known place: the chapter just put there by `.top`, or the first chapter
+    at rest less the page's top margin. The last chapter is not trusted for
+    it, because it can be too short to scroll its top all the way up. Until
+    then the top content inset stands in. This is the number a device should
+    check first. The hold means a wrong one moves where the verse sits by a
+    few points, never which verse is yours.
+
+    **Travelling one way.** "Back to where you were" eases. A chapter that is
+    not on the page comes in at its top when the page is travelling down to
+    it and at its foot travelling up, and the move to the line is made only
+    if it carries on the same way: a verse the page would have to turn back
+    for is already on the screen, and turning back is the overshoot §9.1
+    forbids. Every other landing is made without animation. The book is
+    still rising when it opens, so it arrives already there.
+
+    **What else was wrong on iOS.** A notification tapped while the book was
+    open left the page where it was: the target was read in `onAppear` and
+    never again. It lands now, at once, as it always has on Android. The
+    reading page had no identity of its own, so a notification that opened
+    another book over this one would have kept this book's typeset chapters;
+    it takes one per book. The running head named the chapter of the last
+    save, which a held page does not make; it names the chapter on the
+    screen, written only when that changes, so a scroll does not re-read the
+    page on every verse. And `openedAt` was where the page was sent rather
+    than your own place (Android has always taken your own), so a note opened
+    and closed left the ribbon near it.
+
+I31. **Four small things the motion pass saw and left.** I29 closed on what
+    was not done; these were smaller, and they are done now.
+
+    - **A mark taken back vanished.** Android lowers a removed wash to
+      nothing (A38); iOS dropped it between two frames. It lifts off the
+      words now on `arrive`, and a piece of it that another mark still
+      covers is that mark's, drawn at once — the rule Android keeps. A fade
+      stays a fade under reduce motion (I22).
+    - **A field said nothing about being typed in.** The shared text field
+      sits on paper this dark, and the caret was the only sign of focus —
+      and on the sign-in, with an address and then a code, no sign at all of
+      which field was listening. Its edge brightens under the caret. The
+      caller's hold on focus is passed in rather than laid over the field
+      from outside, so one binding, not two, decides where focus is.
+    - **Quiet hours' wheel did not say whose it was.** Two times share one
+      wheel, which opens under the row it sets; that row's time lights while
+      the wheel is open, and is marked selected for VoiceOver. Android opens
+      a dialog for each time and never needed it.
+    - **The presence form's hint was a string in a view, and the hold had no
+      equivalent.** The hint is in `Copy`, as the tap's consequence ("Follows
+      them"), and the hold is published as an action, "Thinking of you", as
+      it always has been on Android (§11: every gesture has an equivalent
+      that is not a gesture).
+
+I32. **The note unfurls: the line height opens over 400 ms (S04).** I29 left
+    this with a way to do it; this is that way. Opening a note carves space
+    under its verse with a TextKit exclusion path, which cannot animate, and
+    moving one frame by frame would set the chapter again every frame. So the
+    chapter is set once, with the carve where it now is, and the drawing is
+    what moves. The layout manager draws the glyphs the carve displaced — and
+    their washes — from where they were, and they ease home over `settle`:
+    opening, the lines under the verse slide down to make the gap as the
+    card fades into it; closing, they rise into it as the card goes.
+
+    - **What moves** is worked out by glyph, not by height on the page: the
+      lines after the verse's last line (the next verse can begin on that
+      line, and its words stay put), below the old carve, the new one, or
+      both. Opening one note while another is open moves each stretch by its
+      own difference.
+    - **A card that measures itself** while it is still opening — it starts
+      at a guessed height — carries the gap on from wherever it is drawn
+      that frame rather than jumping it.
+    - **The margin's marks** are placed from the chapter's layout, so they
+      would have arrived first; they ease to their new places on the same
+      token.
+    - **Not moved:** the chapter's own height, which changes at once. The
+      foot of a long chapter is off the screen while a note opens in the
+      middle of it; a note open near a chapter's end will show the passage
+      end below stepping rather than sliding. Under reduce motion the carve
+      is a change of state, as on Android (§11). Worth measuring on a device
+      before it is trusted: a display link redraws the chapter for 400 ms.
+
+I33. **Push: the six arrive when they happen (S19).** Every notification was
+    the phone's own work until now — a background pull whenever the system
+    allowed one, fifteen minutes apart at best (A34), and nothing at all
+    for the two things with no row behind them, "Ruth is reading Mark" and
+    a thinking-of-you sent to a closed app. The backend can send now, and
+    this is the shape of it, on both platforms (Android's end is A56).
+
+    - **Every push is a fact in the database first.** A trigger on notes,
+      cards and readings — or a call from the phone for reading, leaving
+      and thinking of you — writes a row to `push_outbox`, and the insert
+      wakes the `push` function. The database says who hears what
+      (`push_claim`); the function only words it and delivers it. So the
+      function needs no secret to be safe to call: anyone who finds it can
+      only make it deliver what was waiting, once.
+    - **The switches are the phone's, as the phone holds them.** Each phone
+      registers its token with every room's four switches, its quiet hours
+      and its time zone — at launch, on every return to the foreground, and
+      a second after a switch changes. The server judges quiet hours in the
+      phone's own zone, because a phone that is asleep cannot judge
+      anything.
+    - **One voice, never two.** While the sender says it can reach APNs and
+      this phone's registration went through, the phone posts none of the
+      six itself; the background pull still merges, and the watermark still
+      moves. A phone that is not registered — no permission, no token, the
+      key not set yet — keeps speaking for itself exactly as before. The
+      last answer is remembered, because a background pull runs before
+      anything could ask.
+    - **The third gate is the phone's.** A note about the room on screen is
+      not presented (`willPresent`): a phone in your hand is not told what
+      it is showing you. A finished book and a touch pass, as they always
+      have.
+    - **"When they open the book"** is said on an *arrival*: the book opened
+      after half an hour away from it. The phone says it is reading on
+      opening and every ten minutes while it stays open, and that it has
+      left when the book closes, reading turns quiet, or the app goes away.
+      Reading quietly tells the server nothing. The server keeps no record
+      of any of it beyond `last_read`, the one stamp per person per room
+      §13 already allows, overwritten in place.
+    - **Thinking of you:** the socket still carries the touch to a phone in
+      the room; the server carries the name to one that is not. In quiet
+      hours nothing is pushed — S19 lets the touch arrive silently "as a
+      haptic on an already-woken device", which is the socket's to give.
+    - **Several notes:** a second note from the same person inside half an
+      hour replaces the first, without a sound, and names only the person
+      (§10.3). It is the same collapse the phones have always done, told by
+      the server now.
+    - **Nothing becomes history.** "Reading", "left" and thinking-of-you
+      rows go five minutes after they are sent; note, card and book rows,
+      which only point at rows that exist anyway, go after a day.
+    - **What it needs to be heard:** the APNs key as secrets on the
+      function (`supabase/README.md`), and the Push Notifications
+      capability on the App ID with the profiles made again. Until both
+      exist nothing changes: the sender answers that it cannot reach
+      APNs, and every phone keeps posting for itself.
+
+I34. **The widgets and the Live Activity (S24).** A second target, the
+    widget extension, carries all three of S24's surfaces, and nothing on
+    any of them answers how much or how often.
+
+    - **The small widget** is the room's fire at its state on the unlit
+      ground, and the book's name in small caps. The fire is drawn by the
+      room's own painter (`FirePainter`, moved into `ios/Shared` so both
+      targets compile it), held at one instant: a widget is a still.
+    - **The lock screen:** the fire alone in the circle; the book and its
+      state inline, in the slot's own face.
+    - **The fire cools without the app.** The app writes the room's open
+      reading's handiwork to the app group's container — not a state, the
+      thing a state is worked out from — and the widget's timeline asks the
+      core's engine for the state an hour at a time, so the home screen
+      reports what the room would. The app rewrites it when it goes away
+      and after every pull, and reloads the widget only when it changed.
+    - **No book open is the unlit ground and nothing on it.** §08: an empty
+      state is a reproach, so the widget is absent rather than empty.
+    - **"Ruth is reading Mark"** is a Live Activity started by push (the
+      server's `i_am_reading`, I33) on the phones whose "When they open the
+      book" is on — the switch it belongs to, and off by default for the
+      reason S19 gives. Her portrait and the sentence; nothing else. It is
+      kept current by her phone's ten-minute heartbeat and ended when she
+      leaves. A phone that dies mid-chapter never says it left, so the line
+      goes into the past tense once the heartbeat has stopped for twenty
+      minutes — "Ruth was reading Mark" — rather than go on claiming a
+      presence nobody can vouch for (§4.2); and when this phone can hear the
+      room's presence itself, it takes down any activity whose reader is not
+      in the book.
+    - **The faces** the Live Activity draws are small copies the app keeps
+      in the group's container, because the extension cannot reach the
+      app's own cache. A tap on any of it opens the room
+      (`ribbon://room/<id>`).
+    - **What it needs:** the App Group `group.bible.ribbon.app` on both App
+      IDs, a `bible.ribbon.app.widgets` App ID, and profiles made again with
+      them (the TestFlight workflow's "refresh profiles"). Until then the
+      simulator build is unaffected; a signed build is not, which is the
+      trade the owner chose.
+
 ## Licensed translations (decided: API.Bible)
 
 Open question §16.8 is now part-decided: **NKJV plus two undecided
@@ -3414,8 +3963,8 @@ written, this ledger records the difference.
   after ~96 h of quiet lands at catching, and any further feeding ≥15 min
   later lifts it. All in `FireTuning`, none of it ever surfaced in copy.
 - **Search field** in the chooser also searches Scripture text of every
-  bundled book (S23's scripture search); note search on the shelf is
-  phase-aligned with cards and not yet built.
+  bundled book (S23's scripture search); note search lives on the shelf
+  (A55).
 - **Four motion tokens the book does not name**, all in
   `RibbonMotion` (Android) because Android has two kinds of motion §9.1
   never had to describe. The **peel** — 6% smaller, 24 dp down, 28% toward

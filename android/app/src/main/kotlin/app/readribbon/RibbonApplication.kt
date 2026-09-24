@@ -3,6 +3,7 @@ package app.readribbon
 import android.app.Application
 import app.readribbon.design.RibbonFonts
 import app.readribbon.services.Notifications
+import app.readribbon.services.Push
 
 class RibbonApplication : Application() {
     override fun onCreate() {
@@ -20,5 +21,10 @@ class RibbonApplication : Application() {
         // leaves the importance the person chose alone, so this is safe to
         // run on every launch and is not gated on a flag.
         Notifications.createChannels(this)
+
+        // Push (S19), when the build carries a Firebase configuration. Before
+        // anything else can ask for a token, and before a message that
+        // started this process is handed to the service.
+        Push.configure(this)
     }
 }

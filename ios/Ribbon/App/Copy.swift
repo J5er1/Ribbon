@@ -151,6 +151,12 @@ enum Copy {
         base + ", with " + others.joined(separator: " and ")
     }
     static let follow = "Follow"
+    /// A portrait in the presence form, for a screen reader: what the tap
+    /// does, as a consequence (Android's click label says "Follow"). The
+    /// hold is not described — it is an action of its own, "Thinking of
+    /// you", as it is on Android (§11: every gesture has an equivalent that
+    /// is not a gesture).
+    static let followsThem = "Follows them"
     static let dismiss = "dismiss"
 
     /// The two ends of a highlight, as controls (§11, ledger A41g). Each has
@@ -235,6 +241,11 @@ enum Copy {
     // MARK: The chooser (S13)
     static let goodPlacesToStart = "Good places to start together"
     static let nothingMatches = "Nothing matches that."
+    /// Note search's prompt, on the shelf (S23) — the book's own words for
+    /// it: finding "something someone said".
+    static let findSomethingSaid = "Something someone said"
+    /// A note found by a search, read out: where, and who (never how many).
+    static func noteFound(_ verse: String, by name: String) -> String { "\(verse), from \(name)" }
     static let search = "Search"
     /// A book as the chooser speaks it: its name and the fire it makes,
     /// which is a scale, not a number (Law 2).
