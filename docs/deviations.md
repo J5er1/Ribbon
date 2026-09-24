@@ -3131,6 +3131,9 @@ A53. **Following did not follow, and your own name did not look like
     the roster by a throttle and would have let a steady roster yank the page
     back to a chapter top once a tick.
 
+    *(Superseded by A58: the page now follows a guess at where they are
+    reading, not their chapter, and the grace window is gone.)*
+
     **And the name.** S18 says the name is "editable in place", and it was —
     in the room's own display face, 26pt, beside your portrait, with no
     paper, no rule and nothing else on the screen saying a field was what it
@@ -3200,7 +3203,7 @@ A54. **The book opens on your verse, not the head of its chapter.**
     **Not changed.** Following still carries the page by chapter: A53's
     reasoning holds, since their scroll inside a chapter is a finer signal
     than the page can answer without twitching. None of this has run on a
-    device.
+    device. *(Changed since, by A58.)*
 
 A55. **Note search, on the shelf (S23).** "Two searches, deliberately
     separate." Scripture search has lived in the chooser for some time; note
@@ -3278,6 +3281,131 @@ A57. **The fire on the home screen (S24).** §12.2 names Glance for Android's
       Mark" line of A56, which is what Android 16 offers a thing that is
       true for as long as it is true; a home-screen widget would be a second
       surface saying the same sentence later.
+
+A58. **Following follows the page (supersedes A53's chapter-only rule and
+    A54's "Not changed").** Owner: *"The app still doesn't follow the other
+    person very well. Can you build out an algorithm to guess where the other
+    person is reading and just follow along?"* It did not follow well for
+    four reasons, and only one of them was the missing guess.
+
+    **Presence was being refused.** Supabase lets one client send five
+    presence messages in thirty seconds and closes the channel on the sixth.
+    A reader scrolling tracked every two seconds — fifteen — and the live
+    project's Realtime logs held thirty-nine `ClientPresenceRateLimitReached`
+    closures in a day. Each one took the reader out of the roster until the
+    reconnect, and the follow with them. Every presence send now goes
+    through one budget on both platforms (`PresenceBudget` on Android, the
+    same rules in `RoomChannel.swift`): four a window, the fifth kept for
+    leaving or for a change of who you follow, coalesced to the latest wish,
+    counted only when the frame was written, and never spent on a scroll
+    fraction alone. The join always re-tracks. The server's `system` event
+    is logged by its status only, and a rate-limit one fills the window.
+    Deviation 20's "a position already rides presence" still holds for the
+    verse; it no longer carries where on the page.
+
+    **The place they came to rest was never said.** The two-second throttle
+    sent on the first frame of a scroll and never at its end, so a follower
+    was always one scroll behind. Presence now also says where a page comes
+    to rest, three hundred milliseconds after it does, through the budget.
+
+    **Where someone reads is a `reading` broadcast** (`RoomChannelWire`,
+    `RoomChannelWireTest`): their reading line as a verse and how far
+    through it, the bottom of what their screen shows, whether they had come
+    to rest, whether their own page was being carried by a follow, and a
+    random per-connection token so one person's two phones do not pull a
+    follow back and forth. It is sent only while someone visibly follows
+    them — while their portrait is tucked against yours — on the settle, a
+    sample a second in flight, when a follow begins, and every twenty
+    seconds. No time, no pace, nothing persisted (§13). A follower reading
+    quietly is seen by nobody, so nobody sends the line for them: they
+    follow at presence's precision, or on a line someone else's follow is
+    keeping sent (Law 3).
+
+    **The guess** is RibbonCore's `ReadingEstimate`, ported case for case
+    (34 tests a side). It measures in words, so two phones setting a chapter
+    at different sizes agree. From where their phone last came to rest it
+    reads on at their own pace — learned from rest to rest, Kindle-style,
+    with pauses, skims, jumps and looks back teaching nothing — and never
+    further than three-quarters of the scroll they usually make: people
+    scroll when their eyes near the bottom of the part of the screen they
+    like to read in, so the next scroll is the honest limit, and a guess
+    allowed to run to the bottom of their screen during a pause carried the
+    page past them and then back. A sample in flight behind the guess
+    holds it; a fifth of a screen behind where they rested is them going
+    back, and is followed. A page being carried by a follow of its own is
+    where that page is and nothing is guessed from it — without that, two
+    people following each other (§2.2) would have read the book with nobody
+    touching either phone. Going still holds the guess. The pace lives in
+    the follow and dies with it; nothing shows it, sends it or keeps it.
+
+    **The page is moved the way the person followed moves theirs**
+    (`FollowCarriage`): held still while the guess is in the upper half,
+    carried several lines at once — to a quarter of the way down — when it
+    leaves, in `settle`'s ease. Never past the line their phone actually
+    reported, which a step never lifts off the top of your screen; and
+    never back to correct its own guess — only their going back, or their
+    line leaving the top, moves the page up (I30's one-way rule). A glide at
+    reading pace was considered and refused: still text read in steps beats
+    moving text (Kolers 1981; Öquist & Lundin 2007), and their own page is
+    still between their scrolls. In simulation (forty sessions of Mark,
+    ten per cent of messages lost) a phone following a phone had the
+    leader's line on screen 96% of the time, against 9% with the chapter
+    rule, at about four steps a minute. An iPad followed on a phone is
+    worse, about 71%: a large screen's reading line says less about where
+    on it the eyes are.
+
+    - **Reduce motion** fades each step — out on `release`, the jump, in on
+      `arrive` — and takes fewer, larger ones; a fly is simply there
+      (extends I22, whose rule is fades, not cuts). Android animates both
+      fades, and the follow thread's, at full length even with the animator
+      scale at zero (`FadesUnderReduceMotion`), because Compose otherwise
+      cuts every animation there and a cut is what I22 forbids.
+    - **A screen reader** hears the page move only when their line leaves
+      the screen, and then to the line itself, not the guess.
+    - **The page holds** while a finger is on it, a scroll is running, a
+      verse is lifted or selected, the toolbar or the composer is up, a note
+      is open, the chapter list or the presence panel is open, the book is
+      closing, and while the person followed is gone or in another book.
+
+    **A follow ends on a gesture that scrolls, not on geometry.** The old
+    rule ended it on any change of the page's frame after a 1.5-second grace
+    — so a note opening, a card, or a licensed chapter arriving ended it
+    with nobody touching the screen — and a page carried every few seconds
+    would have lived inside the grace forever. A tap is not a gesture. The
+    first gesture of a follow is §4.2's rubber band: the page goes back to
+    where the follow held it. Any later one ends the follow and is yours.
+    With nothing to go back to, the first ends it. Every way of going
+    somewhere of your own ends it too — the chapter list, a passage end's
+    continue, a named place, closing the book, and a scroll that is not a
+    finger (keyboard, wheel, VoiceOver, TalkBack). Tapping the person you
+    follow stops following, as the web's F does; their row and portrait
+    carry the system's "selected", and the "Follows them" hint is gone from
+    them. "Back to where you were" now counts its two minutes from the end
+    of a follow — it counted from the start, which follows that lasted
+    hid — and switching to someone else keeps the place you first left.
+
+    **Being carried is not reading.** While following, the page's movement
+    is the follow's: it saves no place (the place is saved when the follow
+    ends and when the book closes), feeds no fire, and does not count as
+    activity — so a follower who never touches the page is "here, but still"
+    after about four minutes, which is true (A54: being sent somewhere is
+    not reading to it). Starting a follow is your own act, and feeds the
+    fire once: joining someone who is reading is reading together.
+
+    **Going away suspends rather than forgets.** §4.2 asks for a short grace
+    before backgrounding removes someone; there was none, so a glance at a
+    message dropped the person you were following out of your roster. The
+    channel now stays up for fifteen seconds after the app leaves the
+    screen, then suspends — the socket goes, what you were announcing does
+    not — and on return it re-announces you once the line is back.
+
+    **Not changed.** Presence's meta, keys and `scrollFraction` are as they
+    were (Android's `scrollFraction` was px over dp, about a third of the
+    truth; it is px over px now); older apps still follow by the chapter
+    and are followed by the verse. **Not exercised on a device**: the band's
+    feel, which scroll phases VoiceOver and keyboards report, the grace
+    against a real OS, and the Realtime logs going quiet are the first real
+    test.
 
 ## iOS (phase four): the second pass
 
@@ -3907,6 +4035,25 @@ I34. **The widgets and the Live Activity (S24).** A second target, the
       them (the TestFlight workflow's "refresh profiles"). Until then the
       simulator build is unaffected; a signed build is not, which is the
       trade the owner chose.
+
+I35. **Following on iOS (A58).** The decisions are A58's; what is only
+    iOS's:
+
+    - **The rubber band has no resistance.** SwiftUI gives a scroll view no
+      way to take less than the finger gives, so the first gesture scrolls
+      freely and the page goes back — on `release` — the moment the finger
+      lifts, cutting off the fling. Android resists as it is pulled and
+      springs back on `cover`.
+    - **Steps aim a mark**, `FollowMark`, a point-sized view inside the
+      chapter like the landing's, at the place that should come to the
+      landing line, measured against the calibrated `scrollTop`.
+    - **VoiceOver's elements are kept, not rebuilt.** Every layout pass
+      threw away every verse's element and made new ones, which a page
+      moved every few seconds would have turned into focus lost every few
+      seconds. Each verse keeps its element (`VerseElement`); only frames
+      and words that changed are updated.
+    - **The grace** is a background task that suspends the channel fifteen
+      seconds after the app goes, unless it comes back first.
 
 ## Licensed translations (decided: API.Bible)
 
