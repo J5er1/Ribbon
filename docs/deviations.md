@@ -108,9 +108,8 @@ reasoning.
     now (I33, A56), and the widgets and Live Activity are built (I34, A57).
     Remaining phase-two items: rooms of three-plus ink-transition moment
     (model supports it; the invitation row on S01 is not yet built),
-    StoreKit (S22 shows the model's promise only), and the web *join* (S16's
-    browser half — the app-side join is built, deviation 10; the web page
-    still previews and reads only).
+    StoreKit (S22 shows the model's promise only). The web join is built
+    (deviation 22).
 
 12. **iPad is a considered surface now, one readable column wide.** The
     book designs phone screens; the target includes iPad (all
@@ -448,6 +447,42 @@ reasoning.
     resolves a native Supabase subject to itself and an Auth0 subject to
     a UUIDv5 of it, so the two are not the same person and never become
     one. Both join screens now host `SignInInline` at that step.
+
+22. **Joining in the browser (S16's web half).** "The link opens the web
+    version of the same screen, and you can join and read immediately, in
+    the browser, without installing anything." The invite page did the
+    first line of that and stopped: who is inviting, and a button into an
+    app the person did not have. It is the whole join now, the app's steps
+    in the app's words — Join; an emailed code; a name and, if they like,
+    a face; the room — and S16's states: expired, full, already a member
+    (straight in), and signed in as someone else, which is offered as a
+    choice ("You'll join as Ruth." / "Join as someone else") and never
+    joined silently. The room it lands in is named as the app names it,
+    shows the book, and has one way in: the book, opened at the room's
+    ribbon. The app is offered underneath, once per browser, and never
+    again.
+
+    - **A face waits for the room.** The invite shows the inviter's
+      initial, not their portrait: a link can be forwarded, and a face is
+      the room's to see, which is what the portraits bucket's policy
+      already says. The joiner's own face goes up with their name.
+    - **The name comes before the seat.** A membership names a profile, so
+      the person is written first and the invite accepted after — the
+      order S16 gives anyway ("Join. Then name and portrait. Then you're in
+      the room.").
+    - **The browser signs in with the emailed code**, the thread that works
+      everywhere, and so a browser joiner's account is the emailed-code
+      kind. In the app, the same person is the same person by the same
+      door: the emailed code, with the same address. The browser sign-in
+      the app leads with (Auth0, deviation 21) would make them someone else,
+      and the fix is on Auth0's side — a web application for readribbon.app
+      — not the page's. It is on the list in `docs/still-to-do.md`.
+    - **Reading is the pages that were already there**, pre-rendered and
+      readable before any script runs. Presence, notes and the fire from a
+      browser are §15's phase four ("full web reading"); phase one's web
+      reading is the invite path's, which this is.
+    - `web/invite.js`; every state is driven in a headless browser against
+      a mocked backend, and the preview against the live one.
 
 ## Android (phase three)
 

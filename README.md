@@ -196,7 +196,11 @@ The one deliberate difference is colour: Android takes it from the wallpaper
   renders every screen this touched, on both palettes, to
   `android/app/build/shots` — and CI keeps them as an artifact.
 
-Still ahead on both platforms: the presence socket and the content half of
-sync (notes, highlights, positions), and everything §15 puts in phase two.
-`docs/deviations.md` is the honest ledger — §A is Android's, §I is the
-iOS pass that followed it.
+- **Joining in the browser.** The invite link is the whole join for
+  somebody without the app: Join, an emailed code, a name and a face, the
+  room — and the book, readable at once (deviation 22).
+
+**What is built but not yet switched on** — push notifications above all,
+which wait on the Apple and Firebase keys — is listed, with the steps, in
+`docs/still-to-do.md`. `docs/deviations.md` is the honest ledger — §A is
+Android's, §I is the iOS pass that followed it.

@@ -215,35 +215,88 @@ ${chapter.blocks.map(renderBlock).join("\n")}
 
 // The invite page (S16) — one static shell; the token rides the URL and
 // the page asks the backend who is inviting. This is the surface Law 3
-// governs hardest: a person, not a product.
+// governs hardest: a person, not a product. And it is the whole of the
+// join for somebody without the app — "you can join and read immediately,
+// in the browser, without installing anything" — so every step the app's
+// join has, this has: Join, an emailed code, a name and a face, the room.
+// One step shows at a time; invite.js decides which.
+const bookNames = Object.fromEntries([...books.values()].map((b) => [b.id, b.name]));
 writeFileSync(
   join(dist, "invite.html"),
   page({
     title: "Ribbon · read it together",
     bodyClass: "invite",
-    head: `<script defer src="/invite.js"></script>`,
+    head: `<script>window.RIBBON_BOOKS = ${JSON.stringify(bookNames)};</script>
+<script defer src="/invite.js"></script>`,
     body: `
 <main class="invite-main">
-  <h1 id="invite-line" class="invite-line">&nbsp;</h1>
-  <p class="sc invite-sub">Ribbon · read it together</p>
+  <p class="step held sc" data-step="loading">ribbon</p>
 
-  <div class="invite-action-group">
-    <a id="open-app-btn" class="btn-primary" href="#">Open in Ribbon</a>
-  </div>
+  <section class="step" data-step="invite" hidden>
+    <div class="monogram" id="inviter-initial" aria-hidden="true"></div>
+    <h1 class="invite-line" id="invite-line">Someone wants to read with you.</h1>
+    <p class="sc invite-sub" id="room-name" hidden></p>
+    <p class="sc invite-sub">Ribbon · read it together</p>
+    <div class="invite-action-group">
+      <button type="button" class="btn-primary" id="join-btn">Join</button>
+    </div>
+    <a id="open-app-link" class="quiet-link sc" href="#" hidden>Open in Ribbon</a>
+  </section>
 
-  <p class="invite-body" id="invite-body">
-    Open the invite in Ribbon to join the room and read together.
-  </p>
+  <section class="step" data-step="as" hidden>
+    <h1 class="invite-line" id="as-line"></h1>
+    <div class="invite-action-group">
+      <button type="button" class="btn-primary" id="join-as-btn">Join</button>
+    </div>
+    <button type="button" class="quiet-btn sc" id="someone-else-btn">Join as someone else</button>
+  </section>
 
-  <div class="invite-options">
-    <a id="download-android-link" class="quiet-link sc" href="/android">Get the Android preview</a>
-    <button type="button" id="copy-token-btn" class="quiet-btn sc">Copy invite link</button>
-    <span id="copied-toast" class="copied-toast" aria-live="polite">Copied</span>
-  </div>
+  <form class="step field-step" data-step="email" hidden novalidate>
+    <label class="sc" for="email">Your email</label>
+    <input id="email" name="email" type="email" autocomplete="email" inputmode="email" required>
+    <button type="submit" class="btn-primary">Send the code</button>
+    <button type="button" class="quiet-btn sc" data-back>Never mind</button>
+  </form>
 
-  <p class="preview-line">
-    <a href="/read/bsb/MRK/1.html" class="preview-link sc">Preview Scripture in browser</a>
-  </p>
+  <form class="step field-step" data-step="code" hidden novalidate>
+    <p class="invite-body">A code is on its way to your email.</p>
+    <label class="sc" for="code">The code</label>
+    <input id="code" name="code" type="text" autocomplete="one-time-code" inputmode="numeric" required>
+    <button type="submit" class="btn-primary">Sign in</button>
+    <button type="button" class="quiet-btn sc" id="resend-btn">Send a new code</button>
+  </form>
+
+  <form class="step field-step" data-step="name" hidden novalidate>
+    <label class="sc" for="name">Your name</label>
+    <input id="name" name="name" type="text" autocomplete="given-name" required>
+    <div class="portrait-row">
+      <div class="monogram small" id="portrait-preview" aria-hidden="true"></div>
+      <label class="quiet-btn sc" for="portrait" id="portrait-label">Add a portrait</label>
+      <input id="portrait" type="file" accept="image/*" class="visually-hidden">
+    </div>
+    <p class="invite-body">They'll see your face when you're reading.</p>
+    <button type="submit" class="btn-primary">That's me</button>
+  </form>
+
+  <p class="step held sc" data-step="joining" hidden>joining</p>
+
+  <section class="step" data-step="room" hidden>
+    <h1 class="invite-line display-room" id="room-line"></h1>
+    <p class="sc invite-sub" id="room-book" hidden></p>
+    <div class="invite-action-group">
+      <a class="btn-primary" id="read-link" href="/read/">Read in the browser</a>
+    </div>
+    <p class="invite-body app-offer" id="app-offer" hidden>
+      Ribbon is an app too, for whenever you want it.
+      <a class="quiet-link" href="/download">Get Ribbon</a>
+    </p>
+  </section>
+
+  <section class="step" data-step="ended" hidden>
+    <h1 class="invite-line" id="ended-line"></h1>
+  </section>
+
+  <p class="error-line" id="error-line" role="status" aria-live="polite"></p>
 </main>
 `,
   }),

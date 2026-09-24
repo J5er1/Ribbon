@@ -248,15 +248,6 @@ sup.v {
   margin: 0.4rem 0 1rem;
 }
 
-.invite-options {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 1.2rem;
-  position: relative;
-}
-
 .quiet-link {
   color: var(--muted);
   text-decoration: underline;
@@ -284,25 +275,104 @@ sup.v {
   color: var(--text);
 }
 
-.copied-toast {
-  display: none;
-  font-family: "Alegreya Sans SC", sans-serif;
-  font-size: 0.75rem;
-  letter-spacing: 0.08em;
-  color: var(--chartreuse);
+.btn-primary {
+  border: none;
+  cursor: pointer;
+}
+.btn-primary:focus-visible,
+.quiet-btn:focus-visible,
+.field-step input:focus-visible {
+  outline: 1px solid var(--chartreuse);
+  outline-offset: 3px;
 }
 
-.preview-line {
-  margin-top: 2rem;
+/* One step at a time (S16). A step arrives the way a sheet does — the
+   320 ms `arrive` token, eased out, nothing overshooting — and under
+   reduce motion it is simply there. */
+.step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.8rem;
+  width: 100%;
+  max-width: 26rem;
+  animation: arrive 320ms ease-out both;
+}
+.step[hidden] { display: none; }
+@keyframes arrive {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .step { animation: fade 320ms ease-out both; }
+  @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 }
 
-.preview-link {
-  color: var(--muted);
-  opacity: 0.75;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-.preview-link:hover {
-  opacity: 1;
+/* The held beat: the wordmark in the quietest voice there is, because
+   nothing in Ribbon is visibly loading (§8). */
+.held { opacity: 0.6; }
+
+/* A face, or the initial that stands in for one until it is shared. */
+.monogram {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface) center / cover no-repeat;
+  border: 1px solid var(--rule);
+  font-family: Literata, Georgia, serif;
+  font-size: 1.9rem;
   color: var(--text);
+  margin-bottom: 0.4rem;
+}
+.monogram:empty { visibility: hidden; }
+.monogram.small { width: 48px; height: 48px; font-size: 1.3rem; margin: 0; }
+.monogram.small:empty { visibility: visible; }
+
+.field-step label.sc { align-self: center; }
+.field-step input[type="email"],
+.field-step input[type="text"] {
+  width: 100%;
+  max-width: 22rem;
+  padding: 0.8rem 1rem;
+  border-radius: 14px;
+  border: 1px solid var(--rule);
+  background: var(--surface);
+  color: var(--text);
+  font-family: "Alegreya Sans", system-ui, sans-serif;
+  font-size: 1.1rem;
+  text-align: center;
+}
+.field-step input:focus { border-color: rgba(243, 240, 230, 0.32); }
+.field-step .btn-primary { margin-top: 0.6rem; }
+
+.portrait-row {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  margin-top: 0.4rem;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.display-room { font-size: 2rem; }
+.app-offer { margin-top: 1.6rem; }
+
+/* What went wrong, in the app's words: the true small thing, and nothing
+   that sounds like an apology. */
+.error-line {
+  min-height: 1.5em;
+  margin: 0.4rem 0 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+  text-align: center;
 }
