@@ -98,15 +98,34 @@ final class FollowingTests: XCTestCase {
         assertPoint(estimate.point(at: at(5), rulers: rulers), 1, 3, 0.9)
     }
 
-    func testEstimateStopsShortOfTheEndOfTheirScreen() {
+    func testEstimateStopsShortOfTheirNextScroll() {
         var estimate = ReadingEstimate()
         estimate.observe(
             ReadingReport(
                 at: ReadingPoint(chapter: 1, verse: 3), end: ReadingPoint(chapter: 1, verse: 8),
                 settled: true, received: t0),
             rulers: rulers)
-        // A hundred words to the bottom of their screen, less three.
-        assertPoint(estimate.point(at: at(100), rulers: rulers), 1, 7, 0.85)
+        // A hundred words to the bottom of their screen; before a scroll of
+        // theirs is seen, three-quarters of half of that.
+        assertPoint(estimate.point(at: at(100), rulers: rulers), 1, 4, 0.875)
+    }
+
+    func testUsualScrollLimitsTheGuess() {
+        var estimate = ReadingEstimate()
+        estimate.observe(
+            ReadingReport(
+                at: ReadingPoint(chapter: 1, verse: 1), end: ReadingPoint(chapter: 1, verse: 10),
+                settled: true, received: t0),
+            rulers: rulers)
+        // They scrolled forty words: the guess runs on thirty past their
+        // line, however long they stay.
+        estimate.observe(
+            ReadingReport(
+                at: ReadingPoint(chapter: 1, verse: 3), end: ReadingPoint(chapter: 2, verse: 2),
+                settled: true, received: at(12)),
+            rulers: rulers)
+        XCTAssertEqual(estimate.pace, 3.543860, accuracy: 0.0001)
+        assertPoint(estimate.point(at: at(112), rulers: rulers), 1, 4, 0.5)
     }
 
     func testEstimateWithoutAnEndLeadsTwoVerses() {
@@ -121,17 +140,33 @@ final class FollowingTests: XCTestCase {
         var estimate = ReadingEstimate()
         estimate.observe(
             ReadingReport(
-                at: ReadingPoint(chapter: 1, verse: 3), end: ReadingPoint(chapter: 1, verse: 8),
+                at: ReadingPoint(chapter: 1, verse: 3), end: ReadingPoint(chapter: 1, verse: 10),
                 settled: true, received: t0),
             rulers: rulers)
         estimate.observe(
             ReadingReport(
-                at: ReadingPoint(chapter: 1, verse: 3, part: 0.01), end: ReadingPoint(chapter: 1, verse: 8),
-                settled: true, received: at(20)),
+                at: ReadingPoint(chapter: 1, verse: 3, part: 0.01), end: ReadingPoint(chapter: 1, verse: 10),
+                settled: true, received: at(10)),
             rulers: rulers)
-        // Seventy-two words on from where they came to rest, not from the
+        // Thirty-six words on from where they came to rest, not from the
         // keepalive.
-        assertPoint(estimate.point(at: at(20), rulers: rulers), 1, 6, 0.6)
+        assertPoint(estimate.point(at: at(10), rulers: rulers), 1, 4, 0.8)
+    }
+
+    func testRepeatUpdatesTheEndOfTheirScreen() {
+        var estimate = ReadingEstimate()
+        estimate.observe(
+            ReadingReport(
+                at: ReadingPoint(chapter: 1, verse: 3), end: ReadingPoint(chapter: 1, verse: 10),
+                settled: true, received: t0),
+            rulers: rulers)
+        // A note opened on their phone: their screen now ends a verse down.
+        estimate.observe(
+            ReadingReport(
+                at: ReadingPoint(chapter: 1, verse: 3), end: ReadingPoint(chapter: 1, verse: 4),
+                settled: true, received: at(5)),
+            rulers: rulers)
+        assertPoint(estimate.point(at: at(100), rulers: rulers), 1, 3, 0.375)
     }
 
     func testRestAfterAScrollInFlightStartsTheReading() {
@@ -147,6 +182,58 @@ final class FollowingTests: XCTestCase {
         assertPoint(estimate.point(at: at(7), rulers: rulers), 1, 3, 0.9)
     }
 
+    func testInFlightSampleBehindTheGuessDoesNotPullItBack() {
+        var estimate = ReadingEstimate()
+        estimate.observe(
+            ReadingReport(
+                at: ReadingPoint(chapter: 1, verse: 3), end: ReadingPoint(chapter: 1, verse: 10),
+                settled: true, received: t0),
+            rulers: rulers)
+        // The first sample of their next scroll is where the last one
+        // ended — behind a guess that has read on since.
+        estimate.observe(
+            ReadingReport(at: ReadingPoint(chapter: 1, verse: 3, part: 0.1), settled: false, received: at(10)),
+            rulers: rulers)
+        assertPoint(estimate.point(at: at(11), rulers: rulers), 1, 4, 0.8)
+        // Once the scroll passes the guess, the page is where it is.
+        estimate.observe(
+            ReadingReport(at: ReadingPoint(chapter: 1, verse: 5, part: 0.5), settled: false, received: at(11.5)),
+            rulers: rulers)
+        assertPoint(estimate.point(at: at(12), rulers: rulers), 1, 5, 0.5)
+    }
+
+    func testGoingBackInFlightIsFollowed() {
+        var estimate = ReadingEstimate()
+        estimate.observe(
+            ReadingReport(
+                at: ReadingPoint(chapter: 1, verse: 6), end: ReadingPoint(chapter: 1, verse: 10),
+                settled: true, received: t0),
+            rulers: rulers)
+        // Forty words back is more than a fifth of their screen.
+        estimate.observe(
+            ReadingReport(at: ReadingPoint(chapter: 1, verse: 4), settled: false, received: at(5)),
+            rulers: rulers)
+        assertPoint(estimate.point(at: at(5), rulers: rulers), 1, 4, 0)
+        XCTAssertEqual(estimate.wentBackAt, at(5))
+    }
+
+    func testCarriedReportIsMirrored() {
+        var estimate = ReadingEstimate()
+        // Their page is being carried by a follow of their own: it is where
+        // their page is, and nothing more.
+        estimate.observe(
+            ReadingReport(
+                at: ReadingPoint(chapter: 1, verse: 3), end: ReadingPoint(chapter: 1, verse: 8),
+                settled: true, carried: true, received: t0),
+            rulers: rulers)
+        assertPoint(estimate.point(at: at(60), rulers: rulers), 1, 3, 0)
+        estimate.observe(
+            ReadingReport(at: ReadingPoint(chapter: 1, verse: 6), settled: true, carried: true, received: at(10)),
+            rulers: rulers)
+        assertPoint(estimate.point(at: at(70), rulers: rulers), 1, 6, 0)
+        XCTAssertEqual(estimate.pace, 3.6, accuracy: 0.0001)
+    }
+
     func testLearnsAFasterReader() {
         var estimate = ReadingEstimate()
         // Sixty words every ten seconds: six a second.
@@ -156,6 +243,22 @@ final class FollowingTests: XCTestCase {
                 rulers: rulers)
         }
         XCTAssertEqual(estimate.pace, 4.536433, accuracy: 0.0001)
+    }
+
+    func testRestInFlightRestLearnsThePace() {
+        var estimate = ReadingEstimate()
+        estimate.observe(
+            ReadingReport(at: ReadingPoint(chapter: 1, verse: 1), settled: true, received: t0),
+            rulers: rulers)
+        // Every scroll is seen in flight before it rests; the pace is
+        // learned from rest to rest all the same.
+        estimate.observe(
+            ReadingReport(at: ReadingPoint(chapter: 1, verse: 2), settled: false, received: at(9)),
+            rulers: rulers)
+        estimate.observe(
+            ReadingReport(at: ReadingPoint(chapter: 1, verse: 4), settled: true, received: at(10)),
+            rulers: rulers)
+        XCTAssertEqual(estimate.pace, 4.036364, accuracy: 0.0001)
     }
 
     func testPauseTeachesNothing() {
@@ -211,18 +314,20 @@ final class FollowingTests: XCTestCase {
             rulers: rulers)
         assertPoint(estimate.point(at: at(30), rulers: rulers), 1, 2, 0)
         XCTAssertEqual(estimate.pace, 3.6, accuracy: 0.0001)
+        XCTAssertEqual(estimate.wentBackAt, at(30))
     }
 
     func testGuessCrossesIntoTheNextChapter() {
         var estimate = ReadingEstimate()
         estimate.observe(
             ReadingReport(
-                at: ReadingPoint(chapter: 1, verse: 10, part: 0.5), end: ReadingPoint(chapter: 2, verse: 2),
+                at: ReadingPoint(chapter: 1, verse: 10, part: 0.5), end: ReadingPoint(chapter: 2, verse: 6),
                 settled: true, received: t0),
             rulers: rulers)
-        // Ten words to the end of chapter 1 and twenty into chapter 2, less
-        // three.
-        assertPoint(estimate.point(at: at(100), rulers: rulers), 2, 1, 0.85)
+        // Ten words to the end of chapter 1, a hundred on to the bottom of
+        // their screen: the guess runs forty-one and a quarter, over the
+        // chapter's end.
+        assertPoint(estimate.point(at: at(100), rulers: rulers), 2, 2, 0.5625)
     }
 
     func testWithoutTheChapterMeasuredTheGuessStaysPut() {
@@ -244,21 +349,37 @@ final class FollowingTests: XCTestCase {
         assertPoint(estimate.point(at: at(10), rulers: rulers), 1, 5, 0)
     }
 
+    func testReportedIsTheirLineNotTheGuess() {
+        var estimate = ReadingEstimate()
+        estimate.observe(
+            ReadingReport(at: ReadingPoint(chapter: 1, verse: 3), settled: true, received: t0),
+            rulers: rulers)
+        assertPoint(estimate.reported, 1, 3, 0)
+    }
+
     // MARK: The carriage
 
     func testCarriageHoldsInsideTheBand() {
         XCTAssertEqual(FollowCarriage.move(y: 300, viewport: 1000), .hold)
-        XCTAssertEqual(FollowCarriage.move(y: 500, viewport: 1000), .hold)
+        XCTAssertEqual(FollowCarriage.move(y: 550, viewport: 1000), .hold)
         XCTAssertEqual(FollowCarriage.move(y: 80, viewport: 1000), .hold)
     }
 
-    func testCarriageStepsForwardPastTheMiddle() {
-        XCTAssertEqual(FollowCarriage.move(y: 620, viewport: 1000), .step(by: 320))
+    func testCarriageStepsForwardPastTheLine() {
+        XCTAssertEqual(FollowCarriage.move(y: 620, viewport: 1000), .step(by: 370))
     }
 
-    func testCarriageStepsBackWhenTheyWentBack() {
-        XCTAssertEqual(FollowCarriage.move(y: 40, viewport: 1000), .step(by: -260))
-        XCTAssertEqual(FollowCarriage.move(y: -500, viewport: 1000), .step(by: -800))
+    func testCarriageKeepsTheirLineOnScreen() {
+        XCTAssertEqual(FollowCarriage.move(y: 620, reported: 400, viewport: 1000, minStep: 60), .step(by: 320))
+        // Their own line is already near the top: nothing is worth moving.
+        XCTAssertEqual(FollowCarriage.move(y: 620, reported: 100, viewport: 1000, minStep: 60), .hold)
+    }
+
+    func testCarriageStepsBackOnlyWhenTheyWentBack() {
+        XCTAssertEqual(FollowCarriage.move(y: 40, reported: 40, viewport: 1000), .hold)
+        XCTAssertEqual(FollowCarriage.move(y: 40, reported: 40, viewport: 1000, wentBack: true), .step(by: -210))
+        XCTAssertEqual(FollowCarriage.move(y: 40, reported: -50, viewport: 1000), .step(by: -210))
+        XCTAssertEqual(FollowCarriage.move(y: 40, viewport: 1000), .step(by: -210))
     }
 
     func testCarriageFliesWhenThePlaceIsNotLaidOut() {
@@ -267,7 +388,20 @@ final class FollowingTests: XCTestCase {
     }
 
     func testCarriageRealigns() {
-        XCTAssertEqual(FollowCarriage.move(y: 400, viewport: 1000, realign: true), .step(by: 100))
-        XCTAssertEqual(FollowCarriage.move(y: 300.5, viewport: 1000, realign: true), .hold)
+        XCTAssertEqual(FollowCarriage.move(y: 400, viewport: 1000, realign: true), .step(by: 150))
+        XCTAssertEqual(FollowCarriage.move(y: 250.5, viewport: 1000, realign: true), .hold)
+    }
+
+    func testCarriageIsCalmerUnderReduceMotion() {
+        XCTAssertEqual(FollowCarriage.move(y: 620, viewport: 1000, manner: .calm), .hold)
+        XCTAssertEqual(FollowCarriage.move(y: 800, viewport: 1000, manner: .calm), .step(by: 550))
+    }
+
+    func testCarriageSpokenMovesOnlyWhenTheirLineLeaves() {
+        XCTAssertEqual(FollowCarriage.move(y: 700, reported: 500, viewport: 1000, manner: .spoken), .hold)
+        XCTAssertEqual(FollowCarriage.move(y: 700, reported: 1200, viewport: 1000, manner: .spoken), .step(by: 950))
+        XCTAssertEqual(FollowCarriage.move(y: 700, reported: -100, viewport: 1000, manner: .spoken), .step(by: -350))
+        XCTAssertEqual(FollowCarriage.move(y: nil, viewport: 1000, manner: .spoken), .fly)
+        XCTAssertEqual(FollowCarriage.move(y: 700, viewport: 1000, manner: .spoken), .hold)
     }
 }

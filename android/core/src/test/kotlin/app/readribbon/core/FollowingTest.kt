@@ -125,11 +125,23 @@ class FollowingTest {
     }
 
     @Test
-    fun testEstimateStopsShortOfTheEndOfTheirScreen() {
+    fun testEstimateStopsShortOfTheirNextScroll() {
         val estimate = ReadingEstimate()
         estimate.observe(report(1, 3, end = ReadingPoint(1, 8), settled = true, second = 0.0), rulers)
-        // A hundred words to the bottom of their screen, less three.
-        assertPoint(estimate.point(now = at(100.0), rulers = rulers), 1, 7, 0.85)
+        // A hundred words to the bottom of their screen; before a scroll of
+        // theirs is seen, three-quarters of half of that.
+        assertPoint(estimate.point(now = at(100.0), rulers = rulers), 1, 4, 0.875)
+    }
+
+    @Test
+    fun testUsualScrollLimitsTheGuess() {
+        val estimate = ReadingEstimate()
+        estimate.observe(report(1, 1, end = ReadingPoint(1, 10), settled = true, second = 0.0), rulers)
+        // They scrolled forty words: the guess runs on thirty past their
+        // line, however long they stay.
+        estimate.observe(report(1, 3, end = ReadingPoint(2, 2), settled = true, second = 12.0), rulers)
+        assertEquals(3.543860, estimate.pace, 0.0001)
+        assertPoint(estimate.point(now = at(112.0), rulers = rulers), 1, 4, 0.5)
     }
 
     @Test
@@ -142,11 +154,20 @@ class FollowingTest {
     @Test
     fun testRepeatDoesNotMoveTheGuessBack() {
         val estimate = ReadingEstimate()
-        estimate.observe(report(1, 3, end = ReadingPoint(1, 8), settled = true, second = 0.0), rulers)
-        estimate.observe(report(1, 3, part = 0.01, end = ReadingPoint(1, 8), settled = true, second = 20.0), rulers)
-        // Seventy-two words on from where they came to rest, not from the
+        estimate.observe(report(1, 3, end = ReadingPoint(1, 10), settled = true, second = 0.0), rulers)
+        estimate.observe(report(1, 3, part = 0.01, end = ReadingPoint(1, 10), settled = true, second = 10.0), rulers)
+        // Thirty-six words on from where they came to rest, not from the
         // keepalive.
-        assertPoint(estimate.point(now = at(20.0), rulers = rulers), 1, 6, 0.6)
+        assertPoint(estimate.point(now = at(10.0), rulers = rulers), 1, 4, 0.8)
+    }
+
+    @Test
+    fun testRepeatUpdatesTheEndOfTheirScreen() {
+        val estimate = ReadingEstimate()
+        estimate.observe(report(1, 3, end = ReadingPoint(1, 10), settled = true, second = 0.0), rulers)
+        // A note opened on their phone: their screen now ends a verse down.
+        estimate.observe(report(1, 3, end = ReadingPoint(1, 4), settled = true, second = 5.0), rulers)
+        assertPoint(estimate.point(now = at(100.0), rulers = rulers), 1, 3, 0.375)
     }
 
     @Test
@@ -158,6 +179,44 @@ class FollowingTest {
     }
 
     @Test
+    fun testInFlightSampleBehindTheGuessDoesNotPullItBack() {
+        val estimate = ReadingEstimate()
+        estimate.observe(report(1, 3, end = ReadingPoint(1, 10), settled = true, second = 0.0), rulers)
+        // The first sample of their next scroll is where the last one
+        // ended — behind a guess that has read on since.
+        estimate.observe(report(1, 3, part = 0.1, settled = false, second = 10.0), rulers)
+        assertPoint(estimate.point(now = at(11.0), rulers = rulers), 1, 4, 0.8)
+        // Once the scroll passes the guess, the page is where it is.
+        estimate.observe(report(1, 5, part = 0.5, settled = false, second = 11.5), rulers)
+        assertPoint(estimate.point(now = at(12.0), rulers = rulers), 1, 5, 0.5)
+    }
+
+    @Test
+    fun testGoingBackInFlightIsFollowed() {
+        val estimate = ReadingEstimate()
+        estimate.observe(report(1, 6, end = ReadingPoint(1, 10), settled = true, second = 0.0), rulers)
+        // Forty words back is more than a fifth of their screen.
+        estimate.observe(report(1, 4, settled = false, second = 5.0), rulers)
+        assertPoint(estimate.point(now = at(5.0), rulers = rulers), 1, 4, 0.0)
+        assertEquals(at(5.0), estimate.wentBackAt)
+    }
+
+    @Test
+    fun testCarriedReportIsMirrored() {
+        val estimate = ReadingEstimate()
+        // Their page is being carried by a follow of their own: it is where
+        // their page is, and nothing more.
+        estimate.observe(
+            report(1, 3, end = ReadingPoint(1, 8), settled = true, second = 0.0).copy(carried = true),
+            rulers,
+        )
+        assertPoint(estimate.point(now = at(60.0), rulers = rulers), 1, 3, 0.0)
+        estimate.observe(report(1, 6, settled = true, second = 10.0).copy(carried = true), rulers)
+        assertPoint(estimate.point(now = at(70.0), rulers = rulers), 1, 6, 0.0)
+        assertEquals(3.6, estimate.pace, 0.0001)
+    }
+
+    @Test
     fun testLearnsAFasterReader() {
         val estimate = ReadingEstimate()
         // Sixty words every ten seconds: six a second.
@@ -165,6 +224,17 @@ class FollowingTest {
             estimate.observe(report(1, verse, settled = true, second = second), rulers)
         }
         assertEquals(4.536433, estimate.pace, 0.0001)
+    }
+
+    @Test
+    fun testRestInFlightRestLearnsThePace() {
+        val estimate = ReadingEstimate()
+        estimate.observe(report(1, 1, settled = true, second = 0.0), rulers)
+        // Every scroll is seen in flight before it rests; the pace is
+        // learned from rest to rest all the same.
+        estimate.observe(report(1, 2, settled = false, second = 9.0), rulers)
+        estimate.observe(report(1, 4, settled = true, second = 10.0), rulers)
+        assertEquals(4.036364, estimate.pace, 0.0001)
     }
 
     @Test
@@ -204,15 +274,17 @@ class FollowingTest {
         estimate.observe(report(1, 2, settled = true, second = 30.0), rulers)
         assertPoint(estimate.point(now = at(30.0), rulers = rulers), 1, 2, 0.0)
         assertEquals(3.6, estimate.pace, 0.0001)
+        assertEquals(at(30.0), estimate.wentBackAt)
     }
 
     @Test
     fun testGuessCrossesIntoTheNextChapter() {
         val estimate = ReadingEstimate()
-        estimate.observe(report(1, 10, part = 0.5, end = ReadingPoint(2, 2), settled = true, second = 0.0), rulers)
-        // Ten words to the end of chapter 1 and twenty into chapter 2, less
-        // three.
-        assertPoint(estimate.point(now = at(100.0), rulers = rulers), 2, 1, 0.85)
+        estimate.observe(report(1, 10, part = 0.5, end = ReadingPoint(2, 6), settled = true, second = 0.0), rulers)
+        // Ten words to the end of chapter 1, a hundred on to the bottom of
+        // their screen: the guess runs forty-one and a quarter, over the
+        // chapter's end.
+        assertPoint(estimate.point(now = at(100.0), rulers = rulers), 2, 2, 0.5625)
     }
 
     @Test
@@ -230,24 +302,49 @@ class FollowingTest {
         assertPoint(estimate.point(now = at(10.0), rulers = rulers), 1, 5, 0.0)
     }
 
+    @Test
+    fun testReportedIsTheirLineNotTheGuess() {
+        val estimate = ReadingEstimate()
+        estimate.observe(report(1, 3, settled = true, second = 0.0), rulers)
+        assertPoint(estimate.reported, 1, 3, 0.0)
+    }
+
     // MARK: The carriage
 
     @Test
     fun testCarriageHoldsInsideTheBand() {
         assertEquals(FollowMove.Hold, FollowCarriage.move(y = 300.0, viewport = 1000.0))
-        assertEquals(FollowMove.Hold, FollowCarriage.move(y = 500.0, viewport = 1000.0))
+        assertEquals(FollowMove.Hold, FollowCarriage.move(y = 550.0, viewport = 1000.0))
         assertEquals(FollowMove.Hold, FollowCarriage.move(y = 80.0, viewport = 1000.0))
     }
 
     @Test
-    fun testCarriageStepsForwardPastTheMiddle() {
-        assertEquals(FollowMove.Step(320.0), FollowCarriage.move(y = 620.0, viewport = 1000.0))
+    fun testCarriageStepsForwardPastTheLine() {
+        assertEquals(FollowMove.Step(370.0), FollowCarriage.move(y = 620.0, viewport = 1000.0))
     }
 
     @Test
-    fun testCarriageStepsBackWhenTheyWentBack() {
-        assertEquals(FollowMove.Step(-260.0), FollowCarriage.move(y = 40.0, viewport = 1000.0))
-        assertEquals(FollowMove.Step(-800.0), FollowCarriage.move(y = -500.0, viewport = 1000.0))
+    fun testCarriageKeepsTheirLineOnScreen() {
+        assertEquals(
+            FollowMove.Step(320.0),
+            FollowCarriage.move(y = 620.0, reported = 400.0, viewport = 1000.0, minStep = 60.0),
+        )
+        // Their own line is already near the top: nothing is worth moving.
+        assertEquals(
+            FollowMove.Hold,
+            FollowCarriage.move(y = 620.0, reported = 100.0, viewport = 1000.0, minStep = 60.0),
+        )
+    }
+
+    @Test
+    fun testCarriageStepsBackOnlyWhenTheyWentBack() {
+        assertEquals(FollowMove.Hold, FollowCarriage.move(y = 40.0, reported = 40.0, viewport = 1000.0))
+        assertEquals(
+            FollowMove.Step(-210.0),
+            FollowCarriage.move(y = 40.0, reported = 40.0, viewport = 1000.0, wentBack = true),
+        )
+        assertEquals(FollowMove.Step(-210.0), FollowCarriage.move(y = 40.0, reported = -50.0, viewport = 1000.0))
+        assertEquals(FollowMove.Step(-210.0), FollowCarriage.move(y = 40.0, viewport = 1000.0))
     }
 
     @Test
@@ -258,7 +355,33 @@ class FollowingTest {
 
     @Test
     fun testCarriageRealigns() {
-        assertEquals(FollowMove.Step(100.0), FollowCarriage.move(y = 400.0, viewport = 1000.0, realign = true))
-        assertEquals(FollowMove.Hold, FollowCarriage.move(y = 300.5, viewport = 1000.0, realign = true))
+        assertEquals(FollowMove.Step(150.0), FollowCarriage.move(y = 400.0, viewport = 1000.0, realign = true))
+        assertEquals(FollowMove.Hold, FollowCarriage.move(y = 250.5, viewport = 1000.0, realign = true))
+    }
+
+    @Test
+    fun testCarriageIsCalmerUnderReduceMotion() {
+        val calm = FollowCarriage.Manner.Calm
+        assertEquals(FollowMove.Hold, FollowCarriage.move(y = 620.0, viewport = 1000.0, manner = calm))
+        assertEquals(FollowMove.Step(550.0), FollowCarriage.move(y = 800.0, viewport = 1000.0, manner = calm))
+    }
+
+    @Test
+    fun testCarriageSpokenMovesOnlyWhenTheirLineLeaves() {
+        val spoken = FollowCarriage.Manner.Spoken
+        assertEquals(
+            FollowMove.Hold,
+            FollowCarriage.move(y = 700.0, reported = 500.0, viewport = 1000.0, manner = spoken),
+        )
+        assertEquals(
+            FollowMove.Step(950.0),
+            FollowCarriage.move(y = 700.0, reported = 1200.0, viewport = 1000.0, manner = spoken),
+        )
+        assertEquals(
+            FollowMove.Step(-350.0),
+            FollowCarriage.move(y = 700.0, reported = -100.0, viewport = 1000.0, manner = spoken),
+        )
+        assertEquals(FollowMove.Fly, FollowCarriage.move(y = null, viewport = 1000.0, manner = spoken))
+        assertEquals(FollowMove.Hold, FollowCarriage.move(y = 700.0, viewport = 1000.0, manner = spoken))
     }
 }

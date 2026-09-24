@@ -8,8 +8,8 @@ import Foundation
 // screen top to bottom and scroll a few lines at a time, so between those
 // words their eyes are somewhere further down than the last one said. This
 // file is the guess at where: the last word, carried on at the reader's own
-// pace, and never past the bottom of their own screen — nobody reads what
-// their phone isn't showing them.
+// pace, and never further than the scroll they would make next — nobody
+// reads past the place they would have scrolled from.
 //
 // It measures in words, not points. Two phones set the same chapter at
 // different widths and sizes; a word is the same word on both.
@@ -113,6 +113,7 @@ public struct ChapterRuler: Hashable, Sendable {
     }
 }
 
+
 /// One word from the phone of the person followed: where their reading line
 /// is, how far down their own screen goes, and whether they had stopped.
 /// Stamped when it arrived here — nothing on the wire carries a time.
@@ -122,12 +123,18 @@ public struct ReadingReport: Hashable, Sendable {
     public var end: ReadingPoint?
     /// Sent because the scroll came to rest, rather than in the middle of it.
     public var settled: Bool
+    /// Their page was being carried by a follow of their own: it is where
+    /// the page is, not where they read to, and nothing is guessed from it.
+    public var carried: Bool
     public var received: Date
 
-    public init(at: ReadingPoint, end: ReadingPoint? = nil, settled: Bool, received: Date) {
+    public init(
+        at: ReadingPoint, end: ReadingPoint? = nil, settled: Bool, carried: Bool = false, received: Date
+    ) {
         self.at = at
         self.end = end
         self.settled = settled
+        self.carried = carried
         self.received = received
     }
 }
@@ -156,9 +163,28 @@ public struct FollowingTuning: Hashable, Sendable {
     public var fasterThan: Double = 3
     /// Nobody finishes the very last line their screen shows.
     public var endMargin: Double = 3
+    /// A guess runs on no further than this share of the scroll they
+    /// usually make. People scroll when their eyes near the bottom of the
+    /// part of the screen they like to read in, so the next scroll is the
+    /// honest limit — and a guess that runs on to the bottom of the screen
+    /// during a pause is a page carried past them, then brought back.
+    public var shareOfTheirScroll: Double = 0.75
+    /// Before a scroll of theirs has been seen: this share of what their
+    /// screen shows below the reading line.
+    public var shareOfTheirScreen: Double = 0.5
+    /// How much each new scroll counts toward the one they usually make.
+    public var scrollMemory: Double = 0.3
     /// How far past their line a guess may run when they didn't say where
     /// their screen ends (an older app): about two verses.
     public var leadWithoutEnd: Double = 60
+    /// The reading line sits under the top third of a screen, so what a
+    /// screen shows below it is this share of the whole.
+    public var belowTheLine: Double = 0.7
+    /// A screen, in words, when they didn't say where theirs ends.
+    public var screenWithoutEnd: Double = 100
+    /// A report this share of their screen behind where they last came to
+    /// rest is them going back, not a scroll catching up.
+    public var goingBack: Double = 0.2
     /// Close enough to the same place to be the same place.
     public var samePart: Double = 0.02
 
@@ -172,10 +198,21 @@ public struct ReadingEstimate: Hashable, Sendable {
     public let tuning: FollowingTuning
     /// Their pace, in words a second — in memory only (§13).
     public private(set) var pace: Double
+    /// When a report last put them well behind where they had come to rest
+    /// — a look back, which is theirs to make and the page's to follow.
+    public private(set) var wentBackAt: Date?
     /// The latest word, which the guess runs on from.
     private var latest: ReadingReport?
-    /// The latest word sent at rest, which a pace is learned against.
+    /// The latest word sent at rest and not carried, which a pace is
+    /// learned against.
     private var lastRest: ReadingReport?
+    /// The guess as it stood when a scroll of theirs was first seen in
+    /// flight. The first sample of a scroll is where the last one ended,
+    /// behind a guess that has been reading on since; it must not pull the
+    /// guess back.
+    private var beforeTheScroll: ReadingPoint?
+    /// The size of the scroll they usually make, in words.
+    private var usualScroll: Double?
     /// Where they were when they went still, if they have.
     private var heldAt: ReadingPoint?
     private var paceSeconds: Double = 0
@@ -186,27 +223,58 @@ public struct ReadingEstimate: Hashable, Sendable {
         self.pace = tuning.startingPace
     }
 
+    /// The place their phone last reported — their line itself, not the
+    /// guess run on from it.
+    public var reported: ReadingPoint? { latest?.at }
+
     /// Take a new word from their phone.
     public mutating func observe(_ report: ReadingReport, rulers: (Int) -> ChapterRuler?) {
         // Two roads bring words — the reading line and presence — and an
         // older word arriving second is not where they are now.
         if let latest, report.received < latest.received { return }
-        if let latest, report.settled, same(report.at, latest.at) {
-            // A repeat is not news. Someone reading down a still screen
-            // sends the same place every so often, and taking it as a new
-            // start would pull the guess back to the top of what they are
-            // reading. The one thing it can say is that a scroll seen in
-            // flight has come to rest here — which is when reading on from
-            // it starts.
-            if !latest.settled {
-                self.latest = report
+        if report.carried {
+            latest = report
+            beforeTheScroll = nil
+            heldAt = nil
+            return
+        }
+        if var latest, !latest.carried, report.settled, same(report.at, latest.at) {
+            if latest.settled {
+                // A repeat is not news. Someone reading down a still
+                // screen sends the same place every so often, and taking
+                // it as a new start would pull the guess back to the top
+                // of what they are reading. Only the bottom of their
+                // screen may have moved — a note opened, a size changed.
+                if let end = report.end { latest.end = end }
+                self.latest = latest
+            } else {
+                // A scroll seen in flight has come to rest here: reading
+                // on from it starts now.
+                if let rest = lastRest { learn(from: rest, to: report, rulers: rulers) }
                 lastRest = report
+                self.latest = report
+                beforeTheScroll = nil
             }
             return
+        }
+        var goingBack = false
+        if let rest = lastRest,
+           let back = distance(from: rest.at, to: report.at, rulers: rulers),
+           back < -tuning.goingBack * screen(of: rest, rulers: rulers) {
+            wentBackAt = report.received
+            goingBack = true
+        }
+        if !report.settled {
+            if goingBack {
+                beforeTheScroll = nil
+            } else if latest.map({ $0.settled || $0.carried }) ?? false {
+                beforeTheScroll = point(at: report.received, rulers: rulers)
+            }
         }
         if report.settled {
             if let rest = lastRest { learn(from: rest, to: report, rulers: rulers) }
             lastRest = report
+            beforeTheScroll = nil
         }
         latest = report
         heldAt = nil
@@ -223,13 +291,24 @@ public struct ReadingEstimate: Hashable, Sendable {
     public func point(at now: Date, rulers: (Int) -> ChapterRuler?) -> ReadingPoint? {
         guard let latest else { return nil }
         if let heldAt { return heldAt }
-        // In the middle of a scroll the page is where it is; and without
-        // the chapter's words there is nothing to run on with.
-        guard latest.settled, rulers(latest.at.chapter) != nil else { return latest.at }
+        if latest.carried { return latest.at }
+        if !latest.settled {
+            // In the middle of a scroll the page is where it is — unless
+            // it is behind the guess and they are not going back, in which
+            // case it is a scroll catching up with where they already are.
+            guard let before = beforeTheScroll,
+                  let ahead = distance(from: before, to: latest.at, rulers: rulers),
+                  ahead < 0
+            else { return latest.at }
+            return before
+        }
+        // Without the chapter's words there is nothing to run on with.
+        guard rulers(latest.at.chapter) != nil else { return latest.at }
         let elapsed = max(0, now.timeIntervalSince(latest.received))
         var room = tuning.leadWithoutEnd
         if let end = latest.end, let span = distance(from: latest.at, to: end, rulers: rulers) {
-            room = max(0, span - tuning.endMargin)
+            let scroll = usualScroll ?? tuning.shareOfTheirScreen * span
+            room = max(0, min(span - tuning.endMargin, tuning.shareOfTheirScroll * scroll))
         }
         return advance(latest.at, by: min(pace * elapsed, room), rulers: rulers)
     }
@@ -240,16 +319,29 @@ public struct ReadingEstimate: Hashable, Sendable {
         a.chapter == b.chapter && a.verse == b.verse && abs(a.part - b.part) < tuning.samePart
     }
 
-    /// A stretch between two rests is reading only if it went forward, took
-    /// long enough to mean something, and went at a pace that is plausibly
-    /// the same person's. Anything else — a pause, a skim, a jump, a look
-    /// back — says nothing about how fast they read.
+    /// Their whole screen, in words, from what a rest said about it.
+    private func screen(of rest: ReadingReport, rulers: (Int) -> ChapterRuler?) -> Double {
+        guard let end = rest.end, let below = distance(from: rest.at, to: end, rulers: rulers), below > 0
+        else { return tuning.screenWithoutEnd }
+        return below / tuning.belowTheLine
+    }
+
+    /// A stretch between two rests is reading if it went forward, not too
+    /// far, and took long enough to mean something. Then it says how far
+    /// they usually scroll — a pause before it included — and, if it went
+    /// at a pace plausibly the same person's, how fast they read. Anything
+    /// else — a fidget, a skim, a jump, a look back — says nothing.
     private mutating func learn(from start: ReadingReport, to end: ReadingReport, rulers: (Int) -> ChapterRuler?) {
         let seconds = end.received.timeIntervalSince(start.received)
         guard seconds >= tuning.shortestStretch,
               let words = distance(from: start.at, to: end.at, rulers: rulers),
               words > 0, words <= tuning.longestStretch
         else { return }
+        // A reading scroll keeps some of what was read on screen; more
+        // than a screen at once is going somewhere.
+        if words <= screen(of: start, rulers: rulers) {
+            usualScroll = usualScroll.map { $0 + tuning.scrollMemory * (words - $0) } ?? words
+        }
         let rate = words / seconds
         guard rate >= pace * tuning.slowerThan, rate <= pace * tuning.fasterThan else { return }
         let fade = exp(-seconds / tuning.paceMemory)
@@ -299,35 +391,80 @@ public enum FollowMove: Hashable, Sendable {
     case fly
 }
 
-/// A page that follows is moved the way a reader moves their own: held
-/// still while the guess is somewhere comfortable on screen, then carried
-/// a few lines at once, easing, when it isn't. Moving text is harder to
-/// read than still text (Kolers 1981; Öquist & Lundin 2007), and a glide at
-/// reading pace is the scroll-linked motion §9.1 forbids by another name.
+/// A page that follows is moved the way the person followed moves their
+/// own: held still while they read down it, then carried several lines at
+/// once when the guess leaves the upper half — "your scroll is theirs"
+/// (§4.2). Still text read in steps beats text that glides (Kolers 1981;
+/// Öquist & Lundin 2007), and a person's own page is still between their
+/// scrolls.
 public enum FollowCarriage {
-    /// The line a guess is brought to — the same upper third a page reads
-    /// its own place from.
-    public static let readingLine = 0.30
-    /// A guess further down the screen than this is carried back up.
-    public static let stepLine = 0.50
+    /// How the page may move for the person reading it.
+    public enum Manner: Hashable, Sendable {
+        /// Steps, easing.
+        case moving
+        /// Reduce motion: fewer, larger steps, each a fade rather than a
+        /// travel (§11).
+        case calm
+        /// A screen reader is speaking the page: it moves only when their
+        /// line has left the screen, so the voice is never pulled out from
+        /// under the listener.
+        case spoken
+    }
+
+    /// The line a guess is brought to: a little above the upper third a
+    /// page reads its own place from, so a step shows what is coming.
+    public static let landingLine = 0.25
+    /// A guess further down the screen than this is carried up.
+    public static let stepLine = 0.55
+    /// Under reduce motion, further down still.
+    public static let calmStepLine = 0.75
     /// A guess higher than this — they went back — is brought down.
     public static let topLine = 0.08
+    /// No step lifts their own line above this: the page never runs ahead
+    /// of what their phone actually said.
+    public static let reportedLine = 0.08
 
     /// - Parameters:
     ///   - y: The guess's height on this screen, from the top of the
     ///     viewport, in the page's own units; nil when this page hasn't
     ///     laid out the place yet.
+    ///   - reported: The height of the line their phone last reported, in
+    ///     the same units; nil when it isn't laid out or came from an older
+    ///     app's presence, which is always a scroll behind.
     ///   - viewport: The viewport's height, in the same units.
-    ///   - realign: Bring the guess to the reading line even from inside
-    ///     the band — the first move of a follow, and the way back after a
-    ///     gesture of your own.
-    public static func move(y: Double?, viewport: Double, realign: Bool = false) -> FollowMove {
-        guard let y, viewport > 0 else { return .fly }
-        let distance = y - readingLine * viewport
+    ///   - minStep: A step smaller than this is not worth taking.
+    ///   - realign: Bring the guess to the landing line even from inside
+    ///     the band — the first move of a follow.
+    ///   - wentBack: They have gone back since the page last moved.
+    public static func move(
+        y: Double?, reported: Double? = nil, viewport: Double, minStep: Double = 0,
+        realign: Bool = false, wentBack: Bool = false, manner: Manner = .moving
+    ) -> FollowMove {
+        guard viewport > 0 else { return .fly }
+        if manner == .spoken {
+            guard let line = reported ?? y else { return .fly }
+            if line >= 0, line <= viewport, !realign { return .hold }
+            let distance = line - landingLine * viewport
+            return abs(distance) < 1 ? .hold : .step(by: distance)
+        }
+        guard let y else { return .fly }
+        let distance = y - landingLine * viewport
         if realign {
             return abs(distance) < 1 ? .hold : .step(by: distance)
         }
-        if y > stepLine * viewport || y < topLine * viewport {
+        let stepAt = manner == .calm ? calmStepLine : stepLine
+        if y > stepAt * viewport {
+            var step = distance
+            if let reported { step = min(step, reported - reportedLine * viewport) }
+            return step < max(minStep, 1) ? .hold : .step(by: step)
+        }
+        if y < topLine * viewport {
+            // The guess never goes back on its own; only a report does. A
+            // report behind a guess that ran on is the guess being wrong,
+            // and turning the page back for it is the overshoot §9.1
+            // forbids (I30). Their going back, or their line having left
+            // the top of the screen, is theirs.
+            guard wentBack || reported.map({ $0 < 0 }) ?? true else { return .hold }
             return .step(by: distance)
         }
         return .hold

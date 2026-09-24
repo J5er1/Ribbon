@@ -6,8 +6,8 @@
 // screen top to bottom and scroll a few lines at a time, so between those
 // words their eyes are somewhere further down than the last one said. This
 // file is the guess at where: the last word, carried on at the reader's own
-// pace, and never past the bottom of their own screen — nobody reads what
-// their phone isn't showing them.
+// pace, and never further than the scroll they would make next — nobody
+// reads past the place they would have scrolled from.
 //
 // It measures in words, not points. Two phones set the same chapter at
 // different widths and sizes; a word is the same word on both.
@@ -158,6 +158,11 @@ data class ReadingReport(
     val end: ReadingPoint? = null,
     /** Sent because the scroll came to rest, rather than in the middle of it. */
     val settled: Boolean,
+    /**
+     * Their page was being carried by a follow of their own: it is where the
+     * page is, not where they read to, and nothing is guessed from it.
+     */
+    val carried: Boolean = false,
     val received: Instant,
 )
 
@@ -191,10 +196,37 @@ data class FollowingTuning(
     /** Nobody finishes the very last line their screen shows. */
     val endMargin: Double = 3.0,
     /**
+     * A guess runs on no further than this share of the scroll they usually
+     * make. People scroll when their eyes near the bottom of the part of the
+     * screen they like to read in, so the next scroll is the honest limit —
+     * and a guess that runs on to the bottom of the screen during a pause is
+     * a page carried past them, then brought back.
+     */
+    val shareOfTheirScroll: Double = 0.75,
+    /**
+     * Before a scroll of theirs has been seen: this share of what their
+     * screen shows below the reading line.
+     */
+    val shareOfTheirScreen: Double = 0.5,
+    /** How much each new scroll counts toward the one they usually make. */
+    val scrollMemory: Double = 0.3,
+    /**
      * How far past their line a guess may run when they didn't say where
      * their screen ends (an older app): about two verses.
      */
     val leadWithoutEnd: Double = 60.0,
+    /**
+     * The reading line sits under the top third of a screen, so what a
+     * screen shows below it is this share of the whole.
+     */
+    val belowTheLine: Double = 0.7,
+    /** A screen, in words, when they didn't say where theirs ends. */
+    val screenWithoutEnd: Double = 100.0,
+    /**
+     * A report this share of their screen behind where they last came to rest
+     * is them going back, not a scroll catching up.
+     */
+    val goingBack: Double = 0.2,
     /** Close enough to the same place to be the same place. */
     val samePart: Double = 0.02,
 )
@@ -209,16 +241,37 @@ class ReadingEstimate(val tuning: FollowingTuning = FollowingTuning()) {
     var pace: Double = tuning.startingPace
         private set
 
+    /**
+     * When a report last put them well behind where they had come to rest —
+     * a look back, which is theirs to make and the page's to follow.
+     */
+    var wentBackAt: Instant? = null
+        private set
+
     /** The latest word, which the guess runs on from. */
     private var latest: ReadingReport? = null
 
-    /** The latest word sent at rest, which a pace is learned against. */
+    /** The latest word sent at rest and not carried, which a pace is learned against. */
     private var lastRest: ReadingReport? = null
+
+    /**
+     * The guess as it stood when a scroll of theirs was first seen in flight.
+     * The first sample of a scroll is where the last one ended, behind a guess
+     * that has been reading on since; it must not pull the guess back.
+     */
+    private var beforeTheScroll: ReadingPoint? = null
+
+    /** The size of the scroll they usually make, in words. */
+    private var usualScroll: Double? = null
 
     /** Where they were when they went still, if they have. */
     private var heldAt: ReadingPoint? = null
     private var paceSeconds = 0.0
     private var paceWords = 0.0
+
+    /** The place their phone last reported — their line itself, not the guess run on from it. */
+    val reported: ReadingPoint?
+        get() = latest?.at
 
     /** Take a new word from their phone. */
     fun observe(report: ReadingReport, rulers: (Int) -> ChapterRuler?) {
@@ -226,21 +279,50 @@ class ReadingEstimate(val tuning: FollowingTuning = FollowingTuning()) {
         // Two roads bring words — the reading line and presence — and an
         // older word arriving second is not where they are now.
         if (latest != null && report.received < latest.received) return
-        if (latest != null && report.settled && same(report.at, latest.at)) {
-            // A repeat is not news. Someone reading down a still screen sends
-            // the same place every so often, and taking it as a new start
-            // would pull the guess back to the top of what they are reading.
-            // The one thing it can say is that a scroll seen in flight has
-            // come to rest here — which is when reading on from it starts.
-            if (!latest.settled) {
-                this.latest = report
+        if (report.carried) {
+            this.latest = report
+            beforeTheScroll = null
+            heldAt = null
+            return
+        }
+        if (latest != null && !latest.carried && report.settled && same(report.at, latest.at)) {
+            if (latest.settled) {
+                // A repeat is not news. Someone reading down a still screen
+                // sends the same place every so often, and taking it as a new
+                // start would pull the guess back to the top of what they are
+                // reading. Only the bottom of their screen may have moved — a
+                // note opened, a size changed.
+                if (report.end != null) this.latest = latest.copy(end = report.end)
+            } else {
+                // A scroll seen in flight has come to rest here: reading on
+                // from it starts now.
+                lastRest?.let { learn(from = it, to = report, rulers = rulers) }
                 lastRest = report
+                this.latest = report
+                beforeTheScroll = null
             }
             return
         }
+        var goingBack = false
+        val rest = lastRest
+        if (rest != null) {
+            val back = distance(from = rest.at, to = report.at, rulers = rulers)
+            if (back != null && back < -tuning.goingBack * screen(of = rest, rulers = rulers)) {
+                wentBackAt = report.received
+                goingBack = true
+            }
+        }
+        if (!report.settled) {
+            if (goingBack) {
+                beforeTheScroll = null
+            } else if (latest != null && (latest.settled || latest.carried)) {
+                beforeTheScroll = point(now = report.received, rulers = rulers)
+            }
+        }
         if (report.settled) {
-            lastRest?.let { learn(from = it, to = report, rulers = rulers) }
+            rest?.let { learn(from = it, to = report, rulers = rulers) }
             lastRest = report
+            beforeTheScroll = null
         }
         this.latest = report
         heldAt = null
@@ -259,15 +341,24 @@ class ReadingEstimate(val tuning: FollowingTuning = FollowingTuning()) {
     fun point(now: Instant, rulers: (Int) -> ChapterRuler?): ReadingPoint? {
         val latest = latest ?: return null
         heldAt?.let { return it }
-        // In the middle of a scroll the page is where it is; and without the
-        // chapter's words there is nothing to run on with.
-        if (!latest.settled || rulers(latest.at.chapter) == null) return latest.at
+        if (latest.carried) return latest.at
+        if (!latest.settled) {
+            // In the middle of a scroll the page is where it is — unless it
+            // is behind the guess and they are not going back, in which case
+            // it is a scroll catching up with where they already are.
+            val before = beforeTheScroll ?: return latest.at
+            val ahead = distance(from = before, to = latest.at, rulers = rulers) ?: return latest.at
+            return if (ahead < 0) before else latest.at
+        }
+        // Without the chapter's words there is nothing to run on with.
+        if (rulers(latest.at.chapter) == null) return latest.at
         val elapsed = maxOf(0.0, (now - latest.received).toDouble(DurationUnit.SECONDS))
         var room = tuning.leadWithoutEnd
         val end = latest.end
         if (end != null) {
             distance(from = latest.at, to = end, rulers = rulers)?.let { span ->
-                room = maxOf(0.0, span - tuning.endMargin)
+                val scroll = usualScroll ?: (tuning.shareOfTheirScreen * span)
+                room = maxOf(0.0, minOf(span - tuning.endMargin, tuning.shareOfTheirScroll * scroll))
             }
         }
         return advance(latest.at, by = minOf(pace * elapsed, room), rulers = rulers)
@@ -276,17 +367,31 @@ class ReadingEstimate(val tuning: FollowingTuning = FollowingTuning()) {
     private fun same(a: ReadingPoint, b: ReadingPoint): Boolean =
         a.chapter == b.chapter && a.verse == b.verse && abs(a.part - b.part) < tuning.samePart
 
+    /** Their whole screen, in words, from what a rest said about it. */
+    private fun screen(of: ReadingReport, rulers: (Int) -> ChapterRuler?): Double {
+        val end = of.end ?: return tuning.screenWithoutEnd
+        val below = distance(from = of.at, to = end, rulers = rulers)
+        if (below == null || below <= 0) return tuning.screenWithoutEnd
+        return below / tuning.belowTheLine
+    }
+
     /**
-     * A stretch between two rests is reading only if it went forward, took
-     * long enough to mean something, and went at a pace that is plausibly
-     * the same person's. Anything else — a pause, a skim, a jump, a look
-     * back — says nothing about how fast they read.
+     * A stretch between two rests is reading if it went forward, not too
+     * far, and took long enough to mean something. Then it says how far they
+     * usually scroll — a pause before it included — and, if it went at a pace
+     * plausibly the same person's, how fast they read. Anything else — a
+     * fidget, a skim, a jump, a look back — says nothing.
      */
     private fun learn(from: ReadingReport, to: ReadingReport, rulers: (Int) -> ChapterRuler?) {
         val seconds = (to.received - from.received).toDouble(DurationUnit.SECONDS)
         if (seconds < tuning.shortestStretch) return
         val words = distance(from = from.at, to = to.at, rulers = rulers) ?: return
         if (words <= 0 || words > tuning.longestStretch) return
+        // A reading scroll keeps some of what was read on screen; more than a
+        // screen at once is going somewhere.
+        if (words <= screen(of = from, rulers = rulers)) {
+            usualScroll = usualScroll?.let { it + tuning.scrollMemory * (words - it) } ?: words
+        }
         val rate = words / seconds
         if (rate < pace * tuning.slowerThan || rate > pace * tuning.fasterThan) return
         val fade = exp(-seconds / tuning.paceMemory)
@@ -345,38 +450,97 @@ sealed interface FollowMove {
 }
 
 /**
- * A page that follows is moved the way a reader moves their own: held still
- * while the guess is somewhere comfortable on screen, then carried a few
- * lines at once, easing, when it isn't. Moving text is harder to read than
- * still text (Kolers 1981; Öquist & Lundin 2007), and a glide at reading
- * pace is the scroll-linked motion §9.1 forbids by another name.
+ * A page that follows is moved the way the person followed moves their own:
+ * held still while they read down it, then carried several lines at once
+ * when the guess leaves the upper half — "your scroll is theirs" (§4.2).
+ * Still text read in steps beats text that glides (Kolers 1981; Öquist &
+ * Lundin 2007), and a person's own page is still between their scrolls.
  */
 object FollowCarriage {
-    /** The line a guess is brought to — the same upper third a page reads its own place from. */
-    const val READING_LINE = 0.30
+    /** How the page may move for the person reading it. */
+    enum class Manner {
+        /** Steps, easing. */
+        Moving,
 
-    /** A guess further down the screen than this is carried back up. */
-    const val STEP_LINE = 0.50
+        /** Reduce motion: fewer, larger steps, each a fade rather than a travel (§11). */
+        Calm,
+
+        /**
+         * A screen reader is speaking the page: it moves only when their line
+         * has left the screen, so the voice is never pulled out from under the
+         * listener.
+         */
+        Spoken,
+    }
+
+    /**
+     * The line a guess is brought to: a little above the upper third a page
+     * reads its own place from, so a step shows what is coming.
+     */
+    const val LANDING_LINE = 0.25
+
+    /** A guess further down the screen than this is carried up. */
+    const val STEP_LINE = 0.55
+
+    /** Under reduce motion, further down still. */
+    const val CALM_STEP_LINE = 0.75
 
     /** A guess higher than this — they went back — is brought down. */
     const val TOP_LINE = 0.08
 
     /**
+     * No step lifts their own line above this: the page never runs ahead of
+     * what their phone actually said.
+     */
+    const val REPORTED_LINE = 0.08
+
+    /**
      * @param y The guess's height on this screen, from the top of the
      *   viewport, in the page's own units; null when this page hasn't laid
      *   out the place yet.
+     * @param reported The height of the line their phone last reported, in
+     *   the same units; null when it isn't laid out or came from an older
+     *   app's presence, which is always a scroll behind.
      * @param viewport The viewport's height, in the same units.
-     * @param realign Bring the guess to the reading line even from inside the
-     *   band — the first move of a follow, and the way back after a gesture
-     *   of your own.
+     * @param minStep A step smaller than this is not worth taking.
+     * @param realign Bring the guess to the landing line even from inside the
+     *   band — the first move of a follow.
+     * @param wentBack They have gone back since the page last moved.
      */
-    fun move(y: Double?, viewport: Double, realign: Boolean = false): FollowMove {
-        if (y == null || viewport <= 0) return FollowMove.Fly
-        val distance = y - READING_LINE * viewport
+    fun move(
+        y: Double?,
+        reported: Double? = null,
+        viewport: Double,
+        minStep: Double = 0.0,
+        realign: Boolean = false,
+        wentBack: Boolean = false,
+        manner: Manner = Manner.Moving,
+    ): FollowMove {
+        if (viewport <= 0) return FollowMove.Fly
+        if (manner == Manner.Spoken) {
+            val line = reported ?: y ?: return FollowMove.Fly
+            if (line >= 0 && line <= viewport && !realign) return FollowMove.Hold
+            val distance = line - LANDING_LINE * viewport
+            return if (abs(distance) < 1) FollowMove.Hold else FollowMove.Step(distance)
+        }
+        if (y == null) return FollowMove.Fly
+        val distance = y - LANDING_LINE * viewport
         if (realign) {
             return if (abs(distance) < 1) FollowMove.Hold else FollowMove.Step(distance)
         }
-        if (y > STEP_LINE * viewport || y < TOP_LINE * viewport) {
+        val stepAt = if (manner == Manner.Calm) CALM_STEP_LINE else STEP_LINE
+        if (y > stepAt * viewport) {
+            var step = distance
+            if (reported != null) step = minOf(step, reported - REPORTED_LINE * viewport)
+            return if (step < maxOf(minStep, 1.0)) FollowMove.Hold else FollowMove.Step(step)
+        }
+        if (y < TOP_LINE * viewport) {
+            // The guess never goes back on its own; only a report does. A
+            // report behind a guess that ran on is the guess being wrong, and
+            // turning the page back for it is the overshoot §9.1 forbids
+            // (I30). Their going back, or their line having left the top of
+            // the screen, is theirs.
+            if (!wentBack && reported != null && reported >= 0) return FollowMove.Hold
             return FollowMove.Step(distance)
         }
         return FollowMove.Hold
