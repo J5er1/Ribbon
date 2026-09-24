@@ -63,6 +63,7 @@ import app.readribbon.services.notesLeftLine
 import app.readribbon.services.PresenceEvent
 import app.readribbon.services.PresenceService
 import app.readribbon.services.PresentPerson
+import app.readribbon.services.FireWidget
 import app.readribbon.services.Push
 import app.readribbon.services.RemoteSync
 import app.readribbon.services.RoomWatch
@@ -2091,6 +2092,24 @@ class AppModel(
         RoomWatch.stop(appContext)
     }
 
+    // MARK: - The widget (S24)
+
+    /**
+     * What the home screen draws: the current room's open book and its fire.
+     * Left when the app goes away and after every pull — the home screen
+     * cannot be seen while the app is open.
+     */
+    fun refreshWidget() {
+        val room = currentRoom
+        val reading = room?.let { openReading(it) }
+        FireWidget.update(
+            context = appContext,
+            room = room,
+            reading = reading,
+            banked = room?.let { quietDays(it).bankedIntervals } ?: emptyList(),
+        )
+    }
+
     // MARK: - Push (S19)
 
     /**
@@ -2411,6 +2430,7 @@ class AppModel(
         val graph = runCatching { remote.pullRooms() }.getOrNull() ?: return Arrivals.none
         val landed = merge(graph)
         announce(landed)
+        refreshWidget()
         return landed
     }
 

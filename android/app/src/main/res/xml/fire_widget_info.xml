@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Two cells square, like the iOS small widget. Updated at most on the
+     hour, which is when the fire's state is worked out again. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/fire_widget_description"
+    android:initialLayout="@layout/fire_widget"
+    android:minWidth="110dp"
+    android:minHeight="110dp"
+    android:previewLayout="@layout/fire_widget"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellWidth="2"
+    android:targetCellHeight="2"
+    android:updatePeriodMillis="3600000"
+    android:widgetCategory="home_screen" />

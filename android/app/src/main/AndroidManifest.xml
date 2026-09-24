@@ -63,6 +63,19 @@
             </intent-filter>
         </activity>
 
+        <!-- The fire on the home screen (S24): services/FireWidget.kt. -->
+        <receiver
+            android:name=".services.FireWidgetProvider"
+            android:exported="false"
+            android:label="@string/fire_widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/fire_widget_info" />
+        </receiver>
+
         <!-- Push (S19). Where FCM hands a message over; everything it means
              is decided in services/Push.kt. -->
         <service

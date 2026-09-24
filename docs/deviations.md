@@ -3222,6 +3222,28 @@ A56. **Push, Android's end (S19; the shape is I33's).** RoomWatch's header
       the Firebase project, and the service account goes to the function as
       `FCM_SERVICE_ACCOUNT` (supabase/README.md).
 
+A57. **The fire on the home screen (S24).** §12.2 names Glance for Android's
+    widgets, "same content as iOS", and this is the content without the
+    Glance: the fire is a painting, and a RemoteViews — which is what Glance
+    compiles to — can hold a bitmap of a painting but not the painting, nor
+    the room's small-caps face. So `FireWidget` paints one bitmap with the
+    room's own `FirePainter`, held at one instant on the unlit ground, sets
+    the book's name under it in Alegreya Sans SC, and hands the system that
+    and a sentence for TalkBack ("The fire is burning. Mark."). A long name
+    is set smaller rather than cut.
+
+    - **It cools without the app**, as on iOS (I34): what the app leaves is
+      the open reading's handiwork and the room's banked spans, and the
+      state is worked out again from the room's own engine each time the
+      system updates the widget — on the hour, at most.
+    - **No book open is the ground and nothing on it** (§08).
+    - **A tap opens the room**, by the same private intent a notification
+      uses.
+    - **The Live Activity's Android shape** is the ongoing "Ruth is reading
+      Mark" line of A56, which is what Android 16 offers a thing that is
+      true for as long as it is true; a home-screen widget would be a second
+      surface saying the same sentence later.
+
 ## iOS (phase four): the second pass
 
 Android took a design pass of its own (A18–A51) and the two platforms

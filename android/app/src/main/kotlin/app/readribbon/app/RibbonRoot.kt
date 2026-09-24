@@ -289,6 +289,8 @@ fun RibbonRoot(
                     // is not reading, and the line on the other phones comes
                     // down.
                     model.sayIveLeft()
+                    // The home screen is about to be seen again (S24).
+                    model.refreshWidget()
                     withContext(NonCancellable) { model.closeRoomChannel() }
                 }
             }
