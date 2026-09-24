@@ -65,16 +65,19 @@ internal fun ChapterLayout.pointAt(chapter: Int, line: Dp, onePixel: Dp): Readin
 /**
  * How far down this chapter a point is: the first line of its verse, and
  * the same fraction of the way to the next line down. A verse this version
- * leaves out is where the one before it begins. Null for a chapter with no
- * lines yet.
+ * leaves out is where the one before it ends — the same place the core's
+ * ruler measures it at. Null for a chapter with no lines yet.
  */
 internal fun ChapterLayout.heightOf(point: ReadingPoint): Dp? {
     if (verseFirstLineY.isEmpty()) return null
-    val top = verseFirstLineY[point.verse]
-        ?: verseFirstLineY.filterKeys { it < point.verse }.maxByOrNull { it.key }?.value
-        ?: verseFirstLineY.values.min()
-    val gap = (lineAfter(top) - top).coerceAtLeast(0.dp)
-    return top + gap * heldInside(point.part).toFloat()
+    val own = verseFirstLineY[point.verse]
+    if (own == null) {
+        val before = verseFirstLineY.filterKeys { it < point.verse }.maxByOrNull { it.key }?.value
+            ?: return verseFirstLineY.values.min()
+        return lineAfter(before)
+    }
+    val gap = (lineAfter(own) - own).coerceAtLeast(0.dp)
+    return own + gap * heldInside(point.part).toFloat()
 }
 
 /** The chapter's last verse on the page — the one a line past its end is in. */

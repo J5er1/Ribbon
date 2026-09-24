@@ -190,6 +190,9 @@ private const val READING_LINE = 0.3f
 /** How often a follow looks again at where the person followed is. */
 private val FOLLOW_TICK = 250.milliseconds
 
+/** A word older than this when a follow first hears it is where they were. */
+private val STALE_FIRST_WORD = 25.seconds
+
 /**
  * A step smaller than this share of the screen — about two lines — is not
  * worth moving the page for.
@@ -1503,12 +1506,22 @@ fun ReadingScreen(
                 here = true
                 val heard = model.heardReading(followed)
                 if (heard != null && heard.report.received != fed) {
-                    val report = heard.report
+                    var report = heard.report
+                    // A word from before this page was listening — the follow
+                    // has just begun, or the phone has come back — is where
+                    // they were, not a start to read on from for however long
+                    // it has been. The guess starts from it now, and the word
+                    // their phone sends on seeing you follow carries it on.
+                    if (estimate.reported == null && !heard.fromPresence &&
+                        now - report.received > STALE_FIRST_WORD
+                    ) {
+                        report = report.copy(received = now)
+                    }
                     val last = fedAt
                     if (last == null || !report.settled || !samePlace(report.at, last)) {
                         news = report.received
                     }
-                    fed = report.received
+                    fed = heard.report.received
                     fedAt = report.at
                     if (heard.book == reading.bookID) estimate.observe(report, ruler)
                 }

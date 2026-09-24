@@ -70,12 +70,15 @@ class FollowAlongTest {
     }
 
     @Test
-    fun aVerseThisVersionLeavesOutIsWhereTheOneBeforeBegins() {
+    fun aVerseThisVersionLeavesOutIsWhereTheOneBeforeEnds() {
         val gapped = ChapterLayout(
             verseFirstLineY = linkedMapOf(36 to 0.dp, 38 to 40.dp),
             height = 80.dp,
         )
-        assertEquals(0f, gapped.heightOf(ReadingPoint(chapter = 9, verse = 37))!!.value, 0f)
+        assertEquals(40f, gapped.heightOf(ReadingPoint(chapter = 9, verse = 37))!!.value, 0f)
+        assertEquals(40f, gapped.heightOf(ReadingPoint(chapter = 9, verse = 37, part = 0.5))!!.value, 0f)
+        // Before every verse on the page is the page's first line.
+        assertEquals(0f, gapped.heightOf(ReadingPoint(chapter = 9, verse = 1))!!.value, 0f)
         // A part that is not a number is the start of the verse.
         assertEquals(
             40f,

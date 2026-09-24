@@ -308,13 +308,21 @@ class AppModel(
     /**
      * The latest word of where [personID] is reading, if there is one.
      *
-     * Reading quietly, it is the verse their presence carries and nothing
-     * finer. Nobody can see a quiet follower, so nobody sends the line for
-     * them, and a follow nobody can see keeps to the precision everybody has
-     * (Law 3).
+     * Reading quietly, nobody can see you follow, so nobody sends the line
+     * for you (Law 3): a quiet follower follows at presence's precision — the
+     * line of someone another follower is keeping sent, while it keeps
+     * coming, and their presence once it stops.
      */
-    fun heardReading(personID: Uuid): HeardReading? =
-        if (readingQuietly) rosterHeard[personID] else readingHeard[personID]
+    fun heardReading(personID: Uuid): HeardReading? {
+        if (!readingQuietly) return readingHeard[personID]
+        val line = readingHeard[personID]
+        if (line != null && !line.fromPresence &&
+            Clock.System.now() - line.report.received <= LINE_STILL_COMING
+        ) {
+            return line
+        }
+        return rosterHeard[personID]
+    }
 
     /**
      * A `reading` line arrived. One person can be reading on two devices at
@@ -3537,6 +3545,12 @@ class AppModel(
          * enough that a phone put away is soon not there (§4.2).
          */
         private const val CHANNEL_GRACE_MS = 15_000L
+
+        /**
+         * A line kept coming by someone else's follow is still coming while
+         * its keepalives are — every twenty seconds — with room for one lost.
+         */
+        private val LINE_STILL_COMING = 45.seconds
 
         /**
          * @param forBackgroundPull skips everything a launch does that a
