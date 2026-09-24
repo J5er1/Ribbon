@@ -52,6 +52,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
@@ -267,6 +268,12 @@ fun RibbonRoot(
                 // never leave it reading true and silence the notifications
                 // it was supposed to suppress (§6.3).
                 model.visibleRoomID = model.currentRoom?.id
+                // A new zone, a new token, a switch changed in Android's own
+                // settings: the server hears all of it again (S19). Launched,
+                // not awaited — the socket below does not wait on it.
+                launch { model.registerForPush() }
+                // Back in the book, if the book is where it was left.
+                model.sayImReading()
                 // The room's live line comes back with the app, and only
                 // with it: a phone in a pocket is not present, and saying
                 // otherwise is the one lie presence must never tell (§4.2).
@@ -278,6 +285,10 @@ fun RibbonRoot(
                     awaitCancellation()
                 } finally {
                     model.visibleRoomID = null
+                    // The same lie, told to the server: a phone in a pocket
+                    // is not reading, and the line on the other phones comes
+                    // down.
+                    model.sayIveLeft()
                     withContext(NonCancellable) { model.closeRoomChannel() }
                 }
             }

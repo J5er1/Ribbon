@@ -63,6 +63,7 @@ import app.readribbon.services.notesLeftLine
 import app.readribbon.services.PresenceEvent
 import app.readribbon.services.PresenceService
 import app.readribbon.services.PresentPerson
+import app.readribbon.services.Push
 import app.readribbon.services.RemoteSync
 import app.readribbon.services.RoomWatch
 import app.readribbon.services.ReleaseInfo
@@ -195,7 +196,15 @@ class AppModel(
      * notification, or nothing at all", and a heads-up sliding over a waiting
      * row about the same note is both at once.
      */
-    var visibleRoomID: Uuid? by mutableStateOf(null)
+    var visibleRoomID: Uuid?
+        get() = visibleRoom
+        set(value) {
+            visibleRoom = value
+            // The messaging service may run with no model at all; the third
+            // gate it applies reads this copy.
+            Push.visibleRoomID = value
+        }
+    private var visibleRoom: Uuid? by mutableStateOf(null)
 
     /** Who is in the book right now (empty means the form is absent). */
     var presentPeople: List<PresentPerson> by mutableStateOf(emptyList())
@@ -280,6 +289,9 @@ class AppModel(
         val newcomer = arrived.firstOrNull { it != me } ?: return
         val name = person(newcomer)?.name ?: return
 
+        // While the server is delivering, it says this — to this phone and to
+        // every other one — and saying it here too would be saying it twice.
+        if (Push.delivering(appContext)) return
         val allowed = Notifications.shouldPost(
             kind = NotificationKind.inTheBook,
             roomID = room.id,
@@ -334,6 +346,9 @@ class AppModel(
         }
 
         haptics.tapOnTheShoulder()
+        // The touch is the socket's to give; the name, while the server is
+        // delivering, is the push's.
+        if (Push.delivering(appContext)) return
         Notifications.post(
             context = appContext,
             id = Notifications.id(room.id, NotificationKind.thinkingOfYou),
@@ -1687,8 +1702,14 @@ class AppModel(
      * class here, so the transform returns the new value instead.
      */
     fun updateSettings(transform: (AppSettings) -> AppSettings) {
+        val before = state.settings
         state = state.copy(settings = transform(state.settings))
         persist()
+        if (state.settings.quietHoursStart != before.quietHoursStart ||
+            state.settings.quietHoursEnd != before.quietHoursEnd
+        ) {
+            pushSettingsChanged()
+        }
     }
 
     fun notificationPrefs(room: Room): RoomNotificationPrefs =
@@ -1699,6 +1720,7 @@ class AppModel(
             settings = state.settings.copy(
                 roomNotifications = state.settings.roomNotifications + (room.id to prefs)))
         persist()
+        pushSettingsChanged()
     }
 
     /**
@@ -1803,6 +1825,9 @@ class AppModel(
 
     /** Asked, whatever the answer was. Never asked again (§6.1). */
     fun markAskedAboutNotifications() {
+        // Whatever the answer, it has just been given: a yes is a phone the
+        // server should know about now rather than at the next launch.
+        viewModelScope.launch { registerForPush() }
         if (state.hasAskedAboutNotifications) return
         state = state.copy(hasAskedAboutNotifications = true)
         persist()
@@ -1857,6 +1882,8 @@ class AppModel(
                     }
                 }
                 remote.forgetProfile(neutralName = Copy.SOMEONE)
+                Push.token(appContext)?.let { remote.forgetPushDevice(it) }
+                Push.forgotten(appContext)
                 remote.signOut()
             }
         }
@@ -1916,6 +1943,7 @@ class AppModel(
         // removed by the merge, so the push can't quietly re-join it.
         refreshFromRemote()
         pushLocalGraph()
+        registerForPush()
     }
 
     /**
@@ -2032,6 +2060,7 @@ class AppModel(
         reconcileOwnProfile()
         refreshFromRemote()
         pushLocalGraph()
+        registerForPush()
     }
 
     /**
@@ -2052,12 +2081,137 @@ class AppModel(
         reconcileOwnProfile()
         refreshFromRemote()
         pushLocalGraph()
+        registerForPush()
     }
 
     suspend fun signOutRemote() {
+        forgetPush()
         remote?.signOut()
         // Nobody to pull for any more.
         RoomWatch.stop(appContext)
+    }
+
+    // MARK: - Push (S19)
+
+    /**
+     * Tell the server about this phone — the token, every room's switches,
+     * the quiet hours and the zone they are kept in. At launch, on every
+     * return, after the one ask, and when a switch changes. Nothing is sent
+     * until notifications are allowed: a phone that said no is not on
+     * anybody's list. A build with no Firebase sends nothing, ever.
+     */
+    suspend fun registerForPush() {
+        val remote = this.remote ?: return
+        if (!remote.isSignedIn || !Notifications.allowed(appContext)) return
+        if (!Push.available(appContext)) return
+        Push.learnWhetherTheServerDelivers(appContext)
+        val token = Push.token(appContext) ?: return
+        val rooms = state.rooms.associate { it.id to notificationPrefs(it) }
+        val succeeded = runCatching {
+            remote.registerPushDevice(
+                token = token,
+                zone = java.util.TimeZone.getDefault().id,
+                quietFrom = state.settings.quietHoursStart,
+                quietUntil = state.settings.quietHoursEnd,
+                rooms = rooms,
+            )
+        }.isSuccess
+        Push.registration(appContext, succeeded)
+    }
+
+    private var pushRegistration: Job? = null
+
+    /**
+     * A switch or the quiet hours changed. The server hears it once, a
+     * moment later, however many steps the control took on the way.
+     */
+    private fun pushSettingsChanged() {
+        pushRegistration?.cancel()
+        pushRegistration = viewModelScope.launch {
+            delay(1_000)
+            registerForPush()
+        }
+    }
+
+    private suspend fun forgetPush() {
+        val remote = this.remote
+        if (remote != null && remote.isSignedIn) {
+            Push.token(appContext)?.let { remote.forgetPushDevice(it) }
+        }
+        Push.forgotten(appContext)
+    }
+
+    /**
+     * The book on screen, whatever presence is saying about it — so that
+     * coming back to the app can say it again.
+     */
+    private var bookOnScreen: Reading? = null
+
+    /** The heartbeat, and the room and reading it is telling about. */
+    private var readingHeartbeat: Triple<Job, Uuid, Uuid>? = null
+
+    /**
+     * The book was opened. Presence is the socket's (§4.2); this is the same
+     * fact told to the server, for the phones the socket cannot reach —
+     * "Ruth is reading Mark", and the line that stands for S24's Live
+     * Activity.
+     */
+    fun bookAppeared(reading: Reading) {
+        bookOnScreen = reading
+        sayImReading()
+    }
+
+    fun bookDisappeared(reading: Reading) {
+        if (bookOnScreen?.id == reading.id) bookOnScreen = null
+        sayIveLeft()
+    }
+
+    /**
+     * Said on opening and every ten minutes while the book stays open, and
+     * never while reading quietly, which is the whole of what reading
+     * quietly means. The repeats keep the other phones' lines current; only
+     * an arrival is ever said aloud.
+     */
+    fun sayImReading() {
+        val reading = bookOnScreen ?: return
+        if (readingQuietly || reading.isFinished) return
+        val remote = this.remote ?: return
+        if (!remote.isSignedIn) return
+        // Already saying it: coming back to the same page is not an arrival.
+        if (readingHeartbeat?.third == reading.id) return
+        readingHeartbeat?.first?.cancel()
+        val heartbeat = viewModelScope.launch {
+            while (true) {
+                runCatching { remote.iAmReading(room = reading.roomID, reading = reading.id) }
+                delay(10 * 60_000L)
+            }
+        }
+        readingHeartbeat = Triple(heartbeat, reading.roomID, reading.id)
+    }
+
+    /**
+     * The book closed, reading turned quiet, or the app went away: the line
+     * on the other phones comes down.
+     */
+    fun sayIveLeft() {
+        val (heartbeat, roomID, _) = readingHeartbeat ?: return
+        heartbeat.cancel()
+        readingHeartbeat = null
+        val remote = this.remote ?: return
+        if (!remote.isSignedIn) return
+        viewModelScope.launch { runCatching { remote.iHaveLeft(room = roomID) } }
+    }
+
+    /**
+     * Thinking of you (§4.3). The socket carries the touch to a phone in the
+     * room; the server carries the name to one that is not.
+     */
+    fun thinkOf(personID: Uuid) {
+        viewModelScope.launch { presence.sendThinkingOfYou(personID) }
+        val remote = this.remote ?: return
+        val room = currentRoom ?: return
+        if (!remote.isSignedIn) return
+        viewModelScope.launch { runCatching { remote.thinkOf(room = room.id, person = personID) } }
     }
 
     /**
@@ -2279,6 +2433,10 @@ class AppModel(
     private fun announce(arrivals: Arrivals) {
         if (arrivals.isEmpty) return
         if (!Notifications.allowed(appContext)) return
+        // While the server is delivering, every one of these has already
+        // arrived as a push, the moment its row was written. The watermark
+        // still moves; the phone just does not say it again.
+        if (Push.delivering(appContext)) return
         val settings = state.settings
 
         fun gate(kind: NotificationKind, roomID: Uuid): Boolean {
@@ -3161,6 +3319,7 @@ class AppModel(
             // their phone four times an hour to find that out is a battery
             // cost with no feature behind it.
             if (remote?.isSignedIn == true) RoomWatch.start(app)
+            model.viewModelScope.launch { model.registerForPush() }
             return model
         }
 

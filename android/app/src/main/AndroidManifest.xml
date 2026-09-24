@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- S01's offline state is "fire renders in its last known state, dimmed
@@ -61,6 +62,25 @@
                 <data android:scheme="ribbon" />
             </intent-filter>
         </activity>
+
+        <!-- Push (S19). Where FCM hands a message over; everything it means
+             is decided in services/Push.kt. -->
+        <service
+            android:name=".services.RibbonMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- Firebase is set up by hand, from the build's own configuration
+             (RibbonApplication → Push.configure), and only when the build
+             has one. The provider that would try to do it from resources
+             that do not exist is taken out rather than left to fail. -->
+        <provider
+            android:name="com.google.firebase.provider.FirebaseInitProvider"
+            android:authorities="${applicationId}.firebaseinitprovider"
+            tools:node="remove" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

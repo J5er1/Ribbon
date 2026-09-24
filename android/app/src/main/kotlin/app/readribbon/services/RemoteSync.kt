@@ -17,14 +17,19 @@ import app.readribbon.core.Ribbon
 import app.readribbon.core.ReflectionCard
 import app.readribbon.core.Room
 import app.readribbon.core.TranslationID
+import app.readribbon.data.RoomNotificationPrefs
 import java.io.File
 import java.util.Base64
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonObject
 import kotlin.time.Instant
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
@@ -304,6 +309,77 @@ class RemoteSync(
         // The function answers with a bare JSON string, so this decodes a
         // scalar rather than a row.
         return SupabaseClient.json.decodeFromString<Uuid>(data)
+    }
+
+    // MARK: - Push notifications (S19)
+
+    /**
+     * This phone, as it holds itself: the token, every room's switches, the
+     * quiet hours and the zone they are kept in. All of it, every time — it
+     * is small, and a partial update is a second way to be wrong.
+     */
+    suspend fun registerPushDevice(
+        token: String,
+        zone: String,
+        quietFrom: Int,
+        quietUntil: Int,
+        rooms: Map<Uuid, RoomNotificationPrefs>,
+    ) {
+        val body = buildJsonObject {
+            put("device_token", token)
+            put("device_platform", "android")
+            put("apns_environment", "production")
+            put("zone", zone)
+            put("quiet_from", quietFrom)
+            put("quiet_until", quietUntil)
+            putJsonObject("room_prefs") {
+                rooms.forEach { (roomID, prefs) ->
+                    putJsonObject(roomID.lowercased()) {
+                        put("notesLeft", prefs.notesLeft)
+                        put("cardsOpen", prefs.cardsOpen)
+                        put("inTheBook", prefs.whenTheyOpenTheBook)
+                        put("thinkingOfYou", prefs.thinkingOfYou)
+                    }
+                }
+            }
+            put("live_start", JsonNull)
+        }
+        withAuthRetry { client.rpcJson("register_push_device", body.toString()) }
+    }
+
+    /** Signing out takes this phone off the server's list. */
+    suspend fun forgetPushDevice(token: String) {
+        runCatching {
+            withAuthRetry { client.rpc("forget_push_device", body = mapOf("device_token" to token)) }
+        }
+    }
+
+    /**
+     * The book is open (§4.2) — said on opening and every ten minutes after,
+     * never while reading quietly. The server turns an arrival into "Ruth is
+     * reading Mark" for whoever asked to hear it.
+     */
+    suspend fun iAmReading(room: Uuid, reading: Uuid) {
+        withAuthRetry {
+            client.rpc(
+                "i_am_reading",
+                body = mapOf("room" to room.lowercased(), "reading" to reading.lowercased()),
+            )
+        }
+    }
+
+    suspend fun iHaveLeft(room: Uuid) {
+        withAuthRetry { client.rpc("i_have_left", body = mapOf("room" to room.lowercased())) }
+    }
+
+    /** Thinking of you (§4.3), for a phone the room's socket cannot reach. */
+    suspend fun thinkOf(room: Uuid, person: Uuid) {
+        withAuthRetry {
+            client.rpc(
+                "think_of",
+                body = mapOf("room" to room.lowercased(), "person" to person.lowercased()),
+            )
+        }
     }
 
     // MARK: - Push: the room surface this device knows

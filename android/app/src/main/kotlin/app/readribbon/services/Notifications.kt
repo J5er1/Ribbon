@@ -251,8 +251,23 @@ object Notifications {
      * @param id what this post replaces. Several notes from one person in one
      *   room share an id and replace each other, which is §10.3's collapse
      *   without a group summary and therefore without Android's own "+2 more".
+     * @param silent a replacement that should not make a sound of its own —
+     *   the second note inside half an hour, or a reader's line kept current.
+     * @param ongoing a line that stands for as long as something is true —
+     *   "Ruth is reading Mark", while she is (S24's Android stand-in).
+     * @param timeoutMillis how long an ongoing line may stand without being
+     *   kept current before it goes by itself.
      */
-    fun post(context: Context, id: Int, kind: NotificationKind, line: String, to: Destination) {
+    fun post(
+        context: Context,
+        id: Int,
+        kind: NotificationKind,
+        line: String,
+        to: Destination,
+        silent: Boolean = false,
+        ongoing: Boolean = false,
+        timeoutMillis: Long? = null,
+    ) {
         // The same two questions [allowed] asks, asked again here rather than
         // through it. `notify` is permission-gated, and lint can only see a
         // check that is in the same function as the call — a helper one frame
@@ -276,6 +291,9 @@ object Notifications {
             .setContentIntent(pendingIntent(context, id, to))
             .setAutoCancel(true)
             .setCategory(NotificationCompat.CATEGORY_SOCIAL)
+            .setSilent(silent)
+            .setOngoing(ongoing)
+            .apply { if (timeoutMillis != null) setTimeoutAfter(timeoutMillis) }
             .build()
         NotificationManagerCompat.from(context).notify(id, notification)
     }

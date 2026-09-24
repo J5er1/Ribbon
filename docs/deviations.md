@@ -3194,6 +3194,34 @@ A55. **Note search, on the shelf (S23).** "Two searches, deliberately
 
     `NoteSearchTest` holds the rules.
 
+A56. **Push, Android's end (S19; the shape is I33's).** RoomWatch's header
+    said it plainly: a note left for you arrived fifteen minutes late at
+    best, "Ruth is reading Mark" only while Ribbon was open, and a
+    thinking-of-you sent to a closed app never. The backend sends now, and
+    Android takes it as FCM data messages — never a notification message —
+    so what arrives is posted by the same `Notifications.post` as what a
+    pull finds: the same five channels, the same ids (a push and a pull
+    about the same person replace each other), the same one line. The
+    third gate, the room on screen, is applied on arrival; the switches
+    and the quiet hours were applied by the server, in the phone's zone.
+
+    - **One voice, never two**, exactly as on iOS: while the sender says it
+      can reach FCM and this phone's registration went through, the app
+      posts none of the six itself. The answer is kept in preferences, since
+      the worker and the messaging service both run with no screen.
+    - **"Ruth is reading Mark" stands while she reads.** It is S24's Live
+      Activity in the only shape Android has for it: an ongoing line,
+      silent after the arrival that said it aloud, kept current by her
+      phone's heartbeat, taken down when she leaves — and gone by itself
+      twenty-five minutes after the heartbeat stops, for a phone that died
+      mid-chapter.
+    - **Firebase is optional in the build.** Its values come out of
+      `app/google-services.json` at build time, with no plugin; a build
+      without the file has no Firebase at all and is the app it was before.
+      Both packages — `app.readribbon` and `app.readribbon.debug` — go in
+      the Firebase project, and the service account goes to the function as
+      `FCM_SERVICE_ACCOUNT` (supabase/README.md).
+
 ## iOS (phase four): the second pass
 
 Android took a design pass of its own (A18–A51) and the two platforms

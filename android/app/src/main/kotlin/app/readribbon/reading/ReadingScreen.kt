@@ -432,6 +432,7 @@ fun ReadingScreen(
             // `withdraw` is idempotent, so the standby page's own first pass
             // through here costs a no-op.
             model.presence.withdraw()
+            model.bookDisappeared(reading)
             return@LaunchedEffect
         }
         if (!model.readingQuietly && model.me != null) {
@@ -442,6 +443,10 @@ fun ReadingScreen(
         } else {
             model.presence.withdraw()
         }
+        // The same fact, told to the server for the phones the socket cannot
+        // reach (S19, S24). Quietly, it tells nobody — `sayImReading` knows.
+        model.bookAppeared(reading)
+        if (model.readingQuietly) model.sayIveLeft()
     }
 
     DisposableEffect(room.id) {
@@ -449,6 +454,7 @@ fun ReadingScreen(
             // Out of the book, still in the room: the line stays open so the
             // room keeps hearing about itself.
             scope.launch { model.presence.withdraw() }
+            model.bookDisappeared(reading)
         }
     }
 
