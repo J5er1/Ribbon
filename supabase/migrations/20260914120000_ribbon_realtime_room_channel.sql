@@ -50,6 +50,15 @@ grant execute on function public.topic_room_id(text) to authenticated;
 -- working — the clients fall back to a public join (see RoomChannel on both
 -- platforms) — and the day the extension is there, this migration is what
 -- closes the channel.
+--
+-- On a hosted project the table belongs to `supabase_realtime_admin`, not to
+-- `postgres`, and has row-level security on already. Turning it on again
+-- needs the owner, so it is asked for only where it is off. This block used
+-- to end in a catch-all that turned any error into a notice: on the live
+-- project the owner check failed (42501, must be owner of table messages),
+-- the catch-all swallowed it and both policies with it, and the channel
+-- stayed public with nothing to say so. An error here now fails the
+-- migration.
 do $$
 begin
   if not exists (
@@ -60,7 +69,9 @@ begin
     return;
   end if;
 
-  execute 'alter table realtime.messages enable row level security';
+  if not (select relrowsecurity from pg_class where oid = 'realtime.messages'::regclass) then
+    execute 'alter table realtime.messages enable row level security';
+  end if;
 
   execute 'drop policy if exists ribbon_room_channel_read on realtime.messages';
   execute $p$
@@ -75,12 +86,6 @@ begin
       for insert to authenticated
       with check (public.is_member(public.topic_room_id(realtime.topic())))
   $p$;
-exception when others then
-  -- Never fail the migration over the socket's policies: every table's own
-  -- RLS is what protects the content, and a channel that cannot be closed
-  -- here is a channel the clients decline to trust (they join public and
-  -- carry no more than a name and an address, exactly as before).
-  raise notice 'realtime.messages policies not applied: %', sqlerrm;
 end;
 $$;
 
