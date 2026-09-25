@@ -488,6 +488,19 @@ final class ChapterPageHandle {
     }
 
     func length(of verse: Int) -> Int { page.length(of: verse) }
+
+    /// The VoiceOver element that reads a verse, for a move that wants to
+    /// hand the listener the verse it came to.
+    func accessibilityElement(forVerse verse: Int) -> Any? {
+        textView?.accessibilityElements?.first { ($0 as? VerseElement)?.verse == verse }
+    }
+}
+
+/// One verse, as VoiceOver reads it. Kept from one layout to the next —
+/// the element the listener is on has to be the same object after the page
+/// moves, or VoiceOver lets go of it.
+final class VerseElement: UIAccessibilityElement {
+    var verse = 0
 }
 
 struct ChapterTextView: UIViewRepresentable {
@@ -657,6 +670,10 @@ struct ChapterTextView: UIViewRepresentable {
         /// The open note's carve as it was last applied: what the next one
         /// moves from.
         var carve: Carve?
+        /// The verses VoiceOver reads, one element each, and the order they
+        /// were last handed to the view in.
+        private var verseElements: [Int: VerseElement] = [:]
+        private var elementOrder: [Int] = []
 
         init(_ parent: ChapterTextView) {
             self.parent = parent
@@ -859,7 +876,7 @@ struct ChapterTextView: UIViewRepresentable {
                 layout.liftStart = start
                 layout.liftEnd = end
             }
-            rebuildAccessibilityElements(on: view, verseRect: verseRect)
+            updateAccessibilityElements(on: view, verseRect: verseRect)
             parent.onLayout(layout)
         }
 
@@ -883,27 +900,51 @@ struct ChapterTextView: UIViewRepresentable {
         /// verse, so a swipe moves by verse — and the label obeys Law 2
         /// ("Verse nine." then the words; never a position report). Each
         /// verse carries the two things a finger can do to it.
-        private func rebuildAccessibilityElements(on view: UITextView, verseRect: [Int: CGRect]) {
-            var elements: [UIAccessibilityElement] = []
+        ///
+        /// The elements are made once per verse and kept. The page is laid
+        /// out again whenever anything above it redraws — a follow's step
+        /// among them — and a fresh set every time took VoiceOver's focus
+        /// away from the listener at every step. Now a frame or a label is
+        /// touched only when it changed, and the view is handed a new list
+        /// only when the verses on the page did.
+        private func updateAccessibilityElements(on view: UITextView, verseRect: [Int: CGRect]) {
+            var order: [Int] = []
             for verse in page.verseText.keys.sorted() {
                 guard let rect = verseRect[verse], let body = page.verseText[verse] else { continue }
-                let element = UIAccessibilityElement(accessibilityContainer: view)
-                element.accessibilityFrameInContainerSpace = rect
-                element.accessibilityLabel = Copy.verseSpoken(verse, body.trimmingCharacters(in: .whitespacesAndNewlines))
-                element.accessibilityCustomActions = [
-                    UIAccessibilityCustomAction(name: Copy.openWhatsHere) { [weak self] _ in
-                        self?.parent.onTapVerse(verse)
-                        return true
-                    },
-                    UIAccessibilityCustomAction(name: Copy.leaveSomethingHere) { [weak self] _ in
-                        self?.parent.onLongPressVerse(verse)
-                        return true
-                    },
-                ]
-                elements.append(element)
+                order.append(verse)
+                let label = Copy.verseSpoken(verse, body.trimmingCharacters(in: .whitespacesAndNewlines))
+                let element = verseElements[verse] ?? makeElement(verse: verse, in: view)
+                if element.accessibilityFrameInContainerSpace != rect {
+                    element.accessibilityFrameInContainerSpace = rect
+                }
+                if element.accessibilityLabel != label {
+                    element.accessibilityLabel = label
+                }
             }
+            if verseElements.count != order.count {
+                verseElements = verseElements.filter { order.contains($0.key) }
+            }
+            guard order != elementOrder || view.isAccessibilityElement else { return }
+            elementOrder = order
             view.isAccessibilityElement = false
-            view.accessibilityElements = elements
+            view.accessibilityElements = order.compactMap { verseElements[$0] }
+        }
+
+        private func makeElement(verse: Int, in view: UITextView) -> VerseElement {
+            let element = VerseElement(accessibilityContainer: view)
+            element.verse = verse
+            element.accessibilityCustomActions = [
+                UIAccessibilityCustomAction(name: Copy.openWhatsHere) { [weak self] _ in
+                    self?.parent.onTapVerse(verse)
+                    return true
+                },
+                UIAccessibilityCustomAction(name: Copy.leaveSomethingHere) { [weak self] _ in
+                    self?.parent.onLongPressVerse(verse)
+                    return true
+                },
+            ]
+            verseElements[verse] = element
+            return element
         }
 
         func verse(at point: CGPoint) -> Int? {

@@ -15,7 +15,11 @@ struct PresenceForm: View {
     @Environment(AppModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let room: Room
+    /// A portrait tapped: follow them — or, if you already are, stop.
     var onFollow: (PresentPerson) -> Void
+    /// The panel opened or closed. A page that follows holds still while
+    /// it is open.
+    var onExpand: (Bool) -> Void = { _ in }
 
     @State private var expanded = false
     @State private var holdTarget: UUID?
@@ -61,6 +65,12 @@ struct PresenceForm: View {
         .animation(RibbonMotion.arrive, value: people)
         .onChange(of: model.presentPeople, initial: true) { _, now in
             holdRoster(now)
+        }
+        .onChange(of: expanded) { _, open in
+            onExpand(open)
+        }
+        .onDisappear {
+            if expanded { onExpand(false) }
         }
     }
 
@@ -184,6 +194,9 @@ struct PresenceForm: View {
             }
         }
         .accessibilityLabel(presenceLabel(person, othersCount: people.count - 1))
+        // The one you follow is "selected", in the system's own word; tapping
+        // it again stops following.
+        .accessibilityAddTraits(model.followingPersonID == person.id ? .isSelected : [])
     }
 
     private func portrait(_ person: PresentPerson) -> some View {
@@ -271,7 +284,7 @@ struct PresenceForm: View {
             Spacer(minLength: 0)
         }
         .contentShape(Rectangle())
-        .onTapGesture { onFollow(person) }
+        .onTapGesture { follow(person) }
         .onLongPressGesture(minimumDuration: 0.7) {
             thinkOf(person)
         } onPressingChanged: { pressing in
@@ -297,11 +310,23 @@ struct PresenceForm: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(presenceLabel(person, othersCount: 0))
-        .accessibilityHint(Copy.followsThem)
+        // Followed, the row is "selected" and activating it stops following
+        // — so it no longer says it follows them. No new words.
+        .accessibilityAddTraits(model.followingPersonID == person.id ? .isSelected : [])
+        .accessibilityHint(model.followingPersonID == person.id ? "" : Copy.followsThem)
         // The hold, as an action (§11): a screen reader could hear that
         // holding would send it, and had nothing to do instead of holding.
         // Android has always published it this way.
         .accessibilityAction(named: Copy.thinkingOfYou) { thinkOf(person) }
+    }
+
+    /// A row used to follow someone, or to stop: the panel folds away as it
+    /// does. The page holds still while the panel is open, so a follow
+    /// started from it would never move the page until you closed it
+    /// yourself — and a screen reader had no way to.
+    private func follow(_ person: PresentPerson) {
+        onFollow(person)
+        withAnimation(RibbonMotion.open) { expanded = false }
     }
 
     /// The hold completed, or the action taken: the tap on the shoulder goes

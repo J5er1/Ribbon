@@ -49,11 +49,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -253,34 +251,57 @@ fun RibbonRoot(
     if (model != null) {
         LaunchedEffect(model, lifecycle) {
             lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                model.refreshFromRemote()
-                // Asked again, because the first ask can fail. A launch with
-                // no network leaves the answer unknown, and unknown draws no
-                // passkey control — which is right for that moment and wrong
-                // for the rest of the process, since nothing else would ever
-                // ask again. It is idempotent and free once answered
-                // (`RemoteSync.learnWhatAuthOffers` returns at once), so only
-                // a launch that actually failed pays for this.
-                model.learnWhatAuthOffers()
-                // What the person is actually looking at, as opposed to
-                // which room is selected. Set here and cleared in the same
-                // `finally` as the socket, so a process that went away can
-                // never leave it reading true and silence the notifications
-                // it was supposed to suppress (§6.3).
-                model.visibleRoomID = model.currentRoom?.id
-                // A new zone, a new token, a switch changed in Android's own
-                // settings: the server hears all of it again (S19). Launched,
-                // not awaited — the socket below does not wait on it.
-                launch { model.registerForPush() }
-                // Back in the book, if the book is where it was left.
-                model.sayImReading()
+                // Back before the grace ran out, the line never went down.
+                model.cameBackToTheRoom()
                 // The room's live line comes back with the app, and only
                 // with it: a phone in a pocket is not present, and saying
                 // otherwise is the one lie presence must never tell (§4.2).
-                // `repeatOnLifecycle` cancels this block on the way out, so
-                // the socket closes exactly when the app stops being looked
-                // at — Swift does the same from `.background`.
+                // `repeatOnLifecycle` cancels this block on the way out, and
+                // the socket is put down a short grace after that — "so a
+                // glance at a text message doesn't read as leaving". It is
+                // put down, not closed: coming back to the same room says
+                // what it was saying again, which a close on every pause
+                // used to forget. Swift keeps the same grace from
+                // `.background`.
+                //
+                // Everything from here is inside the `try`: the grace was
+                // just called off, and a block cancelled anywhere below must
+                // still put the line down again.
                 try {
+                    // What the person is actually looking at, as opposed to
+                    // which room is selected. Set here and cleared in the
+                    // same `finally` as the socket, so a process that went
+                    // away can never leave it reading true and silence the
+                    // notifications it was supposed to suppress (§6.3) — and
+                    // set before the line opens, so the roster it comes back
+                    // to is not announced as people opening the book.
+                    model.visibleRoomID = model.currentRoom?.id
+                    // First, before the pull, as Swift does: the person you
+                    // follow should not wait on the network to find you
+                    // again.
+                    model.openRoomChannel()
+                    model.refreshFromRemote()
+                    // Asked again, because the first ask can fail. A launch
+                    // with no network leaves the answer unknown, and unknown
+                    // draws no passkey control — which is right for that
+                    // moment and wrong for the rest of the process, since
+                    // nothing else would ever ask again. It is idempotent and
+                    // free once answered (`RemoteSync.learnWhatAuthOffers`
+                    // returns at once), so only a launch that actually failed
+                    // pays for this.
+                    model.learnWhatAuthOffers()
+                    // Again after the pull, which can have moved you to
+                    // another room.
+                    model.visibleRoomID = model.currentRoom?.id
+                    // A new zone, a new token, a switch changed in Android's
+                    // own settings: the server hears all of it again (S19).
+                    // Launched, not awaited — the socket below does not wait
+                    // on it.
+                    launch { model.registerForPush() }
+                    // Back in the book, if the book is where it was left.
+                    model.sayImReading()
+                    // And the line again, in case the pull moved the room;
+                    // the same room is a no-op.
                     model.openRoomChannel()
                     awaitCancellation()
                 } finally {
@@ -291,7 +312,19 @@ fun RibbonRoot(
                     model.sayIveLeft()
                     // The home screen is about to be seen again (S24).
                     model.refreshWidget()
-                    withContext(NonCancellable) { model.closeRoomChannel() }
+                    model.setRoomChannelAside()
+                }
+            }
+        }
+        // Out of sight, as opposed to only paused: a dialog over the app —
+        // the notification question the page itself asks — pauses it without
+        // hiding it, and a follow coming back from that has nothing to forget.
+        LaunchedEffect(model, lifecycle) {
+            lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                try {
+                    awaitCancellation()
+                } finally {
+                    model.wentOutOfSight()
                 }
             }
         }

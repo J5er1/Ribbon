@@ -17,6 +17,7 @@ import app.readribbon.core.Ink
 import app.readribbon.core.Membership
 import app.readribbon.core.Person
 import app.readribbon.core.Reading
+import app.readribbon.core.ReadingPoint
 import app.readribbon.core.Room
 import app.readribbon.core.VerseAddress
 import app.readribbon.data.AppState
@@ -28,10 +29,13 @@ import app.readribbon.design.rememberBookSheet
 import app.readribbon.design.room
 import app.readribbon.services.PresenceEvent
 import app.readribbon.services.PresenceService
+import app.readribbon.services.PresentPerson
 import kotlin.time.Duration.Companion.hours
 import kotlin.uuid.Uuid
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.yield
 import kotlin.time.Clock
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -72,21 +76,44 @@ class StandbyPageTest {
 
     @get:Rule val compose = createComposeRule()
 
-    /** Presence, remembered rather than sent, so the room can be overheard. */
-    private class Overheard : PresenceService {
+    /**
+     * Presence, remembered rather than sent, so the room can be overheard —
+     * and, when a test needs somebody else in the book, a roster that says so.
+     */
+    private class Overheard(roster: List<PresentPerson> = emptyList()) : PresenceService {
         val said = mutableListOf<String>()
         override suspend fun connect(roomID: Uuid, person: Person) { said += "connect" }
         override suspend fun disconnect() { said += "disconnect" }
+        override suspend fun suspend() { said += "suspend" }
         override suspend fun present(
             position: VerseAddress?,
             scrollFraction: Double,
             isIdle: Boolean,
             following: Uuid?,
+            activity: Boolean,
         ) { said += "present" }
         override suspend fun withdraw() { said += "withdraw" }
         override suspend fun sendThinkingOfYou(to: Uuid) = Unit
         override suspend fun announceChange() = Unit
-        override val events: Flow<PresenceEvent> = emptyFlow()
+        override suspend fun sendReading(
+            book: String,
+            at: ReadingPoint,
+            end: ReadingPoint?,
+            settled: Boolean,
+            carried: Boolean,
+        ) { said += "reading" }
+        // After a yield, as a socket's would: the model's collector starts
+        // inside its constructor, and a roster delivered on the spot would
+        // arrive before the model was finished.
+        override val events: Flow<PresenceEvent> =
+            if (roster.isEmpty()) {
+                emptyFlow()
+            } else {
+                flow {
+                    yield()
+                    emit(PresenceEvent.Roster(roster))
+                }
+            }
     }
 
     private val now = Clock.System.now()
@@ -104,6 +131,9 @@ class StandbyPageTest {
             recentFuel = listOf(FuelEvent(personID = me.id, at = now - 2.hours)),
         ),
     )
+
+    /** A second reader, following this one. */
+    private val ruth = Person(name = "Ruth")
 
     /**
      * Composes the page at rest — exactly as it now stands beneath the room —
@@ -205,6 +235,46 @@ class StandbyPageTest {
             "a page on standby must not announce anybody",
             emptyList<String>(),
             presence.said.filter { it == "present" },
+        )
+    }
+
+    /**
+     * The reading line is the finest thing a phone says about its reader,
+     * and it is said only to somebody who can be seen following them, from a
+     * book that is open (§4.2, Law 3). Somebody following you while the book
+     * is still shut beneath the room hears nothing at all.
+     */
+    @Test fun aPageNobodyHasTouchedSaysNothingOfItsLine() {
+        val presence = Overheard(
+            roster = listOf(
+                PresentPerson(
+                    id = ruth.id,
+                    name = ruth.name,
+                    position = VerseAddress("MRK", 1, 1),
+                    followingPersonID = me.id,
+                ),
+            ),
+        )
+        val sheet = page(presence)
+        // Past the settle, the in-flight sample and the moment of being
+        // followed — everything that would say it on an open page.
+        compose.mainClock.advanceTimeBy(2_000)
+        compose.waitForIdle()
+        assertEquals(
+            "a page on standby must not say where its line is",
+            emptyList<String>(),
+            presence.said.filter { it == "reading" },
+        )
+
+        // And it is the book being shut that held it back: open, and
+        // followed, the page says where its line is once it comes to rest.
+        compose.runOnIdle { sheet.animate(open = true) }
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(2_000)
+        compose.waitForIdle()
+        assertTrue(
+            "an open page somebody follows should say where its line is",
+            presence.said.contains("reading"),
         )
     }
 

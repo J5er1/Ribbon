@@ -67,7 +67,9 @@ thinking-of-you taps can be read by anyone who holds the publishable key
 and guesses a room id. Applying the migration closes it; the apps retry the
 private join every time a room opens, so nothing else changes. (Found while
 deploying push; not applied without asking, because it changes how every
-live room connects.)
+live room connects.) Since A58 the same channel also carries, while someone
+follows a reader, where on the page that reader is — one more reason to
+close it.
 
 ## 3. One account, whichever door
 
@@ -90,3 +92,18 @@ SMTP (Resend, Postmark and SES all work).
 Built and compiled, never yet watched on hardware: the note unfurl (I32 —
 a display link redraws the chapter for 400 ms), the widgets and the Live
 Activity (I34, A57), and the ongoing "is reading" line on Android (A56).
+
+Following (A58, I35) most of all, with two phones in one room:
+
+- Follow someone and read along: the page should hold while they read and
+  move a few lines at a time, easing, never backwards unless they went back.
+- Put their phone down for a minute: yours should not run on past them.
+- Follow each other: neither page should move with nobody touching it.
+- Scroll once while following: the page goes back to them. Scroll again:
+  the follow ends, and "back to where you were" is offered.
+- With VoiceOver or TalkBack on: the page moves only when their line leaves
+  the screen, and a screen-reader scroll ends the follow.
+- Answer a message and come back within fifteen seconds: nobody should
+  have left the room.
+- Afterwards, the project's Realtime logs should show no new
+  `ClientPresenceRateLimitReached`.

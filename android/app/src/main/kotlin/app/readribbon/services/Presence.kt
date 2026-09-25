@@ -3,6 +3,8 @@
 package app.readribbon.services
 
 import app.readribbon.core.Person
+import app.readribbon.core.ReadingPoint
+import app.readribbon.core.ReadingReport
 import app.readribbon.core.VerseAddress
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -28,7 +30,11 @@ data class PresentPerson(
     /** Where they are — "Mark 6" in the expanded panel. An address, never a
      *  percentage. */
     val position: VerseAddress? = null,
-    /** Scroll offset within their chapter, 0..1 — drives following only. */
+    /**
+     * How far down their chapter they are, 0..1. Still sent, because older
+     * builds decode it; nothing reads it any more — a follow is carried by
+     * the `reading` line (see [PresenceEvent.Reading]).
+     */
     val scrollFraction: Double = 0.0,
     /** ~4 minutes with no scroll: "here, but still." Dimmed, never removed. */
     val isIdle: Boolean = false,
@@ -47,7 +53,39 @@ sealed interface PresenceEvent {
      * racing copy of the truth.
      */
     data class RoomChanged(val roomID: Uuid) : PresenceEvent
+
+    /**
+     * Where somebody's reading line is, finer than the verse presence
+     * carries (§4.2): their phone says it only while it can see that
+     * somebody follows them. Stamped here, on arrival — nothing on the wire
+     * carries a time.
+     *
+     * @param source the stream it came from. Two devices of one person are
+     *   one person on the roster, and this is how a follow tells them apart.
+     */
+    data class Reading(
+        val personID: Uuid,
+        val source: String,
+        val book: String,
+        val report: ReadingReport,
+    ) : PresenceEvent
 }
+
+/**
+ * The latest word of where someone is reading, as the follow reads it.
+ *
+ * @param source the `reading` stream it came from; null when it came from
+ *   presence instead.
+ * @param fromPresence an older app's phone, which never sends `reading`:
+ *   the verse from its presence, taken as a report of its own. That verse is
+ *   always a scroll behind, so a follow never holds a page to it.
+ */
+data class HeardReading(
+    val book: String,
+    val report: ReadingReport,
+    val source: String?,
+    val fromPresence: Boolean = false,
+)
 
 interface PresenceService {
     /**
@@ -56,19 +94,37 @@ interface PresenceService {
      */
     suspend fun connect(roomID: Uuid, person: Person)
 
-    /** Close it. Called when the room goes off screen or the app goes away. */
+    /**
+     * Close it and forget it: the room has changed, or the account has.
+     * Everything this device was saying about itself goes with it.
+     */
     suspend fun disconnect()
+
+    /**
+     * Put the line down for a while — the app has been away past its grace
+     * (§4.2). The socket closes, but what this device was saying about
+     * itself is kept, so that [connect] to the same room says it again
+     * without anybody having to ask. What it heard is not: the roster goes
+     * empty, as on a close, until the line is back to say who is here.
+     */
+    suspend fun suspend()
 
     /**
      * Announce yourself in the book, and keep the announcement current.
      * Idempotent — the first call tracks, every later one updates. Reading
      * quietly never calls it, so others see nothing at all.
+     *
+     * @param activity whether this is the reader's own doing. A page carried
+     *   by a follow moves without anybody touching it, and that is not
+     *   reading: it moves the verse presence carries, but not the clock that
+     *   turns a reader "here, but still" (§4.2).
      */
     suspend fun present(
         position: VerseAddress?,
         scrollFraction: Double,
         isIdle: Boolean,
         following: Uuid?,
+        activity: Boolean = true,
     )
 
     /**
@@ -87,6 +143,25 @@ interface PresenceService {
      */
     suspend fun announceChange()
 
+    /**
+     * Where your reading line is, for the person following you (§4.2). A
+     * point, never a time (§13). Sent only while somebody can be seen
+     * following you — the caller holds that gate.
+     *
+     * @param end the bottom of what your screen shows, when it is known.
+     * @param settled the scroll has come to rest, rather than being sampled
+     *   in the middle of it.
+     * @param carried your own page is being carried by a follow of yours: it
+     *   is where the page is, not where you read to.
+     */
+    suspend fun sendReading(
+        book: String,
+        at: ReadingPoint,
+        end: ReadingPoint?,
+        settled: Boolean,
+        carried: Boolean,
+    )
+
     val events: Flow<PresenceEvent>
 }
 
@@ -104,13 +179,22 @@ class LocalPresenceService : PresenceService {
 
     override suspend fun connect(roomID: Uuid, person: Person) = Unit
     override suspend fun disconnect() = Unit
+    override suspend fun suspend() = Unit
     override suspend fun present(
         position: VerseAddress?,
         scrollFraction: Double,
         isIdle: Boolean,
         following: Uuid?,
+        activity: Boolean,
     ) = Unit
     override suspend fun withdraw() = Unit
     override suspend fun sendThinkingOfYou(to: Uuid) = Unit
     override suspend fun announceChange() = Unit
+    override suspend fun sendReading(
+        book: String,
+        at: ReadingPoint,
+        end: ReadingPoint?,
+        settled: Boolean,
+        carried: Boolean,
+    ) = Unit
 }

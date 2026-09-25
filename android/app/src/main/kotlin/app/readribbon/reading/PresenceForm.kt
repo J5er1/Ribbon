@@ -43,6 +43,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -52,6 +53,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -71,6 +73,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
@@ -173,8 +176,8 @@ private val THINKING_HOLD_MS = RibbonMotion.INK_FILL_MS.toLong()
  * The presence form: the lozenge at the right edge, and the panel it
  * becomes.
  *
- * @param onFollow tap a portrait to follow — a page-fly, no confirmation
- *   dialog (§4.2).
+ * @param onFollow tap a portrait to follow — no confirmation dialog (§4.2) —
+ *   and tap the one you already follow to stop, as the web's "F" does.
  * @param measure the reading measure the caller is setting its text at. The
  *   panel is capped to the space outside it.
  * @param astir whether the page this is on is in play, or is merely standing
@@ -192,6 +195,8 @@ private val THINKING_HOLD_MS = RibbonMotion.INK_FILL_MS.toLong()
  *   glass never lies over a verse; Swift gets it from the panel's own
  *   geometry because a phone's overlay there is already outside the
  *   measure.
+ * @param onExpandedChange the panel opened or closed. A follow holds the page
+ *   still while it is open: the rows in it are what a finger is reaching for.
  */
 @Composable
 fun PresenceForm(
@@ -202,11 +207,19 @@ fun PresenceForm(
     measure: Dp = Measure.reading,
     astir: Boolean = true,
     onMeasureInset: (Dp) -> Unit = {},
+    onExpandedChange: (Boolean) -> Unit = {},
 ) {
     val people = model.presentPeople
     val reduceMotion = rememberReduceMotion()
 
     var expanded by remember { mutableStateOf(false) }
+    LaunchedEffect(expanded) { onExpandedChange(expanded) }
+    // A form that goes away open — the room paused under it — is a panel
+    // closed, or the follow would go on holding for a panel nobody can see.
+    val expandedChangeNow by rememberUpdatedState(onExpandedChange)
+    DisposableEffect(Unit) {
+        onDispose { expandedChangeNow(false) }
+    }
 
     /** "Ruth is with you" appears once per follower, then rests. */
     val announcedFollowers = remember { mutableStateListOf<Uuid>() }
@@ -465,6 +478,10 @@ private fun PresenceSurface(
                 } else {
                     Modifier.semantics(mergeDescendants = true) {
                         role = Role.Button
+                        // The one in front is the one you follow: the system
+                        // says "selected", and no new words are needed (§11).
+                        val front = people.firstOrNull()
+                        if (front != null && front.id == model.followingPersonID) selected = true
                         onClick(label = Copy.WHOS_HERE) {
                             onExpand()
                             true
@@ -648,6 +665,7 @@ private fun PresencePanel(
                         person = person,
                         reduceMotion = reduceMotion,
                         onFollow = onFollow,
+                        onCollapse = onCollapse,
                     )
                 }
             }
@@ -685,6 +703,11 @@ private fun PresencePanel(
  * One person in the panel: tap to follow, hold to let them know you're
  * thinking of them (§4.3).
  *
+ * Following, or stopping, closes the panel on the way: a follow holds the
+ * page still while the panel is open, and one begun from it would otherwise
+ * wait for a panel nobody means to keep open — with TalkBack, for a back
+ * gesture nobody knew was owed.
+ *
  * Swift hoists `holdTarget` beside `holdProgress` because one `@State` pair
  * serves every row; here the pair lives in the row that is being held. Only
  * one row can be under a finger, so the two are the same state — this one
@@ -698,6 +721,7 @@ private fun PersonRow(
     person: PresentPerson,
     reduceMotion: Boolean,
     onFollow: (PresentPerson) -> Unit,
+    onCollapse: () -> Unit,
 ) {
     val haptics = LocalHaptics.current
     val scope = rememberCoroutineScope()
@@ -707,10 +731,15 @@ private fun PersonRow(
     val myInk = model.currentRoom?.let { model.myMembership(it)?.ink } ?: model.lastUsedInk
     val name = model.person(person.id)?.name ?: person.name
     val label = presenceLabel(model, people, person, othersCount = 0)
+    val followed = model.followingPersonID == person.id
 
     val sendThinkingOfYou = {
         haptics?.completeThinkingOfYouHold()
         model.thinkOf(person.id)
+    }
+    val follow = {
+        onFollow(person)
+        onCollapse()
     }
 
     Row(
@@ -762,16 +791,22 @@ private fun PersonRow(
                         // the reduce-motion branch, which the raw tween never
                         // did.
                         scope.launch { fill.animateTo(0f, RibbonMotion.arrive(reduceMotion)) }
-                        if (released) onFollow(person)
+                        if (released) follow()
                     }
                 }
             }
             .semantics(mergeDescendants = true) {
                 contentDescription = label
+                // Following them is said by the system's own "selected", and
+                // activating the row then stops following — the way out of a
+                // follow that is not a gesture (§11). So the row that is
+                // already followed loses the "Follow" it would otherwise
+                // offer: no new words.
+                if (followed) selected = true
                 // Every gesture has an equivalent that is not a gesture
                 // (§11): the hold is published as an action, so it is
                 // reachable without holding a press.
-                onClick(label = Copy.FOLLOW) { onFollow(person); true }
+                onClick(label = if (followed) null else Copy.FOLLOW) { follow(); true }
                 customActions = listOf(
                     CustomAccessibilityAction(Copy.THINKING_OF_YOU) {
                         sendThinkingOfYou()
@@ -960,11 +995,11 @@ fun FollowThread(modifier: Modifier = Modifier) {
 
 // MARK: The end of a follow (§4.2)
 //
-// Swift keeps these two beside the scroll, in ReadingScreen: a scroll of
-// your own breaks the follow, and for about two minutes afterwards the form
-// quietly offers the way back. They are the last two states of the follow
-// the form starts, so they are kept here with it; ReadingScreen owns the
-// scroll and wires them.
+// Swift keeps these two beside the scroll, in ReadingScreen: your own scroll
+// ends the follow (the second one — the first meets a rubber band), and for
+// about two minutes afterwards the form quietly offers the way back. They are
+// the last two states of the follow the form starts, so they are kept here
+// with it; ReadingScreen owns the scroll and wires them.
 
 /** About two minutes, then it forgets. */
 val FOLLOW_BACK_WINDOW = 120.seconds
@@ -974,6 +1009,11 @@ val FOLLOW_BACK_WINDOW = 120.seconds
  *
  * Swift holds a `(address, until)` tuple in `@State`; this is the same pair,
  * with the two-minute window named rather than added at the call site.
+ *
+ * The two minutes run from the end of the follow, not its start. They used
+ * to start with the follow — which was harmless while any scroll at all
+ * broke one within seconds, and meant that a follow which lasted the offer
+ * was gone by the time it was over.
  */
 @Stable
 class FollowBackOfferState {
@@ -982,10 +1022,19 @@ class FollowBackOfferState {
     var until: Instant? by mutableStateOf(null)
         private set
 
-    /** Remember where you were, at the moment a follow starts. */
-    fun beganFollowing(from: VerseAddress, now: Instant = Clock.System.now()) {
+    /**
+     * Remember where you were, as a follow starts. Nothing expires while it
+     * lasts. The caller asks only when not already following, so following
+     * somebody else next keeps the way back to your own place.
+     */
+    fun beganFollowing(from: VerseAddress) {
         address = from
-        until = now + FOLLOW_BACK_WINDOW
+        until = null
+    }
+
+    /** The follow is over: the offer stands from now, for about two minutes. */
+    fun endedFollowing(now: Instant = Clock.System.now()) {
+        if (address != null) until = now + FOLLOW_BACK_WINDOW
     }
 
     fun forget() {
@@ -1008,7 +1057,7 @@ fun rememberFollowBackOffer(): FollowBackOfferState = remember { FollowBackOffer
  * forgets (§4.2).
  *
  * Nothing is said when it expires, and nothing is said about the follow
- * ending — a scroll of your own breaks a follow with no modal and no "stop
+ * ending — your own scroll ends a follow with no modal and no "stop
  * following?", you just have your own scroll back.
  */
 @Composable
