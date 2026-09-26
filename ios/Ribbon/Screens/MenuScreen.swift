@@ -417,9 +417,14 @@ private struct YouScreen: View {
         .confirm($deleting, dismissTitle: Copy.neverMind)
     }
 
+    /// The version and its build. Every build of a version says the same
+    /// version, and which build a phone has is the first thing a test on
+    /// two phones needs to know.
     private var appVersion: String {
-        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
-        return Copy.versionLine(version)
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? ""
+        let build = info?["CFBundleVersion"] as? String ?? ""
+        return Copy.versionLine(build.isEmpty ? version : "\(version) (\(build))")
     }
 }
 

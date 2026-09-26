@@ -330,6 +330,25 @@ final class FollowingTests: XCTestCase {
         assertPoint(estimate.point(at: at(100), rulers: rulers), 2, 2, 0.5625)
     }
 
+    func testGuessWithoutAnEndStaysInItsChapter() {
+        var estimate = ReadingEstimate()
+        estimate.observe(
+            ReadingReport(at: ReadingPoint(chapter: 1, verse: 9), settled: true, received: t0),
+            rulers: rulers)
+        // Forty words to the end of chapter 1, sixty allowed without an end:
+        // nothing says chapter 2 is on their screen, so the guess stops at
+        // chapter 1's last word.
+        assertPoint(estimate.point(at: at(100), rulers: rulers), 1, 10, 1)
+    }
+
+    func testGuessFromAChaptersEndWithoutAnEndStaysThere() {
+        var estimate = ReadingEstimate()
+        estimate.observe(
+            ReadingReport(at: ReadingPoint(chapter: 1, verse: 10, part: 1), settled: true, received: t0),
+            rulers: rulers)
+        assertPoint(estimate.point(at: at(100), rulers: rulers), 1, 10, 1)
+    }
+
     func testWithoutTheChapterMeasuredTheGuessStaysPut() {
         var estimate = ReadingEstimate()
         estimate.observe(
@@ -400,6 +419,16 @@ final class FollowingTests: XCTestCase {
     func testCarriageRealigns() {
         XCTAssertEqual(FollowCarriage.move(y: 400, viewport: 1000, realign: true), .step(by: 150))
         XCTAssertEqual(FollowCarriage.move(y: 250.5, viewport: 1000, realign: true), .hold)
+    }
+
+    func testCarriageRealignKeepsTheirLineOnScreen() {
+        // The guess has run on below their line — into the next chapter,
+        // from a passage end. Brought to the landing line it would lift
+        // their line off the top; it stops with their line at the top.
+        XCTAssertEqual(FollowCarriage.move(y: 760, reported: 300, viewport: 1000, realign: true), .step(by: 220))
+        XCTAssertEqual(FollowCarriage.move(y: 400, reported: 50, viewport: 1000, realign: true), .hold)
+        // Back is not capped: their line is below the guess's anyway.
+        XCTAssertEqual(FollowCarriage.move(y: 100, reported: 500, viewport: 1000, realign: true), .step(by: -150))
     }
 
     func testCarriageIsCalmerUnderReduceMotion() {

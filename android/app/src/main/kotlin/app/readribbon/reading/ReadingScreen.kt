@@ -1510,7 +1510,7 @@ fun ReadingScreen(
         var realign = true
         var backedAt: Instant? = null
         var stuck: Stuck? = null
-        var grounded: Pair<Int, Instant?>? = null
+        var grounded: Lost? = null
         var here = false
         var cameBack = model.cameBack
         fun startOver() {
@@ -1577,13 +1577,24 @@ fun ReadingScreen(
                         )
                     }
                 }
-                if (word != null && word.report.received != fed) {
+                // Only a word newer than the last one given: an older one —
+                // the roster's verse, stamped when it last changed, after
+                // their line stopped — would be refused by the guess, and
+                // still mark the follow as presence's, dropping the cap
+                // their line puts on a step.
+                if (word != null && fed.let { it == null || word.report.received > it }) {
                     val report = word.report
                     // Presence stood in until their line came. A guess begun
                     // from the first word of a verse would learn their pace
                     // and their scroll from a place they never were, so the
-                    // line starts a guess of its own.
-                    if (!word.fromPresence && onPresence) startOver()
+                    // line starts a guess of its own — and the page meets it
+                    // once, from wherever presence left it: a rationed
+                    // roster's verse can be half a screen from their line,
+                    // and inside the band nothing would ever correct that.
+                    if (!word.fromPresence && onPresence) {
+                        startOver()
+                        realign = true
+                    }
                     if (fedAt == null) onPresence = word.fromPresence
                     val last = fedAt
                     if (last == null || !report.settled || !samePlace(report.at, last)) {
@@ -1614,6 +1625,16 @@ fun ReadingScreen(
                 } else {
                     estimate.reported?.let { (placeOnScreen(it) as? Placed.At)?.y }
                 }
+                // A guess run on into the chapter after their line moves the
+                // page only once their line can be measured here: with that
+                // chapter still being set, nothing would hold a step back,
+                // and the next chapter's head came up while they were still
+                // at the end of this one.
+                if (!fedPresence && y != null && reported == null &&
+                    estimate.reported.let { it != null && it.chapter != point.chapter }
+                ) {
+                    continue
+                }
                 val manner = when {
                     screenReaderNow -> FollowCarriage.Manner.Spoken
                     reduceMotionNow -> FollowCarriage.Manner.Calm
@@ -1631,12 +1652,29 @@ fun ReadingScreen(
                     if (!movedOn && news == wasStuck.news) continue
                     stuck = null
                 }
-                // Where a fly goes: the guess, or read aloud, the verse their
-                // phone actually said — never a place nobody reported.
-                val target = if (manner == FollowCarriage.Manner.Spoken) estimate.reported ?: point else point
-                // Nor is a fly that never landed.
+                // Where a fly goes: the guess — or the place their phone
+                // actually said, read aloud, and whenever the guess has run on
+                // into another chapter. Sent to the next chapter's first
+                // words, the page opened that chapter at its head while they
+                // were still reading the end of this one.
+                val said = estimate.reported
+                val target = if (
+                    said != null && (manner == FollowCarriage.Manner.Spoken || said.chapter != point.chapter)
+                ) {
+                    said
+                } else {
+                    point
+                }
+                // Nor is a fly that never landed — until the lines it went
+                // without are here: a streamed chapter that came late is
+                // flown to again, or the page stayed at its head while the
+                // guess sat in the chapter after it, out of sight.
                 val lost = grounded
-                if (line == null && lost != null && lost.first == target.chapter && lost.second == news) continue
+                if (line == null && lost != null && lost.chapter == target.chapter && lost.news == news &&
+                    !(lost.linesMissing && chapterLayouts[lost.chapter] != null)
+                ) {
+                    continue
+                }
                 val back = estimate.wentBackAt
                 val wentBack = back != null && backedAt.let { it == null || back > it }
                 val move = FollowCarriage.move(
@@ -1662,9 +1700,20 @@ fun ReadingScreen(
                             ?: Flight.Grounded
                         grounded = when (flight) {
                             Flight.Landed -> null
-                            Flight.Grounded -> target.chapter to news
+                            Flight.Grounded -> Lost(
+                                chapter = target.chapter,
+                                news = news,
+                                linesMissing = chapterLayouts[target.chapter] == null,
+                            )
                             Flight.TakenBack -> grounded
                         }
+                        // A flight that did not land left the page at the
+                        // head of its chapter, set out or still coming. When
+                        // that chapter's lines are there, the first move
+                        // brings the guess to the landing line from wherever
+                        // it is on screen; held inside the band, the head
+                        // stayed at the top.
+                        if (flight == Flight.Grounded) realign = true
                     }
                 }
             }
@@ -2193,6 +2242,12 @@ private enum class Flight { Landed, Grounded, TakenBack }
 
 /** A step the page could not take: where the guess was, and the news then. */
 private data class Stuck(val y: Double, val news: Instant?)
+
+/**
+ * A fly that did not land: its chapter, the news then, and whether it went
+ * without that chapter's lines — the one thing that can come later.
+ */
+private data class Lost(val chapter: Int, val news: Instant?, val linesMissing: Boolean)
 
 /** The same place, as core's guess counts it. */
 private fun samePlace(a: ReadingPoint, b: ReadingPoint): Boolean =

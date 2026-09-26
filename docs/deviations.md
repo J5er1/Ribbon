@@ -3418,6 +3418,57 @@ A58. **Following follows the page (supersedes A53's chapter-only rule and
     against a real OS, and the Realtime logs going quiet are the first real
     test.
 
+A59. **Following never lands on the head of a chapter they are not at
+    (amends A58).** Owner, after A58 shipped: *"it still always bring you to
+    the top of the chapter."* Part of that may have been builds — nothing on
+    the iPhone said which one it had, and one still on A53's chapter rule
+    does exactly this — but the merged code did it too, reproduced on
+    Android with the real page under Robolectric:
+
+    - **A guess ran on over a chapter's end.** Following on presence alone —
+      an older app, a quiet follower, or the moment before their line
+      arrives — the guess had no bottom of their screen to stop at, and ran
+      on up to sixty words from their verse: from a chapter's last verses
+      into the next chapter's first words. With no line of theirs on screen
+      to hold it back the page flew there, and a verse that near a head
+      lands with the head at the top. A guess now crosses into the next
+      chapter only when the bottom of their screen is in it; without that
+      it stops at their chapter's last word.
+    - **The passage end read as the next chapter's head.** A reading line
+      resting on the card between two chapters is the end of the first. The
+      guess began there and crossed into the next at once, and a page flying
+      after it opened that chapter at its head. A flight now goes to the
+      line their phone said whenever the guess has run on into another
+      chapter — and when that line is set out here already, a step brings
+      it to the landing line instead, part and all: a landing aims at its
+      verse's first line, which at the foot of a verse taller than the
+      screen never reached their line. Nothing lifts that line off the top.
+      The follow's realignment did, and is now held to it like any other
+      step; and a guess in the next chapter moves nothing while their own
+      chapter is still being set.
+    - **A flight that did not land stayed at the head.** A streamed chapter
+      slow to come left the page where the flight's first move put it — the
+      chapter's head — with the follow's one realignment spent, so the hold
+      band kept it there. After a flight that does not land, the first move
+      once that chapter is set brings the guess to the landing line from
+      wherever it is; a flight barred until they say something new no
+      longer spends it. On iOS a flight's three seconds start once a
+      streamed chapter's words are here, a quarter of a minute at most, and
+      under VoiceOver the verse it never reached is not taken for one
+      already spoken; Android flies again once the lines it went without
+      have come.
+    - **Their first line after presence realigns the page.** A rationed
+      roster's verse can be half a screen from their line, and inside the
+      band nothing corrected it. Android now takes only a word newer than
+      the last, as iOS does: an older roster word, refused by the guess,
+      still marked the follow as presence's and let a step past their line.
+
+    Three new tests a side in RibbonCore and its port. **Not changed:** when
+    their line really is at a chapter's head — a chapter just chosen, a
+    passage end's continue — your page is at the head too, and holds there
+    until they have read on about a quarter of a screen. That is where they
+    are.
+
 ## iOS (phase four): the second pass
 
 Android took a design pass of its own (A18–A51) and the two platforms
@@ -4065,6 +4116,12 @@ I35. **Following on iOS (A58).** The decisions are A58's; what is only
       and words that changed are updated.
     - **The grace** is a background task that suspends the channel fifteen
       seconds after the app goes, unless it comes back first.
+
+I36. **The menu says which build (A59).** The version line under You read
+    "Ribbon 0.2.0" on every build of 0.2.0, so a phone a week behind looked
+    like one on today's, and a test on two phones could not start from
+    knowing what each one ran. It now carries the build number beside the
+    version, as Android's line has always carried its run number.
 
 ## Licensed translations (decided: API.Bible)
 

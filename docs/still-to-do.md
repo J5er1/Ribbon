@@ -38,6 +38,13 @@ In the developer portal (Certificates, Identifiers & Profiles):
 > signing**: the app now asks for push and the App Group, and carries the
 > widget extension, and the old profiles cover neither. The simulator build
 > in CI is unaffected.
+>
+> Today it stops sooner still: the lane has failed on every run since at
+> least 11 September, three seconds in, because `ASC_KEY_ID` and
+> `ASC_KEY_CONTENT` are not set as repository secrets. Xcode Cloud's Default
+> workflow archives every merge to `main` on its own; whether it hands those
+> builds to TestFlight is set in App Store Connect. The version line under
+> You now says which build a phone has (I36).
 
 ### Firebase — Android push
 
@@ -57,19 +64,23 @@ In the developer portal (Certificates, Identifiers & Profiles):
 `false` for each today). Then, on a phone: sign in, allow notifications
 when the app asks, and have someone in the room leave a note.
 
-## 2. The room's live channel is still public
+## 2. The room's live channel — closed on 25 September
 
-`supabase/migrations/20260914120000_ribbon_realtime_room_channel.sql` has
-never been applied to the live project: `realtime.messages` has row-level
-security on and no policies, so every private join is refused and both apps
-fall back to a public channel — which means a room's presence and its
-thinking-of-you taps can be read by anyone who holds the publishable key
-and guesses a room id. Applying the migration closes it; the apps retry the
-private join every time a room opens, so nothing else changes. (Found while
-deploying push; not applied without asking, because it changes how every
-live room connects.) Since A58 the same channel also carries, while someone
-follows a reader, where on the page that reader is — one more reason to
-close it.
+`realtime.messages` now carries the migration's two policies
+(`ribbon_room_channel_read`, `ribbon_room_channel_write`), applied to the
+live project on 25 September 2026: a private join is refused unless the
+account is a member of the room, and both apps' private join is accepted for
+members. They never landed before because the file's `alter table ... enable
+row level security` needs the table's owner, which `postgres` is not on a
+hosted project, and the block's catch-all swallowed that error and both
+policies after it. The file now asks for that only where it is off, and no
+longer swallows errors.
+
+A phone that joined before the policies landed was refused, fell back to the
+public channel, and stays there until the room is opened again — and a
+private and a public channel with the same name do not hear each other. Close
+and reopen the app on every phone once. Builds from before 14 September
+(#14) join public only and will not see anyone on a current build.
 
 ## 3. One account, whichever door
 
@@ -105,5 +116,9 @@ Following (A58, I35) most of all, with two phones in one room:
   the screen, and a screen-reader scroll ends the follow.
 - Answer a message and come back within fifteen seconds: nobody should
   have left the room.
+- Follow someone resting at the end of a chapter, or on its card: your
+  page shows the end of that chapter, not the next one's head (A59).
+- Before any of it, check each phone's build: the version line under You
+  says it on both (I36).
 - Afterwards, the project's Realtime logs should show no new
   `ClientPresenceRateLimitReached`.

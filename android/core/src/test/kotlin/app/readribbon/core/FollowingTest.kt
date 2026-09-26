@@ -288,6 +288,23 @@ class FollowingTest {
     }
 
     @Test
+    fun testGuessWithoutAnEndStaysInItsChapter() {
+        val estimate = ReadingEstimate()
+        estimate.observe(report(1, 9, settled = true, second = 0.0), rulers)
+        // Forty words to the end of chapter 1, sixty allowed without an end:
+        // nothing says chapter 2 is on their screen, so the guess stops at
+        // chapter 1's last word.
+        assertPoint(estimate.point(now = at(100.0), rulers = rulers), 1, 10, 1.0)
+    }
+
+    @Test
+    fun testGuessFromAChaptersEndWithoutAnEndStaysThere() {
+        val estimate = ReadingEstimate()
+        estimate.observe(report(1, 10, part = 1.0, settled = true, second = 0.0), rulers)
+        assertPoint(estimate.point(now = at(100.0), rulers = rulers), 1, 10, 1.0)
+    }
+
+    @Test
     fun testWithoutTheChapterMeasuredTheGuessStaysPut() {
         val estimate = ReadingEstimate()
         estimate.observe(report(3, 4, part = 0.5, settled = true, second = 0.0), rulers)
@@ -374,6 +391,23 @@ class FollowingTest {
     fun testCarriageRealigns() {
         assertEquals(FollowMove.Step(150.0), FollowCarriage.move(y = 400.0, viewport = 1000.0, realign = true))
         assertEquals(FollowMove.Hold, FollowCarriage.move(y = 250.5, viewport = 1000.0, realign = true))
+    }
+
+    @Test
+    fun testCarriageRealignKeepsTheirLineOnScreen() {
+        // The guess has run on below their line — into the next chapter,
+        // from a passage end. Brought to the landing line it would lift
+        // their line off the top; it stops with their line at the top.
+        assertEquals(
+            FollowMove.Step(220.0),
+            FollowCarriage.move(y = 760.0, reported = 300.0, viewport = 1000.0, realign = true),
+        )
+        assertEquals(FollowMove.Hold, FollowCarriage.move(y = 400.0, reported = 50.0, viewport = 1000.0, realign = true))
+        // Back is not capped: their line is below the guess's anyway.
+        assertEquals(
+            FollowMove.Step(-150.0),
+            FollowCarriage.move(y = 100.0, reported = 500.0, viewport = 1000.0, realign = true),
+        )
     }
 
     @Test
