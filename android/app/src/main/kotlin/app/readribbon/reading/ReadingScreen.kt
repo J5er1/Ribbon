@@ -1582,8 +1582,14 @@ fun ReadingScreen(
                     // Presence stood in until their line came. A guess begun
                     // from the first word of a verse would learn their pace
                     // and their scroll from a place they never were, so the
-                    // line starts a guess of its own.
-                    if (!word.fromPresence && onPresence) startOver()
+                    // line starts a guess of its own — and the page meets it
+                    // once, from wherever presence left it: a rationed
+                    // roster's verse can be half a screen from their line,
+                    // and inside the band nothing would ever correct that.
+                    if (!word.fromPresence && onPresence) {
+                        startOver()
+                        realign = true
+                    }
                     if (fedAt == null) onPresence = word.fromPresence
                     val last = fedAt
                     if (last == null || !report.settled || !samePlace(report.at, last)) {
@@ -1631,9 +1637,19 @@ fun ReadingScreen(
                     if (!movedOn && news == wasStuck.news) continue
                     stuck = null
                 }
-                // Where a fly goes: the guess, or read aloud, the verse their
-                // phone actually said — never a place nobody reported.
-                val target = if (manner == FollowCarriage.Manner.Spoken) estimate.reported ?: point else point
+                // Where a fly goes: the guess — or the place their phone
+                // actually said, read aloud, and whenever the guess has run on
+                // into another chapter. Sent to the next chapter's first
+                // words, the page opened that chapter at its head while they
+                // were still reading the end of this one.
+                val said = estimate.reported
+                val target = if (
+                    said != null && (manner == FollowCarriage.Manner.Spoken || said.chapter != point.chapter)
+                ) {
+                    said
+                } else {
+                    point
+                }
                 // Nor is a fly that never landed.
                 val lost = grounded
                 if (line == null && lost != null && lost.first == target.chapter && lost.second == news) continue
@@ -1665,6 +1681,13 @@ fun ReadingScreen(
                             Flight.Grounded -> target.chapter to news
                             Flight.TakenBack -> grounded
                         }
+                        // A flight that did not land left the page at the
+                        // head of its chapter, set out or still coming. When
+                        // that chapter's lines are there, the first move
+                        // brings the guess to the landing line from wherever
+                        // it is on screen; held inside the band, the head
+                        // stayed at the top.
+                        if (flight == Flight.Grounded) realign = true
                     }
                 }
             }

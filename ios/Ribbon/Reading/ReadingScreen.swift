@@ -1302,11 +1302,12 @@ struct ReadingScreen: View {
         // The first move of a follow may bring the guess to the line from
         // inside the band; that first decision is the move, even when it is
         // to stay — or a hair's drift later would be a one-point step.
-        followState.realignedEpoch = epoch
         switch move {
         case .hold:
+            followState.realignedEpoch = epoch
             return
         case .step(let distance):
+            followState.realignedEpoch = epoch
             if distance < 0 { run.backStepAt = now }
             if manner == .spoken {
                 // A screen reader moves only when their line has left the
@@ -1319,8 +1320,16 @@ struct ReadingScreen: View {
                 stepPage(by: CGFloat(distance), guessAt: y, run: run, calm: manner == .calm)
             }
         case .fly:
-            let target = manner == .spoken ? reported : guess
+            // Where a flight goes: the guess — or the place their phone
+            // said, read aloud, and whenever the guess has run on into
+            // another chapter. Sent to the next chapter's first words, the
+            // page opened that chapter at its head while they were still
+            // reading the end of this one.
+            let target = manner == .spoken || guess.chapter != reported.chapter ? reported : guess
+            // A flight barred until they say something new decides nothing:
+            // the first decision is still to come when that chapter is set.
             guard run.noFlyTo != target.chapter else { return }
+            followState.realignedEpoch = epoch
             if manner == .spoken {
                 speakTo(target, run: run, now: now)
             } else {
@@ -1332,9 +1341,15 @@ struct ReadingScreen: View {
     /// A word from their phone, given to the guess. Their own line, after
     /// only their presence, starts the guess afresh: a verse's first line,
     /// always a scroll behind, is no rest to learn a pace or a scroll from.
+    /// And the page meets it once, from wherever presence left it: a
+    /// rationed roster's verse can be half a screen from their line, and
+    /// inside the band nothing would ever correct that.
     private func feed(_ report: ReadingReport, fromPresence: Bool, to run: FollowRun, chapterCount: Int) {
         if !fromPresence {
-            if !run.heardTheirLine, run.estimate.reported != nil { run.estimate = ReadingEstimate() }
+            if !run.heardTheirLine, run.estimate.reported != nil {
+                run.estimate = ReadingEstimate()
+                followState.realignedEpoch = nil
+            }
             run.heardTheirLine = true
         }
         let news = !report.settled || !PagePoint.same(report.at, run.estimate.reported)
@@ -1376,11 +1391,23 @@ struct ReadingScreen: View {
             // the page's own opening landing, stuck when the follow began —
             // or nothing would ever let go of it.
             let chapter = landing.address.chapter
-            if run.flying?.chapter != chapter { run.flying = (chapter: chapter, since: now) }
-            if let flying = run.flying, now.timeIntervalSince(flying.since) > 3 {
+            if run.flying?.chapter != chapter { run.flying = (chapter: chapter, since: now, began: now) }
+            // A chapter whose words are still coming — a licensed version,
+            // streamed — has not failed to come: its three seconds start
+            // once they are here. A quarter of a minute in all, and it is
+            // given up on all the same.
+            if chapterContent(chapter) == nil, !chapterFailed.contains(chapter) {
+                run.flying?.since = now
+            }
+            if let flying = run.flying,
+               now.timeIntervalSince(flying.since) > 3 || now.timeIntervalSince(flying.began) > 15 {
                 endLanding()
                 run.noFlyTo = flying.chapter
                 run.flying = nil
+                // It left the page at the head of that chapter, which is no
+                // place to hold: once the chapter is set, the first move
+                // brings the guess to the landing line from wherever it is.
+                followState.realignedEpoch = nil
             }
             return true
         }
@@ -1487,7 +1514,7 @@ struct ReadingScreen: View {
     /// keeping of your place: being sent after someone is not your own
     /// going somewhere. Under reduce motion it is simply there (I22).
     private func flyTo(_ point: ReadingPoint, run: FollowRun, now: Date, speaking: Bool) {
-        run.flying = (chapter: point.chapter, since: now)
+        run.flying = (chapter: point.chapter, since: now, began: now)
         land(
             at: VerseAddress(bookID: reading.bookID, chapter: point.chapter, verse: point.verse),
             animated: true, keepingYourPlace: false, speaking: speaking)

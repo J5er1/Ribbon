@@ -38,6 +38,13 @@ In the developer portal (Certificates, Identifiers & Profiles):
 > signing**: the app now asks for push and the App Group, and carries the
 > widget extension, and the old profiles cover neither. The simulator build
 > in CI is unaffected.
+>
+> Today it stops sooner still: the lane has failed on every run since at
+> least 11 September, three seconds in, because `ASC_KEY_ID` and
+> `ASC_KEY_CONTENT` are not set as repository secrets. Xcode Cloud's Default
+> workflow archives every merge to `main` on its own; whether it hands those
+> builds to TestFlight is set in App Store Connect. The version line under
+> You now says which build a phone has (I36).
 
 ### Firebase — Android push
 
@@ -109,5 +116,9 @@ Following (A58, I35) most of all, with two phones in one room:
   the screen, and a screen-reader scroll ends the follow.
 - Answer a message and come back within fifteen seconds: nobody should
   have left the room.
+- Follow someone resting at the end of a chapter, or on its card: your
+  page shows the end of that chapter, not the next one's head (A59).
+- Before any of it, check each phone's build: the version line under You
+  says it on both (I36).
 - Afterwards, the project's Realtime logs should show no new
   `ClientPresenceRateLimitReached`.

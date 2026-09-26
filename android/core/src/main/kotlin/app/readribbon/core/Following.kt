@@ -354,14 +354,22 @@ class ReadingEstimate(val tuning: FollowingTuning = FollowingTuning()) {
         if (rulers(latest.at.chapter) == null) return latest.at
         val elapsed = maxOf(0.0, (now - latest.received).toDouble(DurationUnit.SECONDS))
         var room = tuning.leadWithoutEnd
+        // Only the bottom of their screen can say the next chapter is in
+        // view. Without it — their presence, or an older app — the guess
+        // stays in the chapter they said: run on over its end, it became the
+        // next chapter's first words, and a page sent there opened that
+        // chapter at its head while they were still reading the last verses
+        // of this one.
+        var crossing = false
         val end = latest.end
         if (end != null) {
             distance(from = latest.at, to = end, rulers = rulers)?.let { span ->
                 val scroll = usualScroll ?: (tuning.shareOfTheirScreen * span)
                 room = maxOf(0.0, minOf(span - tuning.endMargin, tuning.shareOfTheirScroll * scroll))
+                crossing = end.chapter > latest.at.chapter
             }
         }
-        return advance(latest.at, by = minOf(pace * elapsed, room), rulers = rulers)
+        return advance(latest.at, by = minOf(pace * elapsed, room), crossing = crossing, rulers = rulers)
     }
 
     private fun same(a: ReadingPoint, b: ReadingPoint): Boolean =
@@ -421,13 +429,18 @@ class ReadingEstimate(val tuning: FollowingTuning = FollowingTuning()) {
     }
 
     /**
-     * So many words on from a point, into the next chapter when it is
-     * measured, and otherwise to the end of this one.
+     * So many words on from a point: into the next chapter when crossing is
+     * allowed and it is measured, and otherwise to the end of this one.
      */
-    private fun advance(point: ReadingPoint, by: Double, rulers: (Int) -> ChapterRuler?): ReadingPoint {
+    private fun advance(
+        point: ReadingPoint,
+        by: Double,
+        crossing: Boolean,
+        rulers: (Int) -> ChapterRuler?,
+    ): ReadingPoint {
         val ruler = rulers(point.chapter) ?: return point
         val offset = ruler.offset(of = point) + by
-        if (offset > ruler.length) {
+        if (crossing && offset > ruler.length) {
             rulers(point.chapter + 1)?.let { return it.point(at = offset - ruler.length) }
         }
         return ruler.point(at = offset)

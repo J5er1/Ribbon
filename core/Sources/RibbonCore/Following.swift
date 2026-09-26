@@ -306,11 +306,19 @@ public struct ReadingEstimate: Hashable, Sendable {
         guard rulers(latest.at.chapter) != nil else { return latest.at }
         let elapsed = max(0, now.timeIntervalSince(latest.received))
         var room = tuning.leadWithoutEnd
+        // Only the bottom of their screen can say the next chapter is in
+        // view. Without it — their presence, or an older app — the guess
+        // stays in the chapter they said: run on over its end, it became
+        // the next chapter's first words, and a page sent there opened that
+        // chapter at its head while they were still reading the last verses
+        // of this one.
+        var crossing = false
         if let end = latest.end, let span = distance(from: latest.at, to: end, rulers: rulers) {
             let scroll = usualScroll ?? tuning.shareOfTheirScreen * span
             room = max(0, min(span - tuning.endMargin, tuning.shareOfTheirScroll * scroll))
+            crossing = end.chapter > latest.at.chapter
         }
-        return advance(latest.at, by: min(pace * elapsed, room), rulers: rulers)
+        return advance(latest.at, by: min(pace * elapsed, room), crossing: crossing, rulers: rulers)
     }
 
     // MARK: -
@@ -368,12 +376,14 @@ public struct ReadingEstimate: Hashable, Sendable {
         return nil
     }
 
-    /// So many words on from a point, into the next chapter when it is
-    /// measured, and otherwise to the end of this one.
-    private func advance(_ point: ReadingPoint, by words: Double, rulers: (Int) -> ChapterRuler?) -> ReadingPoint {
+    /// So many words on from a point: into the next chapter when crossing
+    /// is allowed and it is measured, and otherwise to the end of this one.
+    private func advance(
+        _ point: ReadingPoint, by words: Double, crossing: Bool, rulers: (Int) -> ChapterRuler?
+    ) -> ReadingPoint {
         guard let ruler = rulers(point.chapter) else { return point }
         let offset = ruler.offset(of: point) + words
-        if offset > ruler.length, let next = rulers(point.chapter + 1) {
+        if crossing, offset > ruler.length, let next = rulers(point.chapter + 1) {
             return next.point(at: offset - ruler.length)
         }
         return ruler.point(at: offset)

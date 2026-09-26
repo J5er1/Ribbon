@@ -330,6 +330,25 @@ final class FollowingTests: XCTestCase {
         assertPoint(estimate.point(at: at(100), rulers: rulers), 2, 2, 0.5625)
     }
 
+    func testGuessWithoutAnEndStaysInItsChapter() {
+        var estimate = ReadingEstimate()
+        estimate.observe(
+            ReadingReport(at: ReadingPoint(chapter: 1, verse: 9), settled: true, received: t0),
+            rulers: rulers)
+        // Forty words to the end of chapter 1, sixty allowed without an end:
+        // nothing says chapter 2 is on their screen, so the guess stops at
+        // chapter 1's last word.
+        assertPoint(estimate.point(at: at(100), rulers: rulers), 1, 10, 1)
+    }
+
+    func testGuessFromAChaptersEndWithoutAnEndStaysThere() {
+        var estimate = ReadingEstimate()
+        estimate.observe(
+            ReadingReport(at: ReadingPoint(chapter: 1, verse: 10, part: 1), settled: true, received: t0),
+            rulers: rulers)
+        assertPoint(estimate.point(at: at(100), rulers: rulers), 1, 10, 1)
+    }
+
     func testWithoutTheChapterMeasuredTheGuessStaysPut() {
         var estimate = ReadingEstimate()
         estimate.observe(

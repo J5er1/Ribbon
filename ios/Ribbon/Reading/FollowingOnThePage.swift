@@ -231,8 +231,9 @@ final class FollowRun {
     /// A step on its way: where the chapter it was measured from stood,
     /// and the guess, when it set off.
     var step: (chapter: Int, top: CGFloat, guess: CGFloat?)?
-    /// A flight of the follow's own on its way.
-    var flying: (chapter: Int, since: Date)?
+    /// A flight of the follow's own on its way: since when its three
+    /// seconds have run, and when it began.
+    var flying: (chapter: Int, since: Date, began: Date)?
     /// A chapter a flight could not reach. Not tried again until they say
     /// something new.
     var noFlyTo: Int?
