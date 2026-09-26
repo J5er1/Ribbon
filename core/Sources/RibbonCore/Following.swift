@@ -469,7 +469,12 @@ public enum FollowCarriage {
         }
         let distance = y - landingLine * viewport
         if realign {
-            return abs(distance) < 1 ? .hold : .step(by: distance)
+            // As far as their line allows, like any step forward: a guess
+            // run on into the next chapter, brought to the landing line,
+            // would lift the line they are still resting on off the top.
+            var step = distance
+            if step > 0, let reported { step = min(step, max(0, reported - reportedLine * viewport)) }
+            return abs(step) < 1 ? .hold : .step(by: step)
         }
         let stepAt = manner == .calm ? calmStepLine : stepLine
         if y > stepAt * viewport {

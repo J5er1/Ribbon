@@ -548,7 +548,12 @@ object FollowCarriage {
         }
         val distance = y - LANDING_LINE * viewport
         if (realign) {
-            return if (abs(distance) < 1) FollowMove.Hold else FollowMove.Step(distance)
+            // As far as their line allows, like any step forward: a guess
+            // run on into the next chapter, brought to the landing line,
+            // would lift the line they are still resting on off the top.
+            var step = distance
+            if (step > 0 && reported != null) step = minOf(step, maxOf(0.0, reported - REPORTED_LINE * viewport))
+            return if (abs(step) < 1) FollowMove.Hold else FollowMove.Step(step)
         }
         val stepAt = if (manner == Manner.Calm) CALM_STEP_LINE else STEP_LINE
         if (y > stepAt * viewport) {

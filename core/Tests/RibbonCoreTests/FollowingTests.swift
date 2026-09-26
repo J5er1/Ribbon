@@ -421,6 +421,16 @@ final class FollowingTests: XCTestCase {
         XCTAssertEqual(FollowCarriage.move(y: 250.5, viewport: 1000, realign: true), .hold)
     }
 
+    func testCarriageRealignKeepsTheirLineOnScreen() {
+        // The guess has run on below their line — into the next chapter,
+        // from a passage end. Brought to the landing line it would lift
+        // their line off the top; it stops with their line at the top.
+        XCTAssertEqual(FollowCarriage.move(y: 760, reported: 300, viewport: 1000, realign: true), .step(by: 220))
+        XCTAssertEqual(FollowCarriage.move(y: 400, reported: 50, viewport: 1000, realign: true), .hold)
+        // Back is not capped: their line is below the guess's anyway.
+        XCTAssertEqual(FollowCarriage.move(y: 100, reported: 500, viewport: 1000, realign: true), .step(by: -150))
+    }
+
     func testCarriageIsCalmerUnderReduceMotion() {
         XCTAssertEqual(FollowCarriage.move(y: 620, viewport: 1000, manner: .calm), .hold)
         XCTAssertEqual(FollowCarriage.move(y: 800, viewport: 1000, manner: .calm), .step(by: 550))

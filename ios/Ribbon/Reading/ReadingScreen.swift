@@ -1287,6 +1287,11 @@ struct ReadingScreen: View {
         // of the screen — unless it came from presence, which is always a
         // scroll behind.
         let reportedY = run.fromPresence ? nil : screenY(of: reported)
+        // A guess run on into the chapter after their line moves the page
+        // only once their line can be measured here: with that chapter still
+        // being set, nothing would hold a step back, and the next chapter's
+        // head came up while they were still at the end of this one.
+        if !run.fromPresence, y != nil, reportedY == nil, guess.chapter != reported.chapter { return }
         let manner: FollowCarriage.Manner = UIAccessibility.isVoiceOverRunning
             ? .spoken
             : (UIAccessibility.isReduceMotionEnabled ? .calm : .moving)
@@ -1326,6 +1331,20 @@ struct ReadingScreen: View {
             // page opened that chapter at its head while they were still
             // reading the end of this one.
             let target = manner == .spoken || guess.chapter != reported.chapter ? reported : guess
+            // Their line is set out on this page, only off the screen: a step
+            // brings it to the landing line, part and all. A landing aims at
+            // its verse's first line, and with their line at the foot of a
+            // verse taller than the screen that brought the first line back
+            // every tick and never their line. A chapter a flight could not
+            // reach is reached this way too, once it is set.
+            if manner != .spoken, let there = screenY(of: target) {
+                followState.realignedEpoch = epoch
+                let distance = there - CGFloat(FollowCarriage.landingLine) * viewport
+                guard abs(distance) >= 1 else { return }
+                if distance < 0 { run.backStepAt = now }
+                stepPage(by: distance, guessAt: y, run: run, calm: manner == .calm)
+                return
+            }
             // A flight barred until they say something new decides nothing:
             // the first decision is still to come when that chapter is set.
             guard run.noFlyTo != target.chapter else { return }
@@ -1406,8 +1425,11 @@ struct ReadingScreen: View {
                 run.flying = nil
                 // It left the page at the head of that chapter, which is no
                 // place to hold: once the chapter is set, the first move
-                // brings the guess to the landing line from wherever it is.
+                // brings the guess to the landing line from wherever it is —
+                // and under VoiceOver lands on their verse, which was never
+                // reached, so is not one it has already spoken.
                 followState.realignedEpoch = nil
+                if run.spokenTo?.chapter == flying.chapter { run.spokenTo = nil }
             }
             return true
         }

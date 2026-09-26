@@ -394,6 +394,23 @@ class FollowingTest {
     }
 
     @Test
+    fun testCarriageRealignKeepsTheirLineOnScreen() {
+        // The guess has run on below their line — into the next chapter,
+        // from a passage end. Brought to the landing line it would lift
+        // their line off the top; it stops with their line at the top.
+        assertEquals(
+            FollowMove.Step(220.0),
+            FollowCarriage.move(y = 760.0, reported = 300.0, viewport = 1000.0, realign = true),
+        )
+        assertEquals(FollowMove.Hold, FollowCarriage.move(y = 400.0, reported = 50.0, viewport = 1000.0, realign = true))
+        // Back is not capped: their line is below the guess's anyway.
+        assertEquals(
+            FollowMove.Step(-150.0),
+            FollowCarriage.move(y = 100.0, reported = 500.0, viewport = 1000.0, realign = true),
+        )
+    }
+
+    @Test
     fun testCarriageIsCalmerUnderReduceMotion() {
         val calm = FollowCarriage.Manner.Calm
         assertEquals(FollowMove.Hold, FollowCarriage.move(y = 620.0, viewport = 1000.0, manner = calm))
