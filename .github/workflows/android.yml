@@ -38,6 +38,19 @@ jobs:
         with:
           packages: 'platform-tools'
 
+      # Load-bearing for the unit tests now, not only for build speed.
+      # Robolectric's `android-all-instrumented` jars — the framework the eight
+      # Robolectric-backed test classes actually run on — are declared to
+      # Gradle in app/build.gradle.kts, so they ride in this cache alongside
+      # every other dependency instead of being fetched from Maven by the test
+      # JVM while the tests are running. They are about 350 MB of it.
+      #
+      # A PR run restores this cache read-only and saves nothing back ("Cache
+      # is read-only" in the log), so it is `main` that fills what the PRs
+      # read. On a cold cache Gradle fetches the jars itself, at resolution
+      # time — still a network call, but one that fails as a resolution error
+      # naming the artifact rather than as eight classes dying in
+      # `classMethod` with a stack from inside Robolectric's own fetcher.
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 

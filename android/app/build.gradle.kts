@@ -158,6 +158,63 @@ androidComponents {
     }
 }
 
+// Robolectric does not resolve the framework jar it runs the tests on through
+// Gradle. It fetches `android-all-instrumented` itself, over the network, from
+// inside the test JVM, the first time a Robolectric class initialises — so
+// Gradle's dependency cache never covered it and every cold run made a live
+// call to Maven Central. When one of those calls failed, all eight
+// Robolectric-backed classes failed at `classMethod`, before a single test body
+// ran, on a diff that had not touched Android at all. A hiccup at somebody
+// else's CDN is not a test result, and CI said it was one.
+//
+// So the jars are declared here, where every other dependency already lives:
+// Gradle resolves them, Gradle's cache holds them, and `setup-gradle` restores
+// them on a PR run with the rest of that cache. The two system properties on
+// the test task below then take Robolectric's own fetcher out of the path
+// entirely, rather than merely making it likely to find a warm cache — offline,
+// there is no live call left to fail.
+//
+// **Two configurations rather than one** because these are the same module at
+// two versions, and a single configuration would resolve that conflict down to
+// one jar. Both are wanted: API 34 for the seven classes pinned with
+// `@Config(sdk = [34])`, and API 36 — `targetSdk`, which is Robolectric's
+// default — for `SettingsSurviveADamagedFileTest`, which pins nothing.
+//
+// **Not `testImplementation`**, which would be the obvious place and is the
+// wrong one: `android-all-instrumented` is the whole framework, and on the unit
+// test classpath it would shadow the stubbed `android.jar` AGP puts there.
+// Robolectric wants these in a directory of their own, which is all
+// `gatherRobolectricSdks` is.
+//
+// **The version strings move with Robolectric**, and they are not invented:
+// each is the one `org.robolectric.plugins.DefaultSdkProvider` names for that
+// API level in the release `libs.versions.toml` pins. A test that asks for an
+// SDK not listed here now fails the way an offline resolver fails — loudly,
+// naming the jar it wanted — which is the moment to add it, not to let the
+// fetcher back in.
+val robolectricSdkApi34 = configurations.create("robolectricSdkApi34") { isTransitive = false }
+val robolectricSdkApi36 = configurations.create("robolectricSdkApi36") { isTransitive = false }
+
+val robolectricSdkDir = layout.buildDirectory.dir("robolectric-sdks")
+
+val gatherRobolectricSdks = tasks.register<Sync>("gatherRobolectricSdks") {
+    description = "Collects Robolectric's android-all jars where its offline resolver looks for them."
+    from(robolectricSdkApi34, robolectricSdkApi36)
+    into(robolectricSdkDir)
+}
+
+tasks.withType<Test>().configureEach {
+    inputs.files(gatherRobolectricSdks)
+        .withPropertyName("robolectricSdks")
+        .withPathSensitivity(PathSensitivity.NAME_ONLY)
+    // `robolectric.dependency.dir` alone already selects the offline resolver
+    // (LegacyDependencyResolver.pickOne); `robolectric.offline` is set beside
+    // it so that a reader — and a future Robolectric — cannot mistake this for
+    // a cache hint.
+    systemProperty("robolectric.offline", "true")
+    systemProperty("robolectric.dependency.dir", robolectricSdkDir.get().asFile.absolutePath)
+}
+
 dependencies {
     implementation(project(":core"))
 
@@ -202,6 +259,8 @@ dependencies {
     testImplementation(libs.kotlin.test)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.robolectric)
+    robolectricSdkApi34(libs.android.all.instrumented.api34)
+    robolectricSdkApi36(libs.android.all.instrumented.api36)
     testImplementation(libs.androidx.test.ext.junit)
     testImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
