@@ -4,6 +4,7 @@ package app.readribbon.services
 
 import app.readribbon.core.Person
 import app.readribbon.core.ReadingPoint
+import app.readribbon.core.TranslationID
 import app.readribbon.core.VerseAddress
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -336,6 +337,74 @@ class RoomChannelWireTest {
         assertNull(heard("""{"id":"$id","book":"MRK","chapter":6,"verse":12,"part":0.5}"""))
         // Out of range is held inside it, not dropped.
         assertEquals(1.0, heard(body(part = "3"))!!.at.part, 0.0)
+    }
+
+    /**
+     * The words under the line (A60): the sender's version, the original
+     * word at their line, and the numbering it counts in — three optional
+     * keys, like `carried`, for `at` only. `end` stays a fraction.
+     */
+    @Test
+    fun testReadingCarriesTheWordsUnderTheLine() {
+        val message = RoomChannelWire.reading(
+            roomID = room, personID = other, source = "0a1b2c3d", book = "JHN",
+            at = ReadingPoint(chapter = 1, verse = 3, part = 0.0),
+            end = ReadingPoint(chapter = 1, verse = 9, part = 0.5),
+            settled = true, carried = false, ref = "14",
+            translation = TranslationID.web, word = 12, wordsSource = "bsbt-5558512b")
+        val body = message["payload"]!!.jsonObject["payload"]!!.jsonObject
+        assertEquals(
+            setOf(
+                "id", "source", "book", "chapter", "verse", "part", "end", "settled",
+                "translation", "word", "words_source",
+            ),
+            body.keys,
+        )
+        assertEquals("web", body.str("translation"))
+        assertEquals("12", body.str("word"))
+        assertFalse(body["word"]!!.jsonPrimitive.isString)
+        assertEquals("bsbt-5558512b", body.str("words_source"))
+        assertEquals(setOf("chapter", "verse", "part"), body["end"]!!.jsonObject.keys)
+
+        val heard = RoomChannelWire.heard(Json.parseToJsonElement(body.toString()))!!
+        assertEquals(TranslationID.web, heard.translation)
+        assertEquals(12, heard.word)
+        assertEquals("bsbt-5558512b", heard.wordsSource)
+        assertEquals(ReadingPoint(chapter = 1, verse = 3, part = 0.0), heard.at)
+    }
+
+    /**
+     * Absent, they are not sent, and a body from a build that never sends
+     * them is heard as it always was. One in the wrong shape is dropped on
+     * its own: the report is whole without it, and is followed by its
+     * fraction, as an older build's is.
+     */
+    @Test
+    fun testReadingWithoutTheWordsIsHeardAsBefore() {
+        val message = RoomChannelWire.reading(
+            roomID = room, personID = other, source = "0a1b2c3d", book = "JHN",
+            at = ReadingPoint(chapter = 1, verse = 3, part = 0.25), end = null,
+            settled = true, carried = false, ref = "15")
+        val body = message["payload"]!!.jsonObject["payload"]!!.jsonObject
+        assertFalse(body.containsKey("translation"))
+        assertFalse(body.containsKey("word"))
+        assertFalse(body.containsKey("words_source"))
+        val heard = RoomChannelWire.heard(body)!!
+        assertNull(heard.translation)
+        assertNull(heard.word)
+        assertNull(heard.wordsSource)
+
+        val id = RoomChannelWire.id(other)
+        fun heard(extra: String) = RoomChannelWire.heard(Json.parseToJsonElement(
+            """{"id":"$id","source":"a","book":"JHN","chapter":1,"verse":3,"part":0.25$extra}"""))
+        val odd = heard(""","translation":7,"word":"12","words_source":["x"]""")!!
+        assertNull(odd.translation)
+        assertNull(odd.word)
+        assertNull(odd.wordsSource)
+        assertEquals(0.25, odd.at.part, 0.0)
+        assertNull(heard(""","word":-1""")!!.word)
+        assertNull(heard(""","word":1.5""")!!.word)
+        assertNull(heard(""","translation":"","words_source":""""")!!.translation)
     }
 
     @Test

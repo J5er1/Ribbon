@@ -756,6 +756,15 @@ private fun YouMenu(
                 SmallCaps(line, size = 11f, color = Palette.muted.copy(alpha = 0.7f))
             }
         }
+        // Where the original words come from (A60): a credit owed, said as
+        // quietly as the version above it. A sentence, so set as one rather
+        // than in small caps.
+        Text(
+            text = Copy.ORIGINAL_CREDIT,
+            style = RibbonType.ui(12f),
+            color = Palette.muted.copy(alpha = 0.7f),
+            modifier = Modifier.padding(top = 6.dp),
+        )
     }
 
     if (confirmDelete) {

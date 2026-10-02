@@ -1,6 +1,7 @@
 package app.readribbon.app
 
 import android.content.Context
+import app.readribbon.core.OriginalLanguage
 
 // Every user-facing string, in one place, so the voice rules (§10) can be
 // audited: short sentences, second person, no exclamation points, never name
@@ -408,6 +409,77 @@ object Copy {
      * is bigger than it was, and colour means a person now (§4.5).
      */
     const val PICK_AN_INK = "Colour is a person now. Pick your ink."
+
+    /**
+     * S06 · the original (A60): the leave toolbar's third verb, named for
+     * the language under the selection — never "the original", which is a
+     * word for the docs. Lower-case; the toolbar sets it in small caps.
+     */
+    fun originalVerb(language: OriginalLanguage) = "the ${language.name}"
+
+    /**
+     * S06 · the original (A60): the panel's heading, set in small caps —
+     * "the Greek · John 1:1".
+     */
+    fun originalHeading(language: OriginalLanguage, address: String) =
+        "the ${language.name.replaceFirstChar { it.uppercaseChar() }} · $address"
+
+    /**
+     * S06 · the original (A60): the honest fallback (A41g's), said where it
+     * happens. The version is its display name, "World English".
+     */
+    fun originalWholeVerse(version: String) =
+        "The $version isn’t matched word for word here, so this is the whole verse."
+
+    /**
+     * S06 · the original (A60): a word your version folds into another, such
+     * as the Greek article, which no English word says by itself.
+     */
+    const val ORIGINAL_NOT_ON_ITS_OWN = "not said on its own"
+
+    /**
+     * S06 · the original (A60): the heading over how each version read in
+     * the room says the same words.
+     */
+    const val ORIGINAL_IN_THIS_ROOM = "In this room"
+
+    /** S06 · the original (A60): who reads a version, when it is you. */
+    const val ORIGINAL_YOU = "you"
+
+    /**
+     * S06 · the original (A60): a licensed version somebody here reads that
+     * has not streamed to this phone. Swift says the device's own noun.
+     */
+    const val ORIGINAL_NOT_ON_THIS_PHONE = "Not on this phone yet."
+
+    /**
+     * S06 · the original (A60): a word's dictionary number, small and
+     * secondary under its definition.
+     */
+    fun originalStrongs(number: String) = "Strong’s $number"
+
+    /**
+     * S06 · the original (A60): a verse's third TalkBack action, beside
+     * [OPEN_WHATS_HERE] and [LEAVE_SOMETHING_HERE]. It lifts the verse and
+     * opens the panel.
+     */
+    const val ORIGINAL_ACTION = "the original words"
+
+    /**
+     * S06 · the original (A60): one original word, read out — how to say it,
+     * what your version says for it, its grammar. A part the word does not
+     * have is left out rather than read as an empty sentence.
+     */
+    fun originalWordSpoken(translit: String, rendering: String, grammar: String) =
+        listOf(translit, rendering, grammar)
+            .filter { it.isNotEmpty() }
+            .joinToString(" ") { "$it." }
+
+    /**
+     * S06 · the original (A60): what the original line over the toolbar
+     * does, for TalkBack (§7.5).
+     */
+    const val ORIGINAL_LINE_ACTION = "opens the original words"
 
 
     // The cards (S08/S09, §4.6)
@@ -934,22 +1006,17 @@ object Copy {
     const val TEXT_LEDE = "How Scripture sets on the page."
 
     /**
-     * Said under the version, because a setting that quietly changes what
-     * somebody else sees has to say so before they touch it (A42).
-     *
-     * Not "everyone must agree" and not a warning: it is a room reading one
-     * book together, which is the product, and the sentence is a statement of
-     * that rather than a caution about it. It names no one, per §10.1 — a
-     * line saying *Ruth is reading the Berean* would make a shared choice
-     * feel like somebody else's property.
+     * Said under the version (A60, reversing A42): it is yours again, and
+     * the second sentence is why that costs the room nothing — a mark you
+     * make lands on the same words in whatever the others read. It names no
+     * one, per §10.1.
      */
-    const val TRANSLATION_IS_THE_ROOMS = "Everyone in this room reads this one."
+    const val TRANSLATION_IS_YOURS = "Yours alone. A mark lands on the same words in theirs."
 
     /**
-     * Said under the page settings, which stayed personal. The contrast with
-     * the line above is the whole point: one of these screens' two halves is
-     * shared and the other is not, and a reader should not have to find that
-     * out by changing something.
+     * Said under the page settings, which were always personal. Both halves
+     * of this screen are yours now (A60); the line above says what that
+     * means for a mark, and this one what it means for the page.
      */
     const val THE_PAGE_IS_YOURS = "Yours alone. Nobody else's page moves."
     const val NOTIFICATIONS_LEDE = "Every room asks for something different. These are per room."
@@ -1082,6 +1149,14 @@ object Copy {
      * Swift composes it inline from the bundle's short version string.
      */
     fun versionLine(version: String) = "$WORDMARK $version"
+
+    /**
+     * Where the original words and their dictionary come from, and the face
+     * the Hebrew is set in (A60) — said once, under the version line, as
+     * quietly.
+     */
+    const val ORIGINAL_CREDIT =
+        "Hebrew and Greek: the Berean Standard Bible translation tables and the Westminster Leningrad Codex, public domain. Definitions: Strong’s Exhaustive Concordance (1890), public domain. Hebrew set in Noto Serif Hebrew (SIL Open Font License)."
 
     // Updates
     fun updateAvailable(version: String) = "A new version of Ribbon is ready ($version)"

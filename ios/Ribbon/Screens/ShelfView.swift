@@ -298,7 +298,7 @@ private struct QuotedHighlight: View {
         } label: {
             VStack(alignment: .leading, spacing: 4) {
                 if let reading = model.state.readings.first(where: { $0.id == highlight.readingID }),
-                   let text = model.scripture.verseText(highlight.range.start, translation: model.words(room: model.room(of: reading), reading: reading)) {
+                   let text = model.scripture.verseText(highlight.range.start, translation: model.words(room: model.room(of: reading))) {
                     Text(text)
                         .font(RibbonType.scripture(15))
                         .foregroundStyle(Palette.text)

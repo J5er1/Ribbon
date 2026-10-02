@@ -202,7 +202,7 @@ fun TextSettingsScreen(
         SettingsGroup(
             count = translations.size,
             title = Copy.TRANSLATION,
-            detail = Copy.TRANSLATION_IS_THE_ROOMS,
+            detail = Copy.TRANSLATION_IS_YOURS,
         ) {
             translations.forEach { translation ->
                 SettingChoice(
@@ -212,7 +212,7 @@ fun TextSettingsScreen(
                     } else {
                         Copy.streamsSub(context)
                     },
-                    chosen = model.currentRoom?.translation == translation.id,
+                    chosen = model.words(model.currentRoom) == translation.id,
                     onClick = { model.setTranslation(translation.id) },
                 )
             }
@@ -300,7 +300,7 @@ private fun ScripturePreview(model: AppModel) {
     val reading = model.openReading(room) ?: return
     val position = model.myPosition(reading)
     val text = model.scripture
-        .verseText(position, translation = model.words(room, reading)) ?: return
+        .verseText(position, translation = model.words(room)) ?: return
 
     val size = model.settings.scriptureSize.toFloat()
     Column(

@@ -460,8 +460,10 @@ final class ChapterPageHandle {
     fileprivate weak var textView: UITextView?
 
     /// The verse and offset under a point in the chapter view's
-    /// coordinates.
-    func place(at point: CGPoint) -> (verse: Int, offset: Int)? {
+    /// coordinates. `wordsOnly` leaves out the verse number and the
+    /// leading, where no word is: a hold there has none to say in the
+    /// original (A60, §7.5).
+    func place(at point: CGPoint, wordsOnly: Bool = false) -> (verse: Int, offset: Int)? {
         guard let view = textView, let text = view.attributedText, text.length > 0 else { return nil }
         let inContainer = CGPoint(
             x: point.x - view.textContainerInset.left,
@@ -471,6 +473,7 @@ final class ChapterPageHandle {
             fractionOfDistanceBetweenInsertionPoints: nil)
         guard index < text.length else { return nil }
         if let placed = page.place(atPageIndex: index) { return placed }
+        if wordsOnly { return nil }
         // On a verse number, or in the leading: the verse the glyph belongs
         // to, at its start.
         if let verse = text.attribute(.ribbonVerse, at: index, effectiveRange: nil) as? Int {
@@ -505,6 +508,10 @@ final class VerseElement: UIAccessibilityElement {
 
 struct ChapterTextView: UIViewRepresentable {
     let chapter: ScriptureChapter
+    /// The version `chapter` is in. A version changed while the book is
+    /// open sets the page again (A60): the words are new, and the marks
+    /// are found afresh in them.
+    let translation: TranslationID
     /// The running head, fully formed: "Mark 4", "Psalm 23".
     let runningHead: String
     let theme: ReadingTheme
@@ -522,10 +529,16 @@ struct ChapterTextView: UIViewRepresentable {
     let handle: ChapterPageHandle
 
     var onLayout: (ChapterLayout) -> Void
-    var onLongPressVerse: (Int) -> Void
+    /// A verse held: the verse, and where in its own text the finger came
+    /// down — the word the original line opens on (A60, §7.5). Nil from
+    /// VoiceOver's action, which has no finger.
+    var onLongPressVerse: (Int, Int?) -> Void
     var onDragToVerse: (Int) -> Void
     var onDragEnded: () -> Void
     var onTapVerse: (Int) -> Void
+    /// VoiceOver's way to the original words of a verse (A60): lift it and
+    /// open the panel in one action.
+    var onOriginalWords: (Int) -> Void
     /// Your own mark drawn to its end: the screen may forget `justMarked`.
     var onMarkDrawn: () -> Void
     /// Y offset (in this view's coordinates) of the open-note carve, so the
@@ -575,7 +588,7 @@ struct ChapterTextView: UIViewRepresentable {
         // body re-evaluates on every scroll tick, and NSShadow has no
         // value equality, so an isEqual comparison can't be the gate.
         let buildKey = [
-            runningHead, String(chapter.n), String(describing: theme),
+            runningHead, String(chapter.n), translation.rawValue, String(describing: theme),
             lifted.map(String.init(describing:)) ?? "-",
             String(isFirstChapter), String(showMarginHint),
         ].joined(separator: "|")
@@ -899,7 +912,8 @@ struct ChapterTextView: UIViewRepresentable {
         /// Verse-by-verse VoiceOver navigation (§11): one element per
         /// verse, so a swipe moves by verse — and the label obeys Law 2
         /// ("Verse nine." then the words; never a position report). Each
-        /// verse carries the two things a finger can do to it.
+        /// verse carries the two things a finger can do to it, and the way
+        /// to its original words (A60).
         ///
         /// The elements are made once per verse and kept. The page is laid
         /// out again whenever anything above it redraws — a follow's step
@@ -939,7 +953,11 @@ struct ChapterTextView: UIViewRepresentable {
                     return true
                 },
                 UIAccessibilityCustomAction(name: Copy.leaveSomethingHere) { [weak self] _ in
-                    self?.parent.onLongPressVerse(verse)
+                    self?.parent.onLongPressVerse(verse, nil)
+                    return true
+                },
+                UIAccessibilityCustomAction(name: Copy.originalAction) { [weak self] _ in
+                    self?.parent.onOriginalWords(verse)
                     return true
                 },
             ]
@@ -963,9 +981,13 @@ struct ChapterTextView: UIViewRepresentable {
             guard let view = textView else { return }
             switch gesture.state {
             case .began:
-                if let verse = verse(at: gesture.location(in: view)) {
+                let location = gesture.location(in: view)
+                if let verse = verse(at: location) {
                     Haptics.shared.verseLifts()
-                    parent.onLongPressVerse(verse)
+                    // Where in the verse's own text the finger is, so the
+                    // original line can say the word under it (§7.5).
+                    let placed = parent.handle.place(at: location, wordsOnly: true)
+                    parent.onLongPressVerse(verse, placed?.verse == verse ? placed?.offset : nil)
                 }
             case .changed:
                 if let verse = verse(at: gesture.location(in: view)) {
@@ -1119,6 +1141,12 @@ struct ChapterTextView: UIViewRepresentable {
                 isFirstContentBlock = false
             }
         }
+        // The verse texts built here are the chapter's own text
+        // (`ScriptureChapter.ownTexts()` in the core), the coordinates every
+        // phrase mark and every word link counts in (A41g, A60). This loop
+        // keeps its own walk because it sets the page as it goes; the two
+        // must never disagree.
+        assert(page.verseText == chapter.ownTexts(), "the page's own text has left the core's")
 
         // The lift: the words in the range raised, with a soft shadow —
         // whole verses, or the phrase between the handles.

@@ -524,6 +524,190 @@ class OriginalTextTest {
         assertEquals("God. ", OriginalWords.phrase(listOf(TextRange(75, 200)), john1))
     }
 
+    // Following lands on the same words
+
+    @Test
+    fun testWordAtPartFindsTheLinkUnderTheLine() {
+        assertEquals(0, OriginalWords.word(0.0, john1, john1Links))
+        // Offset 40 is inside "the Word" (35 until 43): its first word.
+        assertEquals(6, OriginalWords.word(0.5, john1, john1Links))
+        // The foot of the verse is past every link: the last one.
+        assertEquals(13, OriginalWords.word(1.0, john1, john1Links))
+        // A line on the comma after "Word" takes the next link along.
+        assertEquals(5, OriginalWords.word(0.375, john1, john1Links))
+        // Held to the verse.
+        assertEquals(0, OriginalWords.word(-1.0, john1, john1Links))
+        assertEquals(13, OriginalWords.word(2.0, john1, john1Links))
+        assertEquals(0, OriginalWords.word(Double.NaN, john1, john1Links))
+        // Links are taken by where they start, whatever order they come in.
+        assertEquals(6, OriginalWords.word(0.5, john1, john1Links.reversed()))
+    }
+
+    @Test
+    fun testWordAtEmptyTextOrNoLinksIsNil() {
+        assertNull(OriginalWords.word(0.5, "", john1Links))
+        assertNull(OriginalWords.word(0.5, john1, emptyList()))
+    }
+
+    @Test
+    fun testPartOfAWordInAMultiWordLink() {
+        // ὁ λόγος is "the Word" (21 until 29): both words are where it starts.
+        assertEquals(21.0 / 80.0, OriginalWords.part(3, john1, john1Links))
+        assertEquals(21.0 / 80.0, OriginalWords.part(4, john1, john1Links))
+        assertEquals(62.0 / 80.0, OriginalWords.part(16, john1, john1Links))
+        assertEquals(0.0, OriginalWords.part(0, john1, john1Links))
+    }
+
+    @Test
+    fun testPartOfAnUnlinkedWordIsTheNextOneUp() {
+        // τὸν, which no English word renders, is placed at θεόν, "God".
+        assertEquals(53.0 / 80.0, OriginalWords.part(10, john1, john1Links))
+        // Up in the original, not along the page: without the last "God",
+        // θεὸς(13) goes to ἦν(14), "was", though "the Word" (15, 16) is
+        // earlier on the page.
+        val withoutGod = john1Links.dropLast(1)
+        assertEquals(71.0 / 80.0, OriginalWords.part(13, john1, withoutGod))
+    }
+
+    @Test
+    fun testPartOfAWordPastTheEndIsNil() {
+        assertNull(OriginalWords.part(17, john1, john1Links))
+        assertNull(OriginalWords.part(0, john1, emptyList()))
+        assertNull(OriginalWords.part(0, "", john1Links))
+    }
+
+    // The person followed reads "God is love." and their line is on "love";
+    // the follower reads "Love, that is God."
+    val heard get() = ReadingPoint(chapter = 4, verse = 1, part = 0.6)
+
+    @Test
+    fun testCarriedSameVersionIsUntouched() {
+        assertEquals(2, OriginalWords.word(heard.part, authorText, authorLinks))
+        assertEquals(
+            heard,
+            OriginalWords.carried(heard, 2, "src", TranslationID.web, TranslationID.web, "src", readerLinks, readerText),
+        )
+    }
+
+    @Test
+    fun testCarriedDifferentVersionMoves() {
+        assertEquals(
+            ReadingPoint(chapter = 4, verse = 1, part = 0.0),
+            OriginalWords.carried(heard, 2, "src", TranslationID.bsb, TranslationID.web, "src", readerLinks, readerText),
+        )
+        assertEquals(
+            ReadingPoint(chapter = 4, verse = 1, part = 14.0 / 19.0),
+            OriginalWords.carried(heard, 1, "src", TranslationID.bsb, TranslationID.web, "src", readerLinks, readerText),
+        )
+    }
+
+    @Test
+    fun testCarriedWrongSourceIsUntouched() {
+        assertEquals(
+            heard,
+            OriginalWords.carried(heard, 2, "bsbt-old", TranslationID.bsb, TranslationID.web, "src", readerLinks, readerText),
+        )
+        assertEquals(
+            heard,
+            OriginalWords.carried(heard, 2, null, TranslationID.bsb, TranslationID.web, "src", readerLinks, readerText),
+        )
+        // Two missing sources are not a match.
+        assertEquals(
+            heard,
+            OriginalWords.carried(heard, 2, null, TranslationID.bsb, TranslationID.web, null, readerLinks, readerText),
+        )
+    }
+
+    @Test
+    fun testCarriedMissingLinksIsUntouched() {
+        assertEquals(
+            heard,
+            OriginalWords.carried(heard, 2, "src", TranslationID.bsb, TranslationID.web, "src", null, readerText),
+        )
+        assertEquals(
+            heard,
+            OriginalWords.carried(heard, 2, "src", TranslationID.bsb, TranslationID.web, "src", emptyList(), readerText),
+        )
+        assertEquals(
+            heard,
+            OriginalWords.carried(heard, 2, "src", TranslationID.bsb, TranslationID.web, "src", readerLinks, null),
+        )
+        // An old build sends no word and no version.
+        assertEquals(
+            heard,
+            OriginalWords.carried(heard, null, "src", TranslationID.bsb, TranslationID.web, "src", readerLinks, readerText),
+        )
+        assertEquals(
+            heard,
+            OriginalWords.carried(heard, 2, "src", null, TranslationID.web, "src", readerLinks, readerText),
+        )
+        // A word the follower's version cannot place.
+        assertEquals(
+            heard,
+            OriginalWords.carried(heard, 9, "src", TranslationID.bsb, TranslationID.web, "src", readerLinks, readerText),
+        )
+    }
+
+    @Test
+    fun testFollowingLandsOnTheSameWordsAcrossVersions() {
+        // John 1:3, texts and links as bundled. The Greek: πάντα(0) δι’(1)
+        // αὐτοῦ(2) ἐγένετο(3) καὶ(4) χωρὶς(5) αὐτοῦ(6) ἐγένετο(7) οὐδὲ(8)
+        // ἕν(9) ὃ(10) γέγονεν(11). The Berean Standard opens with "Through
+        // Him"; the World English puts it after "all things were made".
+        val bsb = "Through Him all things were made, and without Him nothing was made that has been made. "
+        val bsbLinks = listOf(
+            AlignmentLink(0, 7, listOf(1)),
+            AlignmentLink(8, 11, listOf(2)),
+            AlignmentLink(12, 22, listOf(0)),
+            AlignmentLink(23, 32, listOf(3)),
+            AlignmentLink(34, 37, listOf(4)),
+            AlignmentLink(38, 45, listOf(5)),
+            AlignmentLink(46, 49, listOf(6)),
+            AlignmentLink(50, 57, listOf(8, 9)),
+            AlignmentLink(58, 66, listOf(7)),
+            AlignmentLink(67, 71, listOf(10)),
+            AlignmentLink(72, 85, listOf(11)),
+        )
+        val web = "All things were made through him. Without him, nothing was made that has been made. "
+        val webLinks = listOf(
+            AlignmentLink(0, 10, listOf(0)),
+            AlignmentLink(11, 20, listOf(3)),
+            AlignmentLink(21, 32, listOf(4)),
+            AlignmentLink(34, 41, listOf(5)),
+            AlignmentLink(42, 45, listOf(6)),
+            AlignmentLink(47, 54, listOf(8, 9)),
+            AlignmentLink(55, 63, listOf(7)),
+            AlignmentLink(64, 68, listOf(10)),
+            AlignmentLink(69, 82, listOf(11)),
+        )
+        assertEquals(87, bsb.length)
+        assertEquals(84, web.length)
+
+        fun follow(
+            part: Double,
+            leader: TranslationID,
+            leaderText: String,
+            leaderLinks: List<AlignmentLink>,
+            follower: TranslationID,
+            followerText: String,
+            followerLinks: List<AlignmentLink>,
+        ): Double {
+            val point = ReadingPoint(chapter = 1, verse = 3, part = part)
+            val word = OriginalWords.word(part, leaderText, leaderLinks)
+            return OriginalWords.carried(point, word, "src", leader, follower, "src", followerLinks, followerText).part
+        }
+
+        // A line on "all things" in the Berean Standard is at the head of the
+        // verse in the World English, not 0.15 of the way into "were made".
+        assertEquals(0.0, follow(0.15, TranslationID.bsb, bsb, bsbLinks, TranslationID.web, web, webLinks))
+        // "without Him" and "nothing", each to the same words.
+        assertEquals(34.0 / 84.0, follow(0.45, TranslationID.bsb, bsb, bsbLinks, TranslationID.web, web, webLinks))
+        assertEquals(47.0 / 84.0, follow(0.6, TranslationID.bsb, bsb, bsbLinks, TranslationID.web, web, webLinks))
+        // And back: "All things" at the head of the World English is part-way
+        // into the Berean Standard.
+        assertEquals(12.0 / 87.0, follow(0.0, TranslationID.web, web, webLinks, TranslationID.bsb, bsb, bsbLinks))
+    }
+
     // The bundled corpus
 
     private fun scriptureRoot(): File? {

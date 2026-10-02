@@ -26,6 +26,13 @@ struct HeardReading {
     /// Where each of their phones last said it was, so that one resting
     /// still somewhere else is not taken for news.
     var lastSaid: [String: ReadingPoint]
+    /// The version on their page, and the original word under their line
+    /// counted in `wordsSource` (A60): what lets a page in another version
+    /// go to the same words rather than the same share of the verse. Nil
+    /// from a build that does not say, and from presence.
+    var translation: TranslationID? = nil
+    var word: Int? = nil
+    var wordsSource: String? = nil
 }
 
 @MainActor
@@ -34,6 +41,9 @@ final class AppModel {
     private(set) var state: AppState
     let store: LocalStore
     let scripture = ScriptureStore.shared
+    /// The Hebrew, Aramaic and Greek under the English, and each
+    /// version's links to them (A60).
+    let original = OriginalStore.shared
     let presence: PresenceService
     /// The backend, when configured (SupabaseConfig.remoteEnabled). Nil
     /// means fully local — every remote call below is best-effort and
@@ -160,8 +170,10 @@ final class AppModel {
                     self.thinkingOfYouArrived(fromName)
                 case .roomChanged(let roomID):
                     self.roomChangedRemotely(roomID)
-                case .reading(let personID, let source, let book, let report):
-                    self.heardReading(personID, source: source, book: book, report: report)
+                case .reading(let personID, let source, let book, let report, let translation, let word, let wordsSource):
+                    self.heardReading(
+                        personID, source: source, book: book, report: report,
+                        translation: translation, word: word, wordsSource: wordsSource)
                 }
             }
         }
@@ -180,7 +192,10 @@ final class AppModel {
     /// saying again where it is resting is news only if it is the one
     /// being followed; an iPad left open on chapter 3 does not pull the
     /// page back from chapter 6 every twenty seconds.
-    private func heardReading(_ personID: UUID, source: String, book: String, report: ReadingReport) {
+    private func heardReading(
+        _ personID: UUID, source: String, book: String, report: ReadingReport,
+        translation: TranslationID?, word: Int?, wordsSource: String?
+    ) {
         speaksReading.insert(personID)
         let current = readingHeard[personID]
         var lastSaid = current?.lastSaid ?? [:]
@@ -192,7 +207,8 @@ final class AppModel {
             return
         }
         readingHeard[personID] = HeardReading(
-            book: book, source: source, report: report, fromPresence: false, lastSaid: lastSaid)
+            book: book, source: source, report: report, fromPresence: false, lastSaid: lastSaid,
+            translation: translation, word: word, wordsSource: wordsSource)
     }
 
     /// The roster arrived. Whoever has left takes what was heard about
@@ -539,34 +555,12 @@ final class AppModel {
         Task { [weak self] in await self?.openRoomChannel() }
     }
 
-    /// The room reads one version (ledger A42). Changing it moves the open
-    /// reading with it; a finished one keeps the version it was read in.
-    func setRoomTranslation(_ translation: TranslationID, in room: Room) {
-        guard room.translation != translation,
-              let i = state.rooms.firstIndex(where: { $0.id == room.id })
-        else { return }
-        state.rooms[i].translation = translation
-        for j in state.readings.indices where state.readings[j].roomID == room.id && !state.readings[j].isFinished {
-            state.readings[j].translation = translation
-        }
-        persist()
-        if let remote, remote.isSignedIn {
-            pendingRoomPushes.insert(room.id)
-            pushing { [weak self] in
-                guard let self, let current = self.state.rooms.first(where: { $0.id == room.id }) else { return }
-                if (try? await remote.push(room: current)) != nil {
-                    self.pendingRoomPushes.remove(room.id)
-                }
-            }
-            for reading in state.readings where reading.roomID == room.id && !reading.isFinished {
-                pushReadingRemote(reading)
-            }
-        }
-    }
-
-    /// The words on the page: the reading's version, else the room's.
-    func words(room: Room?, reading: Reading?) -> TranslationID {
-        reading?.translation ?? room?.translation ?? .bsb
+    /// The words on the page: your own version, open book or finished
+    /// (A60, reversing A42). A mark follows its original words into every
+    /// version, so the room no longer has to read one. The room's version
+    /// is only a fallback for a phone that does not know you yet.
+    func words(room: Room?) -> TranslationID {
+        TranslationChoice.page(me: state.me, room: room)
     }
 
     /// Pushes everything the backend needs for an invite link to resolve:
@@ -857,9 +851,11 @@ final class AppModel {
     @discardableResult
     func startReading(bookID: String, in room: Room) -> Reading {
         let scale = Bible.book(id: bookID)?.scale ?? .medium
+        // Seeded with the starter's version for the builds that still set
+        // a reading's page from it (A42); this one reads your own (A60).
         let reading = Reading(
             roomID: room.id, bookID: bookID, startedAt: Date(),
-            handiwork: Handiwork(scale: scale), translation: room.translation)
+            handiwork: Handiwork(scale: scale), translation: state.me?.translation ?? room.translation)
         state.readings.append(reading)
         persist()
         pushReadingRemote(reading)
@@ -1308,13 +1304,14 @@ final class AppModel {
         TranslationRegistry.bundled + TranslationRegistry.licensed.filter(\.isConfigured)
     }
 
-    /// The person's own default, for the next room they start; the room
-    /// on screen changes with it (A42), because the picker is one control.
+    /// Your version, on your page alone (A60). Nobody else's page changes:
+    /// a mark you make lands on the same original words in theirs. The
+    /// room's and the reading's versions are left alone; only older builds
+    /// still read them.
     func setTranslation(_ translation: TranslationID) {
         state.me?.translation = translation
         persist()
         pushProfileRemote()
-        if let room = currentRoom { setRoomTranslation(translation, in: room) }
     }
 
     func updateMe(name: String) {
@@ -1968,7 +1965,9 @@ final class AppModel {
             let translation = row.translation.map(TranslationID.init(rawValue:))
             if let i = state.rooms.firstIndex(where: { $0.id == row.id }) {
                 // Remote wins on the multi-author name and version — except
-                // over a local change that hasn't landed there yet.
+                // over a local change that hasn't landed there yet. The
+                // version is kept for the builds that still read it; it
+                // moves nobody's page here (A60).
                 if !pendingRoomPushes.contains(row.id) {
                     state.rooms[i].name = row.name
                     state.rooms[i].translation = translation ?? state.rooms[i].translation
@@ -2087,8 +2086,8 @@ final class AppModel {
                 }
                 state.readings[i].handiwork = Self.mergedHandiwork(
                     local: state.readings[i].handiwork, remote: fires[row.id], events: events)
-                // An open reading follows its room's version; a finished
-                // one keeps the one it was read in (A42).
+                // Kept as the server has it, for the builds that still set
+                // a page from it (A42). Nobody's page here reads it (A60).
                 if !state.readings[i].isFinished, let translation = row.translation.map(TranslationID.init(rawValue:)) {
                     state.readings[i].translation = translation
                 }
@@ -2186,6 +2185,10 @@ final class AppModel {
         for row in graph.highlights {
             if !state.highlights.contains(where: { $0.id == row.id }) {
                 let markedIn = row.charTranslation.map(TranslationID.init(rawValue:))
+                // Offsets mean nothing without the version they were
+                // measured in, and word positions nothing without the
+                // numbering they count in (A60).
+                let countedIn = row.wordsSource
                 let range = VerseRange(
                     bookID: row.bookId,
                     chapter: row.chapter,
@@ -2193,7 +2196,10 @@ final class AppModel {
                     endVerse: row.endVerse,
                     startChar: markedIn == nil ? nil : row.startChar,
                     endChar: markedIn == nil ? nil : row.endChar,
-                    charTranslation: markedIn
+                    charTranslation: markedIn,
+                    startWords: countedIn == nil ? nil : row.startWords,
+                    endWords: countedIn == nil ? nil : row.endWords,
+                    wordsSource: countedIn
                 )
                 let ink = Ink(rawValue: row.ink) ?? .ochre
                 state.highlights.append(Highlight(

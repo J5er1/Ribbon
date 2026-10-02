@@ -39,8 +39,9 @@ struct NoteCard: View {
                 voiceBody
             }
             // The verse in the author's own version used to be quoted
-            // here; the room reads one version now (A42), so there is
-            // nothing to translate between.
+            // here, and went with A42, when a room read one version and
+            // their words were the words on this page. Everybody reads
+            // their own again (A60), so it could come back; it has not yet.
         }
         .padding(.vertical, 8)
         .contextMenu {

@@ -527,6 +527,85 @@ public enum OriginalWords {
         return slice(text, from: first.start, to: last.end)
     }
 
+    // Following lands on the same words. A follower hears where the person
+    // they follow is reading as a verse and how far down it their reading
+    // line is (A58), and has always set that fraction against their own
+    // page. In one version that is exact; across two it drifts, because the
+    // versions put the words in a different order and take a different
+    // length to say them. "Through Him all things were made" and "All
+    // things were made through him" are the same verse with its first
+    // words at opposite ends. So the person being followed also says which
+    // original word is under their line, and the follower goes to wherever
+    // their own version says that word. It adds onto the guess at where
+    // someone is reading, as the owner put it, and brings everyone to the
+    // same words, not just the same share of the verse.
+
+    /// The original word under a reading line `part` of the way down a
+    /// verse, on the page of the person being followed: the first link that
+    /// ends past that point (the one under it, or the next one when the line
+    /// sits in a gap), else the last, and the first of its words. Nil for a
+    /// verse with no text or no links — the follower then keeps the fraction.
+    public static func word(at part: Double, text: String, links: [AlignmentLink]) -> Int? {
+        let length = text.utf16.count
+        guard length > 0, !links.isEmpty else { return nil }
+        let offset = Int((fraction(part) * Double(length)).rounded(.down))
+        let sorted = links.sorted { $0.start < $1.start }
+        let link = sorted.first { $0.end > offset } ?? sorted[sorted.count - 1]
+        return link.words.min()
+    }
+
+    /// How far down a verse one original word sits on the follower's page:
+    /// where the first link that renders it starts. A word this version
+    /// leaves unsaid is placed at the next word up that it does say, so the
+    /// line lands just after it rather than nowhere. Nil when the version
+    /// says no word from there to the verse's end, or the verse has no text.
+    public static func part(ofWord w: Int, text: String, links: [AlignmentLink]) -> Double? {
+        let length = text.utf16.count
+        guard length > 0 else { return nil }
+        let sorted = links.sorted { $0.start < $1.start }
+        let link = sorted.first { $0.words.contains(w) }
+            ?? sorted
+                .compactMap { link in link.words.min().map { (low: $0, link: link) } }
+                .filter { $0.low >= w }
+                .min { $0.low < $1.low }?.link
+        guard let link else { return nil }
+        return fraction(Double(link.start) / Double(length))
+    }
+
+    /// A heard reading point, set in the follower's version. When the
+    /// person followed reads another version and said which original word
+    /// was under their line — counted in the numbering bundled here — the
+    /// point moves to where that word is on the follower's page. Otherwise
+    /// it comes back as it was heard: on the same version the fraction is
+    /// already exact, and without the word, the links or the text there is
+    /// nothing truer to put in its place.
+    public static func carried(
+        _ point: ReadingPoint,
+        word: Int?,
+        wordsSource: String?,
+        from: TranslationID?,
+        to: TranslationID,
+        source: String?,
+        links: [AlignmentLink]?,
+        text: String?
+    ) -> ReadingPoint {
+        guard let from, from != to,
+              let word,
+              let source, wordsSource == source,
+              let links, let text,
+              let part = part(ofWord: word, text: text, links: links)
+        else { return point }
+        var moved = point
+        moved.part = part
+        return moved
+    }
+
+    /// `part` held to 0...1. A fraction that is not a number reads as the
+    /// top of the verse rather than reaching the arithmetic.
+    static func fraction(_ part: Double) -> Double {
+        part.isNaN ? 0 : min(max(part, 0), 1)
+    }
+
     /// `text[from..<to]` in UTF-16 units, clamped to the text.
     static func slice(_ text: String, from: Int, to: Int) -> String {
         let units = Array(text.utf16)

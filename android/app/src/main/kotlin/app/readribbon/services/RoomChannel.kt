@@ -115,6 +115,7 @@ class RoomChannel(
         val at: ReadingPoint,
         val end: ReadingPoint?,
         val carried: Boolean,
+        val words: LineWords?,
     )
 
     private var webSocket: WebSocket? = null
@@ -298,9 +299,10 @@ class RoomChannel(
         end: ReadingPoint?,
         settled: Boolean,
         carried: Boolean,
+        words: LineWords?,
     ) {
         mutex.withLock {
-            lastReading = LastReading(book, at, end, carried)
+            lastReading = LastReading(book, at, end, carried, words)
             sendReadingLocked(settled)
         }
     }
@@ -590,6 +592,9 @@ class RoomChannel(
                 end = line.end,
                 settled = settled,
                 carried = line.carried,
+                translation = line.words?.translation,
+                word = line.words?.word,
+                wordsSource = line.words?.wordsSource,
                 ref = nextRefLocked(),
             ),
         )
@@ -736,6 +741,11 @@ class RoomChannel(
                             carried = heard.carried,
                             received = Clock.System.now(),
                         ),
+                        words = LineWords(
+                            translation = heard.translation,
+                            word = heard.word,
+                            wordsSource = heard.wordsSource,
+                        ).orNull(),
                     ),
                 )
             }

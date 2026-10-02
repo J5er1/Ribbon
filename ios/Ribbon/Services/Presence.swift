@@ -39,8 +39,12 @@ enum PresenceEvent: Sendable {
     /// Where someone's reading line is, finer than their presence says it
     /// — sent only while somebody follows them (§4.2), stamped with when it
     /// arrived here. `source` is which of their phones said it: one person
-    /// can have the book open on two.
-    case reading(personID: UUID, source: String, book: String, report: ReadingReport)
+    /// can have the book open on two. `translation` is the version on their
+    /// page and `word` the original word under their line, counted in
+    /// `wordsSource` (A60) — each nil when their build does not say.
+    case reading(
+        personID: UUID, source: String, book: String, report: ReadingReport,
+        translation: TranslationID?, word: Int?, wordsSource: String?)
 }
 
 @MainActor
@@ -75,9 +79,13 @@ protocol PresenceService: AnyObject {
     /// screen, for whoever is following you. Kept every time; sent only
     /// while somebody present is following you (§4.2), never while reading
     /// quietly. `carried` is a page moved by a follow of your own.
+    /// `translation` is the version on your page, and `word` the original
+    /// word under your line, counted in `wordsSource` (A60), so a follower
+    /// in another version can go to the same words.
     func sendReading(
         book: String, at point: ReadingPoint, end: ReadingPoint?,
-        settled: Bool, carried: Bool) async
+        settled: Bool, carried: Bool,
+        translation: TranslationID?, word: Int?, wordsSource: String?) async
 
     /// The contentless signal (§4.3). Repeats inside a few minutes collapse
     /// into one delivery.
@@ -123,7 +131,8 @@ final class LocalPresenceService: PresenceService {
     func withdraw() async {}
     func sendReading(
         book: String, at point: ReadingPoint, end: ReadingPoint?,
-        settled: Bool, carried: Bool) async {}
+        settled: Bool, carried: Bool,
+        translation: TranslationID?, word: Int?, wordsSource: String?) async {}
     func sendThinkingOfYou(to personID: UUID) async {}
     func announceChange() async {}
 }

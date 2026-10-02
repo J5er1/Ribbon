@@ -14,6 +14,7 @@
 
 package app.readribbon.core
 
+import kotlin.math.floor
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -444,6 +445,87 @@ object OriginalWords {
         val last = ranges.last()
         return slice(text, first.start, last.end)
     }
+
+    // Following lands on the same words. A follower hears where the person
+    // they follow is reading as a verse and how far down it their reading
+    // line is (A58), and has always set that fraction against their own
+    // page. In one version that is exact; across two it drifts, because the
+    // versions put the words in a different order and take a different
+    // length to say them. "Through Him all things were made" and "All
+    // things were made through him" are the same verse with its first words
+    // at opposite ends. So the person being followed also says which
+    // original word is under their line, and the follower goes to wherever
+    // their own version says that word. It adds onto the guess at where
+    // someone is reading, as the owner put it, and brings everyone to the
+    // same words, not just the same share of the verse.
+
+    /**
+     * The original word under a reading line [part] of the way down a verse,
+     * on the page of the person being followed: the first link that ends past
+     * that point (the one under it, or the next one when the line sits in a
+     * gap), else the last, and the first of its words. Null for a verse with
+     * no text or no links — the follower then keeps the fraction.
+     */
+    fun word(part: Double, text: String, links: List<AlignmentLink>): Int? {
+        val length = text.length
+        if (length == 0 || links.isEmpty()) return null
+        val offset = floor(fraction(part) * length.toDouble()).toInt()
+        val sorted = links.sortedBy { it.start }
+        val link = sorted.firstOrNull { it.end > offset } ?: sorted.last()
+        return link.words.minOrNull()
+    }
+
+    /**
+     * How far down a verse one original word sits on the follower's page:
+     * where the first link that renders it starts. A word this version leaves
+     * unsaid is placed at the next word up that it does say, so the line
+     * lands just after it rather than nowhere. Null when the version says no
+     * word from there to the verse's end, or the verse has no text.
+     */
+    fun part(word: Int, text: String, links: List<AlignmentLink>): Double? {
+        val length = text.length
+        if (length == 0) return null
+        val sorted = links.sortedBy { it.start }
+        val link = sorted.firstOrNull { word in it.words }
+            ?: sorted
+                .mapNotNull { link -> link.words.minOrNull()?.let { it to link } }
+                .filter { it.first >= word }
+                .minByOrNull { it.first }?.second
+            ?: return null
+        return fraction(link.start.toDouble() / length.toDouble())
+    }
+
+    /**
+     * A heard reading point, set in the follower's version. When the person
+     * followed reads another version and said which original word was under
+     * their line — counted in the numbering bundled here — the point moves to
+     * where that word is on the follower's page. Otherwise it comes back as
+     * it was heard: on the same version the fraction is already exact, and
+     * without the word, the links or the text there is nothing truer to put
+     * in its place.
+     */
+    fun carried(
+        point: ReadingPoint,
+        word: Int?,
+        wordsSource: String?,
+        from: TranslationID?,
+        to: TranslationID,
+        source: String?,
+        links: List<AlignmentLink>?,
+        text: String?,
+    ): ReadingPoint {
+        if (from == null || from == to) return point
+        if (word == null || source == null || wordsSource != source) return point
+        if (links == null || text == null) return point
+        val part = part(word, text, links) ?: return point
+        return point.copy(part = part)
+    }
+
+    /**
+     * [part] held to 0..1. A fraction that is not a number reads as the top
+     * of the verse rather than reaching the arithmetic.
+     */
+    internal fun fraction(part: Double): Double = if (part.isNaN()) 0.0 else part.coerceIn(0.0, 1.0)
 
     /** `text[from, to)` in UTF-16 units, clamped to the text. */
     internal fun slice(text: String, from: Int, to: Int): String {

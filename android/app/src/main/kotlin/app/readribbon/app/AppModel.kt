@@ -45,6 +45,7 @@ import app.readribbon.core.RibbonClock
 import app.readribbon.core.Room
 import app.readribbon.core.TranscriptState
 import app.readribbon.core.Translation
+import app.readribbon.core.TranslationChoice
 import app.readribbon.core.TranslationID
 import app.readribbon.core.TranslationRegistry
 import app.readribbon.core.VerseAddress
@@ -53,6 +54,7 @@ import app.readribbon.core.bankedIntervals
 import app.readribbon.data.AppSettings
 import app.readribbon.data.AppState
 import app.readribbon.data.LocalStore
+import app.readribbon.data.OriginalStore
 import app.readribbon.data.RoomNotificationPrefs
 import app.readribbon.data.ScriptureStore
 import app.readribbon.design.Haptics
@@ -138,6 +140,12 @@ class AppModel(
      * `Context`, so the model holds one instead of a process singleton.
      */
     val scripture: ScriptureStore = ScriptureStore(context),
+    /**
+     * The Hebrew, Aramaic and Greek under the text, and each version's links
+     * to them (A60) — what lets a mark land on the same words in everybody's
+     * version, and a follow land on the same words in theirs.
+     */
+    val original: OriginalStore = OriginalStore(context, scripture),
 ) : ViewModel() {
 
     /**
@@ -345,6 +353,7 @@ class AppModel(
             book = event.book,
             report = report,
             source = event.source,
+            words = event.words,
         )
     }
 
@@ -846,7 +855,9 @@ class AppModel(
         // Seeded from whatever you picked before there was a room to pick
         // for — onboarding's Text screen, most likely. Without this, choosing
         // a version and *then* starting a room would quietly drop the choice
-        // and open the first book in the launch translation.
+        // and open the first book in the launch translation. Nothing on this
+        // build sets a page from the room's version any more (A60); it is
+        // written for the builds that still do.
         val room = Room(
             name = name,
             createdAt = Clock.System.now(),
@@ -861,59 +872,17 @@ class AppModel(
     }
 
     /**
-     * The room picks its words, and everybody in it reads them (A42).
+     * The words to set a page in: yours (A60, reversing A42).
      *
-     * Any member may do this — a room is not owned (§6.7) — and it takes
-     * effect at once, including in a book that is already open, because a
-     * setting that appears to do nothing until some future book is a setting
-     * people press twice.
-     *
-     * A *finished* book keeps the words it was read in. S11 calls an ember
-     * immutable and the source of the printed keepsake, and re-wording a book
-     * somebody has already read, under notes left about those exact words,
-     * would be the opposite of that.
-     *
-     * A mark on a phrase (A41g) carries the translation it was made in, so
-     * one made in the old words widens to its whole verse rather than
-     * pointing at the wrong ones. With a room on one version that should now
-     * be a rare thing rather than the everyday case it was built for.
+     * Everybody in a room reads their own version again, open book or
+     * finished, because a mark now follows its original words into every
+     * version rather than being an offset into one. The room's version is
+     * only the answer for a phone that does not know you yet. The room and
+     * the book still carry a version on the server — shipped builds read and
+     * write it — but nothing on this one sets a page from it.
      */
-    fun setRoomTranslation(room: Room, translation: TranslationID) {
-        if (room.translation == translation) return
-        val rooms = state.rooms.map {
-            if (it.id == room.id) it.copy(translation = translation) else it
-        }
-        val readings = state.readings.map {
-            if (it.roomID == room.id && !it.isFinished) {
-                it.copy(translation = translation)
-            } else {
-                it
-            }
-        }
-        state = state.copy(rooms = rooms, readings = readings)
-        persist()
-
-        val remote = this.remote
-        if (remote != null && remote.isSignedIn) {
-            // Marked before the push, so a pull that arrives in between does
-            // not hand the old version back. Read fresh at push time rather
-            // than captured here: a rename in the same breath travels in this
-            // same row, and a captured copy would push the name as it was.
-            pendingRoomPushes.add(room.id)
-            pushing {
-                val current = state.rooms.firstOrNull { it.id == room.id }
-                if (current != null && runCatching { remote.push(room = current) }.isSuccess) {
-                    pendingRoomPushes.remove(room.id)
-                }
-            }
-        }
-        readings.filter { it.roomID == room.id && !it.isFinished }
-            .forEach { pushReadingRemote(it) }
-    }
-
-    /** The words to set a page in: the book's own, or the room's. */
-    fun words(room: Room?, reading: Reading?): TranslationID =
-        reading?.translation ?: room?.translation ?: TranslationID.bsb
+    fun words(room: Room?): TranslationID =
+        TranslationChoice.page(me = state.me, room = room)
 
     fun switchRoom(roomID: Uuid) {
         state = state.copy(currentRoomID = roomID)
@@ -1080,10 +1049,10 @@ class AppModel(
      *
      * It was `pendingRoomPushes` and guarded the name alone, because the
      * name was the only thing about a room a person could change. A42 added
-     * the version the room reads, which travels in the same row and wants the
-     * same protection — and the drain already pushes the *current* room
-     * rather than a captured copy, so one marker covers both and neither can
-     * push a stale copy of the other.
+     * the version the room reads, which travelled in the same row; A60 gave
+     * the version back to each person, and the room's is only seeded now, so
+     * the name is again the one edit this guards. The drain still pushes the
+     * *current* room rather than a captured copy.
      */
     private val pendingRoomPushes: MutableSet<Uuid> = mutableSetOf()
 
@@ -1343,8 +1312,10 @@ class AppModel(
         val reading = Reading(
             roomID = room.id, bookID = bookID, startedAt = Clock.System.now(),
             handiwork = Handiwork(scale = scale),
-            // Pinned from the room, and tracked while the book is open.
-            translation = room.translation)
+            // Seeded from the person starting it, for shipped builds that
+            // still set a page from the book's version. This one reads
+            // everybody's own (A60).
+            translation = words(room))
         state = state.copy(readings = state.readings + reading)
         persist()
         pushReadingRemote(reading)
@@ -2003,19 +1974,13 @@ class AppModel(
         get() = TranslationRegistry.bundled + TranslationRegistry.licensed.filter { it.isConfigured }
 
     /**
-     * Pick the words. The room's, now, not yours (A42).
-     *
-     * `Person.translation` is still written, and deliberately: iOS reads it
-     * and §2.6 is still true over there until somebody takes that pass. It is
-     * no longer what Android *sets a page from* — [words] answers that — so
-     * the two can disagree on one account without either being wrong about
-     * its own platform.
+     * Pick your words. Yours alone (A60, reversing A42): nobody else's page
+     * changes, and a mark lands on the same words in theirs.
      */
     fun setTranslation(translation: TranslationID) {
         state = state.copy(me = state.me?.copy(translation = translation))
         persist()
         pushProfileRemote()
-        currentRoom?.let { setRoomTranslation(it, translation) }
     }
 
     fun updateMe(name: String) {
@@ -2947,12 +2912,11 @@ class AppModel(
             val i = rooms.indexOfFirst { it.id == row.id }
             if (i >= 0) {
                 // Remote wins on the multi-author name — except over a
-                // local rename that hasn't landed there yet.
-                // Remote wins on the two things any member can change —
-                // the name and, since A42, the version the room reads —
-                // except over a local edit that has not landed there yet.
-                // A row from a client that predates the column, or from iOS,
-                // says nothing about version and changes nothing.
+                // local rename that hasn't landed there yet. The room's
+                // version is kept as the server has it, for the builds that
+                // still read it; it moves nobody's page here (A60). A row
+                // from a client that predates the column says nothing about
+                // version and changes nothing.
                 var room = rooms[i]
                 if (!pendingRoomPushes.contains(row.id)) {
                     room = room.copy(
@@ -3099,8 +3063,10 @@ class AppModel(
                 readings[i] = reading.copy(
                     handiwork = mergedHandiwork(
                         local = reading.handiwork, remote = fires[row.id], events = events),
-                    // An open book follows the room; a finished one keeps the
-                    // words it was read in, whatever the room reads now (S11).
+                    // Kept as the server has it for the builds that still set a
+                    // page from it — an open book following the row, a
+                    // finished one keeping its own (S11). Nobody's page here
+                    // is set from it any more (A60).
                     translation = if (reading.isFinished) {
                         reading.translation
                     } else {
@@ -3250,23 +3216,10 @@ class AppModel(
         val highlights = next.highlights.toMutableList()
         for (row in graph.highlights) {
             if (highlights.none { it.id == row.id }) {
-                // The offsets come back only when the row carries the
-                // translation they were taken in; without it they are
-                // numbers into words nobody can name, so the mark is a mark
-                // on whole verses and says so (A41g).
-                // The registry stores a raw key and never enumerates, so a
-                // translation this build has never heard of still round-trips
-                // and still matches the reader who made the mark.
-                val markedIn = row.charTranslation?.let { TranslationID(rawValue = it) }
-                val range = VerseRange(
-                    bookID = row.bookId,
-                    chapter = row.chapter,
-                    startVerse = row.startVerse,
-                    endVerse = row.endVerse,
-                    startChar = row.startChar.takeIf { markedIn != null },
-                    endChar = row.endChar.takeIf { markedIn != null },
-                    charTranslation = markedIn,
-                )
+                // Offsets only with the translation they were taken in, and
+                // original words only with the source they count in (A41g,
+                // A60) — `HighlightRow.range` says why.
+                val range = row.range()
                 val ink = Ink.entries.firstOrNull { it.name == row.ink } ?: Ink.ochre
                 highlights.add(
                     Highlight(

@@ -523,7 +523,10 @@ final class RemoteSync {
                     createdAt: highlight.createdAt,
                     startChar: highlight.range.startChar,
                     endChar: highlight.range.endChar,
-                    charTranslation: highlight.range.charTranslation?.rawValue
+                    charTranslation: highlight.range.charTranslation?.rawValue,
+                    startWords: highlight.range.startWords,
+                    endWords: highlight.range.endWords,
+                    wordsSource: highlight.range.wordsSource
                 )],
                 onConflict: "id")
         }
@@ -904,6 +907,13 @@ final class RemoteSync {
         var startChar: Int?
         var endChar: Int?
         var charTranslation: String?
+        /// The original words the mark covers at each partial end, and the
+        /// numbering they count in (A60). Like the offsets, left out of the
+        /// row when nil and nil when the server has none — a row from a
+        /// build that never wrote them, or a project without the columns.
+        var startWords: [Int]?
+        var endWords: [Int]?
+        var wordsSource: String?
     }
 
     struct RibbonRow: Codable {

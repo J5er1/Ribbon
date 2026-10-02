@@ -409,6 +409,13 @@ private struct YouScreen: View {
                         }
                     }
                     SmallCaps(appVersion, size: 11, color: Palette.muted.opacity(0.7))
+                    // Where the original words come from (A60): a credit
+                    // owed, said as quietly as the version above it. A
+                    // sentence, so set as one rather than in small caps.
+                    Text(Copy.originalCredit)
+                        .font(RibbonType.ui(12))
+                        .foregroundStyle(Palette.muted.opacity(0.7))
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(.horizontal, RibbonShape.textInset)
                 .padding(.top, 8)

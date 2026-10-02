@@ -37,6 +37,10 @@ struct ReadingScreen: View {
     // Composition state
     @State private var lifted: VerseRange?
     @State private var liftedChapter: Int?
+    /// Where in the lifted verse's own text the finger came down, while the
+    /// lift is still the one the hold made: the word the original line
+    /// says (A60, §7.5). Gone as soon as a handle moves.
+    @State private var heldOffset: Int?
     @State private var composer: ComposerState?
     @State private var recorder = VoiceRecorder()
     @State private var editingNote: Note?
@@ -127,6 +131,18 @@ struct ReadingScreen: View {
         case toolbar
         case write(VerseAddress)
         case speak(VerseAddress)
+        /// The original words of the lifted selection (A60, §7): opened on
+        /// a word when it came from the held word's line.
+        case original(OriginalSelection.WordID?)
+
+        /// The lift keeps its handles: under the toolbar, and under the
+        /// original, which follows them.
+        var keepsHandles: Bool {
+            switch self {
+            case .toolbar, .original: return true
+            case .write, .speak: return false
+            }
+        }
     }
 
     /// A verse the page has been sent to: its own place when the book
@@ -223,16 +239,49 @@ struct ReadingScreen: View {
     private static let pageTop: CGFloat = 26
 
     private var book: BibleBook? { Bible.book(id: reading.bookID) }
-    /// The room reads one version (A42).
-    private var translation: TranslationID { model.words(room: room, reading: reading) }
+    /// Your own version, open book or finished (A60, reversing A42): a
+    /// mark follows its original words into whatever each of you reads.
+    private var translation: TranslationID { model.words(room: room) }
     private var bookText: ScriptureBookText? {
         model.scripture.book(reading.bookID, translation: translation)
     }
-    /// Chapters of a licensed translation, as they stream in (§16.8).
-    @State private var remoteChapters: [Int: ScriptureChapter] = [:]
+    /// Chapters of a licensed translation, as they stream in (§16.8) —
+    /// kept by version as well as chapter, so changing version while the
+    /// book is open never leaves the last one's words on the page.
+    @State private var remoteChapters: [RemoteChapter: ScriptureChapter] = [:]
+
+    private struct RemoteChapter: Hashable {
+        var translation: TranslationID
+        var chapter: Int
+    }
 
     private func chapterContent(_ n: Int) -> ScriptureChapter? {
-        bookText?.chapter(n) ?? remoteChapters[n]
+        bookText?.chapter(n) ?? remoteChapters[RemoteChapter(translation: translation, chapter: n)]
+    }
+
+    /// The links from this page's own text to the original words under it,
+    /// verse by verse, for chapter `n` (A60): the bundled ones for a bundled
+    /// version, or worked out on the phone from the chapter as it is held
+    /// here. Nil where there are none to be had — a licensed chapter still
+    /// coming — which everything that asks takes as "the whole verse".
+    private func wordLinks(chapter n: Int) -> [Int: [AlignmentLink]]? {
+        model.original.links(
+            translation, bookID: reading.bookID, chapter: n, readerChapter: chapterContent(n))
+    }
+
+    /// What chapter `n` knows about its original words, for the line over
+    /// the toolbar and the panel (A60, §7): the words, this page's links and
+    /// text, and the Berean Standard's for a word this version folds into
+    /// another.
+    private func originalContext(chapter n: Int) -> OriginalContext {
+        let pivot = translation == .bsb ? nil : model.scripture.book(reading.bookID, translation: .bsb)?.chapter(n)
+        return OriginalContext(
+            bookID: reading.bookID, chapter: n,
+            original: model.original.original(reading.bookID)?.chapter(n),
+            readerLinks: wordLinks(chapter: n),
+            readerTexts: chapterContent(n)?.ownTexts() ?? [:],
+            pivotLinks: pivot == nil ? nil : model.original.links(.bsb, bookID: reading.bookID, chapter: n),
+            pivotTexts: pivot?.ownTexts() ?? [:])
     }
 
     var body: some View {
@@ -439,6 +488,36 @@ struct ReadingScreen: View {
             .task(id: followKey) {
                 await carryThePage(followKey)
             }
+            .task(id: "\(reading.bookID)/\(translation.rawValue)") {
+                // The book's original words, the Berean Standard's text and
+                // links a word may be rendered from, and those of every
+                // bundled version read here, which the panel sets beside
+                // yours — read off the main thread before anything is held.
+                // A book of Hebrew is a megabyte, and decoding it under the
+                // finger would stall the lift it is meant to sit under (A60).
+                let original = model.original
+                let scripture = model.scripture
+                let bookID = reading.bookID
+                let page = translation
+                var versions: Set<TranslationID> = [.bsb]
+                for member in model.members(of: room) {
+                    if let person = model.person(member.personID) { versions.insert(person.translation) }
+                }
+                versions.remove(translation)
+                let bundled = versions.filter { TranslationRegistry.isBundled($0) }
+                await Task.detached(priority: .utility) {
+                    _ = original.original(bookID)
+                    // This page's own links too: the reading line asks for
+                    // them on every report it sends, and the grammar's long
+                    // forms, which every word in the panel is read out with.
+                    _ = original.alignment(bookID, translation: page)
+                    _ = original.parsings
+                    for version in bundled {
+                        _ = scripture.book(bookID, translation: version)
+                        _ = original.alignment(bookID, translation: version)
+                    }
+                }.value
+            }
         }
         .overlay(alignment: .trailing) {
             if !room.isPaused {
@@ -534,6 +613,7 @@ struct ReadingScreen: View {
             ZStack(alignment: .topLeading) {
                 ChapterTextView(
                     chapter: chapter,
+                    translation: translation,
                     runningHead: book?.chapterHeading(n) ?? "\(reading.bookID) \(n)",
                     theme: ReadingTheme(
                         fontSize: model.settings.scriptureSize,
@@ -552,16 +632,17 @@ struct ReadingScreen: View {
                         continueLanding(in: n)
                         settleSoon()
                     },
-                    onLongPressVerse: { verse in beginLift(chapter: n, verse: verse) },
+                    onLongPressVerse: { verse, offset in beginLift(chapter: n, verse: verse, at: offset) },
                     onDragToVerse: { verse in extendLift(chapter: n, verse: verse) },
                     onDragEnded: {},
                     onTapVerse: { verse in tapVerse(chapter: n, verse: verse) },
+                    onOriginalWords: { verse in openOriginal(chapter: n, verse: verse) },
                     onMarkDrawn: { justMarked = nil },
                     onNoteSlot: { y in noteSlotY[n] = y })
 
                 gutterMarks(chapter: n)
                 openNoteCard(chapter: n)
-                if liftedChapter == n, lifted != nil, composer == .toolbar {
+                if liftedChapter == n, lifted != nil, composer?.keepsHandles == true {
                     liftHandles(chapter: n)
                 }
                 if let mark = landingMark, mark.chapter == n {
@@ -624,11 +705,11 @@ struct ReadingScreen: View {
             }
             .padding(.leading, 36)
             .padding(.trailing, 26)
-            .task(id: chapterAttempts[n, default: 0]) {
+            .task(id: "\(licensed.id.rawValue)/\(chapterAttempts[n, default: 0])") {
                 let address = VerseAddress(bookID: reading.bookID, chapter: n, verse: 1)
                 if let chapter = await model.scripture.ensureRemoteChapter(address, translation: licensed) {
                     withAnimation(RibbonMotion.arrive) {
-                        remoteChapters[n] = chapter
+                        remoteChapters[RemoteChapter(translation: licensed.id, chapter: n)] = chapter
                         chapterFailed.remove(n)
                     }
                 } else if !Task.isCancelled {
@@ -653,23 +734,66 @@ struct ReadingScreen: View {
         return handle
     }
 
-    /// Every mark on a chapter, verse by verse. A phrase's offsets are
-    /// honoured only when they were measured in the version on this page
-    /// (A41g); otherwise the whole verse, which is what the address alone
-    /// promises.
+    /// Every mark on a chapter, piece by piece. A phrase lands where its
+    /// author put it for a reader on the author's version (A41g), and on
+    /// the same original words in any other (A60) — which may be two or
+    /// three stretches of a verse, where a version puts the words in a
+    /// different order, each drawn in the mark's ink. Where the words cannot
+    /// be matched, the whole verse, which is what the address alone
+    /// promises. One mark's pieces never overlap, so they never deepen
+    /// each other's wash.
     private func marks(chapter: Int) -> [VerseMark] {
+        let highlights = model.highlights(in: reading, chapter: chapter)
+        guard !highlights.isEmpty else { return [] }
+        // Only a phrase made in another version needs the words worked out;
+        // the common case — whole verses, or your own version — never
+        // reads a link.
+        let needsWords = highlights.contains {
+            !$0.range.isWholeVerses && $0.range.charTranslation != translation
+        }
+        let readerLinks = needsWords ? wordLinks(chapter: chapter) : nil
+        let readerTexts = needsWords ? (chapterContent(chapter)?.ownTexts() ?? [:]) : [:]
+        let source = needsWords ? model.original.source : nil
+        // Asked once per version a mark was made in, not once per mark: a
+        // licensed one not yet on this phone is a look at the disk each time.
+        var linksByAuthor: [TranslationID: [Int: [AlignmentLink]]?] = [:]
         var result: [VerseMark] = []
-        for highlight in model.highlights(in: reading, chapter: chapter) {
-            let chars = highlight.range.chars(in: translation)
-            for verse in highlight.range.verses {
+        for highlight in highlights {
+            let range = highlight.range
+            // The author's links let a mark made before marks carried words
+            // follow them all the same — needed only where the mark carries
+            // none counted in this numbering. A licensed version's are to be
+            // had only if its chapter is on this phone.
+            let carriesWords = source != nil && range.wordsSource == source
+            let authorLinks = range.charTranslation.flatMap { (authored: TranslationID) -> [Int: [AlignmentLink]]? in
+                guard needsWords, !carriesWords, authored != translation else { return nil }
+                if let known = linksByAuthor[authored] { return known }
+                let found = model.original.links(
+                    authored, bookID: reading.bookID, chapter: chapter,
+                    readerChapter: authoredChapter(authored, chapter: chapter))
+                linksByAuthor[authored] = .some(found)
+                return found
+            }
+            let spans = OriginalWords.resolve(
+                range, reader: translation, readerLinks: readerLinks, readerTexts: readerTexts,
+                source: source, authorLinks: authorLinks)
+            for span in spans {
                 result.append(VerseMark(
-                    id: highlight.id, verse: verse,
-                    from: verse == highlight.range.startVerse ? chars.start : nil,
-                    to: verse == highlight.range.endVerse ? chars.end : nil,
+                    id: highlight.id, verse: span.verse, from: span.from, to: span.to,
                     ink: highlight.ink, mine: highlight.authorID == model.me?.id))
             }
         }
         return result
+    }
+
+    /// A chapter as another version has it, if this phone holds it: a
+    /// bundled version always, a licensed one only if it has streamed here.
+    private func authoredChapter(_ version: TranslationID, chapter: Int) -> ScriptureChapter? {
+        guard let licensed = TranslationRegistry.translation(for: version), !licensed.isBundled else {
+            return model.scripture.book(reading.bookID, translation: version)?.chapter(chapter)
+        }
+        return model.scripture.cachedRemoteChapter(
+            VerseAddress(bookID: reading.bookID, chapter: chapter, verse: 1), translation: licensed)
     }
 
     // MARK: The handles (A41g)
@@ -742,7 +866,12 @@ struct ReadingScreen: View {
             startVerse: startVerse, endVerse: endVerse,
             startChar: startChar, endChar: endChar,
             charTranslation: (startChar == nil && endChar == nil) ? nil : translation)
-        if next != current { lifted = next }
+        if next != current {
+            lifted = next
+            // The selection is the handles' now: the line says what they
+            // hold, not the word first held.
+            heldOffset = nil
+        }
     }
 
     private func openNote(in chapter: Int) -> (verse: Int, height: CGFloat)? {
@@ -853,12 +982,21 @@ struct ReadingScreen: View {
         switch composer {
         case .toolbar:
             if let lifted, let chapter = liftedChapter {
+                let context = originalContext(chapter: chapter)
+                let selection = context.selection(lifted)
+                let line = context.line(lifted, held: heldOffset)
                 LeaveToolbar(
                     room: room,
                     range: lifted,
                     roomPaused: room.isPaused,
                     onHighlight: { ink in
-                        let made = model.addHighlight(lifted, ink: ink, in: reading)
+                        // The original words under the phrase go with it,
+                        // worked out now from this page's links (A60): a
+                        // mark is never changed once made, so this is the
+                        // only moment they can be.
+                        let anchored = OriginalWords.anchored(
+                            lifted, links: wordLinks(chapter: chapter), source: model.original.source)
+                        let made = model.addHighlight(anchored, ink: ink, in: reading)
                         justMarked = made?.id
                         clearLift()
                     },
@@ -873,8 +1011,34 @@ struct ReadingScreen: View {
                         withAnimation(RibbonMotion.arrive) {
                             composer = .speak(VerseAddress(bookID: reading.bookID, chapter: chapter, verse: lifted.startVerse))
                         }
+                    },
+                    // The verb and the line open the same panel, on the
+                    // held word when there is one (§7.3, §7.5).
+                    originalVerb: selection.map { Copy.originalVerb($0.language) },
+                    originalLine: line,
+                    onOriginal: {
+                        withAnimation(RibbonMotion.arrive) {
+                            composer = .original(line?.opens)
+                        }
                     })
                 .padding(.bottom, 14)
+            }
+        case .original(let opening):
+            // The panel says whatever the lift holds now — the handles stay
+            // live above it — and a tap in the text leaves it, lift and all,
+            // as it leaves a composer.
+            if let lifted, let chapter = liftedChapter,
+               let selection = originalContext(chapter: chapter).selection(lifted) {
+                OriginalPanel(
+                    selection: selection,
+                    room: room,
+                    translation: translation,
+                    pageTexts: chapterContent(chapter)?.ownTexts() ?? [:],
+                    maxHeight: viewportHeight * 0.55,
+                    opening: opening,
+                    onClose: clearLift)
+                .padding(.bottom, 10)
+                .transition(.opacity)
             }
         case .write(let address):
             WriteComposer(
@@ -1068,11 +1232,29 @@ struct ReadingScreen: View {
 
     // MARK: Intents
 
-    private func beginLift(chapter: Int, verse: Int) {
+    private func beginLift(chapter: Int, verse: Int, at offset: Int?) {
         withAnimation(RibbonMotion.arrive) {
             liftedChapter = chapter
             lifted = VerseRange(bookID: reading.bookID, chapter: chapter, startVerse: verse, endVerse: verse)
+            heldOffset = offset
             composer = .toolbar
+        }
+    }
+
+    /// VoiceOver's way to the original words (A60, §7.3): the verse lifted
+    /// and the panel open, in one action. A verse with no original words —
+    /// one the earliest manuscripts lack — is lifted as the hold lifts it.
+    private func openOriginal(chapter: Int, verse: Int) {
+        let range = VerseRange(bookID: reading.bookID, chapter: chapter, startVerse: verse, endVerse: verse)
+        guard originalContext(chapter: chapter).selection(range) != nil else {
+            beginLift(chapter: chapter, verse: verse, at: nil)
+            return
+        }
+        withAnimation(RibbonMotion.arrive) {
+            liftedChapter = chapter
+            lifted = range
+            heldOffset = nil
+            composer = .original(nil)
         }
     }
 
@@ -1084,6 +1266,7 @@ struct ReadingScreen: View {
             endVerse: max(current.endVerse, verse))
         if extended != current {
             lifted = extended
+            heldOffset = nil
         }
     }
 
@@ -1091,6 +1274,7 @@ struct ReadingScreen: View {
         withAnimation(RibbonMotion.arrive) {
             lifted = nil
             liftedChapter = nil
+            heldOffset = nil
             composer = nil
         }
     }
@@ -1251,7 +1435,7 @@ struct ReadingScreen: View {
         if let heard = model.heard(from: run.person), run.takes(heard) {
             run.fed = heard.report.received
             if heard.book == reading.bookID {
-                feed(heard.report, fromPresence: heard.fromPresence, to: run, chapterCount: chapterCount)
+                feed(onThisPage(heard), fromPresence: heard.fromPresence, to: run, chapterCount: chapterCount)
             }
         } else if run.fed == nil, now.timeIntervalSince(run.startedAt) >= FollowRun.waitForTheirLine,
                   let there = them.position, there.bookID == reading.bookID {
@@ -1357,6 +1541,26 @@ struct ReadingScreen: View {
         }
     }
 
+    /// What their phone said, set in this page's version (A60). When they
+    /// read another version and said which original word was under their
+    /// line, the line goes to where this version says that word; otherwise
+    /// — the same version, an older build, a verse with no links here — it
+    /// is the share of the verse they said, as it always was. Nothing else
+    /// in the guess changes: their pace is still learned in these words.
+    private func onThisPage(_ heard: HeardReading) -> ReadingReport {
+        // The common case, one version or a build that says nothing finer,
+        // asks for no links at all.
+        guard heard.word != nil, let from = heard.translation, from != translation else { return heard.report }
+        var report = heard.report
+        let at = report.at
+        report.at = OriginalWords.carried(
+            at, word: heard.word, wordsSource: heard.wordsSource,
+            from: from, to: translation, source: model.original.source,
+            links: wordLinks(chapter: at.chapter)?[at.verse],
+            text: chapterContent(at.chapter)?.ownText(verse: at.verse))
+        return report
+    }
+
     /// A word from their phone, given to the guess. Their own line, after
     /// only their presence, starts the guess afresh: a verse's first line,
     /// always a scroll behind, is no rest to learn a pace or a scroll from.
@@ -1396,9 +1600,10 @@ struct ReadingScreen: View {
     /// Everything that keeps the page still for now, whatever the guess
     /// says: a finger on it, a scroll or a move of ours under way, the
     /// rubber band, and anything the reader is doing on the page — a verse
-    /// lifted, the toolbar or a composer up, a note open or unfurling, the
-    /// chapter list, the presence panel, a highlight's label, the book
-    /// closing. The page never moves out from under what you are doing.
+    /// lifted, the toolbar, a composer or the original words up, a note
+    /// open or unfurling, the chapter list, the presence panel, a
+    /// highlight's label, the book closing. The page never moves out from
+    /// under what you are doing.
     private func pageIsBusy(_ run: FollowRun, now: Date) -> Bool {
         let state = followState
         if let landing, !landing.arrived {
@@ -1656,9 +1861,26 @@ struct ReadingScreen: View {
         let end = seen
         let book = reading.bookID
         let carried = model.followingPersonID != nil
+        // The original word under the line, so a follower reading another
+        // version goes to the same words rather than the same share of the
+        // verse (A60). The part is a share of the verse's height, taken as
+        // the same share of its text: near enough to find the word.
+        let version = translation
+        let source = model.original.source
+        var under: Int?
+        if source != nil,
+           let text = chapterContent(at.chapter)?.ownText(verse: at.verse),
+           let links = wordLinks(chapter: at.chapter)?[at.verse] {
+            under = OriginalWords.word(at: at.part, text: text, links: links)
+        }
+        // A position means nothing without the numbering it counts in, so
+        // the two go together or not at all.
+        let word = under
+        let wordsSource = under == nil ? nil : source
         Task {
             await model.presence.sendReading(
-                book: book, at: at, end: end, settled: settled, carried: carried)
+                book: book, at: at, end: end, settled: settled, carried: carried,
+                translation: version, word: word, wordsSource: wordsSource)
         }
     }
 

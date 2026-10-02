@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import RibbonCore
 
 // Every user-facing string, in one place, so the voice rules (§10) can be
 // audited: short sentences, second person, no exclamation points, never
@@ -192,6 +193,51 @@ enum Copy {
     /// The third person arriving turns colour into identity (§4.5). Said
     /// once, in the room, as a row you can act on.
     static let pickAnInk = "Colour is a person now. Pick your ink."
+
+    /// S06 · the original (A60): the leave toolbar's third verb, named for
+    /// the language under the selection — never "the original", which is
+    /// a word for the docs. Lower-case; the toolbar sets it in small caps.
+    static func originalVerb(_ language: OriginalLanguage) -> String { "the \(language.rawValue)" }
+    /// S06 · the original (A60): the panel's heading, set in small caps —
+    /// "the Greek · John 1:1".
+    static func originalHeading(_ language: OriginalLanguage, _ address: String) -> String {
+        "the \(language.rawValue.capitalized) · \(address)"
+    }
+    /// S06 · the original (A60): the honest fallback (A41g's), said where
+    /// it happens. The version is its display name, "World English".
+    static func originalWholeVerse(_ version: String) -> String {
+        "The \(version) isn’t matched word for word here, so this is the whole verse."
+    }
+    /// S06 · the original (A60): a word your version folds into another,
+    /// such as the Greek article, which no English word says by itself.
+    static let originalNotOnItsOwn = "not said on its own"
+    /// S06 · the original (A60): the heading over how each version read in
+    /// the room says the same words.
+    static let originalInThisRoom = "In this room"
+    /// S06 · the original (A60): who reads a version, when it is you.
+    static let originalYou = "you"
+    /// S06 · the original (A60): a licensed version somebody here reads
+    /// that has not streamed to this device.
+    @MainActor static var originalNotOnThisPhone: String { "Not on this \(deviceNoun) yet." }
+    /// S06 · the original (A60): a word's dictionary number, small and
+    /// secondary under its definition.
+    static func originalStrongs(_ number: String) -> String { "Strong’s \(number)" }
+    /// S06 · the original (A60): a verse's third VoiceOver action, beside
+    /// "open what's here" and "leave something here". It lifts the verse
+    /// and opens the panel.
+    static let originalAction = "the original words"
+    /// S06 · the original (A60): one original word, read out — how to say
+    /// it, what your version says for it, its grammar. A part the word does
+    /// not have is left out rather than read as an empty sentence.
+    static func originalWordSpoken(_ translit: String, _ rendering: String, _ grammar: String) -> String {
+        [translit, rendering, grammar]
+            .filter { !$0.isEmpty }
+            .map { "\($0)." }
+            .joined(separator: " ")
+    }
+    /// S06 · the original (A60): what the original line over the toolbar
+    /// does, for VoiceOver (§7.5).
+    static let originalLineAction = "opens the original words"
 
     // Reflection cards (§4.6, S08/S09)
     static let cardOpensWhenEveryoneHasAnswered = "This opens when everyone has answered."
@@ -387,7 +433,10 @@ enum Copy {
     static let planSub = "What your room has"
     // The lede under each screen's title: what the screen is, in a sentence.
     static let textLede = "How Scripture sets on the page."
-    static let translationIsTheRooms = "Everyone in this room reads this one."
+    /// Said under the version, S20 (A60, reversing A42): it is yours again,
+    /// and the second sentence is why that costs the room nothing. It names
+    /// no one.
+    static let translationIsYours = "Yours alone. A mark lands on the same words in theirs."
     static let thePageIsYours = "Yours alone. Nobody else's page moves."
     static let notificationsLede = "Every room asks for something different. These are per room."
     static let planLede = "What your room has, and when Ribbon asks."
@@ -457,6 +506,11 @@ enum Copy {
     /// the one line on that screen that is for us rather than for the
     /// reader.
     static func versionLine(_ version: String) -> String { "\(wordmark) \(version)" }
+    /// Where the original words and their dictionary come from, and the
+    /// face the Hebrew is set in (A60) — said once, under the version line,
+    /// as quietly.
+    static let originalCredit =
+        "Hebrew and Greek: the Berean Standard Bible translation tables and the Westminster Leningrad Codex, public domain. Definitions: Strong’s Exhaustive Concordance (1890), public domain. Hebrew set in Noto Serif Hebrew (SIL Open Font License)."
     /// Megabytes on this device (S21) — a count about a device, not about a
     /// person, which is the one honest exception to Law 2 and the same
     /// boundary `noRoomOnPhone` states.

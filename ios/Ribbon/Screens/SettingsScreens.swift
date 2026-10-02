@@ -14,9 +14,9 @@ import RibbonCore
 
 // MARK: - S20: Text
 
-/// The room reads one version (A42), and the page is yours: size, spacing
-/// and red letter move only your own page. The size slider previews live
-/// over real Scripture — the verse you were last reading.
+/// The version is yours (A60, reversing A42), and so is the page: size,
+/// spacing and red letter move only your own page. The size slider previews
+/// live over real Scripture — the verse you were last reading.
 struct TextSettingsScreen: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -24,7 +24,7 @@ struct TextSettingsScreen: View {
     var body: some View {
         RibbonScreen(title: Copy.textAndTranslation, lede: Copy.textLede, onBack: { dismiss() }) {
             VStack(alignment: .leading, spacing: 28) {
-                SettingsGroup(title: Copy.translation, detail: Copy.translationIsTheRooms) {
+                SettingsGroup(title: Copy.translation, detail: Copy.translationIsYours) {
                     // Bundled translations always; licensed ones appear the
                     // day their edition is configured on the proxy — never
                     // as a dead row.
@@ -32,7 +32,7 @@ struct TextSettingsScreen: View {
                         SettingChoice(
                             translation.displayName,
                             subtitle: translation.isBundled ? Copy.bundledSub : Copy.streamsSub,
-                            chosen: (model.currentRoom?.translation ?? model.me?.translation) == translation.id
+                            chosen: model.words(room: model.currentRoom) == translation.id
                         ) {
                             model.setTranslation(translation.id)
                         }
@@ -73,14 +73,14 @@ struct TextSettingsScreen: View {
         }
     }
 
-    /// The live preview: the verse you were last reading, in the room's
-    /// version, at your size, in a well of its own.
+    /// The live preview: the verse you were last reading, in your version,
+    /// at your size, in a well of its own.
     @ViewBuilder
     private var preview: some View {
         if let room = model.currentRoom,
            let reading = model.openReading(in: room) {
             let position = model.myPosition(in: reading)
-            if let text = model.scripture.verseText(position, translation: model.words(room: room, reading: reading)) {
+            if let text = model.scripture.verseText(position, translation: model.words(room: room)) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(text)
                         .font(RibbonType.scripture(model.settings.scriptureSize))

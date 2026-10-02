@@ -7,6 +7,7 @@ import android.net.Uri
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
@@ -102,7 +103,9 @@ import kotlin.uuid.Uuid
 
 // Leaving a note (S05): the toolbar rises from the bottom after the
 // long-press — the ink swatches, write, speak. Highlighting (S06) shares
-// the toolbar. Dismissed by tapping anywhere in the text.
+// the toolbar, and so does the original under the words (A60): a third verb
+// named for its language, and a quiet line over the inks naming the word
+// that was held. Dismissed by tapping anywhere in the text.
 //
 // This is the one floating toolbar in the product. §12.2 allows a
 // docked/floating toolbar for exactly this surface and nothing else: there
@@ -190,7 +193,12 @@ fun leaveToolbarExit(): ExitTransition {
  * The toolbar that rises after the long-press (S05/S06).
  *
  * @param roomPaused Paused rooms: only highlight shows, greyed, with one
- *   line (S02).
+ *   line (S02). The original stays: reading is allowed in a paused room.
+ * @param originalVerb "the greek", "the hebrew", "the aramaic" — the
+ *   language under the selection (A60) — or null where this phone has no
+ *   original words for it.
+ * @param line the original line (§7.5), shown directly above the inks, or
+ *   null for the quiet case: nothing linked under the finger.
  */
 @Composable
 fun LeaveToolbar(
@@ -202,6 +210,9 @@ fun LeaveToolbar(
     onWrite: () -> Unit,
     onSpeak: () -> Unit,
     modifier: Modifier = Modifier,
+    originalVerb: String? = null,
+    onOriginal: () -> Unit = {},
+    line: OriginalLine? = null,
 ) {
     Column(
         modifier = modifier,
@@ -210,6 +221,19 @@ fun LeaveToolbar(
     ) {
         if (roomPaused) {
             SmallCaps(Copy.NEW_NOTES_NEED_THE_ROOM, size = 12f)
+        }
+        // The held word in the original, quietly, over the inks. It fades
+        // in and out and never moves — under reduce motion as well, where a
+        // fade is still not a movement (§11). Held through its fade out, so
+        // it does not blank before it has gone.
+        val heldLine = remember { mutableStateOf(line) }
+        if (line != null) heldLine.value = line
+        AnimatedVisibility(
+            visible = line != null,
+            enter = fadeIn(tween(RibbonMotion.ARRIVE_MS, easing = RibbonMotion.EaseOut)),
+            exit = fadeOut(tween(RibbonMotion.ARRIVE_MS, easing = RibbonMotion.EaseOut)),
+        ) {
+            heldLine.value?.let { OriginalLineView(line = it, onOpen = onOriginal) }
         }
         Row(
             modifier = Modifier
@@ -300,6 +324,26 @@ fun LeaveToolbar(
                 QuietControl(
                     title = Copy.SPEAK,
                     onClick = onSpeak,
+                    color = Palette.text,
+                    size = 13f,
+                )
+            }
+
+            // The third verb (A60), outside the paused room's gate: a paused
+            // room still reads, and reading is what this is for. Like the
+            // two before it, it is pinned; the inks give up the width.
+            if (originalVerb != null) {
+                if (roomPaused) {
+                    Box(
+                        Modifier
+                            .width(1.dp)
+                            .height(20.dp)
+                            .background(Palette.rule),
+                    )
+                }
+                QuietControl(
+                    title = originalVerb,
+                    onClick = onOriginal,
                     color = Palette.text,
                     size = 13f,
                 )

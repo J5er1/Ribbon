@@ -494,6 +494,178 @@ final class OriginalTextTests: XCTestCase {
         XCTAssertEqual(OriginalWords.phrase(for: [TextRange(start: 75, end: 200)], text: john1), "God. ")
     }
 
+    // MARK: Following lands on the same words
+
+    func testWordAtPartFindsTheLinkUnderTheLine() {
+        XCTAssertEqual(OriginalWords.word(at: 0, text: john1, links: john1Links), 0)
+        // Offset 40 is inside "the Word" (35..<43): its first word.
+        XCTAssertEqual(OriginalWords.word(at: 0.5, text: john1, links: john1Links), 6)
+        // The foot of the verse is past every link: the last one.
+        XCTAssertEqual(OriginalWords.word(at: 1, text: john1, links: john1Links), 13)
+        // A line on the comma after "Word" takes the next link along.
+        XCTAssertEqual(OriginalWords.word(at: 0.375, text: john1, links: john1Links), 5)
+        // Held to the verse.
+        XCTAssertEqual(OriginalWords.word(at: -1, text: john1, links: john1Links), 0)
+        XCTAssertEqual(OriginalWords.word(at: 2, text: john1, links: john1Links), 13)
+        XCTAssertEqual(OriginalWords.word(at: .nan, text: john1, links: john1Links), 0)
+        // Links are taken by where they start, whatever order they come in.
+        XCTAssertEqual(OriginalWords.word(at: 0.5, text: john1, links: john1Links.reversed()), 6)
+    }
+
+    func testWordAtEmptyTextOrNoLinksIsNil() {
+        XCTAssertNil(OriginalWords.word(at: 0.5, text: "", links: john1Links))
+        XCTAssertNil(OriginalWords.word(at: 0.5, text: john1, links: []))
+    }
+
+    func testPartOfAWordInAMultiWordLink() {
+        // ὁ λόγος is "the Word" (21..<29): both words are where it starts.
+        XCTAssertEqual(OriginalWords.part(ofWord: 3, text: john1, links: john1Links), 21.0 / 80.0)
+        XCTAssertEqual(OriginalWords.part(ofWord: 4, text: john1, links: john1Links), 21.0 / 80.0)
+        XCTAssertEqual(OriginalWords.part(ofWord: 16, text: john1, links: john1Links), 62.0 / 80.0)
+        XCTAssertEqual(OriginalWords.part(ofWord: 0, text: john1, links: john1Links), 0)
+    }
+
+    func testPartOfAnUnlinkedWordIsTheNextOneUp() {
+        // τὸν, which no English word renders, is placed at θεόν, "God".
+        XCTAssertEqual(OriginalWords.part(ofWord: 10, text: john1, links: john1Links), 53.0 / 80.0)
+        // Up in the original, not along the page: without the last "God",
+        // θεὸς(13) goes to ἦν(14), "was", though "the Word" (15, 16) is
+        // earlier on the page.
+        let withoutGod = Array(john1Links.dropLast())
+        XCTAssertEqual(OriginalWords.part(ofWord: 13, text: john1, links: withoutGod), 71.0 / 80.0)
+    }
+
+    func testPartOfAWordPastTheEndIsNil() {
+        XCTAssertNil(OriginalWords.part(ofWord: 17, text: john1, links: john1Links))
+        XCTAssertNil(OriginalWords.part(ofWord: 0, text: john1, links: []))
+        XCTAssertNil(OriginalWords.part(ofWord: 0, text: "", links: john1Links))
+    }
+
+    // The person followed reads "God is love." and their line is on "love";
+    // the follower reads "Love, that is God."
+    var heard: ReadingPoint { ReadingPoint(chapter: 4, verse: 1, part: 0.6) }
+
+    func testCarriedSameVersionIsUntouched() {
+        XCTAssertEqual(OriginalWords.word(at: heard.part, text: authorText, links: authorLinks), 2)
+        XCTAssertEqual(
+            OriginalWords.carried(heard, word: 2, wordsSource: "src", from: .web, to: .web,
+                                  source: "src", links: readerLinks, text: readerText),
+            heard)
+    }
+
+    func testCarriedDifferentVersionMoves() {
+        XCTAssertEqual(
+            OriginalWords.carried(heard, word: 2, wordsSource: "src", from: .bsb, to: .web,
+                                  source: "src", links: readerLinks, text: readerText),
+            ReadingPoint(chapter: 4, verse: 1, part: 0))
+        XCTAssertEqual(
+            OriginalWords.carried(heard, word: 1, wordsSource: "src", from: .bsb, to: .web,
+                                  source: "src", links: readerLinks, text: readerText),
+            ReadingPoint(chapter: 4, verse: 1, part: 14.0 / 19.0))
+    }
+
+    func testCarriedWrongSourceIsUntouched() {
+        XCTAssertEqual(
+            OriginalWords.carried(heard, word: 2, wordsSource: "bsbt-old", from: .bsb, to: .web,
+                                  source: "src", links: readerLinks, text: readerText),
+            heard)
+        XCTAssertEqual(
+            OriginalWords.carried(heard, word: 2, wordsSource: nil, from: .bsb, to: .web,
+                                  source: "src", links: readerLinks, text: readerText),
+            heard)
+        // Two missing sources are not a match.
+        XCTAssertEqual(
+            OriginalWords.carried(heard, word: 2, wordsSource: nil, from: .bsb, to: .web,
+                                  source: nil, links: readerLinks, text: readerText),
+            heard)
+    }
+
+    func testCarriedMissingLinksIsUntouched() {
+        XCTAssertEqual(
+            OriginalWords.carried(heard, word: 2, wordsSource: "src", from: .bsb, to: .web,
+                                  source: "src", links: nil, text: readerText),
+            heard)
+        XCTAssertEqual(
+            OriginalWords.carried(heard, word: 2, wordsSource: "src", from: .bsb, to: .web,
+                                  source: "src", links: [], text: readerText),
+            heard)
+        XCTAssertEqual(
+            OriginalWords.carried(heard, word: 2, wordsSource: "src", from: .bsb, to: .web,
+                                  source: "src", links: readerLinks, text: nil),
+            heard)
+        // An old build sends no word and no version.
+        XCTAssertEqual(
+            OriginalWords.carried(heard, word: nil, wordsSource: "src", from: .bsb, to: .web,
+                                  source: "src", links: readerLinks, text: readerText),
+            heard)
+        XCTAssertEqual(
+            OriginalWords.carried(heard, word: 2, wordsSource: "src", from: nil, to: .web,
+                                  source: "src", links: readerLinks, text: readerText),
+            heard)
+        // A word the follower's version cannot place.
+        XCTAssertEqual(
+            OriginalWords.carried(heard, word: 9, wordsSource: "src", from: .bsb, to: .web,
+                                  source: "src", links: readerLinks, text: readerText),
+            heard)
+    }
+
+    func testFollowingLandsOnTheSameWordsAcrossVersions() {
+        // John 1:3, texts and links as bundled. The Greek: πάντα(0) δι’(1)
+        // αὐτοῦ(2) ἐγένετο(3) καὶ(4) χωρὶς(5) αὐτοῦ(6) ἐγένετο(7) οὐδὲ(8)
+        // ἕν(9) ὃ(10) γέγονεν(11). The Berean Standard opens with "Through
+        // Him"; the World English puts it after "all things were made".
+        let bsb = "Through Him all things were made, and without Him nothing was made that has been made. "
+        let bsbLinks = [
+            AlignmentLink(start: 0, end: 7, words: [1]),
+            AlignmentLink(start: 8, end: 11, words: [2]),
+            AlignmentLink(start: 12, end: 22, words: [0]),
+            AlignmentLink(start: 23, end: 32, words: [3]),
+            AlignmentLink(start: 34, end: 37, words: [4]),
+            AlignmentLink(start: 38, end: 45, words: [5]),
+            AlignmentLink(start: 46, end: 49, words: [6]),
+            AlignmentLink(start: 50, end: 57, words: [8, 9]),
+            AlignmentLink(start: 58, end: 66, words: [7]),
+            AlignmentLink(start: 67, end: 71, words: [10]),
+            AlignmentLink(start: 72, end: 85, words: [11]),
+        ]
+        let web = "All things were made through him. Without him, nothing was made that has been made. "
+        let webLinks = [
+            AlignmentLink(start: 0, end: 10, words: [0]),
+            AlignmentLink(start: 11, end: 20, words: [3]),
+            AlignmentLink(start: 21, end: 32, words: [4]),
+            AlignmentLink(start: 34, end: 41, words: [5]),
+            AlignmentLink(start: 42, end: 45, words: [6]),
+            AlignmentLink(start: 47, end: 54, words: [8, 9]),
+            AlignmentLink(start: 55, end: 63, words: [7]),
+            AlignmentLink(start: 64, end: 68, words: [10]),
+            AlignmentLink(start: 69, end: 82, words: [11]),
+        ]
+        XCTAssertEqual(bsb.utf16.count, 87)
+        XCTAssertEqual(web.utf16.count, 84)
+
+        func follow(_ part: Double, leader: TranslationID, leaderText: String, leaderLinks: [AlignmentLink],
+                    follower: TranslationID, followerText: String, followerLinks: [AlignmentLink]) -> Double {
+            let point = ReadingPoint(chapter: 1, verse: 3, part: part)
+            let word = OriginalWords.word(at: part, text: leaderText, links: leaderLinks)
+            return OriginalWords.carried(point, word: word, wordsSource: "src", from: leader, to: follower,
+                                         source: "src", links: followerLinks, text: followerText).part
+        }
+
+        // A line on "all things" in the Berean Standard is at the head of the
+        // verse in the World English, not 0.15 of the way into "were made".
+        XCTAssertEqual(follow(0.15, leader: .bsb, leaderText: bsb, leaderLinks: bsbLinks,
+                              follower: .web, followerText: web, followerLinks: webLinks), 0)
+        // "without Him" and "nothing", each to the same words.
+        XCTAssertEqual(follow(0.45, leader: .bsb, leaderText: bsb, leaderLinks: bsbLinks,
+                              follower: .web, followerText: web, followerLinks: webLinks), 34.0 / 84.0)
+        XCTAssertEqual(follow(0.6, leader: .bsb, leaderText: bsb, leaderLinks: bsbLinks,
+                              follower: .web, followerText: web, followerLinks: webLinks), 47.0 / 84.0)
+        // And back: "All things" at the head of the World English is part-way
+        // into the Berean Standard.
+        XCTAssertEqual(follow(0, leader: .web, leaderText: web, leaderLinks: webLinks,
+                              follower: .bsb, followerText: bsb, followerLinks: bsbLinks), 12.0 / 87.0)
+    }
+
     // MARK: The bundled corpus
 
     static var scripture: URL {
