@@ -68,13 +68,22 @@ public struct Translation: Hashable, Identifiable, Sendable {
     /// Whether the text data carries words-of-Jesus markup (S20's
     /// red-letter setting).
     public var redLetter: Bool
+    /// Whether the app ships this version's word links to the original
+    /// (`Scripture/align/<id>/`), worked out ahead of time against its
+    /// bundled text (A60). A version without them is linked on the phone,
+    /// through the Berean Standard, from the chapter already held.
+    public var hasBundledWordLinks: Bool
 
-    public init(id: TranslationID, displayName: String, fullName: String, source: Source, redLetter: Bool) {
+    public init(
+        id: TranslationID, displayName: String, fullName: String, source: Source, redLetter: Bool,
+        hasBundledWordLinks: Bool = false
+    ) {
         self.id = id
         self.displayName = displayName
         self.fullName = fullName
         self.source = source
         self.redLetter = redLetter
+        self.hasBundledWordLinks = hasBundledWordLinks
     }
 
     public var isBundled: Bool {
@@ -96,11 +105,11 @@ public struct Translation: Hashable, Identifiable, Sendable {
 public enum TranslationRegistry {
     public static let bsb = Translation(
         id: .bsb, displayName: "Berean Standard", fullName: "Berean Standard Bible",
-        source: .bundled, redLetter: false)
+        source: .bundled, redLetter: false, hasBundledWordLinks: true)
 
     public static let web = Translation(
         id: .web, displayName: "World English", fullName: "World English Bible",
-        source: .bundled, redLetter: true)
+        source: .bundled, redLetter: true, hasBundledWordLinks: true)
 
     // The three licensed editions, live on the room's API.Bible account
     // (Open Book plan) and served through the bible-proxy. The bibleIDs
@@ -132,5 +141,22 @@ public enum TranslationRegistry {
 
     public static func isBundled(_ id: TranslationID) -> Bool {
         translation(for: id)?.isBundled ?? false
+    }
+
+    public static func hasBundledWordLinks(_ id: TranslationID) -> Bool {
+        translation(for: id)?.hasBundledWordLinks ?? false
+    }
+}
+
+/// Which version is on a person's page.
+public enum TranslationChoice {
+    /// The person's own version, open book or finished. A42 pinned a room
+    /// to one version because a phrase mark was an offset into one text;
+    /// a mark now follows its original words into every version (A60), so
+    /// re-wording a book under its marks no longer moves them, and §2.6 is
+    /// true again. The room's version is only a fallback for a person not
+    /// yet known on this phone.
+    public static func page(me: Person?, room: Room?) -> TranslationID {
+        me?.translation ?? room?.translation ?? .bsb
     }
 }

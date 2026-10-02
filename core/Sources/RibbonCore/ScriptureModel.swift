@@ -83,6 +83,59 @@ public struct ScriptureChapter: Codable, Hashable, Sendable {
             .replacingOccurrences(of: "  ", with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
+
+    /// Every verse's own text — the string a phrase mark's offsets and a
+    /// word link's ranges count in (A41g, A60). Not `text(forVerse:)`, which
+    /// is for quoting: this one is exactly what the page draws for the verse,
+    /// spans glued with no separator ("increased!How" at a poetic line
+    /// break), trailing spaces kept, psalm titles and stanza breaks left out.
+    /// Offsets into it are UTF-16 code units, as the page's are.
+    ///
+    /// A verse number on a title still moves the running verse, because the
+    /// page builders do the same: in Zechariah 12 the burden's title carries
+    /// verse 1 and the paragraph after it continues that verse.
+    public func ownTexts() -> [Int: String] {
+        var texts: [Int: String] = [:]
+        var running: Int?
+        for block in blocks {
+            if block.s == .b { continue }
+            for span in block.x {
+                if let v = span.v { running = v }
+                guard block.s != .d, let verse = running else { continue }
+                texts[verse, default: ""] += span.t
+            }
+        }
+        return texts
+    }
+
+    /// One verse's own text (see `ownTexts()`), or nil when it is not here.
+    public func ownText(verse: Int) -> String? {
+        ownTexts()[verse]
+    }
+
+    /// Where each verse's own text starts a new span after its first — the
+    /// UTF-16 offsets at which a poetic line was glued to the one before.
+    /// A word never runs across one (`PivotAligner.tokens`). A verse with
+    /// one span has an empty list.
+    public func ownSpanBreaks() -> [Int: [Int]] {
+        var lengths: [Int: Int] = [:]
+        var breaks: [Int: [Int]] = [:]
+        var running: Int?
+        for block in blocks {
+            if block.s == .b { continue }
+            for span in block.x {
+                if let v = span.v { running = v }
+                guard block.s != .d, let verse = running else { continue }
+                if let length = lengths[verse] {
+                    breaks[verse, default: []].append(length)
+                } else {
+                    breaks[verse] = []
+                }
+                lengths[verse, default: 0] += span.t.utf16.count
+            }
+        }
+        return breaks
+    }
 }
 
 public struct ScriptureBookText: Codable, Hashable, Sendable {

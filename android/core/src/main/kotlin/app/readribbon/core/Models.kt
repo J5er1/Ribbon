@@ -74,18 +74,12 @@ data class Room(
      */
     val isPaused: Boolean = false,
     /**
-     * The words this room reads, shared by everyone in it.
-     *
-     * This reverses §2.6 — "Translation is a personal setting, not a room
-     * setting" — on the owner's instruction, and deviation A42 carries the
-     * argument. The short of it: §2.6's own reasoning is that "notes pin to
-     * verse addresses, not to text offsets", and A41g put a mark on a
-     * *phrase* into the product, which is a text offset. One version per room
-     * is what makes that mark mean the same thing in both hands.
-     *
-     * Any member may change it; a room is not owned (§6.7). Text size, line
-     * spacing and red letter stay personal, because those are about eyes
-     * rather than about words.
+     * The version this room read while a room had one (ledger A42, reversed
+     * by A60). A42 gave each room one version because a mark on a phrase was
+     * an offset into one text. A mark now follows its original words into
+     * every version, so the page shows the person's own version
+     * ([TranslationChoice.page]) and nothing reads this for display. It is
+     * still decoded and written because shipped clients read and write it.
      */
     val translation: TranslationID = TranslationID.bsb
 ) {
@@ -129,13 +123,11 @@ data class Reading(
      */
     val handiwork: Handiwork,
     /**
-     * The words this book was read in, pinned when it was opened.
-     *
-     * It tracks the room's choice while the book is open and stops when the
-     * book is finished, because S11 says an ember is immutable and "the
-     * source of the printed keepsake": a room that changes version next year
-     * must not silently re-word a book it has already read, under notes that
-     * were left about those exact words.
+     * The words this book was read in, as A42 pinned them. Since A60 the page
+     * shows each person's own version, open book or finished — a mark follows
+     * its words, so re-wording a finished book under its marks no longer
+     * moves them — and nothing reads this for display. It is kept because
+     * shipped clients read and write it.
      */
     val translation: TranslationID = TranslationID.bsb
 ) {

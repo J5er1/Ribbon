@@ -70,7 +70,14 @@ data class Translation(
      * Whether the text data carries words-of-Jesus markup (S20's
      * red-letter setting).
      */
-    val redLetter: Boolean
+    val redLetter: Boolean,
+    /**
+     * Whether the app ships this version's word links to the original
+     * (`Scripture/align/<id>/`), worked out ahead of time against its
+     * bundled text (A60). A version without them is linked on the phone,
+     * through the Berean Standard, from the chapter already held.
+     */
+    val hasBundledWordLinks: Boolean = false,
 ) {
     sealed interface Source {
         /**
@@ -101,11 +108,11 @@ data class Translation(
 object TranslationRegistry {
     val bsb = Translation(
         id = TranslationID.bsb, displayName = "Berean Standard", fullName = "Berean Standard Bible",
-        source = Translation.Source.bundled, redLetter = false)
+        source = Translation.Source.bundled, redLetter = false, hasBundledWordLinks = true)
 
     val web = Translation(
         id = TranslationID.web, displayName = "World English", fullName = "World English Bible",
-        source = Translation.Source.bundled, redLetter = true)
+        source = Translation.Source.bundled, redLetter = true, hasBundledWordLinks = true)
 
     // The three licensed editions, live on the room's API.Bible account
     // (Open Book plan) and served through the bible-proxy. The bibleIDs
@@ -136,4 +143,21 @@ object TranslationRegistry {
 
     fun isBundled(id: TranslationID): Boolean =
         translation(id)?.isBundled ?: false
+
+    fun hasBundledWordLinks(id: TranslationID): Boolean =
+        translation(id)?.hasBundledWordLinks ?: false
+}
+
+/** Which version is on a person's page. */
+object TranslationChoice {
+    /**
+     * The person's own version, open book or finished. A42 pinned a room to
+     * one version because a phrase mark was an offset into one text; a mark
+     * now follows its original words into every version (A60), so re-wording
+     * a book under its marks no longer moves them, and §2.6 is true again.
+     * The room's version is only a fallback for a person not yet known on
+     * this phone.
+     */
+    fun page(me: Person?, room: Room?): TranslationID =
+        me?.translation ?: room?.translation ?: TranslationID.bsb
 }

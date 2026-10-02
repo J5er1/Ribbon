@@ -61,11 +61,15 @@ data class VerseAddress(
  * meaningful in the translation they were taken in — which is why
  * [charTranslation] travels with them. Translation is a property of a
  * *person* (S20), so two people in one room can be reading different words
- * for the same verse, and an offset into one is nonsense in the other. A
- * reader whose translation does not match sees the whole verse marked: it
- * says truthfully that somebody marked something here, which is better than
- * pointing at words that are not on their page, and better than hiding the
- * mark.
+ * for the same verse, and an offset into one is nonsense in the other.
+ *
+ * So a mark also names the original words it covers — [startWords],
+ * [endWords] and the [wordsSource] they count in (A60) — and a reader on
+ * another version sees it on whatever their version says for those words
+ * (`OriginalWords.resolve`). Where a version cannot be matched word for word,
+ * the reader sees the whole verse marked: it says truthfully that somebody
+ * marked something here, which is better than pointing at words that are not
+ * on their page, and better than hiding the mark.
  */
 @Serializable
 data class VerseRange(
@@ -79,6 +83,20 @@ data class VerseRange(
     var endChar: Int? = null,
     /** The translation [startChar] and [endChar] were measured in. */
     val charTranslation: TranslationID? = null,
+    /**
+     * The original words the mark covers in [startVerse] — 0-based positions
+     * in that verse's list of Hebrew, Aramaic or Greek words, sorted (A60).
+     * Present only when the start is partial and the words could be worked
+     * out; a mark inside one verse keeps its whole set here.
+     */
+    var startWords: List<Int>? = null,
+    /** The same for [endVerse]. Always null for a mark inside one verse. */
+    var endWords: List<Int>? = null,
+    /**
+     * The numbering those positions count in (the bundled original text's
+     * source key). Present exactly when either set is.
+     */
+    var wordsSource: String? = null,
 ) {
 
     init {
@@ -90,6 +108,10 @@ data class VerseRange(
         // The character offsets belong to their ends and turn over with them:
         // a range dragged from the middle of verse five back to verse three
         // keeps "the middle of five" as where it *stops*.
+        //
+        // The word sets are the same kind of thing and turn over the same way.
+        startWords = wordSet(startWords)
+        endWords = wordSet(endWords)
         if (startVerse > endVerse) {
             val verse = startVerse
             startVerse = endVerse
@@ -97,6 +119,9 @@ data class VerseRange(
             val char = startChar
             startChar = endChar
             endChar = char
+            val words = startWords
+            startWords = endWords
+            endWords = words
         } else if (startVerse == endVerse) {
             val low = listOfNotNull(startChar, endChar).minOrNull()
             val high = listOfNotNull(startChar, endChar).maxOrNull()
@@ -104,6 +129,20 @@ data class VerseRange(
                 startChar = low
                 endChar = high
             }
+        }
+        // Inside one verse there is one set of words; two would be two
+        // answers to one question.
+        val end = endWords
+        if (startVerse == endVerse && end != null) {
+            startWords = wordSet((startWords ?: emptyList()) + end)
+            endWords = null
+        }
+        // Positions without their source are numbers nobody can resolve, and
+        // a source with no positions says nothing. Each needs the other.
+        if (wordsSource == null || (startWords == null && endWords == null)) {
+            startWords = null
+            endWords = null
+            wordsSource = null
         }
     }
 
@@ -136,3 +175,7 @@ data class VerseRange(
         }
 
 }
+
+/** Sorted, each position once; an empty set is no set. */
+private fun wordSet(words: List<Int>?): List<Int>? =
+    words?.distinct()?.sorted()?.takeIf { it.isNotEmpty() }

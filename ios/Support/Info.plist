@@ -38,6 +38,7 @@
 		<string>AlegreyaSans-Bold.ttf</string>
 		<string>AlegreyaSansSC-Regular.ttf</string>
 		<string>AlegreyaSansSC-Medium.ttf</string>
+		<string>NotoSerifHebrew[wdth,wght].ttf</string>
 	</array>
 	<key>UIBackgroundModes</key>
 	<array>
