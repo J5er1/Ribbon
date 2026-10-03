@@ -18,10 +18,15 @@ struct OriginalContext {
     /// Nil while a licensed chapter is still coming.
     var readerLinks: [Int: [AlignmentLink]]?
     var readerTexts: [Int: String]
+    /// Where a poetic line is glued to the one before in each verse's own
+    /// text (`ScriptureChapter.ownSpanBreaks()`), so what a word is said as
+    /// reads with the space the page shows as a line break.
+    var readerBreaks: [Int: [Int]]
     /// The Berean Standard's links and text, for a word this page's
     /// version does not say on its own. Nil when the page is the Berean.
     var pivotLinks: [Int: [AlignmentLink]]?
     var pivotTexts: [Int: String]
+    var pivotBreaks: [Int: [Int]]
 
     /// The selection's original words, verse by verse, in original order.
     /// Nil when none of its verses has any (a verse the earliest
@@ -77,9 +82,12 @@ struct OriginalContext {
     /// the finger — the link there, which may be one word or the few a
     /// phrase renders together. Moved, it is whatever the selection links.
     /// Nothing at all where nothing links, or the version has no links yet:
-    /// quiet rather than wrong.
+    /// quiet rather than wrong. A held offset below zero is a hold that
+    /// found no word — the verse's number — and is quiet too; nil is a
+    /// lift the handles (or VoiceOver) hold, not a finger.
     func line(_ range: VerseRange, held: Int?) -> OriginalLine? {
         if let held {
+            guard held >= 0 else { return nil }
             let verse = range.startVerse
             guard let links = readerLinks?[verse], let all = original?.words(verse: verse) else { return nil }
             let indices = OriginalWords.words(in: links, from: held, to: held + 1)
@@ -104,13 +112,24 @@ struct OriginalContext {
     /// what the Berean Standard says; nil when neither says it on its own.
     func rendering(of index: Int, verse: Int) -> String? {
         if let links = readerLinks?[verse], let text = readerTexts[verse],
-           let said = OriginalWords.rendering(of: index, in: links, text: text) {
+           let said = Self.rendering(of: index, in: links, text: text, breaks: readerBreaks[verse] ?? []) {
             return said
         }
         if let links = pivotLinks?[verse], let text = pivotTexts[verse] {
-            return OriginalWords.rendering(of: index, in: links, text: text)
+            return Self.rendering(of: index, in: links, text: text, breaks: pivotBreaks[verse] ?? [])
         }
         return nil
+    }
+
+    /// `OriginalWords.rendering`, read the way the page shows it: a link
+    /// that runs over a poetic line break says the break as a space.
+    static func rendering(of index: Int, in links: [AlignmentLink], text: String, breaks: [Int]) -> String? {
+        let pieces = links
+            .filter { $0.words.contains(index) }
+            .sorted { $0.start < $1.start }
+            .map { OriginalSelection.spoken(text, from: $0.start, to: $0.end, breaks: breaks) }
+            .filter { !$0.isEmpty }
+        return pieces.isEmpty ? nil : pieces.joined(separator: " … ")
     }
 
     /// The selection's own stretch of `verse`: from its start offset in the
@@ -185,40 +204,70 @@ struct OriginalSelection: Equatable {
     /// last; or, where it cannot say them part by part, the whole verse,
     /// marked as such. `exact` is for the page's own version, which says
     /// exactly what was selected. Nil when the version's text is not here.
-    func says(texts: [Int: String], links: [Int: [AlignmentLink]]?, exact: Bool) -> [OriginalSaying]? {
+    /// `breaks` are the version's poetic line breaks, verse by verse
+    /// (`ScriptureChapter.ownSpanBreaks()`): every piece is read through
+    /// them, so "O LORD?" and "Who is like You" are two lines with a space
+    /// between, not one word.
+    func says(
+        texts: [Int: String], breaks: [Int: [Int]], links: [Int: [AlignmentLink]]?, exact: Bool
+    ) -> [OriginalSaying]? {
         var pieces: [OriginalSaying] = []
         for verse in verses {
             guard let text = texts[verse.verse] else { continue }
+            let length = text.utf16.count
+            let lines = breaks[verse.verse] ?? []
             if !verse.isPartial {
-                pieces.append(OriginalSaying(text: text, isWholeVerse: false))
+                pieces.append(OriginalSaying(
+                    text: Self.spoken(text, from: 0, to: length, breaks: lines), isWholeVerse: false))
                 continue
             }
             if exact {
-                let length = text.utf16.count
                 pieces.append(OriginalSaying(
-                    text: Self.slice(text, from: verse.from ?? 0, to: verse.to ?? length),
+                    text: Self.spoken(text, from: verse.from ?? 0, to: verse.to ?? length, breaks: lines),
                     isWholeVerse: false))
                 continue
             }
             if let verseLinks = links?[verse.verse] {
                 let found = OriginalWords.ranges(for: verse.chosen, in: verseLinks, text: text)
-                let phrase = OriginalWords.phrase(for: found, text: text)
-                if !phrase.isEmpty {
-                    pieces.append(OriginalSaying(text: phrase, isWholeVerse: false))
-                    continue
+                if let first = found.first, let last = found.last {
+                    let phrase = Self.spoken(text, from: first.start, to: last.end, breaks: lines)
+                    if !phrase.isEmpty {
+                        pieces.append(OriginalSaying(text: phrase, isWholeVerse: false))
+                        continue
+                    }
                 }
             }
-            pieces.append(OriginalSaying(text: text, isWholeVerse: true))
+            pieces.append(OriginalSaying(
+                text: Self.spoken(text, from: 0, to: length, breaks: lines), isWholeVerse: true))
         }
         return pieces.isEmpty ? nil : pieces
     }
 
-    static func slice(_ text: String, from: Int, to: Int) -> String {
+    /// `text[from..<to]` (UTF-16 units, clamped) as a reader would see it,
+    /// trimmed. A line of poetry is glued to the next in a verse's own text
+    /// ("O LORD?Who is like You"), because the page breaks the line
+    /// instead; here, out of the page, each break between two letters
+    /// becomes a space. The same reading as Android's `spoken`.
+    static func spoken(_ text: String, from: Int, to: Int, breaks: [Int]) -> String {
         let units = Array(text.utf16)
         let low = max(0, min(from, units.count))
         let high = max(low, min(to, units.count))
-        return String(decoding: units[low..<high], as: UTF16.self)
+        let breaks = Set(breaks)
+        var out: [UInt16] = []
+        out.reserveCapacity(high - low)
+        for i in low..<high {
+            if i > low, breaks.contains(i), !isSpace(units[i - 1]), !isSpace(units[i]) {
+                out.append(0x20)
+            }
+            out.append(units[i])
+        }
+        return String(decoding: out, as: UTF16.self)
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func isSpace(_ unit: UInt16) -> Bool {
+        guard let scalar = Unicode.Scalar(unit) else { return false }
+        return CharacterSet.whitespacesAndNewlines.contains(scalar)
     }
 }
 

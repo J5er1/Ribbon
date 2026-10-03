@@ -32,6 +32,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -163,6 +164,11 @@ data class OriginalLine(
     val words: List<OriginalWord>,
     val rendering: String?,
     val language: OriginalLanguage,
+    /**
+     * The held word, as a verse and a position, whose detail the panel opens
+     * on when the line or the verb opens it; null once the handles have moved.
+     */
+    val opens: Pair<Int, Int>? = null,
 ) {
     val isHebrew: Boolean get() = language != OriginalLanguage.greek
     val text: String get() = words.joinToString(" ") { it.text }
@@ -190,7 +196,7 @@ data class RoomVersionLine(
 // MARK: - What the panel says
 
 /** Whether the selection stops part-way through [verse]. */
-private fun isPartial(range: VerseRange, verse: Int): Boolean {
+internal fun isPartial(range: VerseRange, verse: Int): Boolean {
     val single = range.startVerse == range.endVerse
     if (verse == range.startVerse) return range.startChar != null || (single && range.endChar != null)
     if (verse == range.endVerse) return range.endChar != null
@@ -218,6 +224,30 @@ internal fun languageOf(bookID: String, words: List<OriginalWord>): OriginalLang
 }
 
 /**
+ * The positions of [verse]'s [count] words a selection covers, and whether
+ * they are all of them only because this version cannot say which: a whole
+ * verse is all its words; a part of one, the words under it in [verseLinks]
+ * with the unrendered words between them filled in — or all of them, where
+ * this version has no links for the verse or nothing in the part is linked.
+ */
+private fun chosenIn(
+    range: VerseRange,
+    verse: Int,
+    count: Int,
+    verseLinks: List<AlignmentLink>?,
+): Pair<List<Int>, Boolean> {
+    val all = (0 until count).toList()
+    if (verseLinks == null) return all to true
+    if (!isPartial(range, verse)) return all to false
+    val (from, to) = offsets(range, verse)
+    val under = OriginalWords.filledInterior(
+        OriginalWords.words(verseLinks, from, to),
+        OriginalWords.linked(verseLinks),
+    ).filter { it in 0 until count }
+    return if (under.isEmpty()) all to true else under to false
+}
+
+/**
  * The original words under a selection, verse by verse.
  *
  * A verse the selection covers whole gives all its words. One it stops
@@ -239,6 +269,8 @@ internal fun readOriginal(
     texts: Map<Int, String>,
     pivotLinks: Map<Int, List<AlignmentLink>>?,
     pivotTexts: Map<Int, String>,
+    breaks: Map<Int, List<Int>> = emptyMap(),
+    pivotBreaks: Map<Int, List<Int>> = emptyMap(),
 ): OriginalReading? {
     val verses = mutableListOf<OriginalVerseWords>()
     val chosen = linkedMapOf<Int, List<Int>>()
@@ -247,29 +279,11 @@ internal fun readOriginal(
         val words = original.words(verse) ?: continue
         if (words.isEmpty()) continue
         val verseLinks = links?.get(verse)?.takeIf { it.isNotEmpty() }
-        val all = words.indices.toList()
-        val picked = if (!isPartial(range, verse)) {
-            // A whole verse is all its words either way; but where this
-            // version has no links for it, what each word is said as is the
-            // Berean Standard's rather than yours, and the panel says so.
-            if (verseLinks == null) whole = true
-            all
-        } else if (verseLinks == null) {
-            whole = true
-            all
-        } else {
-            val (from, to) = offsets(range, verse)
-            val under = OriginalWords.filledInterior(
-                OriginalWords.words(verseLinks, from, to),
-                OriginalWords.linked(verseLinks),
-            ).filter { it in words.indices }
-            if (under.isEmpty()) {
-                whole = true
-                all
-            } else {
-                under
-            }
-        }
+        // A whole verse is all its words either way; but where this version
+        // has no links for it, what each word is said as is the Berean
+        // Standard's rather than yours, and the panel says so.
+        val (picked, fallback) = chosenIn(range, verse, words.size, verseLinks)
+        if (fallback) whole = true
         val text = texts[verse]
         val pivotText = pivotTexts[verse]
         val pivot = pivotLinks?.get(verse)
@@ -278,12 +292,12 @@ internal fun readOriginal(
             verse = verse,
             columns = picked.map { index ->
                 val mine = if (verseLinks != null && text != null) {
-                    OriginalWords.rendering(index, verseLinks, text)
+                    renderingOf(index, verseLinks, text, breaks[verse].orEmpty())
                 } else {
                     null
                 }
                 val theirs = if (mine == null && pivot != null && pivotText != null) {
-                    OriginalWords.rendering(index, pivot, pivotText)
+                    renderingOf(index, pivot, pivotText, pivotBreaks[verse].orEmpty())
                 } else {
                     null
                 }
@@ -318,6 +332,7 @@ internal fun originalLine(
     original: OriginalChapter,
     links: Map<Int, List<AlignmentLink>>?,
     texts: Map<Int, String>,
+    breaks: Map<Int, List<Int>> = emptyMap(),
 ): OriginalLine? {
     if (links == null) return null
     val picked = mutableListOf<Pair<Int, Int>>()
@@ -349,12 +364,18 @@ internal fun originalLine(
     }
     val words = picked.mapNotNull { (verse, index) -> original.words(verse)?.getOrNull(index) }
     if (words.isEmpty()) return null
+    // Held, the panel opens on the word under the finger, as the line names it.
+    val opens = if (held == null) {
+        null
+    } else {
+        picked.firstOrNull { (verse, index) -> original.words(verse)?.getOrNull(index) != null }
+    }
     val rendering = picked.singleOrNull()?.let { (verse, index) ->
         val verseLinks = links[verse]
         val text = texts[verse]
-        if (verseLinks != null && text != null) OriginalWords.rendering(index, verseLinks, text)?.trim() else null
+        if (verseLinks != null && text != null) renderingOf(index, verseLinks, text, breaks[verse].orEmpty())?.trim() else null
     }
-    return OriginalLine(words, rendering, languageOf(range.bookID, words))
+    return OriginalLine(words, rendering, languageOf(range.bookID, words), opens)
 }
 
 /**
@@ -369,16 +390,11 @@ internal fun roomReaders(
     val byVersion = linkedMapOf<TranslationID, MutableList<String>>()
     byVersion.getOrPut(mine) { mutableListOf() } += Copy.ORIGINAL_YOU
     for ((name, version) in others.sortedBy { firstName(it.first).lowercase() }) {
-        byVersion.getOrPut(version) { mutableListOf() } += firstName(name)
+        byVersion.getOrPut(version) { mutableListOf() } += firstName(name).trim().ifEmpty { Copy.SOMEONE }
     }
-    return byVersion.map { (version, names) -> version to joined(names) }
-}
-
-/** "you", "you and Ruth", "you, Ruth and Ann". */
-private fun joined(names: List<String>): String = when (names.size) {
-    0 -> ""
-    1 -> names[0]
-    else -> names.dropLast(1).joinToString(", ") + " and " + names.last()
+    // "you", "you and Ruth", "you and Ruth and Ann": joined the way the
+    // app's other names are, and the iPhone's panel.
+    return byVersion.map { (version, names) -> version to names.joinToString(" and ") }
 }
 
 /**
@@ -431,6 +447,20 @@ private fun spoken(text: String, from: Int, to: Int, breaks: List<Int>): String 
     return out.toString()
 }
 
+/**
+ * What a version says for one original word: [OriginalWords.rendering], with
+ * each piece read the way [spoken] reads it, so a word whose rendering runs
+ * across a line of poetry ("O LORD? Who") is not glued at the break.
+ */
+private fun renderingOf(word: Int, links: List<AlignmentLink>, text: String, breaks: List<Int>): String? {
+    val pieces = links
+        .filter { word in it.words }
+        .sortedBy { it.start }
+        .map { spoken(text, it.start, it.end, breaks).trim() }
+        .filter { it.isNotEmpty() }
+    return if (pieces.isEmpty()) null else pieces.joinToString(" … ")
+}
+
 // MARK: - From the phone's own stores
 
 /**
@@ -460,12 +490,18 @@ internal fun originalUnderLift(
     texts: Map<Int, String> = content.ownTexts(),
 ): OriginalUnderLift? {
     val chapter = original.original(range.bookID)?.chapter(range.chapter) ?: return null
-    val words = range.verses.flatMap { chapter.words(it).orEmpty() }
-    if (words.isEmpty()) return null
     val links = original.links(translation, range.bookID, range.chapter, content)
+    // Named for the words the panel will show, as its heading is: a part of
+    // Daniel 2:4 can be Hebrew in a verse that is mostly Aramaic.
+    val words = range.verses.flatMap { verse ->
+        val all = chapter.words(verse).orEmpty()
+        val verseLinks = links?.get(verse)?.takeIf { it.isNotEmpty() }
+        chosenIn(range, verse, all.size, verseLinks).first.map { all[it] }
+    }
+    if (words.isEmpty()) return null
     return OriginalUnderLift(
         verb = Copy.originalVerb(languageOf(range.bookID, words)),
-        line = originalLine(range, held, chapter, links, texts),
+        line = originalLine(range, held, chapter, links, texts, content.ownSpanBreaks()),
     )
 }
 
@@ -497,6 +533,8 @@ internal fun originalReadingOf(
         texts = texts,
         pivotLinks = pivotLinks,
         pivotTexts = pivot?.ownTexts().orEmpty(),
+        breaks = content.ownSpanBreaks(),
+        pivotBreaks = pivot?.ownSpanBreaks().orEmpty(),
     )
 }
 
@@ -553,7 +591,7 @@ internal suspend fun roomVersionLines(
 // MARK: - The line
 
 /** Isolates a run of another direction inside a line (FSI … PDI). */
-private fun isolated(text: String): String = "⁨$text⁩"
+private fun isolated(text: String): String = "\u2068$text\u2069"
 
 /**
  * The original line, directly above the inks (§7.5): `λόγος · logos · Word`.
@@ -628,8 +666,8 @@ private const val PANEL_BODY = 17f
  * @param room how each version read in this room says the words; null while
  *   that is being worked out, and the section is left out when everyone
  *   reads one version — your own words are already in the row above.
- * @param initiallyOpen a word whose detail is open to begin with (the look
- *   book's picture of it).
+ * @param initiallyOpen a word whose detail is open to begin with: the held
+ *   word the line named, when the line or the verb opened the panel (§7.5).
  */
 @Composable
 fun OriginalPanel(
@@ -650,7 +688,7 @@ fun OriginalPanel(
     // One word open at a time. Kept by its verse and position, so it stays
     // open while the handles move and the word is still in the selection,
     // and closes on its own when the selection moves off it.
-    var open by remember { mutableStateOf(initiallyOpen) }
+    var open by remember(initiallyOpen) { mutableStateOf(initiallyOpen) }
     val openWord = open?.takeIf { (verse, index) ->
         reading.verses.any { v -> v.verse == verse && v.columns.any { it.index == index } }
     }
@@ -673,7 +711,7 @@ fun OriginalPanel(
         )
 
         val several = reading.verses.size > 1
-        for (verse in reading.verses) {
+        for (verse in reading.verses) key(verse.verse) {
             if (several) {
                 SmallCaps(
                     VerseAddress(reading.range.bookID, reading.range.chapter, verse.verse).formatted,
@@ -751,7 +789,7 @@ private fun WordRow(
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            for (column in verse.columns) {
+            for (column in verse.columns) key(column.index) {
                 WordColumn(
                     column = column,
                     hebrew = hebrew,

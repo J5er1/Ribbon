@@ -96,6 +96,18 @@ class OriginalPanelTest {
         assertEquals("Word", reading.verses.single().columns[7].rendering)
     }
 
+    @Test fun aRenderingAcrossALineOfPoetryIsNotGlued() {
+        // Psalm 145:13's second half is one long rendering in the Berean
+        // Standard's links, and it runs from one line of the psalm into the
+        // next — where the verse's own text has no space, because the page
+        // breaks the line instead. Out of the page, the break is a space.
+        val psalm = scripture.chapter(VerseAddress("PSA", 145, 13), TranslationID.bsb)!!
+        val reading = originalReadingOf(original, scripture, VerseRange("PSA", 145, 13, 13), TranslationID.bsb, psalm)!!
+        val rendering = reading.verses.single().columns.single { it.index == 7 }.rendering!!
+        assertTrue(rendering, "words and kind" in rendering)
+        assertFalse(rendering, "wordsand" in rendering)
+    }
+
     @Test fun theLineLeavesOutAVerseThisVersionCannotMatch() {
         // John 1:1–2, with no links for verse 2: the line still names verse
         // 1's words rather than going quiet over the whole selection.
@@ -114,6 +126,8 @@ class OriginalPanelTest {
         assertEquals("Logos", line.translit)
         assertEquals("Word", line.rendering)
         assertEquals("Logos. Word.", line.spoken)
+        // The line and the verb open the panel on it (§7.5), as the iPhone does.
+        assertEquals(1 to 4, line.opens)
     }
 
     @Test fun aFingerJustPastAWordStillNamesIt() {
@@ -133,6 +147,7 @@ class OriginalPanelTest {
         val line = originalUnderLift(original, phrase("the Word was with God"), held = null, TranslationID.bsb, john)!!.line!!
         assertEquals("ὁ Λόγος ἦν πρὸς τὸν Θεόν", line.text)
         assertNull("several words carry no rendering", line.rendering)
+        assertNull("the panel opens on no word once the handles move", line.opens)
     }
 
     @Test fun theLineIsQuietForALicensedVersionWithoutItsText() {
@@ -154,6 +169,53 @@ class OriginalPanelTest {
         assertEquals(OriginalLanguage.greek, languageOf("JHN", listOf(aramaic)))
         assertEquals("the aramaic", Copy.originalVerb(OriginalLanguage.aramaic))
         assertEquals("the Aramaic · Daniel 2:4", Copy.originalHeading(OriginalLanguage.aramaic, "Daniel 2:4"))
+    }
+
+    @Test fun theVerbIsNamedForTheSelectedWordsAsThePanelIs() {
+        // Daniel 2:4 turns to Aramaic part-way: "Then the astrologers
+        // answered the king in Aramaic" is Hebrew, the rest of the verse
+        // Aramaic — most of its words.
+        val daniel = scripture.chapter(VerseAddress("DAN", 2, 1), TranslationID.bsb)!!
+        val text = daniel.ownText(4)!!
+        val phrase = "Then the astrologers answered the king in Aramaic"
+        assertTrue(text.startsWith(phrase))
+        val range = VerseRange(
+            bookID = "DAN", chapter = 2, startVerse = 4, endVerse = 4,
+            startChar = 0, endChar = phrase.length, charTranslation = TranslationID.bsb,
+        )
+        val under = originalUnderLift(original, range, held = null, TranslationID.bsb, daniel)!!
+        val reading = originalReadingOf(original, scripture, range, TranslationID.bsb, daniel)!!
+        assertEquals(OriginalLanguage.hebrew, reading.language)
+        assertEquals(Copy.originalVerb(reading.language), under.verb)
+        // The whole verse is Aramaic, and the verb says so.
+        val whole = originalUnderLift(original, VerseRange("DAN", 2, 4, 4), held = null, TranslationID.bsb, daniel)!!
+        assertEquals("the aramaic", whole.verb)
+    }
+
+    @Test fun threeReadersOfOneVersionAreJoinedTheWayNamesAre() {
+        val readers = roomReaders(
+            mine = TranslationID.web,
+            others = listOf(
+                "Ruth Alderman" to TranslationID.web,
+                "Ann Brooke" to TranslationID.web,
+                "Mara Lee" to TranslationID.bsb,
+            ),
+        )
+        assertEquals(
+            listOf(TranslationID.web to "you and Ann and Ruth", TranslationID.bsb to "Mara"),
+            readers,
+        )
+    }
+
+    @Test fun aReaderWithNoNameIsSomeone() {
+        val readers = roomReaders(
+            mine = TranslationID.bsb,
+            others = listOf("" to TranslationID.bsb, "  " to TranslationID.web),
+        )
+        assertEquals(
+            listOf(TranslationID.bsb to "you and ${Copy.SOMEONE}", TranslationID.web to Copy.SOMEONE),
+            readers,
+        )
     }
 
     @Test fun theRoomsVersionsAreYoursFirstThenByName() {

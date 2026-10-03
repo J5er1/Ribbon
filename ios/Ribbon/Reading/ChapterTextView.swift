@@ -985,9 +985,13 @@ struct ChapterTextView: UIViewRepresentable {
                 if let verse = verse(at: location) {
                     Haptics.shared.verseLifts()
                     // Where in the verse's own text the finger is, so the
-                    // original line can say the word under it (§7.5).
+                    // original line can say the word under it (§7.5). A
+                    // press that found no letter (the verse's number, the
+                    // leading) held no word: -1, before the verse's text,
+                    // so the line stays quiet rather than naming the whole
+                    // verse. Nil is kept for a lift no finger made.
                     let placed = parent.handle.place(at: location, wordsOnly: true)
-                    parent.onLongPressVerse(verse, placed?.verse == verse ? placed?.offset : nil)
+                    parent.onLongPressVerse(verse, placed?.verse == verse ? placed?.offset ?? -1 : -1)
                 }
             case .changed:
                 if let verse = verse(at: gesture.location(in: view)) {

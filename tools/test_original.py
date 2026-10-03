@@ -64,6 +64,13 @@ class HebrewCleanerTests(unittest.TestCase):
         decomposed = unicodedata.normalize("NFD", "λόγος")
         self.assertEqual(otj.clean_greek(decomposed), "λόγος")
 
+    def test_greek_split_reading_mark(self):
+        self.assertEqual(otj.clean_greek("ὅ¦τι"), "ὅτι")
+        self.assertEqual(otj.clean_greek("Ἁρ¦μαγεδών"), "Ἁρμαγεδών")
+        self.assertEqual(otj.clean_greek("Μή¦Ποτε"), "Μήποτε")
+        self.assertEqual(otj.clean_greek("κάτω¦κύψας"), "κάτω κύψας")
+        self.assertEqual(otj.clean_greek("ἀγαθὸν¦ποιῆσαι"), "ἀγαθὸν ποιῆσαι")
+
 
 class TranslitTests(unittest.TestCase):
     def test_decomposed_with_macron_below(self):
@@ -90,6 +97,12 @@ class TupleTests(unittest.TestCase):
         t = otj.word_tuple(r)
         self.assertEqual(len(t), 5)
         self.assertEqual(t[4], "a")
+
+    def test_greek_split_reading_in_translit(self):
+        nfc = lambda r: [unicodedata.normalize("NFC", x) for x in otj.word_tuple(r)[:2]]
+        self.assertEqual(nfc(fake_row("Greek", "Ὅ¦τι", "HO¦ti", "3754")), ["Ὅτι", "Hoti"])
+        self.assertEqual(nfc(fake_row("Greek", "κάτω¦κύψας", "katō¦kypsas", "2955")),
+                         ["κάτω κύψας", "katō kypsas"])
 
     def test_greek_and_missing_strongs(self):
         self.assertEqual(otj.word_tuple(fake_row("Greek", "Λόγος", "Logos", "3056", "N-NSM"))[2], "G3056")
@@ -119,6 +132,83 @@ class TupleTests(unittest.TestCase):
         dan = load(os.path.join(SCRIPTURE, "original", "DAN.json"))
         aramaic = [w for ch in dan["chapters"] for v in ch["verses"] for w in v["w"] if len(w) == 5]
         self.assertTrue(aramaic and all(w[4] == "a" for w in aramaic))
+
+
+# Definitions whose parentheses Strong's (or the source's encoding of him)
+# leaves unbalanced on its own, with nothing in the neighbouring element to
+# mend them. A ')' with nothing open before it:
+STRAY_CLOSE_IN_SOURCE = frozenset("""
+    G852 G3123 G3326 G4434 G5180 H624 H3244 H7992 H8041 H8059 H8628""".split())
+# A '(' never closed, where the KJV renderings (":--") followed in print:
+OPEN_IN_SOURCE = frozenset("""
+    G1744 G2537 G3132 G3844 G4553 G5225 G5259 G5273 G5506 G5525 H520 H521 H2715
+    H3027 H3028 H3283 H3284 H3513 H3650 H3679 H3778 H4791 H5430 H6465 H6621
+    H7306""".split())
+
+
+class LexiconTests(unittest.TestCase):
+    def test_parens(self):
+        self.assertEqual(otj.parens("a (b (c) d"), (1, False))
+        self.assertEqual(otj.parens("b) (c)"), (0, True))
+
+    def test_a_sentence_split_across_elements_is_mended(self):
+        self.assertEqual(otj.mended("from, out (of place, time, or cause;", " literal or figurative)"),
+                         "from, out (of place, time, or cause; literal or figurative)")
+
+    def test_a_whole_definition_stands_alone(self):
+        self.assertEqual(otj.mended("from G446;", "to act as proconsul"), "to act as proconsul")
+        self.assertEqual(otj.mended("from G1 (as a negative particle) and G5316;", "non-apparent)"),
+                         "non-apparent)")
+        self.assertEqual(otj.mended("from ἀΐσσω (to rush) and G251 (in the sense of the sea;",
+                                    "a beach (on which the waves dash)"),
+                         "a beach (on which the waves dash)")
+
+    def test_bundled_definitions(self):
+        path = os.path.join(SCRIPTURE, "original", "strongs.json")
+        if not os.path.exists(path):
+            self.skipTest("original/ not generated")
+        lex = load(path)
+        self.assertTrue(lex["G1537"][2].startswith("a primary preposition denoting origin"))
+        self.assertTrue(lex["G444"][2].startswith("from G435 and ὤψ (the countenance; from G3700)"))
+        self.assertTrue(lex["H1942"][2].startswith("from H1933 (in the sense of eagerly coveting"))
+        stray = {k for k, (_, _, d) in lex.items() if otj.parens(d)[1]}
+        unclosed = {k for k, (_, _, d) in lex.items() if otj.parens(d)[0] and not otj.parens(d)[1]}
+        self.assertEqual(stray, STRAY_CLOSE_IN_SOURCE)
+        self.assertEqual(unclosed, OPEN_IN_SOURCE)
+
+    def test_no_split_reading_mark_ships(self):
+        root = os.path.join(SCRIPTURE, "original")
+        if not os.path.isdir(root):
+            self.skipTest("original/ not generated")
+        for name in sorted(os.listdir(root)):
+            with open(os.path.join(root, name), encoding="utf-8") as f:
+                self.assertNotIn("¦", f.read(), name)
+
+
+class CrossVerseTests(unittest.TestCase):
+    def test_a_swapped_pair_is_found(self):
+        tables = {16: "the latter do so in love knowing that I am appointed for the defense",
+                  17: "the former preach Christ out of selfish ambition to add affliction to my chains",
+                  18: "what then"}
+        web = {16: "The former insincerely preach Christ from selfish ambition, thinking to add "
+                   "affliction to my chains;",
+               17: "but the latter out of love, knowing that I am appointed for the defense of the "
+                   "Good News.",
+               18: "What does it matter?"}
+        rows = {v: fake_row("Greek", "α", english=f" {e} ") for v, e in tables.items()}
+        verse_rows = {("PHP", 1, v): ([r], {id(r): 0}) for v, r in rows.items()}
+        web = {"PHP": ("", {(1, v): (t, []) for v, t in web.items()})}
+        found = otj.swapped_verses(verse_rows, set(verse_rows), web)
+        self.assertEqual([(k, n) for k, n, _ in found],
+                         [(("PHP", 1, 16), ("PHP", 1, 17)), (("PHP", 1, 17), ("PHP", 1, 16))])
+
+    def test_cross_verses_have_no_web_links(self):
+        for bk, c, v in sorted(otj.CROSS_VERSE["web"]):
+            path = os.path.join(SCRIPTURE, "align", "web", f"{bk}.json")
+            if not os.path.exists(path):
+                self.skipTest("align/ not generated")
+            linked = {(ch["n"], x["v"]) for ch in load(path)["chapters"] for x in ch["verses"]}
+            self.assertNotIn((c, v), linked, f"{bk} {c}:{v}")
 
 
 class OwnTextTests(unittest.TestCase):

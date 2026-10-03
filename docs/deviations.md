@@ -3520,7 +3520,7 @@ A60. **A mark follows its words, and everybody reads their own version
       grammar (`Scripture/original/<BOOK>.json`).
     - **A word index** is a word's place in that list, from 0. It is the
       anchor, and it counts in one numbering: the **source key**
-      (`bsbt-5558512b`), a hash of every verse's words, which changes only
+      (`bsbt-7abb5bb6`), a hash of every verse's words, which changes only
       if the words or their numbering do. A stored index is honoured only
       under the key it was made with.
     - **A verse's own text** is A41g's coordinate system, now defined in one
@@ -3564,7 +3564,13 @@ A60. **A mark follows its words, and everybody reads their own version
     - The definitions: Strong's own, from his 1890 concordance, and only
       his — the Hebrew `explanation` notes, not the senses listed beside
       them, which are Online Bible's text and not free, and the Greek
-      `strongs_def`, not the KJV renderings.
+      `strongs_def`, not the KJV renderings. Where Strong's own sentence
+      runs across the derivation and the definition — 108 Greek entries
+      (ἐκ, ἵνα, ἄνθρωπος …) and one Hebrew, whose definition alone began
+      mid-parenthesis — the two are joined, so a definition is never a
+      fragment. The tables mark a word the editions split with "¦" (μή¦γε,
+      Ἁρ¦μαγεδών); the mark is taken off, and two halves that each carry an
+      accent keep a space (κάτω κύψας).
     - The World English's own Strong's tags, from eBible, used only to fill
       in a word the English alignment left unlinked, and only when the
       tag's number is among that verse's words.
@@ -3635,7 +3641,16 @@ A60. **A mark follows its words, and everybody reads their own version
       is not offered. Romans 14:24–26 in the World English is Romans
       16:25–27 in the tables, and the World English's Revelation 13:1
       begins with what the tables end 12:17 on; links are never drawn
-      across verses, so those are whole verses too.
+      across verses, so those are whole verses too. So are five more the
+      review found, where the World English numbers the same words into a
+      neighbouring verse: Philippians 1:16–17 (the two halves the other way
+      round, so a mark there had landed on the wrong Greek), Acts 9:29,
+      Acts 3:19 and 1 Kings 18:33. The pipeline now looks for this — a
+      verse sharing far more words with its neighbour than with itself —
+      and fails until each one it finds is listed. Luke 20:30, where the
+      World English follows a longer Greek text the tables do not carry,
+      still has two wrong links ("took", "died") and is the known case the
+      check cannot see.
     - **A finished book is re-worded.** A42 kept a finished reading in the
       version it was read in, so a room changing version next year would not
       re-word a book under notes left about its words. Your version is now
@@ -3663,12 +3678,15 @@ A60. **A mark follows its words, and everybody reads their own version
     - **Hold: "shows both".** Holding a word lifts its verse for marking
       exactly as before, and a quiet line above the inks already shows the
       word under your finger: "Λόγος · Logos · Word". Move the handles and
-      it follows the selection. Tap it for the rest. Nothing linked under
-      the finger, and the line says nothing.
+      it follows the selection. Tap it — or the verb — for the rest, and
+      while the lift is still a hold the panel opens on that word with its
+      detail already open, on both phones. Nothing linked under the finger
+      (a verse number, say), and the line says nothing.
 
     From a selection, the way in is a third verb on the toolbar, after
-    speak, saying the language — "the greek", "the hebrew", "the aramaic"
-    where most of what is selected is — and never "original language",
+    speak, saying the language of the words the panel will show — "the
+    greek", "the hebrew", "the aramaic" (a phrase of Daniel 2:4 can be
+    Hebrew in a verse that is mostly Aramaic) — and never "original language",
     "lexicon" or "interlinear". The inks scroll to make room; the
     verbs stay on the screen (A41c). It is not a sheet and not glass over a
     verse: the toolbar cross-fades into it at the foot of the page the way
@@ -3690,6 +3708,17 @@ A60. **A mark follows its words, and everybody reads their own version
     nothing changes. The foot of their screen stays a fraction — it is for
     pace. Older apps ignore the keys, and a key of the wrong shape is
     dropped on its own rather than taking the message with it.
+
+    One thing the review caught: a follower on a licensed version hears a
+    line before the chapter it is in has streamed, so the first time it can
+    only use the leader's fraction; when the leader's phone says the same
+    line again a few seconds later, the chapter has arrived and the same
+    line now lands on the word — and the guess took that difference for a
+    tiny scroll, and learned from it. A line heard again unchanged is now
+    set where it was set the first time, on both phones, so a repeat stays
+    what it is. Moving the existing rest onto the word once the chapter
+    arrives wants a new method on the estimate in both cores; it is left
+    for later, and until the leader moves the guess keeps their fraction.
 
     **What stayed.** Following's pace and how it carries the page (A58,
     A59): the guess still learns in the follower's own words. The ribbon,
@@ -4448,9 +4477,6 @@ I36. **The menu says which build (A59).** The version line under You read
 I37. **A mark follows its words, on iOS (A60).** The decisions are A60's,
     and so is the reversal of I7; what is only iOS's:
 
-    - **Tapping the original line opens the panel on the held word**, its
-      detail already open. Android opens it on the selection with no word
-      chosen.
     - **Nothing large is read on the main thread**, which the first cut did
       in four places. The dictionary and the grammar were read under the
       same lock the reading report takes for the source key, so a report

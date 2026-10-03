@@ -59,6 +59,8 @@ struct OriginalPanel: View {
     let translation: TranslationID
     /// This page's own text, verse by verse: what you selected, exactly.
     let pageTexts: [Int: String]
+    /// Where its poetic lines are glued, so a line reads with its break.
+    let pageBreaks: [Int: [Int]]
     /// A little over half the screen; past that the panel scrolls.
     let maxHeight: CGFloat
     /// The word to open on: the one held, when the panel came from the line.
@@ -322,12 +324,13 @@ struct OriginalPanel: View {
     /// this phone holds them; nil when its text is not here.
     private func says(in version: TranslationID) -> [OriginalSaying]? {
         if version == translation {
-            return selection.says(texts: pageTexts, links: nil, exact: true)
+            return selection.says(texts: pageTexts, breaks: pageBreaks, links: nil, exact: true)
         }
         guard let chapter = chapter(in: version) else { return nil }
         let links = model.original.links(
             version, bookID: selection.bookID, chapter: selection.chapter, readerChapter: chapter)
-        return selection.says(texts: chapter.ownTexts(), links: links, exact: false)
+        return selection.says(
+            texts: chapter.ownTexts(), breaks: chapter.ownSpanBreaks(), links: links, exact: false)
     }
 
     /// Another version's chapter: a bundled one always, a licensed one once

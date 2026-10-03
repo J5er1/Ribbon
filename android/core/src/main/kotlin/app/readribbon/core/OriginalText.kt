@@ -60,8 +60,7 @@ data class OriginalWord(
 ) {
     /**
      * Greek in the New Testament; in the Old, Hebrew unless the word is one
-     * of the Aramaic passages' (Daniel, Ezra, a verse of Jeremiah, two words
-     * of Genesis).
+     * of the Aramaic passages' (Daniel, Ezra, a verse of Jeremiah).
      */
     fun language(bookID: String): OriginalLanguage = when {
         OriginalWords.isNewTestament(bookID) -> OriginalLanguage.greek

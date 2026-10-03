@@ -39,7 +39,9 @@ struct ReadingScreen: View {
     @State private var liftedChapter: Int?
     /// Where in the lifted verse's own text the finger came down, while the
     /// lift is still the one the hold made: the word the original line
-    /// says (A60, §7.5). Gone as soon as a handle moves.
+    /// says (A60, §7.5). -1 for a hold that found no word (the verse's
+    /// number), which keeps the line quiet. Gone as soon as a handle moves:
+    /// nil is a lift the handles hold, and the panel then opens on no word.
     @State private var heldOffset: Int?
     @State private var composer: ComposerState?
     @State private var recorder = VoiceRecorder()
@@ -275,13 +277,16 @@ struct ReadingScreen: View {
     /// another.
     private func originalContext(chapter n: Int) -> OriginalContext {
         let pivot = translation == .bsb ? nil : model.scripture.book(reading.bookID, translation: .bsb)?.chapter(n)
+        let page = chapterContent(n)
         return OriginalContext(
             bookID: reading.bookID, chapter: n,
             original: model.original.original(reading.bookID)?.chapter(n),
             readerLinks: wordLinks(chapter: n),
-            readerTexts: chapterContent(n)?.ownTexts() ?? [:],
+            readerTexts: page?.ownTexts() ?? [:],
+            readerBreaks: page?.ownSpanBreaks() ?? [:],
             pivotLinks: pivot == nil ? nil : model.original.links(.bsb, bookID: reading.bookID, chapter: n),
-            pivotTexts: pivot?.ownTexts() ?? [:])
+            pivotTexts: pivot?.ownTexts() ?? [:],
+            pivotBreaks: pivot?.ownSpanBreaks() ?? [:])
     }
 
     var body: some View {
@@ -1034,6 +1039,7 @@ struct ReadingScreen: View {
                     room: room,
                     translation: translation,
                     pageTexts: chapterContent(chapter)?.ownTexts() ?? [:],
+                    pageBreaks: chapterContent(chapter)?.ownSpanBreaks() ?? [:],
                     maxHeight: viewportHeight * 0.55,
                     opening: opening,
                     onClose: clearLift)
@@ -1435,7 +1441,22 @@ struct ReadingScreen: View {
         if let heard = model.heard(from: run.person), run.takes(heard) {
             run.fed = heard.report.received
             if heard.book == reading.bookID {
-                feed(onThisPage(heard), fromPresence: heard.fromPresence, to: run, chapterCount: chapterCount)
+                var report = onThisPage(heard)
+                // The same line again — their phone saying it every so
+                // often while they read down a still screen — is set where
+                // it was set the first time. It can come out somewhere else
+                // now: heard before this page held their chapter, it kept
+                // the share of the verse they said; their words, once the
+                // chapter is here, put it a few words on. Given as it now
+                // comes out, a line that has not moved was a move, and
+                // taught the guess a scroll of a few words.
+                if report.settled, let last = run.heardLine, last.page == translation,
+                   last.word == heard.word, PagePoint.same(heard.report.at, last.at) {
+                    report.at = last.onThisPage
+                } else {
+                    run.heardLine = (at: heard.report.at, word: heard.word, page: translation, onThisPage: report.at)
+                }
+                feed(report, fromPresence: heard.fromPresence, to: run, chapterCount: chapterCount)
             }
         } else if run.fed == nil, now.timeIntervalSince(run.startedAt) >= FollowRun.waitForTheirLine,
                   let there = them.position, there.bookID == reading.bookID {

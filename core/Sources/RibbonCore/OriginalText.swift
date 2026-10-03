@@ -60,8 +60,7 @@ public struct OriginalWord: Codable, Hashable, Sendable {
     }
 
     /// Greek in the New Testament; in the Old, Hebrew unless the word is
-    /// one of the Aramaic passages' (Daniel, Ezra, a verse of Jeremiah, two
-    /// words of Genesis).
+    /// one of the Aramaic passages' (Daniel, Ezra, a verse of Jeremiah).
     public func language(in bookID: String) -> OriginalLanguage {
         OriginalWords.isNewTestament(bookID) ? .greek : (isAramaic ? .aramaic : .hebrew)
     }

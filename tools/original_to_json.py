@@ -31,7 +31,8 @@ How the links are made:
        tag's number is among that verse's own original words. Measured on a
        hand-checked sample: about 91% precise at 97% coverage. Verses whose
        WEB English lies partly in another verse of the tables (ROM 14:24-26,
-       REV 13:1) get no links, so marks there cover the whole verse.
+       REV 13:1, PHP 1:16-17, ...: CROSS_VERSE) get no links, so marks there
+       cover the whole verse.
   Psalm titles: the tables fold a psalm's superscription into verse 1. Its
   words are the rows before the verse-1 marker (the "reftext" span) in a
   psalm whose verse 1 opens a "pshdg" paragraph; they go in a verse 0 entry.
@@ -50,7 +51,11 @@ Sources (all public domain; downloaded, never committed):
   measured against exactly what the apps render.
   Only Strong's own words are used: the Hebrew note type="explanation" (not
   the <list> senses, which are Online Bible text, and not the TWOT numbers)
-  and the Greek strongs_def (not kjv_def).
+  and the Greek strongs_def (not kjv_def). Where the derivation (Greek
+  strongs_derivation, Hebrew note type="exegesis") leaves a '(' open that
+  the definition closes, the two are one sentence and are kept together.
+  The tables' '¦' (a word the editions divide differently) is dropped, or
+  made a space between two accented words.
 
 Run (from anywhere; SRC holds the downloads):
   python3 tools/original_to_json.py SRC
@@ -59,7 +64,8 @@ Run (from anywhere; SRC holds the downloads):
 It checks itself as it goes and fails loudly: every link inside its verse's
 own text, sorted, not overlapping, every index in range; the own text built
 two ways agreeing for every bundled verse; every Strong's number defined;
-and a second run in a fresh process (different hash seed) producing the same
+every WEB verse that reads like its neighbour in the tables (swapped_verses)
+listed in CROSS_VERSE; and a second run in a fresh process (different hash seed) producing the same
 bytes. Then it prints coverage. Stdlib only, Python 3.11.
 """
 
@@ -88,9 +94,15 @@ TSV_SHA256 = "09bbee6f9fe4fa22b5df28e8a9ffa99bf9c33435f4eb8c47c2dc221d855d35cb"
 
 # Verses whose English lies partly in another verse of the tables' numbering
 # (WEB has the Romans doxology at 14:24-26, the tables at 16:25-27; WEB's
-# REV 13:1 opens with what the tables end 12:17 with). Links across verses
-# are not made in v1: these get no entry, so a mark there covers the verse.
-CROSS_VERSE = {"web": {("ROM", 14, 24), ("ROM", 14, 25), ("ROM", 14, 26), ("REV", 13, 1)}}
+# REV 13:1 opens with what the tables end 12:17 with, ACT 9:29 with what they
+# end 9:28 with; WEB's 1KI 18:33 and ACT 3:19 end with what the tables begin
+# the next verse with; WEB has PHP 1:16 and 1:17 in the other order). Links
+# across verses are not made in v1: these get no entry, so a mark there
+# covers the verse. swapped_verses() finds the PHP 1:16-17 kind and fails
+# the run if one is missing here.
+CROSS_VERSE = {"web": {("ROM", 14, 24), ("ROM", 14, 25), ("ROM", 14, 26), ("REV", 13, 1),
+                       ("PHP", 1, 16), ("PHP", 1, 17), ("ACT", 9, 29), ("ACT", 3, 19),
+                       ("1KI", 18, 33)}}
 
 BOOK_ORDER = [b[0] for b in BOOKS]
 NT = set(BOOK_ORDER[39:])
@@ -129,8 +141,32 @@ def clean_hebrew(s):
     return s.strip()
 
 
+GREEK_ACCENT = re.compile("[\u0300\u0301\u0342]")
+
+
+def split_reading(greek):
+    """What the tables' '¦' becomes. They write a word the editions divide
+    differently as e.g. ὅ¦τι, Μή¦Ποτε, Ἁρ¦μαγεδών: the halves join. Two
+    words that each keep an accent (κάτω¦κύψας, ἀγαθὸν¦ποιῆσαι) part with
+    a space instead."""
+    halves = unicodedata.normalize("NFD", greek).split("¦")
+    return " " if len(halves) > 1 and all(GREEK_ACCENT.search(h) for h in halves) else ""
+
+
+def unsplit(s, sep):
+    """s with each '¦' made sep; a joined word keeps only its first capital
+    (Μή¦Ποτε -> Μήποτε, HO¦ti -> Hoti), as the editions print it."""
+    if "¦" not in s:
+        return s
+    if sep:
+        return s.replace("¦", sep)
+    s = s.replace("¦", "")
+    return s[:1] + s[1:].lower()
+
+
 def clean_greek(s):
-    return unicodedata.normalize("NFC", s).replace("‿", "").strip()
+    s = unicodedata.normalize("NFC", s).replace("‿", "").strip()
+    return unsplit(s, split_reading(s))
 
 
 def clean_translit(s):
@@ -207,9 +243,11 @@ def title_split(key, rows):
 def word_tuple(r):
     if r.lang == "Greek":
         text = clean_greek(r.orig)
+        translit = unsplit(r.translit, split_reading(r.orig))
     else:
         text = clean_hebrew(r.orig)
-    t = [text, clean_translit(r.translit), r.strongs, r.parse]
+        translit = r.translit
+    t = [text, clean_translit(translit), r.strongs, r.parse]
     if r.lang == "Aramaic":
         t.append("a")
     return t
@@ -572,7 +610,43 @@ def squash(s):
     return re.sub(r"\s+", " ", s).strip()
 
 
+def parens(s):
+    """(how many '(' are left open at the end, whether a ')' comes first)"""
+    depth, stray = 0, False
+    for ch in s:
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            if depth:
+                depth -= 1
+            else:
+                stray = True
+    return depth, stray
+
+
+def mended(lead, body):
+    """Strong's sometimes breaks one sentence across two elements: the
+    derivation leaves a '(' open and the definition closes it (ἐκ: "... out
+    (of place, time, or cause;" | "literal or figurative; direct or
+    remote)"). Then the definition is the two read as one. A ')' with
+    nothing open before it, or a '(' never closed, is otherwise left as
+    Strong's has it."""
+    if parens(lead)[0] and parens(body)[1]:
+        return squash(lead + " " + body)
+    return body
+
+
 def hebrew_lexicon(path):
+    def render(el):
+        parts = [el.text or ""]
+        for ch in el:
+            if ch.tag == OSIS + "w":
+                parts.append(f"H{int(ch.get('src'))}" if ch.get("src") else ch.get("lemma") or "")
+            else:
+                parts.append(render(ch))
+            parts.append(ch.tail or "")
+        return "".join(parts)
+
     out = {}
     for div in ET.parse(path).getroot().iter(OSIS + "div"):
         if div.get("type") != "entry":
@@ -581,10 +655,13 @@ def hebrew_lexicon(path):
         if w is None or not w.get("ID"):
             continue
         key = strongs_key("H", w.get("ID")[1:])
-        expl = ""
+        expl = exeg = ""
         for note in div.findall(OSIS + "note"):
             if note.get("type") == "explanation":
                 expl = squash("".join(note.itertext()))
+            elif note.get("type") == "exegesis":
+                exeg = squash(render(note))
+        expl = mended(exeg, expl)
         # Strong's writes a vocal shewa as a superscript e, which Literata
         # lacks; the word transliterations write it ə, which it has.
         xlit = clean_translit(w.get("xlit") or "").replace("ᵉ", "ə")
@@ -613,13 +690,45 @@ def greek_lexicon(path):
         key = strongs_key("G", e.get("strongs"))
         g = e.find("greek")
         d = e.find("strongs_def")
+        der = e.find("strongs_derivation")
         if d is None:
             # About twenty entries (ἐγώ, ἄν, …) carry Strong's definition in
             # the derivation element; it is still his text, not kjv_def.
-            d = e.find("strongs_derivation")
+            definition = squash(render(der)) if der is not None else ""
+        else:
+            definition = mended(squash(render(der)) if der is not None else "",
+                                squash(render(d)))
         out[key] = [clean_greek(g.get("unicode") or "") if g is not None else "",
                     clean_translit(g.get("translit") or "") if g is not None else "",
-                    squash(render(d)) if d is not None else ""]
+                    definition]
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Verses the WEB numbers differently.
+
+def swapped_verses(verse_rows, keys, web, margin=3):
+    """[(key, neighbour, [lemmas])] for each WEB verse that shares at least
+    margin more distinct content words with the tables' English of the verse
+    before or after it (and not with its own) than with its own: the PHP
+    1:16-17 kind, where WEB has two verses in the other order, or REV 13:1,
+    where a verse opens with its neighbour's words. keys: the verses that
+    have original words. web: committed("web")."""
+    order = sorted(verse_rows, key=lambda k: (BOOK_ORDER.index(k[0]), k[1], k[2]))
+    english = {k: {lem for _, lem, fn, _ in bsb_side(groups(*verse_rows[k])) if not fn}
+               for k in order}
+    out = []
+    for i, key in enumerate(order):
+        bk, c, v = key
+        if key not in keys or v == 0 or (c, v) not in web[bk][1]:
+            continue
+        mine = {lem for _, _, lem, fn in web_side(*web[bk][1][(c, v)])[1] if not fn}
+        own = mine & english[key]
+        for j in (i - 1, i + 1):
+            if 0 <= j < len(order) and order[j][0] == bk:
+                foreign = (mine & english[order[j]]) - english[key]
+                if len(foreign) >= len(own) + margin:
+                    out.append((key, order[j], sorted(foreign)))
     return out
 
 
@@ -786,6 +895,14 @@ def build(args, out_root, quiet):
         if got != n:
             raise SystemExit(f"error: own text of {t} {bk} {c}:{v} is {got} long, expected {n}")
     tags = usfx_tags(args.web_usfx)
+
+    swapped = swapped_verses(verse_rows, words, texts["web"])
+    log("WEB verses closer to a neighbouring verse of the tables than to their own:")
+    for (bk, c, v), (_, nc, nv), foreign in swapped:
+        log(f"  {bk} {c}:{v} has {nc}:{nv}'s {' '.join(foreign)}")
+    unlisted = sorted({k for k, _, _ in swapped} - CROSS_VERSE["web"])
+    if unlisted:
+        raise SystemExit(f"error: WEB verses that look moved are not in CROSS_VERSE: {unlisted}")
 
     for t in ("bsb", "web"):
         st = collections.Counter()
