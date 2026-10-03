@@ -3,8 +3,9 @@
 Live project: `ribbon` (`noyccfkaotuvhhaoccck`, us-east-1) in the Aeaura
 Supabase org. Apply `migrations/` in filename order — they are timestamped
 and each one is idempotent, so re-running the set is safe. The newest,
-`20260914120000_ribbon_realtime_room_channel.sql`, has not been applied
-yet; see the Realtime note below for what stays open until it is.
+`20261002120000_ribbon_a_mark_follows_its_words.sql`, has not been applied
+yet, and has to be before the app builds that write its columns ship; see
+the note on marks below.
 
 What the schema enforces structurally (see the comments in the SQL):
 
@@ -25,7 +26,8 @@ What the schema enforces structurally (see the comments in the SQL):
   membership rule on `realtime.messages` that every table already has, so
   a private join to `room:<room id>` is refused for a room you are not
   in. Presence is the most intimate signal the product has (§4.2); it is
-  not the one thing RLS skips.
+  not the one thing RLS skips. (Applied on 25 September 2026;
+  `docs/still-to-do.md` has the story.)
 
   **This migration is load-bearing and has to be applied.** Until it is,
   both clients fall back to a *public* channel on their first refused
@@ -62,6 +64,22 @@ What the schema enforces structurally (see the comments in the SQL):
   each is configured. The apps ask it, and a phone keeps posting its own
   notifications until the server can say them for it, so nothing is lost
   before the keys exist and nothing is said twice after.
+
+- **A mark follows its words** (docs/deviations.md A60).
+  `20261002120000_ribbon_a_mark_follows_its_words.sql` adds three nullable
+  columns to `highlights`: `start_words` and `end_words`, the positions of
+  the Hebrew, Aramaic or Greek words a phrase mark covers at each end, and
+  `words_source`, the numbering they count in. A mark on whole verses
+  writes none of them. Its checks say positions need their source, are
+  whole numbers at least zero, come as one set inside one verse, and that
+  the source is a short key. No policy changes. `rooms.translation` and
+  `readings.translation` stay although nothing current reads them for
+  display, because shipped clients still write them.
+
+  **Apply it before the builds that write the columns ship.** PostgREST
+  refuses a write naming a column the table does not have, so until it is
+  applied every phrase mark from those builds fails to push
+  (`docs/still-to-do.md`, item 1).
 
 Auth is Auth0 where the build is configured for it (see `auth0/`), with
 Supabase's own emailed code underneath; there are no passwords either way,

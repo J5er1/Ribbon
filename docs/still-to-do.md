@@ -3,7 +3,38 @@
 What is built but not yet switched on, and what it is waiting for. Each item
 says what happens until it is done, so nothing here is a silent failure.
 
-## 1. Notifications: built, not switched on
+## 1. A mark follows its words: the migration, before the apps
+
+`supabase/migrations/20261002120000_ribbon_a_mark_follows_its_words.sql`
+adds `start_words`, `end_words` and `words_source` to `highlights`
+(docs/deviations.md A60, I37). **Apply it to the live project before any
+build that writes them reaches a phone.** Those builds send the three
+columns with every mark on part of a verse, and PostgREST refuses a write
+that names a column the table does not have — so on an unmigrated project
+every phrase mark from a new build fails to push. It stays on the phone
+that made it, where nobody else in the room can see it, and the app's
+later tries are refused the same way until the migration lands.
+Whole-verse marks write none of the columns and are unaffected. Older
+builds are unaffected either way: the columns are nullable and they never
+name them.
+
+It is idempotent and changes no policy. Run the file in the SQL editor of
+project `ribbon` (`noyccfkaotuvhhaoccck`), then check that
+
+```
+select column_name from information_schema.columns
+where table_name = 'highlights' and column_name like '%words%';
+```
+
+answers `start_words`, `end_words` and `words_source`. Ship the builds
+after that, not before.
+
+Nothing else here needs switching on: the original words, the definitions
+and the links ship inside both apps, and a licensed version's links are
+worked out on the phone. The one line of credit for them is already under
+the version line on You.
+
+## 2. Notifications: built, not switched on
 
 Push is built end to end and deployed: the database writes each of the six
 as it happens, the `push` function on the live project delivers them, and
@@ -64,7 +95,7 @@ In the developer portal (Certificates, Identifiers & Profiles):
 `false` for each today). Then, on a phone: sign in, allow notifications
 when the app asks, and have someone in the room leave a note.
 
-## 2. The room's live channel — closed on 25 September
+## 3. The room's live channel — closed on 25 September
 
 `realtime.messages` now carries the migration's two policies
 (`ribbon_room_channel_read`, `ribbon_room_channel_write`), applied to the
@@ -82,7 +113,7 @@ private and a public channel with the same name do not hear each other. Close
 and reopen the app on every phone once. Builds from before 14 September
 (#14) join public only and will not see anyone on a current build.
 
-## 3. One account, whichever door
+## 4. One account, whichever door
 
 The browser join (deviation 22) signs in with the emailed code. In the app,
 the same person is the same account only through the same door — the
@@ -91,14 +122,14 @@ emailed code, with the same address; the browser sign-in the app leads with
 `readribbon.app` (callback, logout and web-origin URLs), after which the
 invite page can use it too.
 
-## 4. Email that reaches people outside the team
+## 5. Email that reaches people outside the team
 
 If invitees do not receive sign-in codes, Supabase is sending with its
 built-in mailer, which delivers only to the project's own team and only a
 few an hour. Set a custom SMTP provider under Authentication → Emails →
 SMTP (Resend, Postmark and SES all work).
 
-## 5. Seen on a real phone
+## 6. Seen on a real phone
 
 Built and compiled, never yet watched on hardware: the note unfurl (I32 —
 a display link redraws the chapter for 400 ms), the widgets and the Live
@@ -122,3 +153,21 @@ Following (A58, I35) most of all, with two phones in one room:
   says it on both (I36).
 - Afterwards, the project's Realtime logs should show no new
   `ClientPresenceRateLimitReached`.
+
+A mark following its words (A60, I37), which on iOS has not yet been
+compiled — build it in Xcode first:
+
+- Two phones on two versions, the Berean and the World English. Mark part
+  of a verse on one: the other shows the same words in its own version,
+  or the whole verse where they cannot be matched.
+- Mark a phrase on Android, close the book, open it again: still a phrase
+  (A60's toolbar defect).
+- Hold a word: the verse lifts as always, and the line above the inks shows
+  it in the Hebrew or Greek. Tap the line, then a word: its definition and
+  grammar open under it. Hebrew reads right to left, and nothing is clipped.
+- With a licensed version on one phone, open the panel: "In this room"
+  shows its words once the chapter has come, and says so when it has not.
+- Follow someone reading the other version: your page should land on the
+  same words, not the same fraction of the verse.
+- With VoiceOver or TalkBack: "the original words" on a verse opens the
+  panel, and each word is read as its sound, its rendering and its grammar.
