@@ -154,8 +154,8 @@ Following (A58, I35) most of all, with two phones in one room:
 - Afterwards, the project's Realtime logs should show no new
   `ClientPresenceRateLimitReached`.
 
-A mark following its words (A60, I37), which on iOS has not yet been
-compiled — build it in Xcode first:
+A mark following its words (A60, I37) — compiled on both platforms by CI,
+never yet run on a phone:
 
 - Two phones on two versions, the Berean and the World English. Mark part
   of a verse on one: the other shows the same words in its own version,
