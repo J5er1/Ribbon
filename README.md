@@ -203,17 +203,23 @@ The one deliberate difference is colour: Android takes it from the wallpaper
   are and where the ribbon is. Nothing else, because everything else a
   chapter grid usually shows is a count.
 - **The launch window carries the Wave**, unfurling, on both platforms.
-- **A mark on a phrase**, not only a verse, with handles that snap to word
-  edges and a VoiceOver equivalent for every drag; and the washes redrawn
-  as one shape per mark, screened where they overlap.
+- **A mark on a phrase**, not only a verse, and the washes redrawn as one
+  shape per mark, screened where they overlap. The page selects the way
+  any page of text does: a long-press takes a word and the platform's own
+  handles take it further, with no system menu over the words; "the verse"
+  on the toolbar, or a tap on a verse's number, takes the whole verse; and
+  a screen reader can step either end by a word or a verse (A62, I39).
 - **A mark follows its words, and everybody reads their own version.** A
   mark is kept against the Hebrew, Aramaic or Greek under the English, so
   it lands on the same words in whichever version each person reads — the
   whole verse only where a version cannot be matched word for word. Hold a
   word and the line above the inks shows it in the original; "the greek"
   or "the hebrew" on the toolbar opens the words of a selection, what each
-  one carries, and how each version read in the room says them. Following
-  lands on the same words across versions too (A60, I37).
+  one carries, and how the room's versions say them — grouped by what they
+  say, yours first, the words that differ from yours set apart, and at most
+  three faces and "and others" to a block, so a room of eleven is a few
+  blocks, not eleven lines. Following lands on the same words across
+  versions too (A60, A62, I37).
 - **What's new, once per release.** The first plain launch after an update
   puts one screen between the launch mark and the room: what changed, each
   with a small looping picture in the app's own type and inks, and "To the
