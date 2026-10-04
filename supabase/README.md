@@ -77,10 +77,9 @@ What the schema enforces structurally (see the comments in the SQL):
   project on 4 October 2026, and rehearsed there in a rolled-back
   transaction (docs/still-to-do.md §1).
 
-  **Apply it before the builds that write the columns ship.** PostgREST
-  refuses a write naming a column the table does not have, so until it is
-  applied every phrase mark from those builds fails to push
-  (`docs/still-to-do.md`, item 1).
+  It had to land before the builds that write the columns: PostgREST
+  refuses a write naming a column the table does not have, so on a project
+  without it every phrase mark from those builds would fail to push.
 
 Auth is Auth0 where the build is configured for it (see `auth0/`), with
 Supabase's own emailed code underneath; there are no passwords either way,
