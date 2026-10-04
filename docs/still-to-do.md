@@ -3,36 +3,20 @@
 What is built but not yet switched on, and what it is waiting for. Each item
 says what happens until it is done, so nothing here is a silent failure.
 
-## 1. A mark follows its words: the migration, before the apps
+## 1. A mark follows its words — the migration, applied on 4 October
 
 `supabase/migrations/20261002120000_ribbon_a_mark_follows_its_words.sql`
-adds `start_words`, `end_words` and `words_source` to `highlights`
-(docs/deviations.md A60, I37). **Apply it to the live project before any
-build that writes them reaches a phone.** Those builds send the three
-columns with every mark on part of a verse, and PostgREST refuses a write
-that names a column the table does not have — so on an unmigrated project
-every phrase mark from a new build fails to push. It stays on the phone
-that made it, where nobody else in the room can see it, and the app's
-later tries are refused the same way until the migration lands.
-Whole-verse marks write none of the columns and are unaffected. Older
-builds are unaffected either way: the columns are nullable and they never
-name them.
+is on the live project (recorded as `20261004042514`): `highlights` has
+`start_words`, `end_words` and `words_source`, and all four checks are
+validated (docs/deviations.md A60, I37). It was rehearsed there in a
+transaction that was rolled back: a phrase with its words, a mark across two
+verses and an old client's whole-verse row were accepted; words without a
+source, two sets inside one verse, a negative position, an empty set, a null
+inside a set and an empty source were refused. Nothing was left behind, and
+the one existing mark — a whole verse — was untouched.
 
-It is idempotent and changes no policy. Run the file in the SQL editor of
-project `ribbon` (`noyccfkaotuvhhaoccck`), then check that
-
-```
-select column_name from information_schema.columns
-where table_name = 'highlights' and column_name like '%words%';
-```
-
-answers `start_words`, `end_words` and `words_source`. Ship the builds
-after that, not before.
-
-Nothing else here needs switching on: the original words, the definitions
-and the links ship inside both apps, and a licensed version's links are
-worked out on the phone. The one line of credit for them is already under
-the version line on You.
+So the builds that write the words can ship. Older builds never name the
+columns and are unaffected.
 
 ## 2. Notifications: built, not switched on
 

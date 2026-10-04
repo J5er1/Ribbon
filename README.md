@@ -231,7 +231,5 @@ The one deliberate difference is colour: Android takes it from the wallpaper
   room — and the book, readable at once (deviation 22).
 
 **What is built but not yet switched on** — push notifications above all,
-which wait on the Apple and Firebase keys, and the migration that has to
-reach the live project before the builds that make marks follow their
-words — is listed, with the steps, in `docs/still-to-do.md`. `docs/deviations.md` is the honest ledger — §A is
+which wait on the Apple and Firebase keys — is listed, with the steps, in `docs/still-to-do.md`. `docs/deviations.md` is the honest ledger — §A is
 Android's, §I is the iOS pass that followed it.

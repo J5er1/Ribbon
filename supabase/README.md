@@ -3,9 +3,8 @@
 Live project: `ribbon` (`noyccfkaotuvhhaoccck`, us-east-1) in the Aeaura
 Supabase org. Apply `migrations/` in filename order — they are timestamped
 and each one is idempotent, so re-running the set is safe. The newest,
-`20261002120000_ribbon_a_mark_follows_its_words.sql`, has not been applied
-yet, and has to be before the app builds that write its columns ship; see
-the note on marks below.
+`20261002120000_ribbon_a_mark_follows_its_words.sql`, was applied on 4
+October 2026; see the note on marks below.
 
 What the schema enforces structurally (see the comments in the SQL):
 
@@ -74,7 +73,9 @@ What the schema enforces structurally (see the comments in the SQL):
   whole numbers at least zero, come as one set inside one verse, and that
   the source is a short key. No policy changes. `rooms.translation` and
   `readings.translation` stay although nothing current reads them for
-  display, because shipped clients still write them.
+  display, because shipped clients still write them. Applied to the live
+  project on 4 October 2026, and rehearsed there in a rolled-back
+  transaction (docs/still-to-do.md §1).
 
   **Apply it before the builds that write the columns ship.** PostgREST
   refuses a write naming a column the table does not have, so until it is

@@ -3741,9 +3741,9 @@ A60. **A mark follows its words, and everybody reads their own version
     `highlights` gains `start_words`, `end_words` and `words_source`,
     nullable, with four checks — positions name their source, positions are
     whole numbers at least zero, one verse keeps one set, the source is a
-    key — in `20261002120000_ribbon_a_mark_follows_its_words.sql`. It is not
-    applied to the live project yet, and a push carrying the new columns is
-    refused until it is (`docs/still-to-do.md`). A pull keeps a mark's
+    key — in `20261002120000_ribbon_a_mark_follows_its_words.sql`, applied
+    to the live project on 4 October 2026 and rehearsed there in a
+    rolled-back transaction (`docs/still-to-do.md` §1). A pull keeps a mark's
     words only with their source, as it keeps offsets only with their
     version. On the phones: `OriginalStore` (both), `OriginalPanel`, and in
     the core `OriginalText` and `PivotAligner`, whose stop words and
