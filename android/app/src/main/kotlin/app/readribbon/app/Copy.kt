@@ -1258,6 +1258,42 @@ object Copy {
      * event, not a feature.
      */
     const val A_BOOK_FINISHED = "A book finished"
+
+    // What's new (A61) — one screen, once per release, on a plain launch.
+    // The owner's call against §6.2's "no what's new", so it says the true
+    // small thing three times and gets out of the way: no exclamation
+    // points, no counts, nothing that sounds like a launch announcement.
+
+    /** What's new (A61): the screen's heading, set in small caps. */
+    const val WHATS_NEW_HEADING = "What’s new"
+
+    /** What's new (A61): the line under the heading, in Literata display. */
+    const val WHATS_NEW_TITLE = "The words under the words"
+
+    /** What's new (A61): the original under the page (A60). */
+    const val WHATS_NEW_ORIGINAL_TITLE = "The Hebrew and Greek, under every verse"
+
+    /** What's new (A61): how to reach it — the hold you already know. */
+    const val WHATS_NEW_ORIGINAL_BODY =
+        "Hold a word and its verse lifts, as always — with the word in the original already there. " +
+            "Tap the greek or the hebrew for the rest."
+
+    /** What's new (A61): everybody reads their own version again (A60). */
+    const val WHATS_NEW_OWN_VERSION_TITLE = "Your own version again"
+
+    /** What's new (A61): what that means for a mark. */
+    const val WHATS_NEW_OWN_VERSION_BODY =
+        "Everyone in the room reads the version they choose. A mark lands on the same words in theirs."
+
+    /** What's new (A61): a follow across versions lands on the words (A60). */
+    const val WHATS_NEW_FOLLOWING_TITLE = "Following lands on the same words"
+
+    /** What's new (A61): what that means when you follow. */
+    const val WHATS_NEW_FOLLOWING_BODY =
+        "Follow someone reading another version and you arrive at the words they are reading, not just the verse."
+
+    /** What's new (A61): the one way on, pinned at the foot. Says where it goes. */
+    const val WHATS_NEW_DONE = "To the room"
 }
 
 /** First names only, everywhere a person is addressed in a line of copy. */

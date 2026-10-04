@@ -88,6 +88,7 @@ final class AppModel {
         self.state = state
         self.store = store
         self.presence = presence
+        self.hadAPersonBeforeThisLaunch = state.me != nil
     }
 
     static func load() async -> AppModel {
@@ -139,6 +140,7 @@ final class AppModel {
         await Notifications.refreshAllowed()
         NotificationRouter.shared.deliver = { [weak model] destination in
             model?.pendingDestination = destination
+            model?.sentFromOutside()
         }
         // The token arrives from APNs whenever it likes; each arrival is
         // another registration, with everything else this phone holds.
@@ -1362,6 +1364,112 @@ final class AppModel {
         persist()
     }
 
+    // MARK: - What's new (A61, I38)
+    //
+    // One screen, once per release, after the launch mark and before the
+    // room — the owner's call, reversing §6.2's "no what's new" knowingly.
+    // Who sees it is decided in the core (`WhatsNew`); this is the phone's
+    // half: what it knew before this launch, what it remembers afterwards,
+    // and the one decision a launch makes.
+
+    /// Whether a person was on this phone before this launch — `hasHistory`
+    /// in `WhatsNew`'s terms. Taken from the state the model was built
+    /// with, which is what came off disk, and never from `state` later: the
+    /// way in makes a person a minute into a fresh install, and a fresh
+    /// install asked a minute later would read as an update and be shown a
+    /// tour of an app it has only just met (§6.1).
+    private let hadAPersonBeforeThisLaunch: Bool
+
+    /// Something tapped outside the app has sent it somewhere this launch:
+    /// an invite link, a widget's or a Live Activity's room, a notification,
+    /// the home-screen fire. Every one of them comes through
+    /// `handleInviteURL`, the notification router's `deliver`, or the
+    /// fire's activity in `RibbonApp`, which is why it is said there and
+    /// nowhere else.
+    @ObservationIgnored private var sentSomewhere = false
+
+    /// Whether the launch the decision was made for was a plain one. Nil
+    /// until `decideWhatsNew` has run, which it does once per model — once
+    /// per cold start, the only kind of launch that can follow an update.
+    @ObservationIgnored private var whatsNewPlainLaunch: Bool?
+
+    /// The release the screen is showing, or nil when there is no screen.
+    /// The root draws the cover while this is set, with the room already
+    /// built underneath it, so leaving is one movement from reading.
+    private(set) var whatsNew: WhatsNewRelease?
+
+    /// A tap from outside has arrived. Before the decision it makes this
+    /// launch not a plain one, so the screen waits for the next; with the
+    /// screen up, it takes the screen with it — the tap goes where it
+    /// meant rather than arriving underneath a page of news.
+    func sentFromOutside() {
+        sentSomewhere = true
+        leaveWhatsNew()
+    }
+
+    /// The launch's one decision (§12.2), made when the launch mark has run
+    /// its course and the state is loaded — whichever comes second. Every
+    /// tap that brought the app here has arrived by then: a cold-start
+    /// link or fire tap is buffered until the model exists, and a tapped
+    /// notification waits in the router until `deliver` is set during
+    /// `load()`.
+    func decideWhatsNew() {
+        guard whatsNewPlainLaunch == nil else { return }
+        let plainLaunch = !sentSomewhere
+        whatsNewPlainLaunch = plainLaunch
+        let lastSeen = state.whatsNewSeen
+        let hasHistory = hadAPersonBeforeThisLaunch
+        // Only for someone who has already been through the way in. With no
+        // person here the core can still answer yes — a phone that saw an
+        // older release and then lost its person — but the four questions
+        // are what this phone is about to show, and a tour in front of them
+        // is the thing §6.1 forbids outright.
+        let release = hasHistory && isOnboardedPerson
+            ? WhatsNew.toShow(lastSeen: lastSeen, hasHistory: hasHistory, plainLaunch: plainLaunch)
+            : nil
+        whatsNew = release
+        if release == nil {
+            // A fresh install is recorded here, so the first plain launch
+            // after the four questions does not describe what they have just
+            // met. A launch from a tap records nothing, and is still owed.
+            recordWhatsNew(WhatsNew.seenAfter(
+                lastSeen: lastSeen, hasHistory: hasHistory, plainLaunch: plainLaunch, shown: false))
+        }
+    }
+
+    /// The screen is in front of the person. Recorded now as well as on the
+    /// way out, so that a phone put away with the screen up — and the app
+    /// reclaimed in the pocket — does not show it a second time. Once per
+    /// release means once.
+    func whatsNewShown() {
+        guard whatsNew != nil else { return }
+        recordWhatsNewShown()
+    }
+
+    /// Every way out of the screen comes through here: the control at its
+    /// foot, the pull down, the escape gesture, a hardware Esc, and a tap
+    /// from outside the app while it is up.
+    func leaveWhatsNew() {
+        guard whatsNew != nil else { return }
+        recordWhatsNewShown()
+        whatsNew = nil
+    }
+
+    private func recordWhatsNewShown() {
+        guard let plainLaunch = whatsNewPlainLaunch else { return }
+        recordWhatsNew(WhatsNew.seenAfter(
+            lastSeen: state.whatsNewSeen, hasHistory: hadAPersonBeforeThisLaunch,
+            plainLaunch: plainLaunch, shown: true))
+    }
+
+    /// Remembered on this phone only, beside the other things it has been
+    /// told or asked once; nothing about it is ever pushed.
+    private func recordWhatsNew(_ id: String?) {
+        guard let id, id != state.whatsNewSeen else { return }
+        state.whatsNewSeen = id
+        persist()
+    }
+
     /// "Tell me": the system's own prompt, now and only now.
     func askForNotifications() async {
         markAskedAboutNotifications()
@@ -1401,7 +1509,14 @@ final class AppModel {
                 await remote.signOut()
             }
         }
+        // What's new is about the build on this phone, not the person
+        // (A61): someone who starts again here, and relaunches, has not
+        // updated, and is not owed a tour of the app they have just met. A
+        // phone wiped back to the four questions is a fresh install, and a
+        // fresh install records the latest release — as Android does.
+        let whatsNewSeen = WhatsNew.releases.first?.id ?? state.whatsNewSeen
         state = AppState()
+        state.whatsNewSeen = whatsNewSeen
         portraits = [:]
         persist()
         RoomWatch.stop()
@@ -1918,10 +2033,12 @@ final class AppModel {
     func handleInviteURL(_ url: URL) {
         if let roomID = Self.roomID(from: url) {
             pendingDestination = .room(roomID: roomID)
+            sentFromOutside()
             return
         }
         guard let token = Self.inviteToken(from: url) else { return }
         pendingInvite = PendingInvite(token: token)
+        sentFromOutside()
     }
 
     /// ribbon://room/<id> — a tapped widget or Live Activity (S24) opens the

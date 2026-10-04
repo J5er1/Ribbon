@@ -80,6 +80,7 @@ import app.readribbon.screens.MenuScreen
 import app.readribbon.screens.OnboardingFlow
 import app.readribbon.screens.PersonScreen
 import app.readribbon.screens.RoomScreen
+import app.readribbon.screens.WhatsNewScreen
 import kotlinx.coroutines.flow.Flow
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
@@ -171,11 +172,15 @@ internal class RootHolder : ViewModel() {
  *   handed down as a stream. A link that arrives while the app is open sets
  *   `pendingInvite` and nothing else — the join rides over whatever the
  *   person is doing and never switches the room underneath them.
+ * @param plainLaunch the Activity was opened rather than sent somewhere —
+ *   no link, notification or home-screen fire behind it — and is new rather
+ *   than rebuilt. Only a plain launch can be shown what's new (A61).
  */
 @Composable
 fun RibbonRoot(
     links: Flow<Uri>,
     destinations: Flow<Destination> = emptyFlow(),
+    plainLaunch: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -205,7 +210,14 @@ fun RibbonRoot(
     LaunchedEffect(links) {
         links.collect { url ->
             val loaded = holder.model
-            if (loaded != null) loaded.handleInviteURL(url) else bufferedURL = url
+            if (loaded != null) {
+                // A link tapped while what's new is up goes where it meant,
+                // and takes the screen with it (A61).
+                loaded.leaveWhatsNew()
+                loaded.handleInviteURL(url)
+            } else {
+                bufferedURL = url
+            }
         }
     }
 
@@ -217,6 +229,7 @@ fun RibbonRoot(
         destinations.collect { destination ->
             val loaded = holder.model
             if (loaded != null) {
+                loaded.leaveWhatsNew()
                 loaded.pendingDestination = destination
             } else {
                 bufferedDestination = destination
@@ -227,6 +240,12 @@ fun RibbonRoot(
     LaunchedEffect(Unit) {
         if (holder.model == null) {
             val loaded = AppModel.load(context)
+            // What's new is decided here, after the store is off disk and
+            // before anything this launch does can change it — and with
+            // anything that arrived while it loaded counted as a tap, which
+            // it was (A61).
+            val tapped = bufferedURL != null || bufferedDestination != null
+            loaded.decideWhatsNew(plainLaunch = plainLaunch && !tapped)
             bufferedURL?.let { url ->
                 loaded.handleInviteURL(url)
                 bufferedURL = null
@@ -330,13 +349,31 @@ fun RibbonRoot(
         }
     }
 
+    // The launch mark has lifted off what's new: it is in front of the
+    // person now, and that is when it counts as shown (A61).
+    LaunchedEffect(model, marked) {
+        if (marked) model?.whatsNewShown()
+    }
+
     Box(modifier.fillMaxSize()) {
         if (model == null) {
             // One frame of the unlit ground while state loads from disk —
             // indistinguishable from the launch screen.
             Box(Modifier.fillMaxSize().room())
         } else {
-            RootContent(model)
+            // The room is built under what's new from the first frame, so
+            // that leaving it is the room already there rather than the room
+            // starting to load. While the cover is up the room is taken out
+            // of a screen reader's path, as it is under the menu: a layer
+            // that covers the screen does not cover it for TalkBack (§11).
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .then(if (model.whatsNew != null) Modifier.clearAndSetSemantics {} else Modifier),
+            ) {
+                RootContent(model)
+            }
+            WhatsNewCover(model)
         }
 
         // The launch mark, over the top of all of it, until the room can be
@@ -348,6 +385,34 @@ fun RibbonRoot(
         // screen reader to walk into.
         if (!marked) {
             LaunchMark(ready = model != null, onDone = { marked = true })
+        }
+    }
+}
+
+/**
+ * What's new, over the room (A61, §12.2).
+ *
+ * A full-screen cover rather than a sheet: there is nothing beneath it the
+ * person is meant to see past, and it is already there when the launch mark
+ * lifts, so it never *arrives* — it is only ever left. Leaving slides it
+ * down off the room on the settle token, the same way the menu goes, and
+ * under reduce motion it is a cut (§11).
+ */
+@Composable
+private fun WhatsNewCover(model: AppModel) {
+    val reduceMotion = rememberReduceMotion()
+    val settle: FiniteAnimationSpec<Float> = RibbonMotion.settle(reduceMotion)
+    val slide: FiniteAnimationSpec<IntOffset> = RibbonMotion.settle(reduceMotion)
+    AnimatedContent(
+        targetState = model.whatsNew,
+        modifier = Modifier.fillMaxSize(),
+        transitionSpec = {
+            EnterTransition.None togetherWith (slideOutVertically(slide) { it } + fadeOut(settle))
+        },
+        label = "whats-new",
+    ) { release ->
+        if (release != null) {
+            WhatsNewScreen(release = release, onLeave = { model.leaveWhatsNew() })
         }
     }
 }

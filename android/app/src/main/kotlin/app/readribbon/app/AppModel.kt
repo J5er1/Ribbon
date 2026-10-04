@@ -50,6 +50,8 @@ import app.readribbon.core.TranslationID
 import app.readribbon.core.TranslationRegistry
 import app.readribbon.core.VerseAddress
 import app.readribbon.core.VerseRange
+import app.readribbon.core.WhatsNew
+import app.readribbon.core.WhatsNewRelease
 import app.readribbon.core.bankedIntervals
 import app.readribbon.data.AppSettings
 import app.readribbon.data.AppState
@@ -2018,6 +2020,113 @@ class AppModel(
         persist()
     }
 
+    // MARK: - What's new (A61)
+    //
+    // One screen, once per release, after the launch mark and before the
+    // room — the owner's call, reversing §6.2's "no what's new" knowingly.
+    // Who sees it is decided in the core (`WhatsNew`); this is the phone's
+    // half: what it already knew before this launch, what it remembers
+    // afterwards, and the one decision a launch makes.
+
+    /**
+     * Whether a person was on this phone before this launch — `hasHistory`
+     * in `WhatsNew`'s terms.
+     *
+     * Taken from the state the model was *built* with, which is what came
+     * off disk, and never from [state] later: the way in creates a person a
+     * minute into a fresh install, and a fresh install asked a minute later
+     * would read as an update and be shown a tour of an app it has not yet
+     * opened (§6.1).
+     */
+    private val hadAPersonBeforeThisLaunch: Boolean = initialState.me != null
+
+    /** The launch the decision was made for: `null` until it has been. */
+    private var whatsNewLaunch: Boolean? = null
+
+    /**
+     * The release the screen is showing, or null when there is no screen.
+     * The root draws the cover while this is set and the room underneath it
+     * the whole time, so leaving is one frame from reading.
+     */
+    var whatsNew: WhatsNewRelease? by mutableStateOf(null)
+        private set
+
+    /**
+     * The launch's one decision (§12.2), made once per model — that is, once
+     * per cold start, which is the only kind of launch that can follow an
+     * update.
+     *
+     * @param plainLaunch the app was opened rather than sent somewhere: no
+     *   notification, invite or other link, no widget behind it. A launch
+     *   that came from a tap goes where the tap meant; the screen waits.
+     */
+    fun decideWhatsNew(plainLaunch: Boolean) {
+        if (whatsNewLaunch != null) return
+        whatsNewLaunch = plainLaunch
+        val lastSeen = state.whatsNewSeen
+        val hasHistory = hadAPersonBeforeThisLaunch
+        // Only for someone who has already been through the way in. With no
+        // person here the core can still answer yes — a phone that saw an
+        // older release and then lost its person to a damaged file — but
+        // the four questions are what that phone is about to show, and a
+        // tour in front of them is the thing §6.1 forbids outright.
+        val release = WhatsNew.toShow(lastSeen = lastSeen, hasHistory = hasHistory, plainLaunch = plainLaunch)
+            ?.takeIf { hasHistory }
+        whatsNew = release
+        if (release == null) {
+            // A fresh install is recorded here, so the first plain launch
+            // after the four questions does not describe what they just met.
+            // A launch from a tap records nothing, and is still owed.
+            recordWhatsNew(
+                WhatsNew.seenAfter(
+                    lastSeen = lastSeen, hasHistory = hasHistory,
+                    plainLaunch = plainLaunch, shown = false,
+                ),
+            )
+        }
+    }
+
+    /**
+     * The screen is in front of the person: the launch mark has lifted off
+     * it. Recorded now rather than only on the way out, so that a phone put
+     * away with the screen up — and the process reclaimed in the pocket —
+     * does not show it a second time. Once per release means once.
+     */
+    fun whatsNewShown() {
+        if (whatsNew == null) return
+        recordWhatsNewShown()
+    }
+
+    /**
+     * Every way out of the screen comes through here: the control at its
+     * foot, the system back, and anything tapped from outside the app while
+     * it is up — a notification or a link, which goes where it meant and
+     * takes the screen with it rather than arriving underneath it.
+     */
+    fun leaveWhatsNew() {
+        if (whatsNew == null) return
+        recordWhatsNewShown()
+        whatsNew = null
+    }
+
+    private fun recordWhatsNewShown() {
+        recordWhatsNew(
+            WhatsNew.seenAfter(
+                lastSeen = state.whatsNewSeen,
+                hasHistory = hadAPersonBeforeThisLaunch,
+                plainLaunch = whatsNewLaunch ?: return,
+                shown = true,
+            ),
+        )
+    }
+
+    /** Remembered on this phone only; nothing about it is ever pushed. */
+    private fun recordWhatsNew(id: String?) {
+        if (id == null || id == state.whatsNewSeen) return
+        state = state.copy(whatsNewSeen = id)
+        persist()
+    }
+
     /**
      * Whether now is the moment to ask about notifications (§6.1).
      *
@@ -2122,7 +2231,14 @@ class AppModel(
                 remote.signOut()
             }
         }
-        state = AppState()
+        // Everything about the person goes; what this phone's build has
+        // already said does not (A61). Left null, the next person through
+        // the way in would read, on their first plain launch, as somebody
+        // updating from before the screen existed — and be told about an app
+        // they had only just been shown. A phone wiped back to the four
+        // questions is a fresh install, and a fresh install records the
+        // latest release.
+        state = AppState(whatsNewSeen = WhatsNew.releases.firstOrNull()?.id ?: state.whatsNewSeen)
         portraits.clear()
         persist()
         // Nothing left to watch for, and on this path watching on would be

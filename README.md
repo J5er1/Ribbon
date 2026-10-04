@@ -214,6 +214,11 @@ The one deliberate difference is colour: Android takes it from the wallpaper
   or "the hebrew" on the toolbar opens the words of a selection, what each
   one carries, and how each version read in the room says them. Following
   lands on the same words across versions too (A60, I37).
+- **What's new, once per release.** The first plain launch after an update
+  puts one screen between the launch mark and the room: what changed, each
+  with a small looping picture in the app's own type and inks, and "To the
+  room" at the foot. Never on a fresh install, never after a tap on a
+  notification, link or widget, and still under reduce motion (A61, I38).
 - **Notifications, gated three ways** and never a badge; the one ask made in
   context. They arrive by push the moment the thing happens — a note, the
   cards, a finished book, "Ruth is reading Mark", thinking of you — once the

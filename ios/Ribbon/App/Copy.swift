@@ -555,6 +555,35 @@ enum Copy {
     /// because the body is a sentence about the room and the title says
     /// what kind of thing arrived.
     static let aBookFinished = "A book finished"
+
+    // MARK: What's new (A61) — one screen, once per release, on a plain
+    // launch. The owner's call against §6.2's "no what's new", so it says
+    // the true small thing three times and gets out of the way: no
+    // exclamation points, no counts, nothing that sounds like a launch.
+
+    /// What's new (A61): the screen's heading, set in small caps.
+    static let whatsNewHeading = "What’s new"
+    /// What's new (A61): the line under the heading, in Literata display.
+    static let whatsNewTitle = "The words under the words"
+    /// What's new (A61): the original under the page (A60).
+    static let whatsNewOriginalTitle = "The Hebrew and Greek, under every verse"
+    /// What's new (A61): how to reach it — the hold you already know, and
+    /// the toolbar's verb by the name the toolbar gives it.
+    static let whatsNewOriginalBody =
+        "Hold a word and its verse lifts, as always — with the word in the original already there. Tap the greek or the hebrew for the rest."
+    /// What's new (A61): everybody reads their own version again (A60).
+    static let whatsNewOwnVersionTitle = "Your own version again"
+    /// What's new (A61): what that means for a mark.
+    static let whatsNewOwnVersionBody =
+        "Everyone in the room reads the version they choose. A mark lands on the same words in theirs."
+    /// What's new (A61): a follow across versions lands on the words (A60).
+    static let whatsNewFollowingTitle = "Following lands on the same words"
+    /// What's new (A61): what that means when you follow.
+    static let whatsNewFollowingBody =
+        "Follow someone reading another version and you arrive at the words they are reading, not just the verse."
+    /// What's new (A61): the one way on, pinned at the foot. It says where
+    /// it goes, because that is all it does.
+    static let whatsNewDone = "To the room"
 }
 
 /// The first word of a name, for the places that say it in passing. Kept

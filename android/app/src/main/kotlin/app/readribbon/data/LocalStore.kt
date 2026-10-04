@@ -216,6 +216,23 @@ data class AppState(
      * member's phone is the room's live link either way.
      */
     val invitesHandedOut: Set<Uuid> = emptySet(),
+    /**
+     * The last "what's new" release this phone has shown, or recorded as
+     * not needing to (A61) — a release id from `WhatsNew.releases`, never a
+     * version number.
+     *
+     * The same contract as [hasSeenMarginHint], one step wider: a flag says
+     * "told once, ever", and this says "told once, per release". Null is
+     * what every state file written before the screen existed decodes to,
+     * and that is meaningful rather than missing — with a person already
+     * here, it is somebody updating from a build that never had the screen,
+     * and they are the people it is for. `WhatsNew.toShow` reads it that way.
+     *
+     * Per install, and never pushed to the backend, for the reason
+     * [hasAskedAboutNotifications] is not: it is a fact about the build on
+     * this phone, and a second phone on an older build has not seen anything.
+     */
+    val whatsNewSeen: String? = null,
 )
 
 /**
@@ -297,6 +314,13 @@ class LocalStore(context: Context) {
                 json.decodeFromJsonElement(it)
             },
             hasAskedAboutNotifications = saved("hasAskedAboutNotifications", false) {
+                json.decodeFromJsonElement(it)
+            },
+            // The fourth thing this phone has been told once (A61). Lost, it
+            // would put the release's screen in front of the room a second
+            // time, on the morning after the file was damaged — the worst
+            // moment to be shown anything.
+            whatsNewSeen = saved<String?>("whatsNewSeen", null) {
                 json.decodeFromJsonElement(it)
             },
             // An invite that never reached the backend exists only here, and

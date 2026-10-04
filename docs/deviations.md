@@ -3818,6 +3818,128 @@ A60. **A mark follows its words, and everybody reads their own version
     two versions, and a licensed chapter lined up on a real phone. iOS is
     compiled by CI (I37) and has not run.
 
+A61. **What's new, on launch (reverses §6.2's "no what's new").** Owner's
+    call, in the owner's words: *"we should also start adding a whats new to
+    the app and kinda showcase it with little animations and just tell
+    people about it when they open on a new version."* Asked how, the owner
+    chose *"A screen on launch"* over a quiet row in the room or a hint in
+    the book, and *"Add it to this PR"*.
+
+    The rule it reverses is §6.2's, under "The thing to protect in this
+    loop": *"Nothing may be inserted between opening the app and reading. No
+    “what's new,” no streak card, no verse of the day, no re-engagement
+    prompt, no rating request positioned at the moment of completion. The
+    fastest path from launch to Scripture is the product."* It names this
+    exact thing, in quotation marks. §6.1 says the same of a first run:
+    *"The whole thing is four decisions and no tour. There is no carousel,
+    no feature walkthrough…"* A42 was the first entry in this ledger to
+    reverse a named principle and A60 the first to put one back; this is
+    the second to reverse one, and the plainest, because the principle
+    anticipated it by name.
+
+    **What it keeps of what the rule protects.** The rule is against a
+    launch that is about the app rather than the reading, every time, for
+    everyone. So:
+
+    - **One screen**, not a carousel, and only the latest release — a phone
+      three releases behind is shown the newest, never a backlog.
+    - **Once per release.** It counts as seen the moment the launch mark
+      lifts off it, not only on the way out, so a phone put away with it up
+      and reclaimed in the pocket does not show it again.
+    - **A plain launch only.** A launch that came from something tapped — a
+      notification, an invite or any other link, the home-screen fire, a
+      widget or a Live Activity — goes where the tap meant, records nothing,
+      and the screen waits for the next time the app is simply opened. A tap
+      arriving while it is up takes it away and goes where it meant, rather
+      than arriving underneath it. Nothing is ever delayed for somebody who
+      came from something they tapped.
+    - **Never a fresh install.** A phone with nobody on it gets the four
+      questions and no tour (§6.1 is untouched), and records the latest
+      release as it goes, so the first plain launch after the way in does
+      not describe what was just met. A person made during this launch is
+      not history; a phone wiped back to the way in by deleting the account
+      is a fresh install too.
+    - **One tap to the room.** "To the room", pinned at the foot and live
+      from the first frame. The room is already built underneath, so
+      leaving is the room there, not the room starting to load. No timers,
+      no auto-advance, nothing holding the button. Every way out — the
+      button, the system back, Escape — records it.
+
+    **What it shows.** "What’s new" in small caps, and under it "The words
+    under the words". Then A60, as three things, each a title and a line or
+    two: the Hebrew and Greek under every verse, and how to reach them; your
+    own version again; following that lands on the same words. Each has a
+    small picture above it drawn in the app's own type and inks — a word
+    held, lifting, with "λόγος · logos · Word" over it; the ochre wash
+    drawing along "Through Him" in the Berean and then "through him" in the
+    World English, at opposite ends of the line; a reading line under "all
+    things" in one version and gliding to "All things" in the other, not to
+    the same place on the line. No images, no confetti, no badges, no counts,
+    no exclamation points. They move on the house curves, 320–480 ms
+    ease-out with no overshoot, a breath of 1.6 to 2 seconds between beats,
+    each loop about four and a half seconds and the three staggered so they
+    take turns. Under reduce motion each is one still frame of how it ends,
+    nothing loops, and leaving is a cut. The pictures are decorative to
+    TalkBack; the heading is one header and is where focus starts, each
+    item reads as title then body, and the room underneath is taken out of
+    a screen reader's path while the cover is up.
+
+    It is a full-screen cover on the room's ground, with grain — not a
+    sheet, and not glass — because it is the room's first page this once,
+    not something laid over it. It never arrives: it is already there when
+    the launch mark (A28) lifts, and only ever leaves, down off the room the
+    way the menu goes.
+
+    **Where it lives.** Who sees it is decided in the core, `WhatsNew`
+    (RibbonCore and its port): `releases`, newest first, and `toShow` and
+    `seenAfter`, which take what this phone last saw, whether a person was
+    here before this launch, and whether the launch was plain. The rules run
+    in one order — no releases, already seen, fresh install, not a plain
+    launch, show the latest — so a fresh install opened from an invite still
+    records the release. What this phone saw is `whatsNewSeen` in the local
+    state, a release id and never a version number: per install, never
+    pushed, because it is a fact about the build on this phone and a second
+    phone on an older build has seen nothing. A file from before the screen
+    decodes it as null, which with a person already here is exactly somebody
+    updating from a build without it — the people it is for — and a damaged
+    file salvages it with the other one-time flags. On Android:
+    `AppModel.decideWhatsNew`, `whatsNewShown` and `leaveWhatsNew`;
+    `isPlainLaunch` in `MainActivity`, which also treats an Activity rebuilt
+    after the process was reclaimed as not plain, since that is somebody
+    coming *back* to the menu they had open; the cover in `RibbonRoot`; and
+    `screens/WhatsNewScreen.kt`. The nine lines are in `Copy`, in the same
+    order on both phones.
+
+    **Tests that hold it.** In RibbonCore and its port, same names, same
+    inputs: `WhatsNewTests` — today's release, the raw values, no releases,
+    a fresh install records and skips, an update from before the screen
+    shows, the same release twice shows once, a link launch records nothing
+    and the next plain launch shows, an older id shows the latest only, an
+    unknown id shows the latest, not shown records nothing. On Android:
+    `WhatsNewOnLaunchTest` (the model's decision, a person made this launch,
+    the wiped phone, which intents send a launch somewhere, a restored
+    Activity, and the pictures' timing and still frames), the new key in
+    `StateSurvivesAnUpdateTest` and `SettingsSurviveADamagedFileTest`, and
+    four look-book shots (`theWhatsNew`, `theWhatsNewStill`,
+    `theWhatsNewMoving`, `theWhatsNewMovingOn`), each on both palettes and
+    to the foot, looked at. 152 tests in the Swift core, 156 in the Kotlin.
+    **Not exercised on a device**: the motion, TalkBack's first focus, and a
+    real update over an installed build.
+
+    **Still not here:**
+
+    - **Each release has to add its own.** Nothing is generated from a
+      version number: a release with something to say adds its entry at the
+      head of `WhatsNew.releases`, with a new id, and its lines to `Copy`,
+      on both phones and in both cores. A release that adds nothing shows
+      nothing. The first entry, `2026-10-original`, is this change's own.
+    - **No way back to it.** Once left it is gone; there is no row for it in
+      the menu. A second look is the next release's.
+    - **A background pull can lose it.** A pull that read the state file
+      before this launch recorded the release, and writes it after, puts
+      the old value back, and the screen shows once more on a later plain
+      launch. The race is the same one every one-time flag already has.
+
 ## iOS (phase four): the second pass
 
 Android took a design pass of its own (A18–A51) and the two platforms
@@ -4510,6 +4632,42 @@ I37. **A mark follows its words, on iOS (A60).** The decisions are A60's,
       and Xcode Cloud on every push, and has been green. It has not run:
       layout, fonts, right-to-left order, motion and VoiceOver focus are the
       first real test.
+
+I38. **What's new, on iOS (A61).** The decisions are A61's, and so is the
+    reversal; what is only iOS's:
+
+    - **The decision waits for both the mark and the state**, whichever
+      comes second, and is made in the same update as the mark's leaving,
+      so the screen is already under it as it fades and the room never
+      shows through for a frame. Every tap that brought the app here has
+      arrived by then: a link or a fire tap at a cold start is buffered
+      until the model exists, and a tapped notification waits in the router
+      until `deliver` is set. It is decided once per model, which is once
+      per cold start; there is no restored Activity to tell apart.
+    - **The home-screen fire carries no URL**, so a tap on it is heard as
+      an activity of the widget's own kind, `bible.ribbon.fire`
+      (`onContinueUserActivity` in `RibbonApp`). That is how iOS delivers a
+      tap on a widget with no link; it has not been seen on a phone.
+    - **A notification whose payload cannot be read** still counts as a
+      plain launch, where Android counts any tap. Pushes and the phone's own
+      notifications always carry a destination.
+    - **Drawn in the tree, not presented.** `WhatsNewCover` sits between the
+      room and the launch mark rather than in a `fullScreenCover`, so the
+      mark fades straight off it, and a tap arriving while it is up can take
+      it away in the same update that opens the book — two presentations
+      changing in one update is one too many for SwiftUI.
+    - **The ways out are iOS's own:** the button, a pull past the top of
+      90 points with a finger down — the pull that closes the book (S02); a
+      momentum bounce does not count — the VoiceOver escape gesture, and Esc
+      on a keyboard. It leaves down and fading; under Reduce Motion a page
+      the size of the screen does not travel, and it fades rather than cuts.
+    - **The pictures are `TextRenderer`s**, so the lift, the wash and the
+      reading line are drawn on the very glyphs of the line, not over a
+      copy of it.
+    - **Written without Xcode, compiled by CI.** The decision and the state
+      were checked under the Linux harness; the screen has SwiftUI previews
+      only. The text renderers are the likeliest place for the first build
+      to fail, and the motion and VoiceOver focus have not run.
 
 ## Licensed translations (decided: API.Bible)
 

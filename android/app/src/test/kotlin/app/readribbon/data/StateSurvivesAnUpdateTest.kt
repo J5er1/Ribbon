@@ -109,6 +109,9 @@ class StateSurvivesAnUpdateTest {
         assertTrue("a highlight from before original words carries none",
             state.highlights.single().range.let { it.startWords == null && it.wordsSource == null })
         assertTrue("nothing has been notified about yet", state.notifiedThrough == null)
+        // A build from before what's new had never shown it, and null is how
+        // that reads: with a person here, an update that is owed the screen.
+        assertTrue("no release has been shown yet", state.whatsNewSeen == null)
     }
 
     /**

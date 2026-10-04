@@ -14,11 +14,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import app.readribbon.R
@@ -82,6 +85,7 @@ import app.readribbon.screens.PreviewStep
 import app.readribbon.screens.RoomScreen
 import app.readribbon.screens.ShelfView
 import app.readribbon.screens.TextSettingsScreen
+import app.readribbon.screens.WhatsNewScreen
 import app.readribbon.services.LocalPresenceService
 import app.readribbon.services.RemoteSync
 import app.readribbon.services.SessionStore
@@ -1556,6 +1560,66 @@ class LookBookTest {
                 }
             }
         }
+    }
+
+    /**
+     * What's new (A61, §12.3), as it stands when the launch mark lifts off
+     * it: the heading, the first of the three, and the way on pinned at the
+     * foot. Then scrolled to the foot, so the third is in the picture too.
+     *
+     * The vignettes loop on an infinite frame clock, which a test leaves
+     * alone, so this is each picture at rest — the line before anything has
+     * happened to it.
+     */
+    @Test fun theWhatsNew() {
+        shootWhatsNew("whats-new", still = false, frozenAt = null)
+    }
+
+    /**
+     * The same screen under reduce motion: no loop, and each picture held at
+     * its end state — the word lifted with its Greek over it, the ink on the
+     * same words in both versions, both reading lines under "all things".
+     */
+    @Test fun theWhatsNewStill() {
+        shootWhatsNew("whats-new-still", still = true, frozenAt = null)
+    }
+
+    /**
+     * Two moments inside the loop, so the movement can be checked as well as
+     * where it ends: mid-lift with the press settling and the first wash
+     * half drawn; then the second wash coming and the follower's line on the
+     * wrong words, about to glide to the right ones.
+     */
+    @Test fun theWhatsNewMoving() {
+        shootWhatsNew("whats-new-at-1000", still = false, frozenAt = 1_000L)
+    }
+
+    @Test fun theWhatsNewMovingOn() {
+        shootWhatsNew("whats-new-at-1800", still = false, frozenAt = 1_800L)
+    }
+
+    private fun shootWhatsNew(name: String, still: Boolean, frozenAt: Long?) {
+        val appearance = Appearance(ApplicationProvider.getApplicationContext())
+        appearance.wallpaperColour = true
+        val release = app.readribbon.core.WhatsNew.releases.first()
+        compose.setContent {
+            RibbonTheme(appearance = appearance) {
+                CompositionLocalProvider(app.readribbon.design.LocalReduceMotion provides still) {
+                    Box(Modifier.fillMaxSize()) {
+                        WhatsNewScreen(release = release, onLeave = {}, frozenAt = frozenAt)
+                    }
+                }
+            }
+        }
+        capture(name)
+        appearance.wallpaperColour = false
+        capture("$name-ribbon")
+        // All the way down, past the last line, so the fade over the way on
+        // has gone and the foot is the foot the person scrolls to.
+        compose.onNode(hasScrollAction()).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 100_000f) }
+        capture("$name-foot-ribbon")
+        appearance.wallpaperColour = true
+        capture("$name-foot")
     }
 
     /**

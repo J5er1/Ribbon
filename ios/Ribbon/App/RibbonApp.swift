@@ -5,6 +5,10 @@ import RibbonCore
 // "welcome back," no interstitial — the app opening on the room is the app
 // saying nothing, which is correct (§05). The fastest path from launch to
 // Scripture is the product (§6.2).
+//
+// With one exception, the owner's (A61, I38): the first plain launch of a
+// release with something new in it puts one screen between the mark and
+// the room, once, and never in front of a launch that came from a tap.
 
 /// The model, for the two things that run without a scene: a background
 /// pull, and a tapped notification arriving before the window exists.
@@ -66,6 +70,10 @@ struct RibbonApp: App {
     /// A URL that arrived before the model finished loading — the normal
     /// case when tapping an invite link cold-starts the app (S16).
     @State private var bufferedURL: URL?
+    /// A tap on the home-screen fire that arrived before the model did. The
+    /// fire names no room, so there is nothing to go to, but the launch
+    /// still came from a tap, and what's new waits for a plain one (A61).
+    @State private var bufferedTap = false
     /// The mark's unfurl has run its course (ledger A28): the launch mark
     /// leaves when the model is loaded *and* the mark has settled, so a
     /// fast phone still sees the whole of it and a slow one never sees a
@@ -79,14 +87,26 @@ struct RibbonApp: App {
                 if let model {
                     RootView()
                         .environment(model)
+                        // Under what's new the room is already built, so
+                        // leaving is one movement; but it is not there
+                        // for a screen reader until it is.
+                        .accessibilityHidden(model.whatsNew != nil)
+                    WhatsNewCover()
+                        .environment(model)
                 } else {
                     // The unlit ground while state loads from disk —
                     // indistinguishable from the launch screen.
                     GrainBackground()
                 }
                 if model == nil || !markSettled {
-                    LaunchMark { markSettled = true }
-                        .transition(.opacity)
+                    LaunchMark {
+                        markSettled = true
+                        // In the same update as the mark's leaving, so
+                        // what's new is already under it as it fades and
+                        // the room never shows through for a frame.
+                        model?.decideWhatsNew()
+                    }
+                    .transition(.opacity)
                 }
             }
             .animation(RibbonMotion.settle, value: model == nil || !markSettled)
@@ -98,9 +118,16 @@ struct RibbonApp: App {
                         loaded.handleInviteURL(bufferedURL)
                         self.bufferedURL = nil
                     }
+                    if bufferedTap {
+                        loaded.sentFromOutside()
+                        bufferedTap = false
+                    }
                     AppSession.model = loaded
                     loaded.visibleRoomID = loaded.currentRoom?.id
                     model = loaded
+                    // A mark that settled before the state was read left
+                    // the decision to now (A61).
+                    if markSettled { loaded.decideWhatsNew() }
                     // The room renders from local state instantly; the
                     // backend catches up behind it.
                     await loaded.refreshFromRemote()
@@ -114,6 +141,18 @@ struct RibbonApp: App {
                     model.handleInviteURL(url)
                 } else {
                     bufferedURL = url
+                }
+            }
+            // The home-screen fire carries no URL, so a tap on it arrives as
+            // an activity of the widget's own kind (FireWidget's
+            // "bible.ribbon.fire"). It goes nowhere but the room; it only
+            // has to be heard as a tap, like every other way in from outside
+            // (A61).
+            .onContinueUserActivity("bible.ribbon.fire") { _ in
+                if let model {
+                    model.sentFromOutside()
+                } else {
+                    bufferedTap = true
                 }
             }
             .onChange(of: scenePhase) { _, phase in
