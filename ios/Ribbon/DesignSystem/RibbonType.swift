@@ -21,6 +21,22 @@ enum RibbonType {
         .custom(literata, size: size, relativeTo: .body)
     }
 
+    /// Literata's italic, for a word's transliteration (A60): how to say it,
+    /// set apart from what it means. The italic face is registered beside
+    /// the roman, so the family finds it.
+    static func scriptureItalic(_ size: CGFloat) -> Font {
+        .custom(literata, size: size, relativeTo: .body).italic()
+    }
+
+    /// The original words themselves (A60): Greek in Literata, which has
+    /// polytonic Greek; Hebrew and Aramaic in Noto Serif Hebrew, which has
+    /// the vowel points Literata lacks.
+    static func original(_ size: CGFloat, hebrew: Bool) -> Font {
+        .custom(hebrew ? hebrewFace : literata, size: size, relativeTo: .body)
+    }
+
+    static let hebrewFace = "Noto Serif Hebrew"
+
     /// Display — book names, the finishing line. (Literata standing in for
     /// Cesso.)
     static func display(_ size: CGFloat) -> Font {

@@ -61,6 +61,7 @@ class SettingsSurviveADamagedFileTest {
           },
           "hasSeenMarginHint": true,
           "hasPulledTheFire": true,
+          "whatsNewSeen": "2026-10-original",
           "invitesHandedOut": [ "1a2b3c4d-0000-4000-8000-000000000009" ]
         }
     """.trimIndent()
@@ -89,6 +90,8 @@ class SettingsSurviveADamagedFileTest {
 
         assertTrue("the margin hint stays seen", state.hasSeenMarginHint)
         assertTrue("the fire stays pulled", state.hasPulledTheFire)
+        // A release told about once is not told about again (A61).
+        assertEquals("what's new stays seen", "2026-10-original", state.whatsNewSeen)
         assertEquals(
             "an invite already handed out is still handed out",
             1, state.invitesHandedOut.size,

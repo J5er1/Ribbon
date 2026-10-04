@@ -16,6 +16,8 @@ let package = Package(
     ],
     targets: [
         .target(name: "RibbonCore"),
-        .testTarget(name: "RibbonCoreTests", dependencies: ["RibbonCore"]),
+        // The fixtures are read by path from the repository, as the corpus
+        // tests read the bundled Scripture, so they are not resources.
+        .testTarget(name: "RibbonCoreTests", dependencies: ["RibbonCore"], exclude: ["Fixtures"]),
     ]
 )

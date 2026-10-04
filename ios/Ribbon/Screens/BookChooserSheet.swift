@@ -22,7 +22,7 @@ struct BookChooserSheet: View {
     /// not flash "Nothing matches" on the way to the hits.
     @State private var searching = false
 
-    private var translation: TranslationID { model.words(room: room, reading: model.openReading(in: room)) }
+    private var translation: TranslationID { model.words(room: room) }
     private var trimmedQuery: String { query.trimmingCharacters(in: .whitespaces) }
     /// Two characters is where the chooser turns into a search (S13).
     private var hasQuery: Bool { trimmedQuery.count >= 2 }

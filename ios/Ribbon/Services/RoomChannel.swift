@@ -10,9 +10,9 @@ import RibbonCore
 ///     they have gone still, and who they are following. Announced only
 ///     while someone is actually reading: opening the channel says nothing.
 ///   * **The reading line.** Finer than presence — the verse, how far
-///     through it, and the last thing on the screen — and only ever sent
-///     while somebody present is following you (§4.2). Nothing on it is a
-///     time: it is stamped where it arrives.
+///     through it, the original word under it (A60), and the last thing on
+///     the screen — and only ever sent while somebody present is following
+///     you (§4.2). Nothing on it is a time: it is stamped where it arrives.
 ///   * **Thinking of you.** The contentless tap (§4.3).
 ///   * **A change nudge.** "Something in this room moved" — no content, no
 ///     second copy of the truth, just a reason for the other phone to pull
@@ -89,6 +89,9 @@ final class RoomChannel: PresenceService {
         var end: ReadingPoint?
         var settled: Bool
         var carried: Bool
+        var translation: TranslationID?
+        var word: Int?
+        var wordsSource: String?
     }
 
     private var socket: URLSessionWebSocketTask?
@@ -274,9 +277,12 @@ final class RoomChannel: PresenceService {
 
     func sendReading(
         book: String, at point: ReadingPoint, end: ReadingPoint?,
-        settled: Bool, carried: Bool
+        settled: Bool, carried: Bool,
+        translation: TranslationID?, word: Int?, wordsSource: String?
     ) async {
-        reading = LinePlace(book: book, at: point, end: end, settled: settled, carried: carried)
+        reading = LinePlace(
+            book: book, at: point, end: end, settled: settled, carried: carried,
+            translation: translation, word: word, wordsSource: wordsSource)
         keepReadingAlive()
         guard !followers.isEmpty else { return }
         if !settled {
@@ -559,7 +565,8 @@ final class RoomChannel: PresenceService {
         else { return }
         broadcast("reading", payload: ReadingWire.payload(
             personID: person.id, source: source, book: reading.book,
-            at: reading.at, end: reading.end, settled: reading.settled, carried: reading.carried))
+            at: reading.at, end: reading.end, settled: reading.settled, carried: reading.carried,
+            translation: reading.translation, word: reading.word, wordsSource: reading.wordsSource))
         lastReadingSent = ContinuousClock.now
     }
 
@@ -757,7 +764,8 @@ final class RoomChannel: PresenceService {
             else { return }
             continuation.yield(.reading(
                 personID: heard.personID, source: heard.source,
-                book: heard.book, report: heard.report))
+                book: heard.book, report: heard.report,
+                translation: heard.translation, word: heard.word, wordsSource: heard.wordsSource))
         default:
             break
         }
@@ -823,33 +831,51 @@ final class RoomChannel: PresenceService {
 /// `RoomChannelWire` on Android, and the two agree key for key:
 ///
 ///     {"id", "source", "book", "chapter", "verse", "part",
-///      "end": {"chapter", "verse", "part"}, "settled", "carried"}
+///      "end": {"chapter", "verse", "part"}, "settled", "carried",
+///      "translation", "word", "words_source"}
 ///
 /// `chapter` and `verse` are integers, `part` a number in [0, 1] to two
 /// places, `end` left out when unknown and `carried` when false. Nothing on
 /// it is a time, a rate or a duration (§13).
 ///
+/// The last three are how following lands on the same words (A60):
+/// `translation` the version on the sender's page (`"web"`), `word` the
+/// original word under their line — a position in that verse's Hebrew,
+/// Aramaic or Greek, for `at` only — and `words_source` the numbering it
+/// counts in (`"bsbt-5558512b"`). Each is left out when the sender has none.
+/// An older build sends none of them, and a body without them reads as it
+/// always has. They only ever sharpen a report that stands without them, so
+/// one that is the wrong shape is read as absent rather than dropping the
+/// report: `translation` and `words_source` non-empty strings, `word` a
+/// whole number, not negative and not a flag.
+///
 /// There is no test target for the app, so the cases Android's
 /// RoomChannelWireTest pins down are held here by construction:
 /// `testReadingCarriesAPointNeverATime` — a carried report with an end has
-/// exactly the nine keys above, the end exactly its three, 0.4213 goes out
-/// as 0.42; `testReadingOmitsAnAbsentEndAndCarried` — without either, the
-/// seven; `testReadingNeverSendsANonFinitePart` — NaN goes out as 0, an
-/// infinity as the end it runs past (+∞ as 1, −∞ as 0), 1.7 as 1, −0.3 as
-/// 0, 0.126 as 0.13. That last one matters most here: JSONSerialization
-/// meets a NaN with an Objective-C exception, which `try?` does not catch,
-/// and the app would fall over on the reader's own scroll.
+/// exactly the nine keys of the first two lines above, the end exactly its
+/// three, 0.4213 goes out as 0.42, and with the original words said it has
+/// all twelve; `testReadingOmitsAnAbsentEndAndCarried` — without an end,
+/// `carried` or the original words, the seven;
+/// `testReadingNeverSendsANonFinitePart` — NaN goes out as 0, an infinity as
+/// the end it runs past (+∞ as 1, −∞ as 0), 1.7 as 1, −0.3 as 0, 0.126 as
+/// 0.13. That last one matters most here: JSONSerialization meets a NaN
+/// with an Objective-C exception, which `try?` does not catch, and the app
+/// would fall over on the reader's own scroll.
 enum ReadingWire {
     struct Heard {
         var personID: UUID
         var source: String
         var book: String
         var report: ReadingReport
+        var translation: TranslationID?
+        var word: Int?
+        var wordsSource: String?
     }
 
     static func payload(
         personID: UUID, source: String, book: String,
-        at: ReadingPoint, end: ReadingPoint?, settled: Bool, carried: Bool
+        at: ReadingPoint, end: ReadingPoint?, settled: Bool, carried: Bool,
+        translation: TranslationID? = nil, word: Int? = nil, wordsSource: String? = nil
     ) -> [String: Any] {
         var body: [String: Any] = [
             "id": personID.uuidString.lowercased(),
@@ -866,6 +892,9 @@ enum ReadingWire {
             ] as [String: Any]
         }
         if carried { body["carried"] = true }
+        if let translation { body["translation"] = translation.rawValue }
+        if let word { body["word"] = word }
+        if let wordsSource { body["words_source"] = wordsSource }
         return body
     }
 
@@ -884,6 +913,8 @@ enum ReadingWire {
     /// else must be there. A key that is there must be the right shape — a
     /// flag true or false, an end an object — and anything else, `null`
     /// included, drops the report rather than being read as its default.
+    /// The three original-word keys are the exception, read as absent when
+    /// they are the wrong shape (see above).
     static func heard(from body: [String: Any], received: Date) -> Heard? {
         guard let rawID = body["id"] as? String, let id = UUID(uuidString: rawID),
               let source = body["source"] as? String, !source.isEmpty,
@@ -905,9 +936,15 @@ enum ReadingWire {
             guard let said = flag(raw) else { return nil }
             carried = said
         }
+        let translation = (body["translation"] as? String).flatMap {
+            $0.isEmpty ? nil : TranslationID(rawValue: $0)
+        }
+        let word = whole(body["word"]).flatMap { $0 >= 0 ? $0 : nil }
+        let wordsSource = (body["words_source"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         return Heard(
             personID: id, source: source, book: book,
-            report: ReadingReport(at: at, end: end, settled: settled, carried: carried, received: received))
+            report: ReadingReport(at: at, end: end, settled: settled, carried: carried, received: received),
+            translation: translation, word: word, wordsSource: wordsSource)
     }
 
     /// `chapter` and `verse` whole numbers — not true or false, which

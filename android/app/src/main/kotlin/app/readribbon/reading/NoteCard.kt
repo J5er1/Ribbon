@@ -188,17 +188,13 @@ fun NoteCard(
 
             // §2.6's authored detail — "when Ruth's note quotes the verse,
             // it renders in Ruth's translation, so you see the words she was
-            // looking at" — is gone with §2.6 itself (A42). A room reads one
-            // version now, so the words she was looking at are the words on
-            // this page, an inch above; quoting them under her note would be
-            // saying the verse twice.
+            // looking at" — went with A42, when a room read one version and
+            // her words were the words on this page, an inch above.
             //
-            // Worse than redundant, it had become wrong. `Person.translation`
-            // is still written per person for iOS, and nothing updates a
-            // *bystander's* copy when somebody changes the room's version —
-            // so the test "does the author's differ from mine" would have
-            // started firing on two people reading identical words, and
-            // quoted a verse in a translation neither of them had open.
+            // Everybody reads their own version again (A60), so the detail
+            // could come back; it has not yet. When it does, the author's
+            // version is their `Person.translation` as last pulled, which is
+            // what each person's page is set from now.
         }
 
         DropdownMenu(expanded = menuShown, onDismissRequest = { menuShown = false }) {

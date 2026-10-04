@@ -46,6 +46,81 @@ final class ScriptureModelTests: XCTestCase {
         XCTAssertEqual(redSpans.map(\.t), ["“Come.”"])
     }
 
+    // A psalm's shape: a title, a stanza break, then a verse whose second
+    // poetic line is glued to the first with no space. And Zechariah 12's: a
+    // title that carries the verse number the next paragraph continues.
+    let psalm = """
+    {"n":3,"blocks":[
+      {"s":"d","x":[{"t":"A Psalm of David."}]},
+      {"s":"b","x":[]},
+      {"s":"q1","x":[{"v":1,"t":"O LORD, how my foes have increased!"}]},
+      {"s":"q2","x":[{"t":"How many rise up against me!"}]},
+      {"s":"q1","x":[{"v":2,"t":"Many say of me, "},{"t":"\\u201cGod will not deliver him.\\u201d"}]}
+    ]}
+    """
+
+    let burden = """
+    {"n":12,"blocks":[
+      {"s":"d","x":[{"v":1,"t":"This is the burden of the word of the LORD."}]},
+      {"s":"b","x":[]},
+      {"s":"m","x":[{"t":"Thus declares the LORD."}]},
+      {"s":"p","x":[{"v":2,"t":"Behold. "}]}
+    ]}
+    """
+
+    func testOwnTextGluesSpans() throws {
+        let chapter = try XCTUnwrap(decoded().chapter(1))
+        let texts = chapter.ownTexts()
+        XCTAssertEqual(texts[1], "The beginning of the Good News.")
+        XCTAssertEqual(texts[2], "As it is written,\u{201C}Behold, I send my messenger,who will prepare your way.\u{201D}")
+        XCTAssertEqual(texts[3], "He said, ")
+        XCTAssertEqual(texts[4], "\u{201C}Come.\u{201D}")
+        XCTAssertEqual(chapter.ownText(verse: 4), "\u{201C}Come.\u{201D}")
+        XCTAssertNil(chapter.ownText(verse: 5))
+        XCTAssertEqual(chapter.ownSpanBreaks()[2], [17, 46])
+        XCTAssertEqual(chapter.ownSpanBreaks()[3], [8])
+        XCTAssertEqual(chapter.ownSpanBreaks()[1], [])
+    }
+
+    func testOwnTextLeavesOutTitles() throws {
+        let chapter = try JSONDecoder().decode(ScriptureChapter.self, from: Data(psalm.utf8))
+        let texts = chapter.ownTexts()
+        XCTAssertEqual(Set(texts.keys), [1, 2])
+        XCTAssertEqual(texts[1], "O LORD, how my foes have increased!How many rise up against me!")
+        XCTAssertEqual(texts[1]?.utf16.count, 63)
+        // Offsets count UTF-16 units: the curly quotes are one each.
+        XCTAssertEqual(texts[2], "Many say of me, \u{201C}God will not deliver him.\u{201D}")
+        XCTAssertEqual(texts[2]?.utf16.count, 43)
+        XCTAssertEqual(chapter.ownSpanBreaks()[1], [35])
+        XCTAssertEqual(chapter.ownSpanBreaks()[2], [16])
+    }
+
+    func testOwnTextFollowsAVerseNumberOnATitle() throws {
+        let chapter = try JSONDecoder().decode(ScriptureChapter.self, from: Data(burden.utf8))
+        XCTAssertEqual(chapter.ownTexts(), [1: "Thus declares the LORD.", 2: "Behold. "])
+    }
+
+    func testBundledOwnTextLengths() throws {
+        // The own text is what a mark's offsets and the bundled word links
+        // count in, so two known lengths pin it to the committed text.
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("ios/Ribbon/Resources/Scripture/bsb")
+        guard FileManager.default.fileExists(atPath: root.path) else {
+            throw XCTSkip("converted Scripture not present")
+        }
+        func own(_ book: String, _ chapter: Int, _ verse: Int) throws -> String? {
+            let data = try Data(contentsOf: root.appendingPathComponent("\(book).json"))
+            let text = try JSONDecoder().decode(ScriptureBookText.self, from: data)
+            return text.chapter(chapter)?.ownText(verse: verse)
+        }
+        XCTAssertEqual(try own("PSA", 3, 1)?.utf16.count, 63)
+        XCTAssertEqual(try own("JHN", 1, 1)?.utf16.count, 80)
+    }
+
     func testBundledConverterOutputDecodes() throws {
         // When the converted corpus is reachable from the test's working
         // tree, decode every book of both translations end-to-end.

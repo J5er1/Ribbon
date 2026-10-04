@@ -3,7 +3,9 @@ import RibbonCore
 
 // Leaving a note (S05): the toolbar rises from the bottom after the
 // long-press — the ink swatches, write, speak. Highlighting (S06) shares
-// the toolbar. Dismissed by tapping anywhere in the text.
+// the toolbar, and so does the original (A60): a third verb, and a quiet
+// line above the inks saying the held word in the original. Dismissed by
+// tapping anywhere in the text.
 
 enum ComposerMode: Equatable {
     case toolbar
@@ -16,16 +18,31 @@ struct LeaveToolbar: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let room: Room
     let range: VerseRange
-    /// Paused rooms: only highlight shows, greyed, with one line (S02).
+    /// Paused rooms: only highlight shows, greyed, with one line (S02) —
+    /// and the original's verb, which is reading (A60).
     let roomPaused: Bool
     var onHighlight: (Ink) -> Void
     var onWrite: () -> Void
     var onSpeak: () -> Void
+    /// "the greek", "the hebrew", "the aramaic" — nil where the verses
+    /// have no original words to show.
+    var originalVerb: String? = nil
+    /// The held word, or the selection, in the original (§7.5); nil where
+    /// nothing under it links, which says nothing rather than something
+    /// wrong.
+    var originalLine: OriginalLine? = nil
+    var onOriginal: () -> Void = {}
 
     var body: some View {
         VStack(spacing: 6) {
             if roomPaused {
                 SmallCaps(Copy.newNotesNeedTheRoom, size: 12)
+            }
+            if let originalLine {
+                // It comes and goes as the handles find words and lose
+                // them: a fade, never a movement.
+                OriginalLineView(line: originalLine, onOpen: onOriginal)
+                    .transition(.opacity)
             }
             HStack(spacing: 0) {
                 // Two people: eight swatches, pick per highlight, last-used
@@ -34,7 +51,7 @@ struct LeaveToolbar: View {
                 // reads everything and writes nothing (S02, §08).
                 //
                 // Only the inks scroll (A26): on a narrow phone eight
-                // swatches at a finger's width will not fit beside the two
+                // swatches at a finger's width will not fit beside the
                 // verbs, and the verbs are the ones that must never leave
                 // the screen.
                 ScrollView(.horizontal) {
@@ -58,9 +75,11 @@ struct LeaveToolbar: View {
                 .scrollIndicators(.hidden)
                 .fixedSize(horizontal: model.inkForNewHighlight(in: room) != nil, vertical: false)
 
-                if !roomPaused {
+                if !roomPaused || originalVerb != nil {
                     Rectangle().fill(Palette.rule).frame(width: 1, height: 20)
+                }
 
+                if !roomPaused {
                     Button(action: onWrite) {
                         SmallCaps(Copy.write, size: 13, color: Palette.text)
                             .frame(minWidth: 44, minHeight: 44)
@@ -75,6 +94,23 @@ struct LeaveToolbar: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .padding(.trailing, originalVerb == nil ? 8 : 0)
+                }
+
+                // Reading, not writing: a paused room keeps this one. It
+                // takes its width from the inks, which scroll; the verbs
+                // never leave the screen.
+                if let originalVerb {
+                    Button(action: onOriginal) {
+                        SmallCaps(originalVerb, size: 13, color: Palette.text)
+                            .lineLimit(1)
+                            .fixedSize()
+                            .padding(.horizontal, 6)
+                            .frame(minWidth: 44, minHeight: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.leading, roomPaused ? 6 : 0)
                     .padding(.trailing, 8)
                 }
             }
@@ -82,6 +118,7 @@ struct LeaveToolbar: View {
             .frame(maxWidth: 420)
             .ribbonGlass(in: Capsule(), interactive: true)
         }
+        .animation(RibbonMotion.arrive, value: originalLine)
         // It rises from the foot of the page; under reduce motion it fades
         // in where it will be used (§11).
         .transition(reduceMotion

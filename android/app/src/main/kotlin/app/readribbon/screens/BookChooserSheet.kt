@@ -168,7 +168,7 @@ fun BookChooserContent(
 ) {
     var query by remember { mutableStateOf("") }
 
-    val translation: TranslationID = model.words(model.currentRoom, null)
+    val translation: TranslationID = model.words(model.currentRoom)
     val onShelf: Set<String> = model.shelf(room).map { it.bookID }.toSet()
 
     val trimmed = query.trim()

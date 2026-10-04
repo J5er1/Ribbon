@@ -106,7 +106,12 @@ class StateSurvivesAnUpdateTest {
             state.readings.single().translation == app.readribbon.core.TranslationID.bsb)
         assertTrue("a highlight from before phrases marks whole verses",
             state.highlights.single().range.isWholeVerses)
+        assertTrue("a highlight from before original words carries none",
+            state.highlights.single().range.let { it.startWords == null && it.wordsSource == null })
         assertTrue("nothing has been notified about yet", state.notifiedThrough == null)
+        // A build from before what's new had never shown it, and null is how
+        // that reads: with a person here, an update that is owed the screen.
+        assertTrue("no release has been shown yet", state.whatsNewSeen == null)
     }
 
     /**
@@ -118,5 +123,22 @@ class StateSurvivesAnUpdateTest {
         val before = json.decodeFromString<AppState>(fromAnOlderBuild)
         val after = json.decodeFromString<AppState>(json.encodeToString(before))
         assertEquals("a round trip changes nothing", before, after)
+    }
+
+    /** A mark that knows its original words (A60) keeps them on the phone. */
+    @Test fun aMarksOriginalWordsSurviveTheFile() {
+        val before = json.decodeFromString<AppState>(fromAnOlderBuild)
+        val marked = before.highlights.single().let {
+            it.copy(
+                range = app.readribbon.core.VerseRange(
+                    bookID = "MRK", chapter = 4, startVerse = 9, endVerse = 10,
+                    startChar = 4, endChar = 11, charTranslation = app.readribbon.core.TranslationID.web,
+                    startWords = listOf(2, 3), endWords = listOf(0), wordsSource = "bsbt-5558512b",
+                ),
+            )
+        }
+        val state = before.copy(highlights = listOf(marked))
+        val after = json.decodeFromString<AppState>(json.encodeToString(state))
+        assertEquals(state.highlights, after.highlights)
     }
 }

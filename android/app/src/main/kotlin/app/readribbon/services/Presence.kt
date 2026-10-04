@@ -5,6 +5,7 @@ package app.readribbon.services
 import app.readribbon.core.Person
 import app.readribbon.core.ReadingPoint
 import app.readribbon.core.ReadingReport
+import app.readribbon.core.TranslationID
 import app.readribbon.core.VerseAddress
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -68,6 +69,8 @@ sealed interface PresenceEvent {
         val source: String,
         val book: String,
         val report: ReadingReport,
+        /** The words under their line, when their build says them. */
+        val words: LineWords? = null,
     ) : PresenceEvent
 }
 
@@ -85,7 +88,31 @@ data class HeardReading(
     val report: ReadingReport,
     val source: String?,
     val fromPresence: Boolean = false,
+    /**
+     * The words under their line, as their phone said them — null from
+     * presence, and from a build that does not say them. The follower sets
+     * the report on its own page with these (`OriginalWords.carried`).
+     */
+    val words: LineWords? = null,
 )
+
+/**
+ * What a reading line says beyond its fraction (A60): the version the
+ * sender's page is set in, and the original word under their line, counted
+ * in [wordsSource]'s numbering. A follower on another version goes to that
+ * word on its own page rather than to the same share of the verse, because
+ * two versions put a verse's words in different places. Any of the three can
+ * be missing, and a line without them is followed as it always was.
+ */
+data class LineWords(
+    val translation: TranslationID? = null,
+    val word: Int? = null,
+    val wordsSource: String? = null,
+) {
+    /** Null rather than a value that says nothing. */
+    fun orNull(): LineWords? =
+        takeIf { translation != null || word != null || wordsSource != null }
+}
 
 interface PresenceService {
     /**
@@ -153,6 +180,8 @@ interface PresenceService {
      *   in the middle of it.
      * @param carried your own page is being carried by a follow of yours: it
      *   is where the page is, not where you read to.
+     * @param words your page's version and the original word under your
+     *   line, so a follower on another version lands on the same words.
      */
     suspend fun sendReading(
         book: String,
@@ -160,6 +189,7 @@ interface PresenceService {
         end: ReadingPoint?,
         settled: Boolean,
         carried: Boolean,
+        words: LineWords?,
     )
 
     val events: Flow<PresenceEvent>
@@ -196,5 +226,6 @@ class LocalPresenceService : PresenceService {
         end: ReadingPoint?,
         settled: Boolean,
         carried: Boolean,
+        words: LineWords?,
     ) = Unit
 }

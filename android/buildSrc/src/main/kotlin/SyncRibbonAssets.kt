@@ -11,7 +11,7 @@ import org.gradle.api.tasks.TaskAction
 import javax.inject.Inject
 
 /**
- * Copies Scripture, the three OFL faces and the paper grain out of the
+ * Copies Scripture, the OFL faces and the paper grain out of the
  * shared resources (ios/Ribbon/Resources) and into the Android assets.
  *
  * They live in the repo once. Two copies of 11 MB of Scripture would be two
@@ -46,6 +46,7 @@ abstract class SyncRibbonAssets @Inject constructor(
                 // to type twice.
                 rename("""Literata\[opsz,wght]\.ttf""", "Literata.ttf")
                 rename("""Literata-Italic\[opsz,wght]\.ttf""", "Literata-Italic.ttf")
+                rename("""NotoSerifHebrew\[wdth,wght]\.ttf""", "NotoSerifHebrew.ttf")
             }
             from(from.dir("Fonts")) {
                 into("fonts")

@@ -567,7 +567,7 @@ fun EmberRecordScreen(
                     ) {
                         highlights.forEach { highlight ->
                             QuotedHighlight(
-                                translation = reading.translation,
+                                translation = model.words(model.room(reading)),
                                 model = model,
                                 highlight = highlight,
                                 onOpenVerse = onOpenVerse,
@@ -691,9 +691,10 @@ private fun QuotedHighlight(
     onOpenVerse: (VerseAddress) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // The words the book was read in, not the words the room reads today.
-    // S11 calls an ember immutable, and a keepsake that re-words itself when
-    // somebody changes a setting next year is not one (A42).
+    // In your own version (A60). A42 held a finished book to the room's
+    // because re-wording it would have moved its marks off their words; a
+    // mark follows its original words now, so the keepsake can read in the
+    // version you read.
     val text = model.scripture.verseText(highlight.range.start, translation)
 
     Column(

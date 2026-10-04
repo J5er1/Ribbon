@@ -25,6 +25,17 @@ public struct Person: Codable, Hashable, Identifiable, Sendable {
         self.translation = translation
     }
 
+    enum CodingKeys: String, CodingKey { case id, name, portraitPath, translation }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        portraitPath = try c.decodeIfPresent(String.self, forKey: .portraitPath)
+        // A person saved without a version reads the default, as on Android.
+        translation = try c.decodeIfPresent(TranslationID.self, forKey: .translation) ?? .bsb
+    }
+
     /// The monogram shown when there is no portrait.
     public var monogram: String {
         String(name.trimmingCharacters(in: .whitespaces).prefix(1)).uppercased()
@@ -44,10 +55,11 @@ public struct Room: Codable, Hashable, Identifiable, Sendable {
     /// Subscription lapsed → the room is paused: presence off, new notes
     /// off. Reading and everything already left stays, forever (§2.5).
     public var isPaused: Bool
-    /// The version this room reads. One per room, not one per person
-    /// (ledger A42): a highlight is a mark on a shared page, and two people
-    /// reading two versions have two pages. A person still carries a
-    /// `translation` for the room they start next.
+    /// The version this room read while a room had one (ledger A42,
+    /// reversed by A60). A mark now follows its original words into every
+    /// version, so the page shows the person's own version
+    /// (`TranslationChoice.page`) and nothing reads this for display. It is
+    /// still decoded and written because shipped clients read and write it.
     public var translation: TranslationID
 
     public init(id: UUID = UUID(), name: String? = nil, createdAt: Date, isPaused: Bool = false, translation: TranslationID = .bsb) {
@@ -102,9 +114,10 @@ public struct Reading: Codable, Hashable, Identifiable, Sendable {
     /// The campfire. `handiwork` is the general mechanic (§2.8) — the code
     /// says handiwork everywhere and fire only in the campfire's own module.
     public var handiwork: Handiwork
-    /// The version this book was read in. An open reading follows its room;
-    /// a finished one keeps the version it was finished in, so an ember on
-    /// the shelf still opens to the words that were read (A42).
+    /// The version this book was read in, as A42 pinned it. Since A60 the
+    /// page shows each person's own version, open book or finished, and
+    /// nothing reads this for display; it is kept because shipped clients
+    /// read and write it.
     public var translation: TranslationID
 
     public init(id: UUID = UUID(), roomID: UUID, bookID: String, startedAt: Date, finishedAt: Date? = nil, handiwork: Handiwork, translation: TranslationID = .bsb) {

@@ -191,6 +191,12 @@ private const val WASH_BELOW_BASELINE = 0.28f
  *   beneath it.
  * @param onNoteSlot y offset (in this composable's coordinates) of the
  *   open-note carve, so the note card can sit in it.
+ * @param onHeld where the finger was when a verse lifted: the verse, and the
+ *   offset into its own text under the press point — the word the original
+ *   line names (A60, §7.5). Called straight after [onLongPressVerse].
+ * @param onOriginal a verse's "the original words" action, for somebody who
+ *   cannot hold and then reach for the toolbar: lifts the verse and opens the
+ *   original (A60). Null leaves the action off.
  */
 @Composable
 fun ChapterText(
@@ -212,6 +218,8 @@ fun ChapterText(
     onTapVerse: (Int) -> Unit,
     onNoteSlot: (Dp) -> Unit,
     modifier: Modifier = Modifier,
+    onHeld: (verse: Int, offset: Int?) -> Unit = { _, _ -> },
+    onOriginal: ((Int) -> Unit)? = null,
 ) {
     val density = LocalDensity.current
     val haptics = LocalHaptics.current
@@ -292,6 +300,8 @@ fun ChapterText(
     val currentExtend by rememberUpdatedState(onExtend)
     val currentDragEnded by rememberUpdatedState(onDragEnded)
     val currentTap by rememberUpdatedState(onTapVerse)
+    val currentHeld by rememberUpdatedState(onHeld)
+    val currentOriginal by rememberUpdatedState(onOriginal)
 
     fun verseAt(point: Offset): Int? {
         val result = layout ?: return null
@@ -355,11 +365,15 @@ fun ChapterText(
                     detectDragGesturesAfterLongPress(
                         onDragStart = { point ->
                             gesture.lifted = true
-                            verseAt(point)?.let { verse ->
+                            val pageOffset = layout?.getOffsetForPosition(point)
+                            pageOffset?.let(page::verseAt)?.let { verse ->
                                 // The haptic fires the moment the verse
                                 // lifts, not on touch-down (§9.3).
                                 haptics?.verseLifts()
                                 currentLongPress(verse)
+                                // And the word the finger is on, for the
+                                // original line over the toolbar (§7.5).
+                                currentHeld(verse, page.textOffset(verse, pageOffset))
                             }
                         },
                         onDrag = { change, _ ->
@@ -507,11 +521,20 @@ fun ChapterText(
                                 currentTap(verse)
                                 true
                             }
-                            customActions = listOf(
+                            customActions = listOfNotNull(
                                 CustomAccessibilityAction(Copy.LEAVE_SOMETHING_HERE) {
                                     haptics?.verseLifts()
                                     currentLongPress(verse)
                                     true
+                                },
+                                // The original words, a third way in beside
+                                // the toolbar's verb and the line (A60).
+                                currentOriginal?.let { open ->
+                                    CustomAccessibilityAction(Copy.ORIGINAL_ACTION) {
+                                        haptics?.verseLifts()
+                                        open(verse)
+                                        true
+                                    }
                                 },
                             )
                         },

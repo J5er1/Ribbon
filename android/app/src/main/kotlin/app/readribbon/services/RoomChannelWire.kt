@@ -4,6 +4,7 @@ package app.readribbon.services
 
 import app.readribbon.core.Person
 import app.readribbon.core.ReadingPoint
+import app.readribbon.core.TranslationID
 import app.readribbon.core.VerseAddress
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -181,6 +182,14 @@ internal object RoomChannelWire {
      * follow of theirs. Both are omitted when absent or false, as presence's
      * optional keys are.
      *
+     * `translation`, `word` and `words_source` are the same kind of
+     * optional (A60): the version the sender's page is set in, and the
+     * original word under their line — for `at` only — counted in the
+     * numbering `words_source` names. A follower on another version goes to
+     * that word on its own page. `end` stays a fraction; it is the foot of
+     * their screen, read for pace, and the words are not worth the bytes
+     * there. An older build ignores all three.
+     *
      * The body is always an object. An older build of this app decodes any
      * broadcast's body as one before looking at its event name, and anything
      * else would throw on its socket's thread.
@@ -195,6 +204,9 @@ internal object RoomChannelWire {
         settled: Boolean,
         carried: Boolean,
         ref: String,
+        translation: TranslationID? = null,
+        word: Int? = null,
+        wordsSource: String? = null,
     ): JsonObject =
         broadcast(
             roomID,
@@ -215,6 +227,9 @@ internal object RoomChannelWire {
                 }
                 put("settled", settled)
                 if (carried) put("carried", true)
+                if (translation != null) put("translation", translation.rawValue)
+                if (word != null) put("word", word)
+                if (wordsSource != null) put("words_source", wordsSource)
             },
             ref = ref,
         )
@@ -239,12 +254,23 @@ internal object RoomChannelWire {
         val end: ReadingPoint?,
         val settled: Boolean,
         val carried: Boolean,
+        /** The version the sender's page is set in, when they said. */
+        val translation: TranslationID? = null,
+        /** The original word under their line, when they said. */
+        val word: Int? = null,
+        /** The numbering [word] counts in, when they said. */
+        val wordsSource: String? = null,
     )
 
     /**
      * A `reading` body, read defensively: anything missing or the wrong
      * shape drops the whole report rather than guessing at it. `settled`
      * missing means settled; `carried` missing means not.
+     *
+     * The words under the line are the exception (A60). They refine a
+     * report that is whole without them, so one in the wrong shape is
+     * dropped on its own and the report is followed by its fraction, as an
+     * older build's is.
      */
     fun heard(body: JsonElement?): Heard? {
         val fields = body as? JsonObject ?: return null
@@ -267,6 +293,10 @@ internal object RoomChannelWire {
             end = end,
             settled = settled.value ?: true,
             carried = carried.value ?: false,
+            translation = fields.text("translation")?.takeIf { it.isNotEmpty() }
+                ?.let { TranslationID(rawValue = it) },
+            word = fields.whole("word")?.takeIf { it >= 0 },
+            wordsSource = fields.text("words_source")?.takeIf { it.isNotEmpty() },
         )
     }
 

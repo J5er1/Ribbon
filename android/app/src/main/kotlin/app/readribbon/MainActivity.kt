@@ -31,6 +31,27 @@ import kotlin.uuid.Uuid
 // `RibbonRoot`.
 
 /**
+ * Whether an intent with this action sends the app somewhere: a tapped link
+ * (an invite, through the App Link or the `ribbon://` fallback) or a tapped
+ * notification or home-screen fire, which both arrive as
+ * [Notifications.ACTION_OPEN]. The launcher's own `MAIN` does not, and
+ * neither does anything else, because [MainActivity] acts on nothing else.
+ *
+ * Said by the action alone and not by whether the intent parsed: a tap on a
+ * notification whose room no longer exists still came from a tap, and the
+ * person is waiting to see where it went rather than for a screen of news.
+ */
+internal fun carriesSomewhereToGo(action: String?): Boolean =
+    action == Intent.ACTION_VIEW || action == Notifications.ACTION_OPEN
+
+/**
+ * Whether this is a launch the "what's new" screen may stand in (A61): the
+ * Activity is new rather than [restored], and nothing sent it anywhere.
+ */
+internal fun isPlainLaunch(restored: Boolean, action: String?): Boolean =
+    !restored && !carriesSomewhereToGo(action)
+
+/**
  * A tablet is any device that has never reported a smallest width under
  * 600 dp. The same test `Copy.deviceNoun` uses (deviation A8): a property of
  * the hardware rather than of the current window, so a phone in a freeform
@@ -117,6 +138,17 @@ class MainActivity : ComponentActivity() {
         // rotation rebuilds the Activity with the same intent still attached,
         // and replaying it would reopen a join over whatever the person had
         // moved on to.
+        //
+        // Whether it carried anywhere to go is also the whole of what the
+        // "what's new" screen asks of a launch (A61): it waits for one that
+        // was simply opened, and never stands between a tap and where the
+        // tap meant. Nor is a rebuilt Activity a launch: a rotation keeps the
+        // model, so it decides nothing, and a process reclaimed in the pocket
+        // is rebuilt when the person comes *back* — to the menu they had
+        // open, in the middle of whatever they were doing — which is not the
+        // moment to put a page of news in front of it. It waits, as a tap
+        // does, for the next time the app is simply opened.
+        val plainLaunch = isPlainLaunch(restored = savedInstanceState != null, action = intent?.action)
         if (savedInstanceState == null) deliver(intent)
 
         val haptics = Haptics(this)
@@ -126,6 +158,7 @@ class MainActivity : ComponentActivity() {
                 RibbonRoot(
                     links = linkStream,
                     destinations = destinationStream,
+                    plainLaunch = plainLaunch,
                 )
             }
         }
@@ -143,6 +176,9 @@ class MainActivity : ComponentActivity() {
         deliver(intent)
     }
 
+    // The two kinds of intent below are the only ones that send the app
+    // anywhere, and [carriesSomewhereToGo] is kept beside them so that a
+    // third one cannot be added here without the launch hearing about it.
     private fun deliver(intent: Intent?) {
         if (intent == null) return
         when (intent.action) {

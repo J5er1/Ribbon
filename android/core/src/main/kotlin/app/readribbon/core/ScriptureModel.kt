@@ -83,6 +83,66 @@ data class ScriptureChapter(
             .replace("  ", " ")
             .trim()
     }
+
+    /**
+     * Every verse's own text — the string a phrase mark's offsets and a word
+     * link's ranges count in (A41g, A60). Not [text], which is for quoting:
+     * this one is exactly what the page draws for the verse, spans glued with
+     * no separator ("increased!How" at a poetic line break), trailing spaces
+     * kept, psalm titles and stanza breaks left out. Offsets into it are
+     * UTF-16 code units — Kotlin's `length`, and Swift's `utf16.count`.
+     *
+     * A verse number on a title still moves the running verse, because the
+     * page builders do the same: in Zechariah 12 the burden's title carries
+     * verse 1 and the paragraph after it continues that verse.
+     */
+    fun ownTexts(): Map<Int, String> {
+        val texts = linkedMapOf<Int, StringBuilder>()
+        var running: Int? = null
+        for (block in blocks) {
+            if (block.s == BlockStyle.b) continue
+            for (span in block.x) {
+                val v = span.v
+                if (v != null) running = v
+                val verse = running
+                if (block.s == BlockStyle.d || verse == null) continue
+                texts.getOrPut(verse) { StringBuilder() }.append(span.t)
+            }
+        }
+        return texts.mapValues { it.value.toString() }
+    }
+
+    /** One verse's own text (see [ownTexts]), or null when it is not here. */
+    fun ownText(verse: Int): String? = ownTexts()[verse]
+
+    /**
+     * Where each verse's own text starts a new span after its first — the
+     * UTF-16 offsets at which a poetic line was glued to the one before. A
+     * word never runs across one ([PivotAligner.tokens]). A verse with one
+     * span has an empty list.
+     */
+    fun ownSpanBreaks(): Map<Int, List<Int>> {
+        val lengths = mutableMapOf<Int, Int>()
+        val breaks = linkedMapOf<Int, MutableList<Int>>()
+        var running: Int? = null
+        for (block in blocks) {
+            if (block.s == BlockStyle.b) continue
+            for (span in block.x) {
+                val v = span.v
+                if (v != null) running = v
+                val verse = running
+                if (block.s == BlockStyle.d || verse == null) continue
+                val length = lengths[verse]
+                if (length != null) {
+                    breaks.getOrPut(verse) { mutableListOf() }.add(length)
+                } else {
+                    breaks[verse] = mutableListOf()
+                }
+                lengths[verse] = (length ?: 0) + span.t.length
+            }
+        }
+        return breaks
+    }
 }
 
 @Serializable

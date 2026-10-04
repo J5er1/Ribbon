@@ -28,6 +28,7 @@ import app.readribbon.design.RibbonTheme
 import app.readribbon.design.rememberBookSheet
 import app.readribbon.design.room
 import app.readribbon.services.PresenceEvent
+import app.readribbon.services.LineWords
 import app.readribbon.services.PresenceService
 import app.readribbon.services.PresentPerson
 import kotlin.time.Duration.Companion.hours
@@ -101,6 +102,7 @@ class StandbyPageTest {
             end: ReadingPoint?,
             settled: Boolean,
             carried: Boolean,
+            words: LineWords?,
         ) { said += "reading" }
         // After a yield, as a socket's would: the model's collector starts
         // inside its constructor, and a roster delivered on the spot would

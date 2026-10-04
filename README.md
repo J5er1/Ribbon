@@ -103,6 +103,28 @@ unzip -d engwebp_usfx engwebp_usfx.zip && unzip -d engbsb_usfx engbsb_usfx.zip
 python3 tools/usfx_to_json.py .
 ```
 
+`tools/original_to_json.py` builds the layer under the English: the
+Hebrew, Aramaic and Greek words of every verse with Strong's own
+definitions and the grammar (`Scripture/original/`), and the links from
+the bundled Berean and World English to those words (`Scripture/align/`)
+that let a mark follow its words between versions. Its sources are public
+domain, downloaded and never committed; the script's header gives each
+URL and checksum. With the World English unzipped as above:
+
+```
+curl -O https://bereanbible.com/bsb_tables.tsv
+curl -O https://raw.githubusercontent.com/openscriptures/strongs/master/hebrew/StrongHebrewG.xml
+curl -O https://raw.githubusercontent.com/openscriptures/strongs/master/greek/StrongsGreekDictionaryXML_1.4/strongsgreek.xml
+python3 tools/original_to_json.py .          # about four minutes; checks itself
+python3 -m unittest tools/test_original.py
+```
+
+Run it again whenever `usfx_to_json.py` changes a text: each link file
+records the English it was measured against. `tools/pivot_align.py` is the
+reference for the same linking done on the phone for a licensed version;
+it writes `PivotLexicon.generated.swift` and `.kt`, and with `--kjv
+eng-kjv2006_usfx.xml` the fixture both cores are tested against.
+
 ## Backend
 
 The live Supabase project is `ribbon` (`noyccfkaotuvhhaoccck`,
@@ -184,6 +206,19 @@ The one deliberate difference is colour: Android takes it from the wallpaper
 - **A mark on a phrase**, not only a verse, with handles that snap to word
   edges and a VoiceOver equivalent for every drag; and the washes redrawn
   as one shape per mark, screened where they overlap.
+- **A mark follows its words, and everybody reads their own version.** A
+  mark is kept against the Hebrew, Aramaic or Greek under the English, so
+  it lands on the same words in whichever version each person reads — the
+  whole verse only where a version cannot be matched word for word. Hold a
+  word and the line above the inks shows it in the original; "the greek"
+  or "the hebrew" on the toolbar opens the words of a selection, what each
+  one carries, and how each version read in the room says them. Following
+  lands on the same words across versions too (A60, I37).
+- **What's new, once per release.** The first plain launch after an update
+  puts one screen between the launch mark and the room: what changed, each
+  with a small looping picture in the app's own type and inks, and "To the
+  room" at the foot. Never on a fresh install, never after a tap on a
+  notification, link or widget, and still under reduce motion (A61, I38).
 - **Notifications, gated three ways** and never a badge; the one ask made in
   context. They arrive by push the moment the thing happens — a note, the
   cards, a finished book, "Ruth is reading Mark", thinking of you — once the
@@ -201,6 +236,5 @@ The one deliberate difference is colour: Android takes it from the wallpaper
   room — and the book, readable at once (deviation 22).
 
 **What is built but not yet switched on** — push notifications above all,
-which wait on the Apple and Firebase keys — is listed, with the steps, in
-`docs/still-to-do.md`. `docs/deviations.md` is the honest ledger — §A is
+which wait on the Apple and Firebase keys — is listed, with the steps, in `docs/still-to-do.md`. `docs/deviations.md` is the honest ledger — §A is
 Android's, §I is the iOS pass that followed it.

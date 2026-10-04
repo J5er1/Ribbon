@@ -2,7 +2,9 @@ package app.readribbon.look
 
 import android.graphics.Bitmap
 import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
@@ -12,11 +14,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import app.readribbon.R
@@ -43,6 +48,7 @@ import app.readribbon.core.Room
 import app.readribbon.core.ScriptureBlock
 import app.readribbon.core.ScriptureChapter
 import app.readribbon.core.ScriptureSpan
+import app.readribbon.core.TranslationID
 import app.readribbon.core.VerseAddress
 import app.readribbon.core.VerseRange
 import app.readribbon.data.AppState
@@ -57,6 +63,11 @@ import app.readribbon.design.rememberBookSheet
 import app.readribbon.design.room
 import app.readribbon.reading.ChapterText
 import app.readribbon.reading.ChaptersContent
+import app.readribbon.reading.HeldWord
+import app.readribbon.reading.OriginalPanel
+import app.readribbon.reading.originalReadingOf
+import app.readribbon.reading.originalUnderLift
+import app.readribbon.reading.roomVersionLines
 import app.readribbon.reading.LeaveToolbar
 import app.readribbon.reading.ReadingScreen
 import app.readribbon.reading.ReadingTheme
@@ -74,6 +85,7 @@ import app.readribbon.screens.PreviewStep
 import app.readribbon.screens.RoomScreen
 import app.readribbon.screens.ShelfView
 import app.readribbon.screens.TextSettingsScreen
+import app.readribbon.screens.WhatsNewScreen
 import app.readribbon.services.LocalPresenceService
 import app.readribbon.services.RemoteSync
 import app.readribbon.services.SessionStore
@@ -82,6 +94,7 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.hours
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
+import kotlinx.coroutines.runBlocking
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -1340,6 +1353,273 @@ class LookBookTest {
                 }
             }
         }
+    }
+
+    // MARK: the original (A60)
+
+    /**
+     * A room of three on three versions, reading John: you on the Berean
+     * Standard, Ruth on the World English, Ann on the New International —
+     * which has not streamed to this phone, so her line says so.
+     */
+    private fun roomOfThreeVersions(book: String): AppModel {
+        val open = reading(book, FireScale.medium)
+        val ruthWeb = ruth.copy(translation = TranslationID.web)
+        val annNiv = ann.copy(translation = TranslationID.niv)
+        return model(
+            AppState(
+                me = me,
+                people = mapOf(me.id to me, ruth.id to ruthWeb, ann.id to annNiv),
+                rooms = listOf(room),
+                memberships = listOf(
+                    membership(me, Ink.teal),
+                    membership(ruthWeb, Ink.crimson),
+                    membership(annNiv, Ink.moss),
+                ),
+                readings = listOf(open),
+                currentRoomID = room.id,
+            ),
+        )
+    }
+
+    /**
+     * The original panel open under a lifted phrase of John 1:1, with one
+     * word's detail open (§7.2). Real bundled words, links and dictionary:
+     * the panel is only as good as the data it sets, and the picture has to
+     * be of that.
+     */
+    @Test fun theOriginal() {
+        val m = roomOfThreeVersions("JHN")
+        val chapter = m.scripture.chapter(VerseAddress("JHN", 1, 1), TranslationID.bsb)!!
+        val text = chapter.ownText(1)!!
+        val phrase = "the Word was with God"
+        val from = text.indexOf(phrase)
+        val range = VerseRange(
+            bookID = "JHN", chapter = 1, startVerse = 1, endVerse = 1,
+            startChar = from, endChar = from + phrase.length,
+            charTranslation = TranslationID.bsb,
+        )
+        shootOriginal("original", m, chapter, range, open = 1 to 7)
+    }
+
+    /**
+     * The panel with no word open, so its foot is in the picture: how each
+     * version read in this room says the phrase, and the licensed one that
+     * has not reached this phone.
+     */
+    @Test fun theOriginalInThisRoom() {
+        val m = roomOfThreeVersions("JHN")
+        val chapter = m.scripture.chapter(VerseAddress("JHN", 1, 1), TranslationID.bsb)!!
+        val text = chapter.ownText(1)!!
+        val phrase = "the Word was with God"
+        val from = text.indexOf(phrase)
+        val range = VerseRange(
+            bookID = "JHN", chapter = 1, startVerse = 1, endVerse = 1,
+            startChar = from, endChar = from + phrase.length,
+            charTranslation = TranslationID.bsb,
+        )
+        shootOriginal("original-room", m, chapter, range, open = null)
+    }
+
+    /**
+     * The same panel over Hebrew: Exodus 15:11, whole, right to left — the
+     * first word is the rightmost — in Noto Serif Hebrew with its points.
+     */
+    @Test fun theOriginalHebrew() {
+        val m = roomOfThreeVersions("EXO")
+        val chapter = m.scripture.chapter(VerseAddress("EXO", 15, 1), TranslationID.bsb)!!
+        val range = VerseRange(bookID = "EXO", chapter = 15, startVerse = 11, endVerse = 11)
+        shootOriginal("original-hebrew", m, chapter, range, open = 11 to 6)
+    }
+
+    private fun shootOriginal(
+        name: String,
+        m: AppModel,
+        chapter: ScriptureChapter,
+        range: VerseRange,
+        open: Pair<Int, Int>?,
+    ) {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val reading = originalReadingOf(m.original, m.scripture, range, TranslationID.bsb, chapter)!!
+        val lines = runBlocking {
+            roomVersionLines(m, context, room, reading, TranslationID.bsb, chapter, fetch = false)
+        }
+        val lexicon = m.original.lexicon
+        val parsings = m.original.parsings
+        val head = Bible.book(range.bookID)?.chapterHeading(range.chapter) ?: range.bookID
+        // The lifted verse and its neighbours, so it is on screen above the
+        // panel however far into its chapter it is.
+        val page = excerpt(chapter, (range.startVerse - 1)..(range.endVerse + 1))
+        shoot(name) {
+            OnTheGround {
+                Box(Modifier.fillMaxSize()) {
+                    ChapterText(
+                        chapter = page,
+                        runningHead = head,
+                        theme = ReadingTheme(fontSize = 19f, lineHeightMultiple = 1.62f, redLetter = false),
+                        marks = emptyList(),
+                        lifted = range,
+                        justMarked = null,
+                        onMarkDrawn = {},
+                        openNote = null,
+                        isFirstChapter = range.chapter == 1,
+                        showMarginHint = false,
+                        onLayout = {},
+                        onLongPressVerse = {},
+                        onDragToVerse = {},
+                        onExtend = { _, _, _ -> },
+                        onDragEnded = {},
+                        onTapVerse = {},
+                        onNoteSlot = {},
+                        modifier = Modifier.padding(top = 40.dp),
+                    )
+                    OriginalPanel(
+                        reading = reading,
+                        versionName = "Berean Standard",
+                        lexicon = lexicon,
+                        parsings = parsings,
+                        room = lines,
+                        initiallyOpen = open,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 24.dp),
+                    )
+                }
+            }
+        }
+    }
+
+    /** A chapter cut down to [verses], each span kept with the verse it belongs to. */
+    private fun excerpt(chapter: ScriptureChapter, verses: IntRange): ScriptureChapter {
+        var current: Int? = null
+        val blocks = chapter.blocks.mapNotNull { block ->
+            val kept = block.x.filter { span ->
+                span.v?.let { current = it }
+                current?.let { it in verses } == true
+            }
+            if (kept.isEmpty()) null else block.copy(x = kept)
+        }
+        return chapter.copy(blocks = blocks)
+    }
+
+    /**
+     * The toolbar with the original line over its inks (§7.5): a word of
+     * John 1:1 held in a room of two, with all eight inks and three verbs on
+     * the bar; and a word of Exodus 15:11 held in a paused room, where the
+     * inks are greyed and the original is still there to read.
+     */
+    @Test fun theOriginalLine() {
+        val open = reading("JHN", FireScale.medium)
+        val m = model(
+            AppState(
+                me = me,
+                people = mapOf(me.id to me, ruth.id to ruth),
+                rooms = listOf(room),
+                memberships = listOf(membership(me, null), membership(ruth, null)),
+                readings = listOf(open),
+                currentRoomID = room.id,
+            ),
+        )
+        val john = m.scripture.chapter(VerseAddress("JHN", 1, 1), TranslationID.bsb)!!
+        val johnRange = VerseRange("JHN", 1, 1, 1)
+        val word = john.ownText(1)!!.indexOf("Word") + 1
+        val greek = originalUnderLift(m.original, johnRange, HeldWord(1, word), TranslationID.bsb, john)!!
+        val exodus = m.scripture.chapter(VerseAddress("EXO", 15, 1), TranslationID.bsb)!!
+        val exodusRange = VerseRange("EXO", 15, 11, 11)
+        val majestic = exodus.ownText(11)!!.indexOf("majestic") + 2
+        val hebrew = originalUnderLift(m.original, exodusRange, HeldWord(11, majestic), TranslationID.bsb, exodus)!!
+        shoot("original-line") {
+            OnTheGround {
+                Column(
+                    Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(48.dp, Alignment.CenterVertically),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    LeaveToolbar(
+                        model = m,
+                        room = m.state.rooms.first(),
+                        range = johnRange,
+                        roomPaused = false,
+                        onHighlight = {},
+                        onWrite = {},
+                        onSpeak = {},
+                        originalVerb = greek.verb,
+                        line = greek.line,
+                    )
+                    LeaveToolbar(
+                        model = m,
+                        room = m.state.rooms.first(),
+                        range = exodusRange,
+                        roomPaused = true,
+                        onHighlight = {},
+                        onWrite = {},
+                        onSpeak = {},
+                        originalVerb = hebrew.verb,
+                        line = hebrew.line,
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * What's new (A61, §12.3), as it stands when the launch mark lifts off
+     * it: the heading, the first of the three, and the way on pinned at the
+     * foot. Then scrolled to the foot, so the third is in the picture too.
+     *
+     * The vignettes loop on an infinite frame clock, which a test leaves
+     * alone, so this is each picture at rest — the line before anything has
+     * happened to it.
+     */
+    @Test fun theWhatsNew() {
+        shootWhatsNew("whats-new", still = false, frozenAt = null)
+    }
+
+    /**
+     * The same screen under reduce motion: no loop, and each picture held at
+     * its end state — the word lifted with its Greek over it, the ink on the
+     * same words in both versions, both reading lines under "all things".
+     */
+    @Test fun theWhatsNewStill() {
+        shootWhatsNew("whats-new-still", still = true, frozenAt = null)
+    }
+
+    /**
+     * Two moments inside the loop, so the movement can be checked as well as
+     * where it ends: mid-lift with the press settling and the first wash
+     * half drawn; then the second wash coming and the follower's line on the
+     * wrong words, about to glide to the right ones.
+     */
+    @Test fun theWhatsNewMoving() {
+        shootWhatsNew("whats-new-at-1000", still = false, frozenAt = 1_000L)
+    }
+
+    @Test fun theWhatsNewMovingOn() {
+        shootWhatsNew("whats-new-at-1800", still = false, frozenAt = 1_800L)
+    }
+
+    private fun shootWhatsNew(name: String, still: Boolean, frozenAt: Long?) {
+        val appearance = Appearance(ApplicationProvider.getApplicationContext())
+        appearance.wallpaperColour = true
+        val release = app.readribbon.core.WhatsNew.releases.first()
+        compose.setContent {
+            RibbonTheme(appearance = appearance) {
+                CompositionLocalProvider(app.readribbon.design.LocalReduceMotion provides still) {
+                    Box(Modifier.fillMaxSize()) {
+                        WhatsNewScreen(release = release, onLeave = {}, frozenAt = frozenAt)
+                    }
+                }
+            }
+        }
+        capture(name)
+        appearance.wallpaperColour = false
+        capture("$name-ribbon")
+        // All the way down, past the last line, so the fade over the way on
+        // has gone and the foot is the foot the person scrolls to.
+        compose.onNode(hasScrollAction()).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 100_000f) }
+        capture("$name-foot-ribbon")
+        appearance.wallpaperColour = true
+        capture("$name-foot")
     }
 
     /**

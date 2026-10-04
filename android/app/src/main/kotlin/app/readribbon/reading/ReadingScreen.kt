@@ -4,6 +4,7 @@ package app.readribbon.reading
 
 import android.Manifest
 import android.os.SystemClock
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
@@ -55,6 +56,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -100,6 +102,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import app.readribbon.app.AppModel
 import app.readribbon.app.Copy
 import app.readribbon.app.firstName
+import app.readribbon.core.AlignmentLink
 import app.readribbon.core.Bible
 import app.readribbon.core.BibleBook
 import app.readribbon.core.CardState
@@ -108,7 +111,9 @@ import app.readribbon.core.FollowCarriage
 import app.readribbon.core.FollowMove
 import app.readribbon.core.Highlight
 import app.readribbon.core.Ink
+import app.readribbon.core.MarkedSpan
 import app.readribbon.core.Note
+import app.readribbon.core.OriginalWords
 import app.readribbon.core.Reading
 import app.readribbon.core.ReadingEstimate
 import app.readribbon.core.ReadingPoint
@@ -118,8 +123,12 @@ import app.readribbon.core.Room
 import app.readribbon.core.ScriptureChapter
 import app.readribbon.core.TranslationID
 import app.readribbon.core.TranslationRegistry
+import app.readribbon.core.Lexicon
+import app.readribbon.core.Parsings
+import app.readribbon.core.displayName
 import app.readribbon.core.VerseAddress
 import app.readribbon.core.VerseRange
+import app.readribbon.data.OriginalStore
 import app.readribbon.design.BookSheet
 import app.readribbon.design.FadesUnderReduceMotion
 import app.readribbon.design.HairlineRule
@@ -144,6 +153,7 @@ import app.readribbon.fire.FireBecomesEmber
 import app.readribbon.screens.ConfirmChoice
 import app.readribbon.screens.RibbonConfirmDialog
 import app.readribbon.services.HeardReading
+import app.readribbon.services.LineWords
 import app.readribbon.services.PresentPerson
 import app.readribbon.services.VoiceRecorder
 import app.readribbon.services.ensureRemoteChapter
@@ -157,6 +167,7 @@ import kotlin.time.Instant
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
@@ -308,6 +319,15 @@ sealed interface ComposerState {
     data object Toolbar : ComposerState
     data class Write(val address: VerseAddress) : ComposerState
     data class Speak(val address: VerseAddress) : ComposerState
+
+    /**
+     * The original words for the lifted selection (A60). It carries no
+     * address because it follows the lift: the handles stay live while it
+     * is open, and the panel says what is selected now. [opens] is the held
+     * word the line named, whose detail the panel opens on — null once the
+     * handles have moved, and from a verse's own action.
+     */
+    data class Original(val opens: Pair<Int, Int>? = null) : ComposerState
 }
 
 /**
@@ -360,10 +380,13 @@ fun ReadingScreen(
 
     val book = remember(reading.bookID) { Bible.book(reading.bookID) }
     val chapterCount = book?.chapterCount ?: 1
-    // The book's own words, which are the room's (A42). Not yours: a room
-    // reads one version, so a note's quote and a mark on a phrase mean the
-    // same thing in both hands.
-    val translation = model.words(model.room(reading), reading)
+    // Your own version (A60, reversing A42). The others in the room may be
+    // reading another; a mark follows its original words onto each page,
+    // and a follow lands on the same words, so nobody has to share one.
+    val translation = model.words(model.room(reading))
+    // The same, for the follow and the reading line, which run on their own
+    // clocks and must not keep a version that has since been changed.
+    val translationNow by rememberUpdatedState(translation)
     val bookText = remember(reading.bookID, translation) {
         model.scripture.book(reading.bookID, translation)
     }
@@ -391,6 +414,13 @@ fun ReadingScreen(
      */
     var justMarked by remember { mutableStateOf<VerseRange?>(null) }
     var composer by remember { mutableStateOf<ComposerState?>(null) }
+
+    /**
+     * Where the finger was when the lift began — the word the original line
+     * names (§7.5). Let go of as soon as the handles move: from then on the
+     * line says what is selected rather than what was held.
+     */
+    var heldAt by remember { mutableStateOf<HeldWord?>(null) }
     val recorder = remember(context) { VoiceRecorder(context) }
     var editingNote by remember { mutableStateOf<Note?>(null) }
 
@@ -835,6 +865,7 @@ fun ReadingScreen(
         lifted = null
         liftedChapter = null
         composer = null
+        heldAt = null
         // The note being edited goes with the composer it was being edited
         // in, and it never used to. This is S05's own dismiss route — "the
         // toolbar is dismissed by tapping anywhere in the text" calls exactly
@@ -853,6 +884,27 @@ fun ReadingScreen(
             bookID = reading.bookID, chapter = chapter, startVerse = verse, endVerse = verse,
         )
         composer = ComposerState.Toolbar
+        heldAt = null
+    }
+
+    /** The word under the finger as the verse lifted (§7.5). */
+    fun holdAt(chapter: Int, verse: Int, offset: Int?) {
+        if (liftedChapter != chapter || lifted?.verses != verse..verse) return
+        // A press that found no letter (the verse's number) held no word:
+        // an offset before the verse's text, under which nothing links, so
+        // the line stays quiet rather than naming the whole verse.
+        heldAt = HeldWord(verse, offset ?: -1)
+    }
+
+    /**
+     * The original words for what is lifted, from the toolbar's verb, the
+     * line over it, or a verse's own action (A60). The lift stays: the panel
+     * is about it, and the handles keep working while it is open.
+     */
+    fun openOriginal(opens: Pair<Int, Int>? = null) {
+        if (lifted == null) return
+        editingNote = null
+        composer = ComposerState.Original(opens)
     }
 
     fun extendLift(chapter: Int, verse: Int) {
@@ -866,6 +918,7 @@ fun ReadingScreen(
         )
         if (extended != current) {
             lifted = extended
+            heldAt = null
         }
     }
 
@@ -890,14 +943,15 @@ fun ReadingScreen(
         val stamped = if (moved.isWholeVerses) {
             moved.copy(charTranslation = null)
         } else {
-            // The words this mark was made in are the book's, not the
-            // marker's: that is what makes the offsets mean the same thing
-            // in the other person's hands (A42).
-            moved.copy(charTranslation = reading.translation)
+            // The version on this page, which is yours (A60). The offsets
+            // mean nothing in anybody else's words; the original words
+            // worked out from them when the mark is made are what carry it
+            // to theirs.
+            moved.copy(charTranslation = translation)
         }
         if (stamped != current) {
-
             lifted = stamped
+            heldAt = null
         }
     }
 
@@ -1282,6 +1336,15 @@ fun ReadingScreen(
     // is consumed and does nothing, which is what it should do.
     val peel = rememberBackPeel(enabled = sheet.engaged, onBack = { close() })
 
+    // Back closes what is lifted before it closes the book: the original
+    // panel, or the toolbar, with the lift they are about — the topmost
+    // passing thing on the page, which is what back dismisses. Registered
+    // after the peel, so it is asked first.
+    BackHandler(
+        enabled = sheet.engaged &&
+            (composer is ComposerState.Original || composer is ComposerState.Toolbar),
+    ) { clearLift() }
+
     // Opening, in two halves, because the page is raised before it is
     // entered. Where it opens is settled at once — the page has to rise
     // already showing the right verse, not jump to it once it lands.
@@ -1341,10 +1404,10 @@ fun ReadingScreen(
             hands.fingerDown || listState.isScrollInProgress || hands.ownMove || hands.banding ||
             // One of the reader's own landings, still on its way.
             landing?.arrived == false ||
-            // A verse lifted, the toolbar, the composer, a note open or
-            // opening, the chapter list, the presence panel, a highlight's
-            // label, the one question: what a finger is reaching for must not
-            // move out from under it.
+            // A verse lifted, the toolbar, the composer, the original words
+            // (A60), a note open or opening, the chapter list, the presence
+            // panel, a highlight's label, the one question: what a finger is
+            // reaching for must not move out from under it.
             lifted != null || composer != null || editingNote != null ||
             openNoteVerse != null || showChapters || panelOpen ||
             highlightLabel != null || askAboutNotifications
@@ -1483,6 +1546,36 @@ fun ReadingScreen(
         }
     }
 
+    /**
+     * A heard report, set on this page (A60). Their line is a fraction of
+     * the verse on *their* page; when they read another version and said
+     * which original word is under their line, the report moves to where
+     * this page says that word. Otherwise it is as it was heard. Only `at`
+     * moves: the guess still learns their pace in this page's words, from
+     * the foot of their screen.
+     */
+    fun onThisPage(heard: HeardReading): ReadingReport {
+        val report = heard.report
+        val words = heard.words ?: return report
+        val page = translationNow
+        val word = words.word
+        if (words.translation == null || words.translation == page || word == null) return report
+        val at = report.at
+        val content = contentNow(at.chapter)
+        val carried = OriginalWords.carried(
+            at,
+            word = word,
+            wordsSource = words.wordsSource,
+            from = words.translation,
+            to = page,
+            source = model.original.source(reading.bookID),
+            links = content?.let { model.original.links(page, reading.bookID, at.chapter, it) }
+                ?.get(at.verse),
+            text = content?.ownText(at.verse),
+        )
+        return if (carried == at) report else report.copy(at = carried)
+    }
+
     val following = model.followingPersonID
     LaunchedEffect(following, followEpoch, sheet.committed) {
         val followed = following ?: return@LaunchedEffect
@@ -1503,6 +1596,8 @@ fun ReadingScreen(
         var fedPresence = false
         // Nothing but presence has reached the guess since it began.
         var onPresence = false
+        // Their line as it was last heard, beside where it was set here.
+        var heardLine: HeardLine? = null
         // When they last said something new: another place, or a scroll.
         var news: Instant? = null
         // The first move of a follow brings them to the landing line from
@@ -1520,6 +1615,7 @@ fun ReadingScreen(
             fedBook = null
             fedPresence = false
             onPresence = false
+            heardLine = null
         }
         try {
             while (true) {
@@ -1583,7 +1679,13 @@ fun ReadingScreen(
                 // still mark the follow as presence's, dropping the cap
                 // their line puts on a step.
                 if (word != null && fed.let { it == null || word.report.received > it }) {
-                    val report = word.report
+                    val report = if (word.book == reading.bookID) {
+                        val (set, line) = setAsHeard(word, onThisPage(word), translationNow, heardLine)
+                        heardLine = line
+                        set
+                    } else {
+                        word.report
+                    }
                     // Presence stood in until their line came. A guess begun
                     // from the first word of a verse would learn their pace
                     // and their scroll from a place they never were, so the
@@ -1802,6 +1904,31 @@ fun ReadingScreen(
     fun mayTellMyLine(): Boolean =
         sheet.committed && !closing && !model.readingQuietly && followedByAnybody() && !hands.banding
 
+    /**
+     * Your page's version, and the original word under your line (A60), so
+     * a follower reading another version lands on the same words rather than
+     * on the same share of the verse. The word is left out where this page
+     * has no links for the verse.
+     */
+    fun lineWords(at: ReadingPoint): LineWords {
+        val page = translationNow
+        val content = contentNow(at.chapter)
+        val links = content?.let { model.original.links(page, reading.bookID, at.chapter, it) }
+            ?.get(at.verse)
+        val text = content?.ownText(at.verse)
+        val source = model.original.source(reading.bookID)
+        val word = if (links != null && text != null && source != null) {
+            OriginalWords.word(at.part, text, links)
+        } else {
+            null
+        }
+        return LineWords(
+            translation = page,
+            word = word,
+            wordsSource = source.takeIf { word != null },
+        )
+    }
+
     /** Say where your line is, if it may be said. */
     fun tellMyLine(settled: Boolean) {
         if (!mayTellMyLine()) return
@@ -1811,7 +1938,8 @@ fun ReadingScreen(
         // not where you read to.
         val carried = model.followingPersonID != null
         val book = reading.bookID
-        scope.launch { model.presence.sendReading(book, at, end, settled, carried) }
+        val words = lineWords(at)
+        scope.launch { model.presence.sendReading(book, at, end, settled, carried, words) }
     }
 
     // At rest: a short while after the page last moved or was laid out
@@ -2004,6 +2132,18 @@ fun ReadingScreen(
                             },
                             onFrame = { frame -> trackReading(n, frame) },
                             onLongPressVerse = { verse -> beginLift(n, verse) },
+                            onHeld = { verse, offset -> holdAt(n, verse, offset) },
+                            onOriginal = { verse ->
+                                beginLift(n, verse)
+                                // A verse with no original words here (one
+                                // the oldest copies leave out) has nothing to
+                                // open: it stays lifted under the toolbar, as
+                                // a hold leaves it, rather than opening onto
+                                // an empty panel.
+                                val words = model.original.original(reading.bookID)
+                                    ?.chapter(n)?.words(verse)
+                                if (!words.isNullOrEmpty()) openOriginal()
+                            },
                             onDragToVerse = { verse -> extendLift(n, verse) },
                             onExtend = { atStart, verse, char -> moveLiftEnd(atStart, verse, char) },
                             onTapVerse = { verse -> tapVerse(n, verse) },
@@ -2096,6 +2236,70 @@ fun ReadingScreen(
                 modifier = Modifier.align(Alignment.TopEnd),
             )
 
+            // The original under the lift (A60): the toolbar's verb and the
+            // line over its inks, worked out as the lift changes; and, while
+            // the panel is open, its words, the dictionary and the room's
+            // versions — the last two read off the main thread.
+            val liftedRange = lifted?.let { l ->
+                liftedChapter?.let { l.copy(bookID = reading.bookID, chapter = it) }
+            }
+            val liftedContent = liftedChapter?.let { chapterContent(it) }
+            // The chapter's own text, built once per chapter rather than on
+            // every step a handle takes.
+            val liftedTexts = remember(liftedContent) { liftedContent?.ownTexts() }
+            val underLift = remember(liftedRange, heldAt, translation, liftedContent) {
+                if (liftedRange == null || liftedContent == null || liftedTexts == null) {
+                    null
+                } else {
+                    originalUnderLift(model.original, liftedRange, heldAt, translation, liftedContent, liftedTexts)
+                }
+            }
+            val originalOpen = composer is ComposerState.Original
+            val originalReading = remember(originalOpen, liftedRange, translation, liftedContent) {
+                if (!originalOpen || liftedRange == null || liftedContent == null || liftedTexts == null) {
+                    null
+                } else {
+                    originalReadingOf(
+                        model.original, model.scripture, liftedRange, translation, liftedContent, liftedTexts,
+                    )
+                }
+            }
+            val lexicon by produceState(model.original.lexiconIfRead, originalOpen) {
+                if (originalOpen && value == null) {
+                    value = withContext(Dispatchers.IO) { model.original.lexicon }
+                }
+            }
+            val parsings by produceState(model.original.parsingsIfRead, originalOpen) {
+                if (originalOpen && value == null) {
+                    value = withContext(Dispatchers.IO) { model.original.parsings }
+                }
+            }
+            // Who in the room reads what, read here so a change — someone
+            // switching version, or coming in — redraws their line.
+            val roomVersions = originalReading?.let {
+                model.room(reading)?.let { r ->
+                    model.members(r).map { it.personID to model.person(it.personID)?.translation }
+                }
+            }
+            val roomLines by produceState<List<RoomVersionLine>?>(
+                null, originalReading?.chosen, originalReading?.range, translation, model.isOnline, roomVersions,
+            ) {
+                val shown = originalReading
+                val ofRoom = model.room(reading)
+                if (shown == null || ofRoom == null) {
+                    // Closed: the next selection starts from nothing rather
+                    // than from the last one's lines.
+                    value = null
+                    return@produceState
+                }
+                // What the phone already holds, at once; then a licensed
+                // version that had not come yet, if it can be fetched now.
+                value = roomVersionLines(model, context, ofRoom, shown, translation, liftedContent, fetch = false)
+                if (value.orEmpty().any { it.words == null } && model.isOnline) {
+                    value = roomVersionLines(model, context, ofRoom, shown, translation, liftedContent, fetch = true)
+                }
+            }
+
             // The way out, or the composer.
             BottomChrome(
                 whereYouAre = whereYouAre,
@@ -2111,12 +2315,31 @@ fun ReadingScreen(
                 composer = composer,
                 lifted = lifted,
                 liftedChapter = liftedChapter,
+                underLift = underLift,
+                originalReading = originalReading,
+                lexicon = lexicon,
+                parsings = parsings,
+                roomLines = roomLines,
+                versionName = translation.displayName,
+                // Opened from a hold, on the word the line names (§7.5).
+                onOriginal = { openOriginal(underLift?.line?.opens) },
                 editingNote = editingNote,
                 recorder = recorder,
                 followBackOffer = followBackOffer,
                 onHighlight = { range, ink ->
-                    model.addHighlight(range, ink, reading)
-                    justMarked = range
+                    // The original words under the phrase, worked out now
+                    // and never later: a mark is never updated once it is
+                    // made, so this is the one moment it can learn them
+                    // (A60). Measured in the version its offsets were taken
+                    // in, which is this page's.
+                    val measuredIn = range.charTranslation ?: translation
+                    val marked = model.original.anchored(
+                        range,
+                        measuredIn,
+                        chapterContent(range.chapter).takeIf { measuredIn == translation },
+                    )
+                    model.addHighlight(marked, ink, reading)
+                    justMarked = marked
                     clearLift()
                 },
                 // Said outright at both entry points as well, rather than
@@ -2249,6 +2472,45 @@ private data class Stuck(val y: Double, val news: Instant?)
  */
 private data class Lost(val chapter: Int, val news: Instant?, val linesMissing: Boolean)
 
+/**
+ * Their line as it was last heard — the point and the original word under
+ * it, in [book] — beside where it was set on this page, in [page]'s words.
+ */
+internal data class HeardLine(
+    val book: String,
+    val at: ReadingPoint,
+    val word: Int?,
+    val page: TranslationID,
+    val onThisPage: ReadingPoint,
+)
+
+/**
+ * A heard line, [set] on this page by `onThisPage`, with a repeat decided on
+ * the line as heard rather than as set (A60). The same line again — their
+ * phone saying it every so often while they read down a still screen — is
+ * set where it was set the first time. It can come out somewhere else now:
+ * heard before this page held their chapter, it kept the share of the verse
+ * they said; their words, once the chapter is here, put it a few words on.
+ * Given as it now comes out, a line that has not moved would be a move, and
+ * teach the guess a scroll of a few words.
+ *
+ * @return what to give the guess, and the line to remember.
+ */
+internal fun setAsHeard(
+    heard: HeardReading,
+    set: ReadingReport,
+    page: TranslationID,
+    last: HeardLine?,
+): Pair<ReadingReport, HeardLine> {
+    val word = heard.words?.word
+    if (set.settled && last != null && last.book == heard.book && last.page == page &&
+        last.word == word && samePlace(heard.report.at, last.at)
+    ) {
+        return set.copy(at = last.onThisPage) to last
+    }
+    return set to HeardLine(heard.book, heard.report.at, word, page, set.at)
+}
+
 /** The same place, as core's guess counts it. */
 private fun samePlace(a: ReadingPoint, b: ReadingPoint): Boolean =
     a.chapter == b.chapter && a.verse == b.verse && abs(a.part - b.part) < 0.02
@@ -2320,6 +2582,8 @@ private fun ChapterSection(
     onNoteCardHeight: (Dp) -> Unit,
     onFrame: (Rect) -> Unit,
     onLongPressVerse: (Int) -> Unit,
+    onHeld: (Int, Int?) -> Unit,
+    onOriginal: (Int) -> Unit,
     onDragToVerse: (Int) -> Unit,
     onExtend: (Boolean, Int, Int?) -> Unit,
     onTapVerse: (Int) -> Unit,
@@ -2344,6 +2608,13 @@ private fun ChapterSection(
     )
 
     if (chapter != null) {
+        // Worked out again only when a mark, the version or the text changes:
+        // a mark made in another version is found through its original words,
+        // and that is not work to repeat on every frame of a scroll.
+        val highlights = model.highlights(reading, n)
+        val marks = remember(highlights, translation, chapter) {
+            verseMarks(model.original, reading.bookID, n, highlights, translation, chapter)
+        }
         Box(
             modifier = Modifier
                 .readingMeasure(measureInset)
@@ -2360,7 +2631,7 @@ private fun ChapterSection(
                     lineHeightMultiple = model.settings.lineHeightMultiple.toFloat(),
                     redLetter = model.settings.redLetter,
                 ),
-                marks = verseMarks(model, reading, n),
+                marks = marks,
                 lifted = lifted,
                 justMarked = justMarked,
                 onMarkDrawn = onMarkDrawn,
@@ -2376,6 +2647,8 @@ private fun ChapterSection(
                 onDragEnded = {},
                 onTapVerse = onTapVerse,
                 onNoteSlot = onNoteSlot,
+                onHeld = onHeld,
+                onOriginal = onOriginal,
             )
 
             // The gutter (left edge — notes only).
@@ -2525,30 +2798,115 @@ private fun ChapterSection(
 }
 
 /**
- * Every highlight on this chapter, as a mark per verse.
+ * Every highlight on this chapter, as marks on this page.
  *
- * A mark that names part of a verse only names it in the translation it was
- * made in, because translation belongs to a *person* (S20) and two people in
- * one room can be reading different words for the same verse. When they do
- * not match, the mark widens to the whole verse rather than pointing at words
- * that are not on this page: it says truthfully that somebody marked
- * something here, which is the honest half of what it knows (A41g).
+ * A mark that stops part-way through a verse names its part in the version it
+ * was made in, and also names the original words under that part (A60). On
+ * the author's version it lands exactly where it was made. On any other, it
+ * lands on whatever this page says for the same original words — which may
+ * be in another place in the verse, or in two places — and where this
+ * version cannot be matched word for word, on the whole verse: that says
+ * truthfully that somebody marked something here, which is the honest half of
+ * what it knows (A41g). `OriginalWords.resolve` makes that call, verse by
+ * verse.
+ *
+ * A mark made before marks carried their words still follows them: its words
+ * are worked out from its offsets through the author's version's links, when
+ * this phone has them.
  */
-private fun verseMarks(model: AppModel, reading: Reading, chapter: Int): List<VerseMark> {
-    val readingIn = reading.translation
+internal fun verseMarks(
+    original: OriginalStore,
+    bookID: String,
+    chapter: Int,
+    highlights: List<Highlight>,
+    translation: TranslationID,
+    content: ScriptureChapter,
+): List<VerseMark> {
+    if (highlights.isEmpty()) return emptyList()
+    // Links are read only when a mark has to find its words on this page; a
+    // chapter of whole-verse marks, or of marks made in this version, never
+    // asks for them.
+    val travelling = highlights.any {
+        !it.range.isWholeVerses && it.range.charTranslation != translation
+    }
+    val readerLinks = if (travelling) original.links(translation, bookID, chapter, content) else null
+    val readerTexts = if (travelling) content.ownTexts() else emptyMap()
+    val source = if (travelling) original.source(bookID) else null
+    val authors = HashMap<TranslationID, Map<Int, List<AlignmentLink>>?>()
     val result = mutableListOf<VerseMark>()
-    for (highlight in model.highlights(reading, chapter)) {
+    for (highlight in highlights) {
         val range = highlight.range
-        val readable = range.isWholeVerses ||
-            (range.charTranslation != null && range.charTranslation == readingIn)
-        for (verse in range.verses) {
-            result += VerseMark(
-                verse = verse,
-                from = if (readable && verse == range.startVerse) range.startChar else null,
-                to = if (readable && verse == range.endVerse) range.endChar else null,
-                ink = highlight.ink,
-            )
+        // A licensed author's links would need their text, which this phone
+        // holds only for its own version; a mark that has its words does not
+        // need them, and does not read them.
+        val author = range.charTranslation?.takeIf {
+            it != translation && !range.isWholeVerses && !carriesItsWords(range, source)
         }
+        val authorLinks = author?.let {
+            authors.getOrPut(it) { original.links(it, bookID, chapter, readerChapter = null) }
+        }
+        val spans = OriginalWords.resolve(
+            range,
+            reader = translation,
+            readerLinks = readerLinks,
+            readerTexts = readerTexts,
+            source = source,
+            authorLinks = authorLinks,
+        )
+        result += marksOf(spans, highlight.ink)
+    }
+    return result
+}
+
+/**
+ * Whether every part-way end of [range] has its original words stored, in
+ * [source]'s numbering — so nothing has to be worked out from its offsets
+ * through its author's links (`OriginalWords.resolve`).
+ */
+private fun carriesItsWords(range: VerseRange, source: String?): Boolean {
+    if (source == null || range.wordsSource != source) return false
+    if (isPartial(range, range.startVerse) && range.startWords == null) return false
+    return range.endVerse == range.startVerse || !isPartial(range, range.endVerse) || range.endWords != null
+}
+
+/**
+ * One highlight's pieces, as marks: per verse, pieces that overlap or touch
+ * are made one, and a whole verse takes in every piece of it.
+ *
+ * The wash counts a mark per ink, and deepens where two overlap because two
+ * people marked the same words (§4.5). One person's one mark, found on this
+ * page in two pieces that meet, must not be drawn as if it had been marked
+ * twice.
+ */
+internal fun marksOf(spans: List<MarkedSpan>, ink: Ink): List<VerseMark> {
+    val result = mutableListOf<VerseMark>()
+    for ((verse, pieces) in spans.groupBy { it.verse }) {
+        var from: Int? = null
+        var to: Int? = null
+        var open = false
+        for (piece in pieces.sortedBy { it.from ?: 0 }) {
+            val reach = to
+            when {
+                !open -> {
+                    from = piece.from
+                    to = piece.to
+                    open = true
+                }
+                // Null runs to the verse's end, which every later piece is
+                // inside.
+                reach == null -> Unit
+                (piece.from ?: 0) <= reach -> {
+                    val pieceTo = piece.to
+                    to = if (pieceTo == null) null else maxOf(reach, pieceTo)
+                }
+                else -> {
+                    result += VerseMark(verse = verse, from = from, to = to, ink = ink)
+                    from = piece.from
+                    to = piece.to
+                }
+            }
+        }
+        if (open) result += VerseMark(verse = verse, from = from, to = to, ink = ink)
     }
     return result
 }
@@ -2637,6 +2995,25 @@ private fun GutterStack(
 
 // MARK: Bottom chrome — the way out, or the composer
 
+/**
+ * The range the leave toolbar acts on: the lift, whole, placed in its book
+ * and chapter — or nothing, when the toolbar is not what is up.
+ *
+ * It used to be rebuilt here from the lift's two verses alone, which dropped
+ * the offsets the handles had set and the version they were measured in, so
+ * every mark made on this phone was stored as whole verses whatever the
+ * handles had said. What the lift carries, the toolbar hands on.
+ */
+internal fun toolbarRange(
+    composer: ComposerState?,
+    lifted: VerseRange?,
+    liftedChapter: Int?,
+    bookID: String,
+): VerseRange? {
+    if (composer !is ComposerState.Toolbar || lifted == null || liftedChapter == null) return null
+    return lifted.copy(bookID = bookID, chapter = liftedChapter)
+}
+
 @Composable
 private fun BottomChrome(
     model: AppModel,
@@ -2647,6 +3024,15 @@ private fun BottomChrome(
     composer: ComposerState?,
     lifted: VerseRange?,
     liftedChapter: Int?,
+    /** The original under the lift: the toolbar's third verb and its line (A60). */
+    underLift: OriginalUnderLift?,
+    /** The panel's words, while it is open. */
+    originalReading: OriginalReading?,
+    lexicon: Lexicon?,
+    parsings: Parsings?,
+    roomLines: List<RoomVersionLine>?,
+    versionName: String,
+    onOriginal: () -> Unit,
     editingNote: Note?,
     recorder: VoiceRecorder,
     followBackOffer: FollowBackOfferState,
@@ -2679,16 +3065,7 @@ private fun BottomChrome(
         // enter/exit belongs to the parent that decides whether the child is
         // there at all. The range is held through the exit so the bar does
         // not blank out halfway off the screen.
-        val range = if (composer is ComposerState.Toolbar && lifted != null && liftedChapter != null) {
-            VerseRange(
-                bookID = reading.bookID,
-                chapter = liftedChapter,
-                startVerse = lifted.startVerse,
-                endVerse = lifted.endVerse,
-            )
-        } else {
-            null
-        }
+        val range = toolbarRange(composer, lifted, liftedChapter, reading.bookID)
         val heldRange = remember { mutableStateOf(range) }
         if (range != null) heldRange.value = range
         AnimatedVisibility(
@@ -2706,6 +3083,9 @@ private fun BottomChrome(
                     onHighlight = { ink -> onHighlight(bar, ink) },
                     onWrite = { onWrite(bar.start) },
                     onSpeak = { onSpeak(bar.start) },
+                    originalVerb = underLift?.verb,
+                    onOriginal = onOriginal,
+                    line = underLift?.line,
                     modifier = Modifier.padding(bottom = 14.dp),
                 )
             }
@@ -2732,11 +3112,15 @@ private fun BottomChrome(
             is ComposerState.Toolbar -> BottomStage.Toolbar
             is ComposerState.Write -> BottomStage.Write
             is ComposerState.Speak -> BottomStage.Speak
+            is ComposerState.Original -> BottomStage.Original
         }
         // The leaving branch still needs an address to draw with, exactly as
         // the toolbar's range is held above.
         val heldComposer = remember { mutableStateOf(composer) }
         if (composer != null) heldComposer.value = composer
+        // And the panel's words, held through its fade the same way.
+        val heldReading = remember { mutableStateOf(originalReading) }
+        if (originalReading != null) heldReading.value = originalReading
 
         AnimatedContent(
             targetState = stage,
@@ -2748,6 +3132,23 @@ private fun BottomChrome(
         ) { showing ->
             when (showing) {
             BottomStage.Toolbar -> Unit
+
+            // The original words for the lift (A60, §7). The selection
+            // stays lifted above it and the handles keep working; the panel
+            // follows them. Left the way a composer is: a tap in the text,
+            // which lets the lift go with it.
+            BottomStage.Original -> {
+                val shown = heldReading.value ?: return@AnimatedContent
+                OriginalPanel(
+                    reading = shown,
+                    versionName = versionName,
+                    lexicon = lexicon,
+                    parsings = parsings,
+                    room = roomLines,
+                    initiallyOpen = (heldComposer.value as? ComposerState.Original)?.opens,
+                    modifier = Modifier.padding(bottom = 10.dp),
+                )
+            }
 
             BottomStage.Write -> {
                 val address = (heldComposer.value as? ComposerState.Write)?.address
@@ -2878,7 +3279,7 @@ private fun BottomChrome(
  * keyed on it would restart its transition as somebody typed. This is the
  * only distinction the transition is about.
  */
-private enum class BottomStage { TheWayOut, Toolbar, Write, Speak }
+private enum class BottomStage { TheWayOut, Toolbar, Write, Speak, Original }
 
 /**
  * A small label naming who made a highlight, and remove if it's yours (S06).

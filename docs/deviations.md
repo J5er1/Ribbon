@@ -68,9 +68,15 @@ reasoning.
    aim itself: how far above the line the verse rests, and the one number
    iOS reads off its own first landing (I30).
 
-8. **Word-boundary highlight extension is not built.** S06's "word
-   boundaries when dragged slowly" — the current drag snaps to verse
-   boundaries only, which is also the stated default.
+8. **Word-boundary highlight extension is built; the slow drag is not.**
+   S06's "word boundaries when dragged slowly" — the drag snapped to verse
+   boundaries only, which is also the stated default. It is no longer a
+   deviation in substance (September 2026; A41g, I8): both handles snap to
+   word edges at any speed, and a handle taken to either end of a verse
+   gives the whole verse, so S06's default is still the easiest thing to
+   hit. What remains a departure is the speed: no mode is entered by how
+   fast a thumb happens to move, for the reasons A41g gives. Android's
+   toolbar dropped the phrase the handles set until A60 found it.
 
 9. **Following, live presence, and thinking-of-you are backed by
    `RoomChannel` on iOS and Android.** (September 2026; rebuilt September
@@ -2280,10 +2286,12 @@ A41g. **A mark on a phrase.** A41e built S06's two handles and stopped at its
     needs the marked words themselves stored and searched for in the reader's
     text, and Scripture under licence is not ours to copy into our own
     database to make a highlight prettier (§16.8). The whole verse is the
-    right answer until that is not true.
+    right answer until that is not true. *(Answered since, by A60: what is
+    stored is the original words, which are nobody's licence.)*
 
 A42. **A room reads one version.** Owner's call, and the first entry in this
     ledger that reverses a *named principle* rather than filling a gap in one.
+    *(Reversed since, by A60.)*
 
     §2.6 is titled "Translation is a personal setting, not a room setting",
     and S20 repeats it as a rule. Its reasoning is one sentence: *"You read
@@ -3469,6 +3477,469 @@ A59. **Following never lands on the head of a chapter they are not at
     until they have read on about a quarter of a screen. That is where they
     are.
 
+A60. **A mark follows its words, and everybody reads their own version
+    again (reverses A42).** Owner's call, in the owner's words: *"if you
+    select a certain area, like specifically like who is or whatever, we can
+    view the original Greek … everybody on their own version in the same
+    plan or in the same room … if the Hebrew's the same then we highlight it
+    all."* And, for following: *"this whole thing adds onto the algorithm
+    that guesses where the user is reading and brings everyone to the same
+    area while reading."*
+
+    A42 was the first entry in this ledger to reverse a named principle.
+    This is the first to put one back. §2.6 is "Translation is a personal
+    setting, not a room setting", and it rested on one sentence: *"her note
+    still lands on verse 9 because notes pin to verse addresses, not to text
+    offsets."* A41g put a text offset into the product, and A42 took the
+    only way out that offsets allow: if a phrase is to mean the same words
+    in both hands, both hands must hold the same words. That was true of
+    offsets. It is not true of the words under them. The Berean's "with God"
+    and the World English's "with God" are both πρὸς τὸν Θεόν, and the
+    Berean's "Through Him all things were made" and the World English's
+    "All things were made through him" are the same Greek in a different
+    order. A mark that remembers the Greek is an address again, one level
+    finer than a verse, and §2.6's sentence is true of it.
+
+    It is also the answer to A41g's **Still not here**, which said doing
+    better than the whole verse "needs the marked words themselves stored
+    and searched for in the reader's text, and Scripture under licence is
+    not ours to copy." There was a third way. What is stored is positions in
+    the Hebrew or Greek, which are nobody's licence; the English is never
+    stored, and a licensed version's links are worked out on the phone from
+    the chapter it already holds, and kept nowhere.
+
+    What it does not give back is A42's other reason, "the simpler product
+    besides". Each person reading their own words, with marks and following
+    that cross between them, is the harder product. The owner asked for it
+    knowing that.
+
+    **The model.** Five things, each defined once, in RibbonCore and its port.
+
+    - **The original words** of a verse: Hebrew, Aramaic or Greek, in their
+      own order, each with how to say it, its Strong's number and its
+      grammar (`Scripture/original/<BOOK>.json`).
+    - **A word index** is a word's place in that list, from 0. It is the
+      anchor, and it counts in one numbering: the **source key**
+      (`bsbt-7abb5bb6`), a hash of every verse's words, which changes only
+      if the words or their numbering do. A stored index is honoured only
+      under the key it was made with.
+    - **A verse's own text** is A41g's coordinate system, now defined in one
+      place (`ScriptureChapter.ownTexts()`): the verse's spans joined with
+      nothing between them, titles left out, counted in UTF-16 units.
+    - **A link** is a range of one version's own text and the words it
+      renders, `[start, end, [words]]`. Links are what a version says for
+      which words. The Berean and the World English carry theirs
+      (`Scripture/align/`); a licensed version gets them on the phone
+      (below).
+    - **A mark** keeps everything A41g gave it — `startChar`, `endChar`,
+      `charTranslation`, meaning exactly what they meant — and gains
+      `startWords`, `endWords` and `wordsSource`. A set, not a range: an
+      English phrase can render its words out of order ("In the beginning
+      God created" is Hebrew words 0, 2 and 1). The words are worked out
+      once, when the mark is made (`OriginalWords.anchored`), and never
+      added later. A mark on whole verses writes none of it and is
+      byte-for-byte what it was.
+
+    **How a mark finds its words on your page** (`OriginalWords.resolve`),
+    for each partly marked verse, in this order. If you read the version it
+    was made in, the offsets, exactly as A41g drew them. Otherwise its
+    stored words, if they count in the bundled numbering; otherwise the
+    words its offsets cover in the version it was made in — which is how
+    every phrase marked before this follows its words, with no data
+    migrated. Those words are drawn wherever your version's links put them,
+    as many pieces as they really occupy, bridged over words your version
+    leaves unrendered and never across a word that belongs to something
+    else. If what is left is a scatter of "the", "of" and "and", or your
+    version has no links for the verse, it is the whole verse: somebody
+    marked something here, which is still the honest half of what the mark
+    knows. Verses in the middle of a mark are whole, as they always were.
+
+    **The data, and where it is from.** The words and the definitions are
+    public domain, the Hebrew face is open, and none of it is written by us.
+
+    - The Hebrew, Aramaic and Greek, the transliterations, Strong's numbers
+      and grammar: the Berean Standard Bible translation tables, placed in
+      the public domain in April 2023, which carry the Westminster Leningrad
+      Codex (public domain). Cantillation is taken off; vowel points stay.
+    - The definitions: Strong's own, from his 1890 concordance, and only
+      his — the Hebrew `explanation` notes, not the senses listed beside
+      them, which are Online Bible's text and not free, and the Greek
+      `strongs_def`, not the KJV renderings. Where Strong's own sentence
+      runs across the derivation and the definition — 108 Greek entries
+      (ἐκ, ἵνα, ἄνθρωπος …) and one Hebrew, whose definition alone began
+      mid-parenthesis — the two are joined, so a definition is never a
+      fragment. The tables mark a word the editions split with "¦" (μή¦γε,
+      Ἁρ¦μαγεδών); the mark is taken off, and two halves that each carry an
+      accent keep a space (κάτω κύψας).
+    - The World English's own Strong's tags, from eBible, used only to fill
+      in a word the English alignment left unlinked, and only when the
+      tag's number is among that verse's words.
+    - Noto Serif Hebrew (SIL Open Font License) sets the Hebrew. That is a
+      third family beside Literata and Alegreya, which the brief's type
+      stack does not have; nothing in either document names a Hebrew face,
+      and Literata covers the Greek. One quiet line under the version line
+      on You credits all of it.
+
+    `tools/original_to_json.py` builds the files from the downloads (the
+    URLs and checksums are in its header), against the committed English, so
+    every offset is measured against exactly what the phones show. It checks
+    itself and runs twice to prove the bytes do not change.
+
+    How well the links fit, measured over every verse:
+
+    - **Berean Standard**: 97.2% of verses linked perfectly, 99.9% of the
+      original words it renders linked, 99.7% of its English content words.
+      The tables *are* the Berean, chunk by chunk, so what is missing is
+      drift (below), not judgement.
+    - **World English**: 97.2% of its content words linked, 93.6% of the
+      rendered original words, and 79% of verses with every content word
+      linked. It is aligned to the Berean's English and inherits its words.
+      On 42 hand-checked verses (392 content words) the method was **91%
+      precise**; in 30 simulated marks it put 25 on exactly the right words,
+      5 on acceptable ones and none on wrong ones, and 2.6% of 5,000 random
+      phrases fell back to the whole verse. Those were judged by hand on the
+      prototype; what shipped reproduces its coverage, and its precision
+      was not judged again.
+    - **A wrong link ships, and here is one.** The World English's "through
+      him" in John 1:3 is linked to καὶ, "and", and the Greek it renders is
+      linked to nothing. A Berean mark on "Through Him" finds no words to
+      land on there and marks the whole verse, and a follow from "through"
+      lands on "were made". The core's test of that verse steps around those
+      words rather than build on them. About one World English link in
+      eleven is like that. No "less sure" tier was built; a near miss inside
+      the right verse was judged better than silence.
+
+    **What it costs, stated plainly.**
+
+    - **Size.** The original words with Strong's and the grammar are 26.4
+      MB; the links for both bundled versions are 11.0 MB. About 37 MB in
+      all, about 7 MB compressed — three and a half times the two English
+      versions it sits beside. S21 says megabytes are a fine number; this
+      is now the largest thing in the app. A book of it is up to 1.3 MB, so
+      it has its own cache on each phone, not the English one.
+    - **A licensed version is only as good as the pivot.** NKJV, NIV and
+      NASB come with no word data and may not be stored, so the phone lines
+      the chapter up against the Berean's English for the same verse and
+      borrows the Berean's links (`PivotAligner`, a port of
+      `tools/pivot_align.py`). Their text cannot be measured here, so the
+      World English and the KJV stood in: the pivot links **66% of the
+      World English's content words and 58% of the KJV's**. Where it does
+      link, it agrees with the World English's own links 99.8% of the time
+      — agreement, not precision; both rest on exact-stem matches, which
+      were 98–100% right by hand. The rest are real wording differences —
+      "replied" against "said", "behold" and "therefore" the Berean leaves
+      unrendered — and a mark on words the pivot cannot find is the whole
+      verse. Until a licensed reader's chapter has arrived, their marks are
+      whole verses and their reading line carries no word.
+    - **Where it is the whole verse, or nothing.** A psalm's title: the tables
+      fold it into verse 1 and the pipeline takes it out again (116 titles,
+      kept as verse 0), but the page sets a title apart from every verse,
+      so its Hebrew links to nothing and is not reachable from the page.
+      The verses the oldest copies leave out — Matthew 17:21, Mark 9:44 and
+      the rest the World English keeps and the tables do not — have no
+      original words at all; a mark there stays a verse, and the original
+      is not offered. Romans 14:24–26 in the World English is Romans
+      16:25–27 in the tables, and the World English's Revelation 13:1
+      begins with what the tables end 12:17 on; links are never drawn
+      across verses, so those are whole verses too. So are five more the
+      review found, where the World English numbers the same words into a
+      neighbouring verse: Philippians 1:16–17 (the two halves the other way
+      round, so a mark there had landed on the wrong Greek), Acts 9:29,
+      Acts 3:19 and 1 Kings 18:33. The pipeline now looks for this — a
+      verse sharing far more words with its neighbour than with itself —
+      and fails until each one it finds is listed. Luke 20:30, where the
+      World English follows a longer Greek text the tables do not carry,
+      still has two wrong links ("took", "died") and is the known case the
+      check cannot see.
+    - **A finished book is re-worded.** A42 kept a finished reading in the
+      version it was read in, so a room changing version next year would not
+      re-word a book under notes left about its words. Your version is now
+      yours in every book, finished or not — and the reason A42 gave is
+      answered by this entry, because the marks move with their words. The
+      notes were always pinned to verses.
+
+    **The original, on the page.** The owner's three answers, built as given.
+
+    - **Depth: "on select".** What you select is what you get: its words in
+      the Hebrew or Greek, in their own order — Hebrew and Aramaic right to
+      left — each with how to say it and how your version says it ("not said
+      on its own" where it does not). Tapping a word opens its dictionary
+      form, Strong's definition, its grammar spelled out, and "Strong's
+      G3056", small. No counts, no "occurs 54 times": the build book's "Not
+      a study platform" is still the rule, and a word's detail is the
+      furthest this goes. A word looked up is not logged or sent (§13).
+    - **Compare: "the room's versions".** Under the words, "In this room":
+      each version somebody in the room reads, who reads it — "you", then
+      first names — and that version's words for the same selection, or its
+      whole verse, muted, where it cannot be matched. A licensed version
+      comes from this phone's copy or the usual fetch, and says "Not on this
+      phone yet." otherwise. It compares versions, never people (§6.12), and
+      is left out when everybody reads the same one.
+    - **Hold: "shows both".** Holding a word lifts its verse for marking
+      exactly as before, and a quiet line above the inks already shows the
+      word under your finger: "Λόγος · Logos · Word". Move the handles and
+      it follows the selection. Tap it — or the verb — for the rest, and
+      while the lift is still a hold the panel opens on that word with its
+      detail already open, on both phones. Nothing linked under the finger
+      (a verse number, say), and the line says nothing.
+
+    From a selection, the way in is a third verb on the toolbar, after
+    speak, saying the language of the words the panel will show — "the
+    greek", "the hebrew", "the aramaic" (a phrase of Daniel 2:4 can be
+    Hebrew in a verse that is mostly Aramaic) — and never "original language",
+    "lexicon" or "interlinear". The inks scroll to make room; the
+    verbs stay on the screen (A41c). It is not a sheet and not glass over a
+    verse: the toolbar cross-fades into it at the foot of the page the way
+    it does into write and speak, the selection stays lifted above it with
+    its handles live, and a follow holds while it is open. A paused room
+    keeps the verb and the line — reading is allowed. Each verse carries a
+    VoiceOver and TalkBack action, "the original words"; each word is one
+    element, spoken as its transliteration, its rendering and its grammar.
+
+    **Following lands on the same words** (amends A58). A58's line is a
+    verse and how far through it, and the follower used that fraction on
+    its own page — exact when both read the same words, and only
+    proportional across two versions that put them in a different order.
+    The `reading` broadcast now also says which version the page is in and
+    which original word is under the reading line (`translation`, `word`,
+    `words_source`, each left out when absent). A follower on another
+    version is carried to that word in its own text
+    (`OriginalWords.carried`) before the guess hears it; on the same version
+    nothing changes. The foot of their screen stays a fraction — it is for
+    pace. Older apps ignore the keys, and a key of the wrong shape is
+    dropped on its own rather than taking the message with it.
+
+    One thing the review caught: a follower on a licensed version hears a
+    line before the chapter it is in has streamed, so the first time it can
+    only use the leader's fraction; when the leader's phone says the same
+    line again a few seconds later, the chapter has arrived and the same
+    line now lands on the word — and the guess took that difference for a
+    tiny scroll, and learned from it. A line heard again unchanged is now
+    set where it was set the first time, on both phones, so a repeat stays
+    what it is. Moving the existing rest onto the word once the chapter
+    arrives wants a new method on the estimate in both cores; it is left
+    for later, and until the leader moves the guess keeps their fraction.
+
+    **What stayed.** Following's pace and how it carries the page (A58,
+    A59): the guess still learns in the follower's own words. The ribbon,
+    which is an address (A30). Presence's "(Mark 6)". Note search, which
+    searches notes and transcripts, not Scripture (A55), and Scripture
+    search, which was already the reader's. Text size, spacing and red
+    letter were always yours.
+
+    **Where it lives.** Settings › Text: the version is yours again — "Yours
+    alone. A mark lands on the same words in theirs." It writes your
+    profile and nobody else's page. `TranslationChoice.page(me:room:)` —
+    yours, else the room's, else the Berean — is asked everywhere the room's
+    version was: the page, the chooser's search, the previews, the shelf's
+    quotes. A42 kept `profiles.translation` "deliberately", which is what
+    made this cheap. `rooms.translation` and `readings.translation` stay,
+    and new rooms and readings still fill them from you: shipped apps read
+    and write them, and PostgREST refuses a write that names a column that
+    has gone. Nothing on this build reads them for display.
+
+    `highlights` gains `start_words`, `end_words` and `words_source`,
+    nullable, with four checks — positions name their source, positions are
+    whole numbers at least zero, one verse keeps one set, the source is a
+    key — in `20261002120000_ribbon_a_mark_follows_its_words.sql`, applied
+    to the live project on 4 October 2026 and rehearsed there in a
+    rolled-back transaction (`docs/still-to-do.md` §1). A pull keeps a mark's
+    words only with their source, as it keeps offsets only with their
+    version. On the phones: `OriginalStore` (both), `OriginalPanel`, and in
+    the core `OriginalText` and `PivotAligner`, whose stop words and
+    irregular forms are generated by `tools/pivot_align.py` like the book
+    table, so neither app hand-copies them.
+
+    **Android had never stored a phrase.** The toolbar rebuilt the range it
+    acted on from the lift's two verse numbers, dropping the offsets the
+    handles had set and the version they were measured in — so since A41g
+    every mark made on an Android phone was saved as whole verses, whatever
+    the handles said. It looked right until the book was opened again. The
+    toolbar hands the lift on whole now (`toolbarRange`), and
+    `AMarkKeepsItsWordsTest` would have caught it.
+
+    **Still not here:**
+
+    - **The note card's quote in the author's version** (§2.6, S04). A42
+      took it away because the words she was looking at were the words an
+      inch above her note; they are not now. It is not back, because the
+      honest version needs the author's version stored on the note when it
+      is written — a profile read later can have changed since.
+    - **The web reader.** A browser joiner (deviation 22) still opens the
+      book in the version its reading was started in, `readings.translation`
+      — the web is the last thing reading it — and there is no original
+      there, and no marks to follow.
+    - **Plainer definitions.** Strong's 1890 English is accurate and old.
+      STEP Bible's short glosses (Tyndale House, CC BY 4.0) would read
+      better, with credit, and about one Hebrew word in eight would need
+      STEP's tagged text to choose the right sense. The Hebrew "meaning"
+      column beside them is not free.
+    - **The Berean, from its publisher.** Ribbon's Berean is eBible's 2020
+      copy, and the tables follow the publisher's current text, so about 3%
+      of verses have drifted: a word reworded here and there, which is most
+      of what the Berean does not link perfectly. Against the publisher's
+      current text, 31,100 of 31,102 verses align exactly. Re-sourcing it
+      is worth doing; before it is, phrases marked in the Berean before this
+      change in the drifted verses must have their words worked out while
+      the old text is still the one bundled. Each link file records which
+      English it was measured against (`basis`), so a re-converted text
+      cannot pass unnoticed.
+    - **Zooming to the original.** The owner's next idea, *"zooming in
+      brings you closer to the original Hebrew in terms of version, and then
+      zooming out can bring you to a more simpler version"*, is decided and
+      not built: it is its own change, after this one. A pinch walks a ladder
+      of versions — the unfoldingWord Simplified Text at the simple end
+      (owner's choice: plain modern English, and its translators linked every
+      word to the Hebrew and Greek themselves; CC BY-SA), your own version,
+      a literal one, the words in their own order with the English under
+      each, and the Hebrew or Greek itself. The pinch *changes your version*
+      (owner's choice) and is saved, so the room sees what you are reading.
+      What makes it hold your place is this entry: every rung is linked to
+      the same original words, so the word under your fingers stays put
+      while the words around it change. S02 lists pinch as unsupported
+      because text size lives in Settings; the gesture is free, and taking
+      it is argued in that entry.
+
+    **Tests that hold it.** In RibbonCore and its port, same names, same
+    inputs: `OriginalTextTests` (decoding, word sets, ranges, anchoring,
+    resolving in its order, the three following functions and a John 1:3
+    worked across versions, and the bundled files against the committed
+    text), `PivotAlignerTests` (tokens, Porter, alignment, and a fixture of
+    775 stems and 106 alignments of real verses that `tools/pivot_align.py`
+    generates), `VerseRangeAnchorTests`, and the own-text cases in
+    `ScriptureModelTests`. `tools/test_original.py` holds the pipeline. On
+    Android: `AMarkKeepsItsWordsTest`, `OriginalStoreTest`,
+    `EverybodyReadsTheirOwnVersionTest`, `OriginalPanelTest`, the new keys
+    in `RoomChannelWireTest` and `WireFormatTest`, and four look-book shots
+    (`theOriginal`, `theOriginalInThisRoom`, `theOriginalHebrew`,
+    `theOriginalLine`), looked at. All of it passes: 142 tests in the Swift
+    core, 146 in the Kotlin. **Not exercised on a device**: the fonts,
+    right-to-left words, the panel's height, a follow between two phones on
+    two versions, and a licensed chapter lined up on a real phone. iOS is
+    compiled by CI (I37) and has not run.
+
+A61. **What's new, on launch (reverses §6.2's "no what's new").** Owner's
+    call, in the owner's words: *"we should also start adding a whats new to
+    the app and kinda showcase it with little animations and just tell
+    people about it when they open on a new version."* Asked how, the owner
+    chose *"A screen on launch"* over a quiet row in the room or a hint in
+    the book, and *"Add it to this PR"*.
+
+    The rule it reverses is §6.2's, under "The thing to protect in this
+    loop": *"Nothing may be inserted between opening the app and reading. No
+    “what's new,” no streak card, no verse of the day, no re-engagement
+    prompt, no rating request positioned at the moment of completion. The
+    fastest path from launch to Scripture is the product."* It names this
+    exact thing, in quotation marks. §6.1 says the same of a first run:
+    *"The whole thing is four decisions and no tour. There is no carousel,
+    no feature walkthrough…"* A42 was the first entry in this ledger to
+    reverse a named principle and A60 the first to put one back; this is
+    the second to reverse one, and the plainest, because the principle
+    anticipated it by name.
+
+    **What it keeps of what the rule protects.** The rule is against a
+    launch that is about the app rather than the reading, every time, for
+    everyone. So:
+
+    - **One screen**, not a carousel, and only the latest release — a phone
+      three releases behind is shown the newest, never a backlog.
+    - **Once per release.** It counts as seen the moment the launch mark
+      lifts off it, not only on the way out, so a phone put away with it up
+      and reclaimed in the pocket does not show it again.
+    - **A plain launch only.** A launch that came from something tapped — a
+      notification, an invite or any other link, the home-screen fire, a
+      widget or a Live Activity — goes where the tap meant, records nothing,
+      and the screen waits for the next time the app is simply opened. A tap
+      arriving while it is up takes it away and goes where it meant, rather
+      than arriving underneath it. Nothing is ever delayed for somebody who
+      came from something they tapped.
+    - **Never a fresh install.** A phone with nobody on it gets the four
+      questions and no tour (§6.1 is untouched), and records the latest
+      release as it goes, so the first plain launch after the way in does
+      not describe what was just met. A person made during this launch is
+      not history; a phone wiped back to the way in by deleting the account
+      is a fresh install too.
+    - **One tap to the room.** "To the room", pinned at the foot and live
+      from the first frame. The room is already built underneath, so
+      leaving is the room there, not the room starting to load. No timers,
+      no auto-advance, nothing holding the button. Every way out — the
+      button, the system back, Escape — records it.
+
+    **What it shows.** "What’s new" in small caps, and under it "The words
+    under the words". Then A60, as three things, each a title and a line or
+    two: the Hebrew and Greek under every verse, and how to reach them; your
+    own version again; following that lands on the same words. Each has a
+    small picture above it drawn in the app's own type and inks — a word
+    held, lifting, with "λόγος · logos · Word" over it; the ochre wash
+    drawing along "Through Him" in the Berean and then "through him" in the
+    World English, at opposite ends of the line; a reading line under "all
+    things" in one version and gliding to "All things" in the other, not to
+    the same place on the line. No images, no confetti, no badges, no counts,
+    no exclamation points. They move on the house curves, 320–480 ms
+    ease-out with no overshoot, a breath of 1.6 to 2 seconds between beats,
+    each loop about four and a half seconds and the three staggered so they
+    take turns. Under reduce motion each is one still frame of how it ends,
+    nothing loops, and leaving is a cut. The pictures are decorative to
+    TalkBack; the heading is one header and is where focus starts, each
+    item reads as title then body, and the room underneath is taken out of
+    a screen reader's path while the cover is up.
+
+    It is a full-screen cover on the room's ground, with grain — not a
+    sheet, and not glass — because it is the room's first page this once,
+    not something laid over it. It never arrives: it is already there when
+    the launch mark (A28) lifts, and only ever leaves, down off the room the
+    way the menu goes.
+
+    **Where it lives.** Who sees it is decided in the core, `WhatsNew`
+    (RibbonCore and its port): `releases`, newest first, and `toShow` and
+    `seenAfter`, which take what this phone last saw, whether a person was
+    here before this launch, and whether the launch was plain. The rules run
+    in one order — no releases, already seen, fresh install, not a plain
+    launch, show the latest — so a fresh install opened from an invite still
+    records the release. What this phone saw is `whatsNewSeen` in the local
+    state, a release id and never a version number: per install, never
+    pushed, because it is a fact about the build on this phone and a second
+    phone on an older build has seen nothing. A file from before the screen
+    decodes it as null, which with a person already here is exactly somebody
+    updating from a build without it — the people it is for — and a damaged
+    file salvages it with the other one-time flags. On Android:
+    `AppModel.decideWhatsNew`, `whatsNewShown` and `leaveWhatsNew`;
+    `isPlainLaunch` in `MainActivity`, which also treats an Activity rebuilt
+    after the process was reclaimed as not plain, since that is somebody
+    coming *back* to the menu they had open; the cover in `RibbonRoot`; and
+    `screens/WhatsNewScreen.kt`. The nine lines are in `Copy`, in the same
+    order on both phones.
+
+    **Tests that hold it.** In RibbonCore and its port, same names, same
+    inputs: `WhatsNewTests` — today's release, the raw values, no releases,
+    a fresh install records and skips, an update from before the screen
+    shows, the same release twice shows once, a link launch records nothing
+    and the next plain launch shows, an older id shows the latest only, an
+    unknown id shows the latest, not shown records nothing. On Android:
+    `WhatsNewOnLaunchTest` (the model's decision, a person made this launch,
+    the wiped phone, which intents send a launch somewhere, a restored
+    Activity, and the pictures' timing and still frames), the new key in
+    `StateSurvivesAnUpdateTest` and `SettingsSurviveADamagedFileTest`, and
+    four look-book shots (`theWhatsNew`, `theWhatsNewStill`,
+    `theWhatsNewMoving`, `theWhatsNewMovingOn`), each on both palettes and
+    to the foot, looked at. 152 tests in the Swift core, 156 in the Kotlin.
+    **Not exercised on a device**: the motion, TalkBack's first focus, and a
+    real update over an installed build.
+
+    **Still not here:**
+
+    - **Each release has to add its own.** Nothing is generated from a
+      version number: a release with something to say adds its entry at the
+      head of `WhatsNew.releases`, with a new id, and its lines to `Copy`,
+      on both phones and in both cores. A release that adds nothing shows
+      nothing. The first entry, `2026-10-original`, is this change's own.
+    - **No way back to it.** Once left it is gone; there is no row for it in
+      the menu. A second look is the next release's.
+    - **A background pull can lose it.** A pull that read the state file
+      before this launch recorded the release, and writes it after, puts
+      the old value back, and the screen shows once more on a later plain
+      launch. The race is the same one every one-time flag already has.
+
 ## iOS (phase four): the second pass
 
 Android took a design pass of its own (A18–A51) and the two platforms
@@ -3550,7 +4021,8 @@ I5. **Settings as tiles (A23).** Text is the room's translation as a choice
     a wheel in a well, and the footnote about the touch that still arrives.
     Downloads and Plan are one group each. When the OS is silencing the app
     after the one ask, Notifications says so in one line and offers
-    Settings — never a second ask.
+    Settings — never a second ask. *(Text's first group changed since, by
+    A60: the version is yours again.)*
 
 I6. **The ribbon (A30) and the chapter list (A31).** Closing the book leaves
     the ribbon where you were, if you moved and the book is not finished;
@@ -3570,7 +4042,7 @@ I7. **The room reads one version (A42).** `Room.translation` and
     `setTranslation` still writes the profile — the person's default for
     the next room — and changes the room on screen. Finished readings keep
     the version they were read in. Kotlin already had all of this; the
-    Swift model now matches it, with tests.
+    Swift model now matches it, with tests. *(Reversed since, by A60.)*
 
 I8. **A mark on a phrase (A41g), and the washes (A41b/d/f).** `VerseRange`
     gains `startChar`, `endChar`, `charTranslation`, normalised in the
@@ -3581,7 +4053,8 @@ I8. **A mark on a phrase (A41g), and the washes (A41b/d/f).** `VerseRange`
     pt targets) sit under the first and last letters of a lift and drag to
     word edges; each has four VoiceOver actions — a verse or a word, either
     way — and the whole verse has "open what's here" and "leave something
-    here" (§11).
+    here" (§11). *(Changed since, by A60: anyone else sees the same words in
+    their own version.)*
 
     The wash is redrawn: one path per mark, filled once (no dark band at a
     line break, no staggered rows, one shape), hung off the baseline (0.88
@@ -4122,6 +4595,79 @@ I36. **The menu says which build (A59).** The version line under You read
     like one on today's, and a test on two phones could not start from
     knowing what each one ran. It now carries the build number beside the
     version, as Android's line has always carried its run number.
+
+I37. **A mark follows its words, on iOS (A60).** The decisions are A60's,
+    and so is the reversal of I7; what is only iOS's:
+
+    - **Nothing large is read on the main thread**, which the first cut did
+      in four places. The dictionary and the grammar were read under the
+      same lock the reading report takes for the source key, so a report
+      could wait on 1.2 MB being parsed; they are read outside it now and
+      only stored under it. The panel keeps its own copy, loaded off the
+      main thread, and shows a word without its detail until it arrives.
+      The book-open task loads the page's own links and the grammar ahead
+      of the first hold. And drawing the marks asks for an author's links
+      once per version, not once per mark on every redraw.
+    - **A hold on a verse number names no word.** The point-to-offset
+      lookup answers a verse number with the verse's start, which is right
+      for a handle dragged there and put the verse's first word on the line
+      for a hold. The hold asks `place(at:wordsOnly:)` now.
+    - **The page is rebuilt when your version changes**: the translation is
+      part of `ChapterTextView`'s build key, and the licensed chapters held
+      in memory are keyed by version and chapter. A debug assertion holds
+      the page's own text to `ScriptureChapter.ownTexts()`; Android's page
+      builder has no such check.
+    - **An old phrase marked in a licensed version** follows its words on an
+      iPhone that has streamed that chapter. Android shows it as the whole
+      verse.
+    - **Hebrew runs right to left inside `WordFlow`**, the panel's own
+      wrapping layout, not by flipping the layout direction, so it does not
+      depend on how the system mirrors a custom layout. Opening the panel
+      moves VoiceOver to its heading, and "Not on this iPad yet." names the
+      device, as `chapterWouldntCome` does.
+    - **Written without Xcode, compiled by CI.** There was no Xcode where it
+      was written. The store, the selection logic, the wire and the copy were
+      compiled under Swift 6's strict concurrency and run on Linux against
+      the bundled data; the app as a whole is compiled by the iOS workflow
+      and Xcode Cloud on every push, and has been green. It has not run:
+      layout, fonts, right-to-left order, motion and VoiceOver focus are the
+      first real test.
+
+I38. **What's new, on iOS (A61).** The decisions are A61's, and so is the
+    reversal; what is only iOS's:
+
+    - **The decision waits for both the mark and the state**, whichever
+      comes second, and is made in the same update as the mark's leaving,
+      so the screen is already under it as it fades and the room never
+      shows through for a frame. Every tap that brought the app here has
+      arrived by then: a link or a fire tap at a cold start is buffered
+      until the model exists, and a tapped notification waits in the router
+      until `deliver` is set. It is decided once per model, which is once
+      per cold start; there is no restored Activity to tell apart.
+    - **The home-screen fire carries no URL**, so a tap on it is heard as
+      an activity of the widget's own kind, `bible.ribbon.fire`
+      (`onContinueUserActivity` in `RibbonApp`). That is how iOS delivers a
+      tap on a widget with no link; it has not been seen on a phone.
+    - **A notification whose payload cannot be read** still counts as a
+      plain launch, where Android counts any tap. Pushes and the phone's own
+      notifications always carry a destination.
+    - **Drawn in the tree, not presented.** `WhatsNewCover` sits between the
+      room and the launch mark rather than in a `fullScreenCover`, so the
+      mark fades straight off it, and a tap arriving while it is up can take
+      it away in the same update that opens the book — two presentations
+      changing in one update is one too many for SwiftUI.
+    - **The ways out are iOS's own:** the button, a pull past the top of
+      90 points with a finger down — the pull that closes the book (S02); a
+      momentum bounce does not count — the VoiceOver escape gesture, and Esc
+      on a keyboard. It leaves down and fading; under Reduce Motion a page
+      the size of the screen does not travel, and it fades rather than cuts.
+    - **The pictures are `TextRenderer`s**, so the lift, the wash and the
+      reading line are drawn on the very glyphs of the line, not over a
+      copy of it.
+    - **Written without Xcode, compiled by CI.** The decision and the state
+      were checked under the Linux harness; the screen has SwiftUI previews
+      only. The text renderers are the likeliest place for the first build
+      to fail, and the motion and VoiceOver focus have not run.
 
 ## Licensed translations (decided: API.Bible)
 

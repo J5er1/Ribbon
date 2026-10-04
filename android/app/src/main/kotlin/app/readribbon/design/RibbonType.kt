@@ -74,6 +74,27 @@ object RibbonFonts {
         )
     }
 
+    /**
+     * The Hebrew and Aramaic words under the English (A60). Literata has
+     * polytonic Greek but no Hebrew, so the original words of the Old
+     * Testament are set in Noto Serif Hebrew, which carries the vowel points
+     * and the accents the text keeps. Variable on width and weight; both are
+     * left at the face's own regular.
+     */
+    val hebrew: FontFamily by lazy {
+        FontFamily(
+            Font(
+                path = "fonts/NotoSerifHebrew.ttf",
+                assetManager = assets,
+                weight = FontWeight.Normal,
+                variationSettings = FontVariation.Settings(
+                    FontVariation.weight(FontWeight.Normal.weight),
+                    FontVariation.width(100f),
+                ),
+            ),
+        )
+    }
+
     /** True small caps — a real face, never a textTransform (§12.2). */
     val sansSmallCaps: FontFamily by lazy {
         FontFamily(
@@ -97,6 +118,38 @@ object RibbonType {
             fontFamily = family,
             fontSize = size.sp,
             lineHeight = (size * 1.62f).sp,
+        )
+    }
+
+    /**
+     * Literata's italic, for a word's transliteration (A60): how to say it,
+     * set apart from what it means.
+     */
+    @Composable
+    fun scriptureItalic(size: Float): TextStyle {
+        val family = remember(size) { RibbonFonts.literata(FontWeight.Normal, size, italic = true) }
+        return TextStyle(
+            fontFamily = family,
+            fontStyle = FontStyle.Italic,
+            fontSize = size.sp,
+            lineHeight = (size * 1.4f).sp,
+        )
+    }
+
+    /**
+     * The original words themselves (A60): Greek in Literata, Hebrew and
+     * Aramaic in Noto Serif Hebrew. The line is opened well past the body's
+     * so the points above and below a Hebrew letter are never clipped.
+     */
+    @Composable
+    fun original(size: Float, hebrew: Boolean): TextStyle {
+        val family = remember(size, hebrew) {
+            if (hebrew) RibbonFonts.hebrew else RibbonFonts.literata(FontWeight.Normal, size)
+        }
+        return TextStyle(
+            fontFamily = family,
+            fontSize = size.sp,
+            lineHeight = (size * 1.75f).sp,
         )
     }
 

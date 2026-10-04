@@ -17,12 +17,23 @@ import app.readribbon.core.Ribbon
 import app.readribbon.core.ReflectionCard
 import app.readribbon.core.Room
 import app.readribbon.core.TranslationID
+import app.readribbon.core.VerseRange
 import app.readribbon.data.RoomNotificationPrefs
 import java.io.File
 import java.util.Base64
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
@@ -676,22 +687,7 @@ class RemoteSync(
         withAuthRetry {
             client.upsert(
                 table = "highlights",
-                rowsJson = SupabaseClient.json.encodeToString(listOf(
-                    HighlightRow(
-                        id = highlight.id,
-                        readingId = highlight.readingID,
-                        authorId = highlight.authorID,
-                        bookId = highlight.range.bookID,
-                        chapter = highlight.range.chapter,
-                        startVerse = highlight.range.startVerse,
-                        endVerse = highlight.range.endVerse,
-                        ink = highlight.ink.name,
-                        createdAt = highlight.createdAt,
-                        startChar = highlight.range.startChar,
-                        endChar = highlight.range.endChar,
-                        charTranslation = highlight.range.charTranslation?.rawValue,
-                    )
-                )),
+                rowsJson = SupabaseClient.json.encodeToString(listOf(HighlightRow.of(highlight))),
                 onConflict = "id"
             )
         }
@@ -1014,8 +1010,9 @@ class RemoteSync(
         val name: String? = null,
         val isPaused: Boolean,
         val createdAt: Instant,
-        /** The words this room reads, shared by everyone in it (A42). Null
-         *  from a client that predates the column, and from iOS. */
+        /** The version the room was seeded with. Shipped builds set a page
+         *  from it (A42); this one reads each person's own (A60). Null from
+         *  a client that predates the column. */
         val translation: String? = null,
     )
 
@@ -1125,7 +1122,90 @@ class RemoteSync(
         val startChar: Int? = null,
         val endChar: Int? = null,
         val charTranslation: String? = null,
-    )
+        /**
+         * The original words under each end that stops part-way through its
+         * verse, and the numbering they count in (A60) — how a mark lands on
+         * the same words in every reader's version. Null for whole verses,
+         * and from every build before them; sent only when there is
+         * something to send, like the three above.
+         */
+        @Serializable(with = WordPositions::class) val startWords: List<Int>? = null,
+        @Serializable(with = WordPositions::class) val endWords: List<Int>? = null,
+        val wordsSource: String? = null,
+    ) {
+        /**
+         * The mark this row describes, as this phone keeps it.
+         *
+         * The offsets come back only when the row carries the translation
+         * they were taken in; without it they are numbers into words nobody
+         * can name, so the mark is a mark on whole verses and says so (A41g).
+         * The words come back only with the source they count in, for the
+         * same reason (A60). The registry stores a raw key and never
+         * enumerates, so a translation this build has never heard of still
+         * round-trips and still matches the reader who made the mark.
+         */
+        fun range(): VerseRange {
+            val markedIn = charTranslation?.let { TranslationID(rawValue = it) }
+            val source = wordsSource?.takeIf { it.isNotEmpty() }
+            return VerseRange(
+                bookID = bookId,
+                chapter = chapter,
+                startVerse = startVerse,
+                endVerse = endVerse,
+                startChar = startChar.takeIf { markedIn != null },
+                endChar = endChar.takeIf { markedIn != null },
+                charTranslation = markedIn,
+                startWords = startWords.takeIf { source != null },
+                endWords = endWords.takeIf { source != null },
+                wordsSource = source,
+            )
+        }
+
+        companion object {
+            /** The row a mark is pushed as. */
+            fun of(highlight: Highlight): HighlightRow = HighlightRow(
+                id = highlight.id,
+                readingId = highlight.readingID,
+                authorId = highlight.authorID,
+                bookId = highlight.range.bookID,
+                chapter = highlight.range.chapter,
+                startVerse = highlight.range.startVerse,
+                endVerse = highlight.range.endVerse,
+                ink = highlight.ink.name,
+                createdAt = highlight.createdAt,
+                startChar = highlight.range.startChar,
+                endChar = highlight.range.endChar,
+                charTranslation = highlight.range.charTranslation?.rawValue,
+                startWords = highlight.range.startWords,
+                endWords = highlight.range.endWords,
+                wordsSource = highlight.range.wordsSource,
+            )
+        }
+    }
+
+    /**
+     * A set of word positions off the wire, read so that a malformed one
+     * costs only itself. The database holds them to whole numbers from zero,
+     * but one bad row decoded strictly would fail the whole pull, and every
+     * mark in the room with it; read here, it comes back empty, and an empty
+     * set is no set — that end of the mark is its whole verse.
+     */
+    internal object WordPositions : KSerializer<List<Int>> {
+        private val strict = ListSerializer(Int.serializer())
+        override val descriptor: SerialDescriptor = strict.descriptor
+
+        override fun deserialize(decoder: Decoder): List<Int> {
+            val json = decoder as? JsonDecoder ?: return strict.deserialize(decoder)
+            val array = json.decodeJsonElement() as? JsonArray ?: return emptyList()
+            val positions = array.map { element ->
+                (element as? JsonPrimitive)?.takeIf { !it.isString }?.intOrNull
+                    ?.takeIf { it >= 0 } ?: return emptyList()
+            }
+            return positions
+        }
+
+        override fun serialize(encoder: Encoder, value: List<Int>) = strict.serialize(encoder, value)
+    }
 
     @Serializable
     data class PositionRow(

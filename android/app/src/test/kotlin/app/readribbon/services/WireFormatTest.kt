@@ -2,8 +2,13 @@
 
 package app.readribbon.services
 
+import app.readribbon.core.Highlight
+import app.readribbon.core.Ink
+import app.readribbon.core.TranslationID
+import app.readribbon.core.VerseRange
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -132,6 +137,87 @@ class WireFormatTest {
             setOf("id", "room_id", "person_id", "local_date", "time_zone", "marked_at"),
             keysOf(json.encodeToString(row)),
         )
+    }
+
+    /**
+     * 20260916190000_ribbon_a_mark_on_a_phrase.sql and
+     * 20261002120000_ribbon_a_mark_follows_its_words.sql. A mark on whole
+     * verses sends none of the six optional columns; a mark on a phrase
+     * sends its offsets, the version they were taken in, and the original
+     * words under it with the source they count in (A60). The row is built
+     * the way `push(highlight)` builds it.
+     */
+    @Test
+    fun testHighlightsRowMatchesSchema() {
+        val whole = Highlight(
+            id = id, readingID = other, authorID = id,
+            range = VerseRange("JHN", 1, 3, 4), ink = Ink.teal, createdAt = at,
+        )
+        val base = setOf(
+            "id", "reading_id", "author_id", "book_id", "chapter", "start_verse", "end_verse",
+            "ink", "created_at",
+        )
+        assertEquals(base, keysOf(json.encodeToString(RemoteSync.HighlightRow.of(whole))))
+
+        val phrase = whole.copy(
+            range = VerseRange(
+                bookID = "JHN", chapter = 1, startVerse = 3, endVerse = 4,
+                startChar = 12, endChar = 22, charTranslation = TranslationID.bsb,
+                startWords = listOf(3, 0), endWords = listOf(5), wordsSource = "bsbt-5558512b",
+            ),
+        )
+        val encoded = json.encodeToString(RemoteSync.HighlightRow.of(phrase))
+        assertEquals(
+            base + setOf(
+                "start_char", "end_char", "char_translation",
+                "start_words", "end_words", "words_source",
+            ),
+            keysOf(encoded),
+        )
+        val fields = Json.parseToJsonElement(encoded).jsonObject
+        assertEquals("[0,3]", fields["start_words"].toString())
+        assertEquals("[5]", fields["end_words"].toString())
+        assertEquals("bsbt-5558512b", fields["words_source"]?.jsonPrimitive?.content)
+
+        // And back, as a pull reads it.
+        val pulled = json.decodeFromString<RemoteSync.HighlightRow>(encoded)
+        assertEquals(phrase.range, pulled.range())
+    }
+
+    /**
+     * What a pull keeps: offsets only with the version they were taken in,
+     * and original words only with the source they count in — a row from a
+     * build before either decodes as whole verses, and a malformed set of
+     * words costs only itself rather than the pull.
+     */
+    @Test
+    fun testHighlightsRowIsPulledTolerantly() {
+        fun pulled(extra: String): VerseRange = json.decodeFromString<RemoteSync.HighlightRow>(
+            """{"id":"$id","reading_id":"$other","author_id":"$id","book_id":"JHN",""" +
+                """"chapter":1,"start_verse":3,"end_verse":3,"ink":"teal",""" +
+                """"created_at":"2026-05-28T20:26:40Z"$extra}""",
+        ).range()
+
+        val old = pulled("")
+        assertTrue(old.isWholeVerses)
+        assertEquals(null, old.wordsSource)
+
+        val chars = ""","start_char":12,"end_char":22,"char_translation":"bsb""""
+        val anchored = pulled("""$chars,"start_words":[0],"words_source":"bsbt-5558512b"""")
+        assertEquals(listOf(0), anchored.startWords)
+        assertEquals("bsbt-5558512b", anchored.wordsSource)
+
+        val sourceless = pulled("""$chars,"start_words":[0]""")
+        assertEquals(12, sourceless.startChar)
+        assertEquals(null, sourceless.startWords)
+
+        val malformed = pulled("""$chars,"start_words":["a",1],"words_source":"bsbt-5558512b"""")
+        assertEquals(12, malformed.startChar)
+        assertEquals(null, malformed.startWords)
+        assertEquals(null, malformed.wordsSource)
+
+        val unnamed = pulled(""","start_char":12,"end_char":22,"start_words":[0],"words_source":"bsbt-5558512b"""")
+        assertTrue("offsets without their version are whole verses", unnamed.isWholeVerses)
     }
 
     /**

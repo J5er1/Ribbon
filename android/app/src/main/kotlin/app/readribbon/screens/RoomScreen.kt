@@ -73,6 +73,7 @@ import app.readribbon.core.NoteKind
 import app.readribbon.core.Reading
 import app.readribbon.core.Ribbon
 import app.readribbon.core.Room
+import app.readribbon.core.TranslationID
 import app.readribbon.core.VerseAddress
 import app.readribbon.design.Air
 import app.readribbon.design.BookSheet
@@ -272,10 +273,27 @@ fun RoomScreen(
     // screen, because a book nobody is looking at any more is not worth the
     // read.
     val openBookID = reading?.bookID
-    val roomTranslation = model.words(room, reading)
-    LaunchedEffect(openBookID, roomTranslation) {
+    val pageTranslation = model.words(room)
+    LaunchedEffect(openBookID, pageTranslation) {
         val bookID = openBookID ?: return@LaunchedEffect
-        withContext(Dispatchers.IO) { model.scripture.book(bookID, roomTranslation) }
+        withContext(Dispatchers.IO) {
+            model.scripture.book(bookID, pageTranslation)
+            // The links the marks on the page are drawn through, while
+            // nothing is waiting on them (A60).
+            model.original.alignment(bookID, pageTranslation)
+            model.original.source(bookID)
+            // And the Berean Standard's text and links, when the page is not
+            // in it: a licensed version is linked through them, and the panel
+            // reads its renderings where this version folds a word into
+            // another. Read here, not on the main thread at the first hold.
+            if (pageTranslation != TranslationID.bsb) {
+                model.scripture.book(bookID, TranslationID.bsb)
+                model.original.alignment(bookID, TranslationID.bsb)
+            }
+            // And the book's original words, which the toolbar's verb and
+            // the line over it read the moment a verse is held.
+            model.original.original(bookID)
+        }
     }
 
     // One branch for reduce motion, taken inside the token (§11), for the two

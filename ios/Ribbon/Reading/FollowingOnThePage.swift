@@ -237,6 +237,10 @@ final class FollowRun {
     /// A chapter a flight could not reach. Not tried again until they say
     /// something new.
     var noFlyTo: Int?
+    /// Their line as it was last heard — the point and the original word
+    /// under it — beside where it was set on this page, in this page's
+    /// version. A repeat of it is decided on the line as heard, not as set.
+    var heardLine: (at: ReadingPoint, word: Int?, page: TranslationID, onThisPage: ReadingPoint)?
 
     init(person: UUID, startedAt: Date = Date()) {
         self.person = person
@@ -255,6 +259,7 @@ final class FollowRun {
         spokenTo = nil
         stuckAt = nil
         noFlyTo = nil
+        heardLine = nil
     }
 
     /// Whether what this phone last heard about them may be given to the

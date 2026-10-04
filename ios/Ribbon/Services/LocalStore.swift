@@ -80,6 +80,12 @@ struct AppState: Codable {
     /// worse than no question. Per install, never pushed: a fact about this
     /// phone, not about the person.
     var hasAskedAboutNotifications = false
+    /// The what's-new release this phone last showed, or recorded as owed
+    /// to nobody (A61): the id of a `WhatsNewRelease`, nil before the
+    /// first launch of a build that has the screen. Per install, never
+    /// pushed — it is about the build on this phone, not about the person,
+    /// and a second phone with the same build has its own news to tell.
+    var whatsNewSeen: String?
     /// The tag of the portrait object each face on this device came from,
     /// so a conditional fetch can be told what it already has. Persisted:
     /// a relaunch must not re-download every face in the room.
@@ -116,6 +122,7 @@ struct AppState: Codable {
     enum CodingKeys: String, CodingKey {
         case me, people, rooms, memberships, readings, notes, highlights, quietDays, positions, ribbons, cards, invites, currentRoomID, settings, hasSeenMarginHint, hasPulledTheFire, hasAskedAboutNotifications, portraitETags, notifiedThrough, invitesNotYetPushed, invitesHandedOut
         case pendingRoomPushes, pendingNoteDeletes, pendingNotePushes, pendingHighlightDeletes, unsaid
+        case whatsNewSeen
     }
 
     init() {}
@@ -139,6 +146,9 @@ struct AppState: Codable {
         hasSeenMarginHint = try container.decodeIfPresent(Bool.self, forKey: .hasSeenMarginHint) ?? false
         hasPulledTheFire = try container.decodeIfPresent(Bool.self, forKey: .hasPulledTheFire) ?? false
         hasAskedAboutNotifications = try container.decodeIfPresent(Bool.self, forKey: .hasAskedAboutNotifications) ?? false
+        // A file from before the screen existed has no such key, and nil is
+        // exactly what it should read as: nothing told yet.
+        whatsNewSeen = try container.decodeIfPresent(String.self, forKey: .whatsNewSeen)
         portraitETags = try container.decodeIfPresent([UUID: String].self, forKey: .portraitETags) ?? [:]
         notifiedThrough = try container.decodeIfPresent(Date.self, forKey: .notifiedThrough)
         invitesNotYetPushed = try container.decodeIfPresent(Set<UUID>.self, forKey: .invitesNotYetPushed) ?? []
@@ -177,8 +187,9 @@ actor LocalStore {
     ///
     /// The room's content is the backend's and comes back on the next pull;
     /// what would not come back is what only this phone knows — the
-    /// reader's settings, the three "asked once" flags, and the invites that
-    /// left this phone before the backend heard of them. Each is read on
+    /// reader's settings, the three "asked once" flags and the one "told
+    /// once" (what's new, A61), and the invites that left this phone
+    /// before the backend heard of them. Each is read on
     /// its own, so one unreadable field cannot take the rest with it, and
     /// the unreadable file is kept beside the new one rather than
     /// overwritten, so that whatever went wrong can be looked at.
@@ -199,6 +210,7 @@ actor LocalStore {
         state.hasSeenMarginHint = saved("hasSeenMarginHint", false)
         state.hasPulledTheFire = saved("hasPulledTheFire", false)
         state.hasAskedAboutNotifications = saved("hasAskedAboutNotifications", false)
+        state.whatsNewSeen = saved("whatsNewSeen", String?.none)
         state.invitesNotYetPushed = saved("invitesNotYetPushed", Set<UUID>())
         state.invitesHandedOut = saved("invitesHandedOut", Set<UUID>())
         // Deliberately not salvaged: `notifiedThrough`. Nil means this device
