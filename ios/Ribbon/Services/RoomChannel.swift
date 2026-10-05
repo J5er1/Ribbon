@@ -137,8 +137,6 @@ final class RoomChannel: PresenceService {
     private var generation = 0
     private var ref = 0
     private var joinRef: String?
-    /// Downgraded to false once a server refuses the private join.
-    private var wantsPrivate = true
     private var reconnectAttempt = 0
     private var pendingHeartbeats = 0
     /// A change that happened while the line was down, to send on arrival.
@@ -193,9 +191,6 @@ final class RoomChannel: PresenceService {
         await disconnect()
         self.roomID = roomID
         self.person = person
-        // A fresh room gets a fresh answer to the private question: the
-        // migration may well have landed since the last refusal.
-        wantsPrivate = true
         reconnectAttempt = 0
         await open()
     }
@@ -367,7 +362,9 @@ final class RoomChannel: PresenceService {
                     "key": personID.uuidString.lowercased(), "enabled": true,
                 ] as [String: Any],
                 "postgres_changes": [[String: Any]](),
-                "private": wantsPrivate,
+                // Always private: the room's members are the only ones who
+                // may hear it (20260914120000_ribbon_realtime_room_channel).
+                "private": true,
             ] as [String: Any]
         ]
         if let token { payload["access_token"] = token }
@@ -722,19 +719,14 @@ final class RoomChannel: PresenceService {
             }
             return
         }
-        // A refused private join on a project whose Realtime Authorization
-        // policies are not in place yet. Say so once, come back public, and
-        // try the private join again the next time the room is opened.
-        if wantsPrivate {
-            wantsPrivate = false
-            print("[RoomChannel] private join refused; falling back to a public channel. "
-                + "Apply 20260914120000_ribbon_realtime_room_channel.sql to close it.")
-            Task { [weak self] in
-                guard let self, let person = self.person else { return }
-                await self.sendJoin(personID: person.id, generation: self.generation)
-            }
-            return
-        }
+        // Refused. It used to come back on a public channel for the rest of
+        // the session, which made any refusal — a Realtime restart, a token
+        // the server had just seen expire, a busy minute — a reader the
+        // others could not see on a channel anyone with the room's id could
+        // read. Now it tries the private join again, later each time; only
+        // a join that succeeds starts the wait over.
+        let reason = (payload?["response"] as? [String: Any])?["reason"] as? String
+        print("[RoomChannel] join refused: \(reason ?? status ?? "no reason"); trying again")
         scheduleReconnect()
     }
 

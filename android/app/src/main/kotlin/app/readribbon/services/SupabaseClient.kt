@@ -11,9 +11,13 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNamingStrategy
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
@@ -143,6 +147,64 @@ class SupabaseClient(
             url = url("rest/v1/$table", query),
             authenticated = true,
         )
+
+    /**
+     * Every row a filter matches, as one JSON array — not only the first
+     * page of it. PostgREST ends a response at the project's max rows (1,000
+     * unless the dashboard says otherwise) and the body gives no sign it
+     * stopped short, so a year of a room's marks came back as an arbitrary
+     * thousand and the pull pruned the rest from the phone. Each page asks
+     * for the exact count, so the end is known rather than guessed from a
+     * short page. A single-column key pages by keyset — the next page starts
+     * after the last key read — so a row deleted between two pages cannot
+     * shift another out of the answer. A composite key pages by offset: those
+     * tables are merged into the phone, never pruned against.
+     */
+    suspend fun selectAll(
+        table: String,
+        query: List<Pair<String, String>>,
+        orderedBy: List<String>,
+    ): String {
+        val keyset = orderedBy.size == 1
+        val rows = mutableListOf<JsonElement>()
+        var after: String? = null
+        while (true) {
+            val items = query.toMutableList()
+            items += "order" to orderedBy.joinToString(",") { "$it.asc" }
+            items += "limit" to PAGE_SIZE.toString()
+            val last = after
+            if (keyset && last != null) {
+                items += orderedBy[0] to "gt.$last"
+            } else if (!keyset && rows.isNotEmpty()) {
+                items += "offset" to rows.size.toString()
+            }
+            val (body, contentRange) = try {
+                exchange(
+                    method = "GET",
+                    url = url("rest/v1/$table", items),
+                    authenticated = true,
+                    headers = mapOf("Prefer" to "count=exact"),
+                )
+            } catch (e: SupabaseError.Http) {
+                // Rows deleted since the last page put the offset past the
+                // end (PGRST103): there is nothing after it.
+                if (e.status == 416 && !keyset && rows.isNotEmpty()) break
+                throw e
+            }
+            val page = json.parseToJsonElement(body.decodeToString()).jsonArray
+            val before = rows.size
+            rows.addAll(page)
+            if (page.isEmpty()) break
+            // Keyset: the count is of what is left after `after`. Offset: of all of it.
+            val total = total(contentRange)
+            if (total != null && page.size >= if (keyset) total else total - before) break
+            if (keyset) {
+                after = (page.last().jsonObject[orderedBy[0]] as? JsonPrimitive)?.contentOrNull
+                    ?: throw SupabaseError.Http(0, "no ${orderedBy[0]} to page $table after")
+            }
+        }
+        return JsonArray(rows).toString()
+    }
 
     /**
      * Upsert rows; last-write-wins per object is safe because objects are
@@ -492,7 +554,16 @@ class SupabaseClient(
         body: ByteArray? = null,
         authenticated: Boolean,
         headers: Map<String, String> = emptyMap(),
-    ): ByteArray {
+    ): ByteArray = exchange(method, url, body, authenticated, headers).first
+
+    /** The body, and the response's `Content-Range` (null if it sent none). */
+    private suspend fun exchange(
+        method: String,
+        url: String,
+        body: ByteArray? = null,
+        authenticated: Boolean,
+        headers: Map<String, String> = emptyMap(),
+    ): Pair<ByteArray, String?> {
         val bearer = if (authenticated) {
             (currentSession() ?: throw SupabaseError.NotSignedIn).accessToken
         } else {
@@ -527,7 +598,7 @@ class SupabaseClient(
                     }.getOrNull().orEmpty()
                     throw SupabaseError.Http(status, error)
                 }
-                connection.inputStream.use { it.readBytes() }
+                connection.inputStream.use { it.readBytes() } to connection.getHeaderField("Content-Range")
             } catch (io: IOException) {
                 throw SupabaseError.Http(0, io.message.orEmpty())
             } finally {
@@ -537,6 +608,13 @@ class SupabaseClient(
     }
 
     companion object {
+        /** Rows asked for in one response; the project's own cap may be lower. */
+        const val PAGE_SIZE = 1000
+
+        /** The `1234` of a `Content-Range: 0-999/1234`; null for `*` or no header. */
+        fun total(contentRange: String?): Int? =
+            contentRange?.substringAfterLast('/', missingDelimiterValue = "")?.toIntOrNull()
+
         /**
          * PostgREST speaks snake_case, and its timestamps carry fractional
          * seconds while GoTrue's do not.

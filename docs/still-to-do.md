@@ -91,11 +91,13 @@ hosted project, and the block's catch-all swallowed that error and both
 policies after it. The file now asks for that only where it is off, and no
 longer swallows errors.
 
-A phone that joined before the policies landed was refused, fell back to the
-public channel, and stays there until the room is opened again — and a
-private and a public channel with the same name do not hear each other. Close
-and reopen the app on every phone once. Builds from before 14 September
-(#14) join public only and will not see anyone on a current build.
+Builds before A63 fell back to a public channel when a private join was
+refused, and stayed there until the room was opened again — and a private
+and a public channel with the same name do not hear each other. From A63 no
+build joins public: a refused join tries the private one again. Once every
+phone is on such a build, turn off public channels in the project's Realtime
+settings, so a room's channel can only ever be private. Builds from before 14
+September (#14) join public only and will not see anyone on a current build.
 
 ## 4. One account, whichever door
 

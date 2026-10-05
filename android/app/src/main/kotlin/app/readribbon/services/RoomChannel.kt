@@ -168,8 +168,6 @@ class RoomChannel(
     private var ref = 0
     private var joinRef: String? = null
 
-    /** Downgraded to false once a server refuses the private join. */
-    private var wantsPrivate = true
     private var reconnectAttempt = 0
     private var pendingHeartbeats = 0
 
@@ -234,9 +232,6 @@ class RoomChannel(
             this.roomID = roomID
             this.person = person
             source = newSource()
-            // A fresh room gets a fresh answer to the private question: the
-            // migration may well have landed since the last refusal.
-            wantsPrivate = true
             reconnectAttempt = 0
             openLocked()
         }
@@ -441,7 +436,7 @@ class RoomChannel(
         val room = roomID ?: return
         val reference = nextRefLocked()
         joinRef = reference
-        send(RoomChannelWire.join(room, personID, wantsPrivate, token, reference))
+        send(RoomChannelWire.join(room, personID, true, token, reference))
     }
 
     private fun startHeartbeatLocked(mine: Int) {
@@ -693,20 +688,15 @@ class RoomChannel(
             }
             return
         }
-        // A refused private join on a project whose Realtime Authorization
-        // policies are not in place yet. Say so once, come back public, and
-        // try the private join again the next time the room is opened.
-        if (wantsPrivate) {
-            wantsPrivate = false
-            println(
-                "[RoomChannel] private join refused; falling back to a public channel. " +
-                    "Apply 20260914120000_ribbon_realtime_room_channel.sql to close it.",
-            )
-            val me = person ?: return
-            val mine = generation
-            scope.launch { mutex.withLock { if (mine == generation) sendJoinLocked(me.id, mine) } }
-            return
-        }
+        // Refused. It used to come back on a public channel for the rest of
+        // the session, which made any refusal — a Realtime restart, a token
+        // the server had just seen expire, a busy minute — a reader the
+        // others could not see on a channel anyone with the room's id could
+        // read. Now it tries the private join again, later each time; only
+        // a join that succeeds starts the wait over.
+        val response = (root["payload"] as? JsonObject)?.get("response") as? JsonObject
+        val reason = (response?.get("reason") as? JsonPrimitive)?.contentOrNull
+        println("[RoomChannel] join refused: ${reason ?: status ?: "no reason"}; trying again")
         scheduleReconnectLocked()
     }
 
