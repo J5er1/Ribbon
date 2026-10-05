@@ -28,6 +28,9 @@ the Kotlin core (PivotAligner.kt) are ports of it, case for case:
            "said" and "saying" meet at "sai".
   align    A weighted longest common subsequence over stems (content match
            3, stop-word match 1), integers only, with a fixed traceback;
+           then each still-unpaired content token whose stem occurs exactly
+           once among the reader's tokens and once among the pivot's pairs
+           with that pivot token if it is unpaired, wherever it stands;
            paired reader tokens inherit the word set of the pivot link that
            contains their partner; stop words survive only between content
            links or beside a content link with the same words; runs of
@@ -480,6 +483,23 @@ def align(reader, reader_breaks, pivot, pivot_breaks, pivot_links):
         else:
             j -= 1
     pairs.reverse()
+    # Second pass: a content word the ordered match left out, whose stem
+    # occurs exactly once in each verse, pairs with that one word wherever
+    # it stands — the same word said earlier or later ("John answered them,
+    # saying, 'I baptize with water'" against "'I baptize with water,' John
+    # replied"). On the KJV: 57.8% -> 61.0% of content words linked, 98.8%
+    # -> 98.3% right by its own Strong's tags.
+    paired_r = {a for a, _ in pairs}
+    paired_p = {b for _, b in pairs}
+    rcount = collections.Counter(t.stem for t in R)
+    pcount = collections.Counter(t.stem for t in P)
+    for a, t in enumerate(R):
+        if a in paired_r or not t.is_content or rcount[t.stem] != 1 or pcount[t.stem] != 1:
+            continue
+        b = next(k for k, u in enumerate(P) if u.stem == t.stem)
+        if b not in paired_p:
+            pairs.append((a, b))
+            paired_p.add(b)
     cand = {ri: psets[pj] for ri, pj in pairs if psets[pj] is not None}
     content = sorted(ri for ri in cand if R[ri].is_content)
     kept = set(content)

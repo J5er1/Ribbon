@@ -67,8 +67,11 @@ Deno.serve(async (req: Request) => {
     status: response.status,
     headers: {
       "content-type": "application/json",
-      // A chapter of a fixed edition doesn't change; let the CDN help.
-      "cache-control": "public, max-age=86400",
+      // Not stored anywhere on the way: the function's responses are not
+      // cached at the edge (cf-cache-status: DYNAMIC), and "public,
+      // max-age=86400" only had the phone's own HTTP cache keep every
+      // chapter for a day, beside the one-book cache the license allows.
+      "cache-control": "private, no-store",
     },
   });
 });

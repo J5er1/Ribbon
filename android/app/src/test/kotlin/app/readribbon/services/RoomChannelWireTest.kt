@@ -153,6 +153,18 @@ class RoomChannelWireTest {
         )
     }
 
+    /** A follow said again (A64) carries its count — only while following. */
+    @Test
+    fun testAFollowSaidAgainCarriesItsCount() {
+        fun meta(following: Uuid?, asked: Int) = RoomChannelWire.track(
+            roomID = room, person = person, position = VerseAddress("MRK", 6, 7), scrollFraction = 0.0,
+            isIdle = false, following = following, ref = "5", asked = asked,
+        )["payload"]!!.jsonObject["payload"]!!.jsonObject
+        assertEquals("2", meta(other, 2).str("asked"))
+        assertNull(meta(other, 0)["asked"])
+        assertNull(meta(null, 2)["asked"])
+    }
+
     @Test
     fun testUntrackLeavesTheChannelOpen() {
         val message = RoomChannelWire.untrack(room, "4")

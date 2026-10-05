@@ -20,6 +20,16 @@ enum RemoteScriptureError: Error {
 struct APIBibleProvider: RemoteScriptureProvider {
     var proxyURL: URL = SupabaseConfig.url.appending(path: "functions/v1/bible-proxy")
 
+    /// No HTTP cache: `URLSession.shared` kept every chapter's raw payload
+    /// in the app's URL cache on disk for a day, whatever book it was from —
+    /// beside the one-book cache below, which is the whole policy.
+    private static let session: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.urlCache = nil
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        return URLSession(configuration: configuration)
+    }()
+
     func fetchChapter(bookID: String, chapter: Int, translation: Translation) async throws -> ScriptureChapter {
         guard case .apiBible(let bibleID) = translation.source, !bibleID.isEmpty else {
             throw RemoteScriptureError.notConfigured
@@ -33,7 +43,7 @@ struct APIBibleProvider: RemoteScriptureProvider {
         request.setValue(SupabaseConfig.publishableKey, forHTTPHeaderField: "apikey")
         request.setValue("Bearer \(SupabaseConfig.publishableKey)", forHTTPHeaderField: "Authorization")
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await Self.session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw RemoteScriptureError.unavailable }
         guard http.statusCode != 503 else { throw RemoteScriptureError.notConfigured }
         guard (200..<300).contains(http.statusCode) else { throw RemoteScriptureError.unavailable }
@@ -84,10 +94,16 @@ extension ScriptureStore {
         return chapter
     }
 
+    /// The chapter as converted, named for the converter's format: a
+    /// chapter converted the old way is never read again, and goes in the
+    /// next prune.
     private static func licensedChapterURL(_ address: VerseAddress, translation: Translation) -> URL {
         licensedCacheDirectory
-            .appendingPathComponent("\(translation.id.rawValue)-\(address.bookID)-\(address.chapter).json")
+            .appendingPathComponent(
+                "\(translation.id.rawValue)-\(address.bookID)-\(address.chapter)\(formatSuffix)")
     }
+
+    private static var formatSuffix: String { ".v\(APIBibleContent.format).json" }
 
     private func pruneLicensedCache(keeping bookID: String, translation: Translation) {
         let keep = "\(translation.id.rawValue)-\(bookID)-"
@@ -95,7 +111,8 @@ extension ScriptureStore {
             at: Self.licensedCacheDirectory, includingPropertiesForKeys: nil)) ?? []
         for file in files
         where file.lastPathComponent.hasPrefix("\(translation.id.rawValue)-")
-            && !file.lastPathComponent.hasPrefix(keep) {
+            && (!file.lastPathComponent.hasPrefix(keep)
+                || !file.lastPathComponent.hasSuffix(Self.formatSuffix)) {
             try? FileManager.default.removeItem(at: file)
         }
     }

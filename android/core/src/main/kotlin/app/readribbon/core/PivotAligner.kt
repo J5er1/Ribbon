@@ -135,7 +135,8 @@ object PivotAligner {
      *
      * The reader's words are lined up with the pivot's by the longest common
      * subsequence of stems, a content word weighing three times a function
-     * word. Each reader word paired with a linked pivot word takes that link's
+     * word, and then a content word left over pairs with the one pivot word of
+     * its stem when that stem occurs once in each verse. Each reader word paired with a linked pivot word takes that link's
      * original words. Content words keep theirs; a function word keeps its
      * only between two content words that did, or beside one that took
      * exactly the same words ("shall not perish"). Neighbouring words with the
@@ -183,6 +184,22 @@ object PivotAligner {
             } else {
                 j -= 1
             }
+        }
+
+        // 2b. A content word the ordered match left out, whose stem occurs
+        // exactly once in each verse, pairs with that one word wherever it
+        // stands — the same word said earlier or later ("John answered
+        // them" against "John replied" at the other end of the verse).
+        val pivotPaired = paired.filterNotNull().toMutableSet()
+        val readerCount = r.groupingBy { it.stem }.eachCount()
+        val pivotCount = p.groupingBy { it.stem }.eachCount()
+        for (k in 0 until n) {
+            if (paired[k] != null || !r[k].isContent) continue
+            if (readerCount[r[k].stem] != 1 || pivotCount[r[k].stem] != 1) continue
+            val pj = p.indexOfFirst { it.stem == r[k].stem }
+            if (pj < 0 || pj in pivotPaired) continue
+            paired[k] = pj
+            pivotPaired.add(pj)
         }
 
         // 3. Candidates, and which of them stay.

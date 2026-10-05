@@ -160,6 +160,15 @@ interface PresenceService {
      */
     suspend fun withdraw()
 
+    /**
+     * Say the follow again, as a presence that has changed (A64). The phone
+     * you follow has gone quiet while it is here and reading: an older app
+     * lost sight of a follower whenever one of their connections left, and
+     * a changed presence is what it notices. Supabase drops a track that
+     * says nothing new, so the counter that changes is the point.
+     */
+    suspend fun askAgain() = Unit
+
     /** The contentless signal (§4.3). Repeats inside a few minutes collapse
      *  into one delivery. */
     suspend fun sendThinkingOfYou(to: Uuid)

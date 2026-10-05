@@ -19,6 +19,15 @@ import kotlinx.serialization.json.JsonPrimitive
 object APIBibleContent {
 
     /**
+     * What a payload converts to, as a number: raised whenever a change here
+     * would turn the same chapter into different text or verses, so a phone
+     * re-streams a chapter it converted the old way rather than keep it for
+     * as long as the book is open (`RemoteScripture`). 2: the divine name in
+     * capitals, a verse marker at a paragraph's end kept.
+     */
+    const val FORMAT: Int = 2
+
+    /**
      * Decode `{"data": {"content": [...]}}` (or a bare content array)
      * into a chapter. Returns null when no verse text could be found.
      */
@@ -30,9 +39,12 @@ object APIBibleContent {
         }
 
         var content: List<JsonElement>? = null
+        var copyright: String? = null
         val obj = root.asObject()
         if (obj != null) {
             val dataObject = obj["data"].asObject()
+            copyright = (dataObject?.get("copyright") as? JsonPrimitive)
+                ?.takeIf { it.isString }?.content?.trim()?.takeIf { it.isNotEmpty() }
             content = if (dataObject != null) {
                 dataObject["content"].asArray()
             } else {
@@ -54,7 +66,7 @@ object APIBibleContent {
 
         val blocks = builder.blocks
         if (blocks.none { it.x.isNotEmpty() }) return null
-        return ScriptureChapter(n = number, blocks = blocks)
+        return ScriptureChapter(n = number, blocks = blocks, copyright = copyright)
     }
 
     // The USFM paragraph styles worth keeping, mapped exactly like the
@@ -68,6 +80,18 @@ object APIBibleContent {
         "b" to BlockStyle.b,
     )
 
+    /**
+     * Character styles a printed page sets in small capitals — the divine
+     * name, "LORD", where the Hebrew has YHWH and "Lord" stands for Adonai.
+     * The page has no small capitals of its own, so they are written as
+     * capitals, as the bundled Berean Standard writes them. ASCII only, so
+     * the text keeps its length and every offset into it stands.
+     */
+    internal val smallCapsStyles: Set<String> = setOf("sc", "nd")
+
+    internal fun asCapitals(text: String): String =
+        buildString(text.length) { for (c in text) append(if (c in 'a'..'z') c - 32 else c) }
+
     /** Styles whose whole subtree is headings or apparatus, not Scripture. */
     internal val skippedStyles: Set<String> = setOf(
         "s", "s1", "s2", "s3", "ms", "ms1", "r", "mt", "mt1", "mt2", "mt3",
@@ -80,6 +104,7 @@ object APIBibleContent {
         var blockStyle: BlockStyle = BlockStyle.p
         var pendingVerse: Int? = null
         var redLetterDepth = 0
+        var smallCapsDepth = 0
 
         fun walkBlock(node: JsonElement) {
             val obj = node.asObject() ?: return
@@ -133,8 +158,11 @@ object APIBibleContent {
                     continue  // a footnote or cross-reference subtree
                 }
                 val isRed = style == "wj"
+                val isSmallCaps = style != null && APIBibleContent.smallCapsStyles.contains(style)
                 if (isRed) redLetterDepth += 1
+                if (isSmallCaps) smallCapsDepth += 1
                 walkItems(obj["items"].asArray() ?: emptyList())
+                if (isSmallCaps) smallCapsDepth -= 1
                 if (isRed) redLetterDepth -= 1
             }
         }
@@ -145,7 +173,8 @@ object APIBibleContent {
             // friends) that publisher USFM carries. Java's `\s` is ASCII-only
             // and would leave them in the text, so `\p{Z}` is added back to
             // keep both apps producing byte-identical verse text.
-            val text = raw.replace(Regex("[\\s\\p{Z}]+"), " ")
+            var text = raw.replace(Regex("[\\s\\p{Z}]+"), " ")
+            if (smallCapsDepth > 0) text = APIBibleContent.asCapitals(text)
             if (text.trim().isEmpty() && spans.isEmpty()) return
             val red = redLetterDepth > 0
             val last = spans.lastOrNull()
@@ -167,7 +196,13 @@ object APIBibleContent {
                 if (index == spans.size - 1) {
                     text = text.dropLastWhile { it == ' ' }
                 }
-                if (text.isEmpty()) continue
+                if (text.isEmpty()) {
+                    // A verse marker that ends its paragraph, its words in
+                    // the next one: the number goes on with them rather than
+                    // vanish and fold the verse into the one before.
+                    if (span.v != null && pendingVerse == null) pendingVerse = span.v
+                    continue
+                }
                 cleaned.add(ScriptureSpan(v = span.v, t = text, w = span.w))
             }
             if (cleaned.isNotEmpty()) {

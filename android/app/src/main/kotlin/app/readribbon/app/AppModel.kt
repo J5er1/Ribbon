@@ -334,6 +334,9 @@ class AppModel(
         return rosterHeard[personID]
     }
 
+    /** Whether [personID]'s phone has sent its line this session (A58). */
+    fun speaksReading(personID: Uuid): Boolean = personID in speaksReading
+
     /**
      * A `reading` line arrived. One person can be reading on two devices at
      * once, and the two lines would pull a follow back and forth: the line

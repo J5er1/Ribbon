@@ -140,6 +140,19 @@ Following (A58, I35) most of all, with two phones in one room:
 - Afterwards, the project's Realtime logs should show no new
   `ClientPresenceRateLimitReached`.
 
+And what A64 changed, on the same two phones:
+
+- Follow someone and leave both phones alone: the follower's screen stays
+  on while they read, and sleeps once they are idle or gone.
+- Turn the reader's phone to airplane mode for fifteen seconds and back:
+  the follower keeps moving afterwards. Do the same with a second device
+  signed in as the follower, opened and closed.
+- Follow a reader still on an older Android build: if the page stalls,
+  within about thirty seconds it should move again.
+- Both phones on the New King James: "LORD" reads LORD in Psalm 3, and the
+  copyright line sits under each chapter. One on the New King James, the
+  other on the Berean: following lands on the same words.
+
 A mark following its words (A60, I37) — compiled on both platforms by CI,
 never yet run on a phone:
 
@@ -157,3 +170,16 @@ never yet run on a phone:
   same words, not the same fraction of the verse.
 - With VoiceOver or TalkBack: "the original words" on a verse opens the
   panel, and each word is read as its sound, its rendering and its grammar.
+
+## 7. The New King James's usage reporting, and its proxy
+
+API.Bible asks apps to report each chapter shown (FUMS) with the
+`meta.fumsToken` it returns, and to show the edition's copyright. The
+copyright line is shown under every licensed chapter (A64); the usage
+report is not sent. It sends a device and session identifier to API.Bible,
+so it wants a decision, and a reading of the licence terms, before it is
+built.
+
+`supabase/functions/bible-proxy` now answers `cache-control: private,
+no-store`. Redeploy it for that to apply; the apps no longer rely on it.
+

@@ -12,15 +12,26 @@ import Foundation
 
 public enum APIBibleContent {
 
+    /// What a payload converts to, as a number: raised whenever a change
+    /// here would turn the same chapter into different text or verses, so a
+    /// phone re-streams a chapter it converted the old way rather than keep
+    /// it for as long as the book is open (`RemoteScripture`). 2: the divine
+    /// name in capitals, a verse marker at a paragraph's end kept, and the
+    /// edition's copyright line carried with the chapter.
+    public static let format = 2
+
     /// Decode `{"data": {"content": [...]}}` (or a bare content array)
     /// into a chapter. Returns nil when no verse text could be found.
     public static func chapter(number: Int, from data: Data) -> ScriptureChapter? {
         guard let root = try? JSONSerialization.jsonObject(with: data) else { return nil }
 
         var content: [Any]?
+        var copyright: String?
         if let object = root as? [String: Any] {
             if let dataObject = object["data"] as? [String: Any] {
                 content = dataObject["content"] as? [Any]
+                copyright = (dataObject["copyright"] as? String)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
             } else {
                 content = object["content"] as? [Any]
             }
@@ -37,7 +48,8 @@ public enum APIBibleContent {
 
         let blocks = builder.blocks
         guard blocks.contains(where: { !$0.x.isEmpty }) else { return nil }
-        return ScriptureChapter(n: number, blocks: blocks)
+        return ScriptureChapter(
+            n: number, blocks: blocks, copyright: copyright?.isEmpty == false ? copyright : nil)
     }
 
     // The USFM paragraph styles worth keeping, mapped exactly like the
@@ -51,6 +63,19 @@ public enum APIBibleContent {
         "b": .b,
     ]
 
+    /// Character styles a printed page sets in small capitals — the divine
+    /// name, "LORD", where the Hebrew has YHWH and "Lord" stands for Adonai.
+    /// The page has no small capitals of its own, so they are written as
+    /// capitals, as the bundled Berean Standard writes them. ASCII only, so
+    /// the text keeps its length and every offset into it stands.
+    static let smallCapsStyles: Set<String> = ["sc", "nd"]
+
+    static func asCapitals(_ text: String) -> String {
+        String(String.UnicodeScalarView(text.unicodeScalars.map { scalar in
+            ("a"..."z").contains(scalar) ? Unicode.Scalar(scalar.value - 32)! : scalar
+        }))
+    }
+
     /// Styles whose whole subtree is headings or apparatus, not Scripture.
     static let skippedStyles: Set<String> = [
         "s", "s1", "s2", "s3", "ms", "ms1", "r", "mt", "mt1", "mt2", "mt3",
@@ -63,6 +88,7 @@ public enum APIBibleContent {
         var blockStyle: BlockStyle = .p
         var pendingVerse: Int?
         var redLetterDepth = 0
+        var smallCapsDepth = 0
 
         mutating func walkBlock(_ node: Any) {
             guard let object = node as? [String: Any] else { return }
@@ -112,15 +138,19 @@ public enum APIBibleContent {
                     continue  // a footnote or cross-reference subtree
                 }
                 let isRed = style == "wj"
+                let isSmallCaps = style.map(APIBibleContent.smallCapsStyles.contains) ?? false
                 if isRed { redLetterDepth += 1 }
+                if isSmallCaps { smallCapsDepth += 1 }
                 walkItems(object["items"] as? [Any] ?? [])
+                if isSmallCaps { smallCapsDepth -= 1 }
                 if isRed { redLetterDepth -= 1 }
             }
         }
 
         mutating func push(_ raw: String) {
-            let text = raw.replacingOccurrences(
+            var text = raw.replacingOccurrences(
                 of: "\\s+", with: " ", options: .regularExpression)
+            if smallCapsDepth > 0 { text = APIBibleContent.asCapitals(text) }
             guard !text.trimmingCharacters(in: .whitespaces).isEmpty || !spans.isEmpty else { return }
             let red = redLetterDepth > 0
             if pendingVerse == nil,
@@ -141,7 +171,13 @@ public enum APIBibleContent {
                 if index == spans.count - 1 {
                     text = String(text.reversed().drop(while: { $0 == " " }).reversed())
                 }
-                guard !text.isEmpty else { continue }
+                guard !text.isEmpty else {
+                    // A verse marker that ends its paragraph, its words in
+                    // the next one: the number goes on with them rather than
+                    // vanish and fold the verse into the one before.
+                    if let v = span.v, pendingVerse == nil { pendingVerse = v }
+                    continue
+                }
                 cleaned.append(ScriptureSpan(v: span.v, t: text, w: span.w))
             }
             if !cleaned.isEmpty {

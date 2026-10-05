@@ -4,6 +4,7 @@ package app.readribbon.services
 
 import android.os.SystemClock
 import app.readribbon.core.Person
+import app.readribbon.core.PresenceLedger
 import app.readribbon.core.ReadingPoint
 import app.readribbon.core.ReadingReport
 import app.readribbon.core.VerseAddress
@@ -123,7 +124,11 @@ class RoomChannel(
     private var person: Person? = null
     private var phase = Phase.CLOSED
     private var announcement: Announcement? = null
-    private val presenceStore = mutableMapOf<String, JsonObject>()
+    /**
+     * Everyone here, one entry per connection ([PresenceLedger]): a person
+     * leaves when their last phone does, not when any one of them does.
+     */
+    private val presence = PresenceLedger<JsonObject>()
 
     /** Every presence send, rationed — across reconnects, not per socket. */
     private val budget = PresenceBudget(clock = SystemClock::elapsedRealtime)
@@ -169,6 +174,9 @@ class RoomChannel(
     private var joinRef: String? = null
 
     private var reconnectAttempt = 0
+
+    /** How many times the current follow has been said again (A64). */
+    private var asked = 0
     private var pendingHeartbeats = 0
 
     /** A change that happened while the line was down, to send on arrival. */
@@ -270,8 +278,18 @@ class RoomChannel(
             // has not touched the page in four minutes is still, whoever is
             // carrying it (§4.2).
             val still = isIdle || now - lastActivity >= IDLE_AFTER_MS
+            // Another follow, or none, starts the count of asking again over.
+            if (following != announcement?.following) asked = 0
             announcement = Announcement(position, scrollFraction, still, following)
             if (idleJob == null) startIdleWatchLocked()
+            reconcileLocked()
+        }
+    }
+
+    override suspend fun askAgain() {
+        mutex.withLock {
+            if (phase != Phase.JOINED || announcement?.following == null) return
+            asked += 1
             reconcileLocked()
         }
     }
@@ -361,7 +379,7 @@ class RoomChannel(
         phase = Phase.CLOSED
         joinRef = null
         owesReading = false
-        presenceStore.clear()
+        presence.clear()
         pendingHeartbeats = 0
     }
 
@@ -523,7 +541,9 @@ class RoomChannel(
         val room = roomID ?: return
         val me = person ?: return
         val current = announcement
-        val desired = current?.let { Stance(it.position, it.isIdle, it.following, me.name) }
+        val desired = current?.let {
+            Stance(it.position, it.isIdle, it.following, me.name, if (it.following != null) asked else 0)
+        }
         when (val verdict = budget.reconcile(desired, joining)) {
             PresenceBudget.Verdict.Quiet -> cancelPendingLocked()
             PresenceBudget.Verdict.Track -> {
@@ -538,6 +558,7 @@ class RoomChannel(
                         isIdle = current.isIdle,
                         following = current.following,
                         ref = nextRefLocked(),
+                        asked = desired?.asked ?: 0,
                     ),
                 )
                 if (wrote) budget.wrote(desired)
@@ -619,10 +640,7 @@ class RoomChannel(
 
             "presence_state" -> {
                 val payload = root["payload"]?.jsonObject ?: return
-                presenceStore.clear()
-                for ((key, value) in payload) {
-                    firstMeta(value)?.let { presenceStore[key] = it }
-                }
+                presence.reset(payload.mapValues { (_, value) -> connections(value) })
                 emitRosterLocked()
                 // Back in the room with somebody following: they hear where
                 // the line is now, rather than at the next keepalive.
@@ -634,10 +652,10 @@ class RoomChannel(
 
             "presence_diff" -> {
                 val payload = root["payload"]?.jsonObject ?: return
-                payload["leaves"]?.jsonObject?.keys?.forEach { presenceStore.remove(it) }
-                payload["joins"]?.jsonObject?.forEach { (key, value) ->
-                    firstMeta(value)?.let { presenceStore[key] = it }
-                }
+                presence.apply(
+                    joins = (payload["joins"] as? JsonObject).orEmpty().mapValues { (_, value) -> connections(value) },
+                    leaves = (payload["leaves"] as? JsonObject).orEmpty().mapValues { (_, value) -> connections(value) },
+                )
                 emitRosterLocked()
             }
 
@@ -745,20 +763,31 @@ class RoomChannel(
     /** Whether anybody on the roster is following this device's person. */
     private fun someoneFollowsMeLocked(): Boolean {
         val me = person?.id?.let { RoomChannelWire.id(it) } ?: return false
-        return presenceStore.values.any { meta ->
+        return presence.allMetas.any { meta ->
             (meta["followingPersonID"] as? JsonPrimitive)?.contentOrNull?.lowercase() == me
         }
     }
 
-    private fun firstMeta(value: kotlinx.serialization.json.JsonElement): JsonObject? =
-        runCatching { value.jsonObject["metas"]?.jsonArray?.firstOrNull()?.jsonObject }.getOrNull()
+    /**
+     * A person's connections as the server lists them, each named by the
+     * `phx_ref` of its latest track.
+     */
+    private fun connections(value: kotlinx.serialization.json.JsonElement): List<PresenceLedger.Connection<JsonObject>> =
+        ((value as? JsonObject)?.get("metas") as? kotlinx.serialization.json.JsonArray).orEmpty()
+            .mapNotNull { it as? JsonObject }
+            .map { PresenceLedger.Connection((it["phx_ref"] as? JsonPrimitive)?.contentOrNull, it) }
 
     private fun emitRosterLocked() {
         val me = person?.id?.let { RoomChannelWire.id(it) } ?: return
         val roster = mutableListOf<PresentPerson>()
-        for ((key, meta) in presenceStore) {
+        for (key in presence.keys) {
             // Your own portrait is never in the presence line (§4.2, S07).
             if (key == me) continue
+            val meta = presence.latest(key) ?: continue
+            // Whom they follow, from whichever of their phones last said so:
+            // a second device sitting on another page is not the end of it.
+            val following = presence.latest(key) { it["followingPersonID"] is JsonPrimitive }
+                ?.get("followingPersonID") as? JsonPrimitive
             val idText = meta["id"]?.jsonPrimitive?.content ?: key
             val id = runCatching { Uuid.parse(idText) }.getOrNull() ?: continue
             if (RoomChannelWire.id(id) == me) continue
@@ -782,7 +811,7 @@ class RoomChannel(
                     position = position,
                     scrollFraction = meta["scrollFraction"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
                     isIdle = meta["isIdle"]?.jsonPrimitive?.booleanOrNull ?: false,
-                    followingPersonID = meta["followingPersonID"]?.jsonPrimitive?.content
+                    followingPersonID = following?.contentOrNull
                         ?.let { runCatching { Uuid.parse(it) }.getOrNull() },
                 ),
             )

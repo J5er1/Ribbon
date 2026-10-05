@@ -44,15 +44,15 @@ class PresenceBudgetTest {
             now += 1_000
         }
         // The fifth ordinary move waits for the oldest send to leave the
-        // window, and a quarter second past it.
+        // window, and the margin past it.
         val held = say(at(5))
         assertTrue(held is Verdict.Later)
-        assertEquals(30_000L - 4_000L + 250L, (held as Verdict.Later).inMs)
+        assertEquals(30_000L - 4_000L + PresenceBudget.MARGIN_MS, (held as Verdict.Later).inMs)
         // Two more moves before it opens are the same wait, not two more.
         now += 500
-        assertEquals(Verdict.Later(30_000L - 4_500L + 250L), say(at(6)))
+        assertEquals(Verdict.Later(30_000L - 4_500L + PresenceBudget.MARGIN_MS), say(at(6)))
         // When it opens, what goes is the latest place, once.
-        now += 30_000L
+        now += PresenceBudget.WINDOW_MS + PresenceBudget.MARGIN_MS
         assertEquals(Verdict.Track, say(at(7)))
         assertEquals(Verdict.Quiet, say(at(7)))
     }
@@ -133,7 +133,7 @@ class PresenceBudgetTest {
         assertTrue(say(at(2)) is Verdict.Later)
         assertTrue(say(at(2, following = ruth)) is Verdict.Later)
         assertTrue(say(null) is Verdict.Later)
-        now += 30_000L
+        now += PresenceBudget.WINDOW_MS + PresenceBudget.MARGIN_MS
         assertEquals(Verdict.Untrack, say(null))
     }
 
@@ -145,5 +145,22 @@ class PresenceBudgetTest {
         assertFalse(PresenceBudget.isPresenceLimit("Subscribed to PostgreSQL", "postgres_changes"))
         assertFalse(PresenceBudget.isPresenceLimit(null, "presence"))
         assertFalse(PresenceBudget.isPresenceLimit("rate limit reached", "broadcast"))
+    }
+
+    /**
+     * Saying a follow again (A64) changes what the room heard, so it goes —
+     * but as an ordinary move, inside the four, never the slot kept for
+     * starting or ending a follow.
+     */
+    @Test
+    fun aFollowSaidAgainIsAnOrdinaryMove() {
+        assertEquals(Verdict.Track, say(at(1, following = ruth)))
+        assertEquals(Verdict.Quiet, say(at(1, following = ruth)))
+        for (asked in 1..3) {
+            now += 1_000
+            assertEquals(Verdict.Track, say(at(1, following = ruth).copy(asked = asked)))
+        }
+        now += 1_000
+        assertTrue(say(at(1, following = ruth).copy(asked = 4)) is Verdict.Later)
     }
 }

@@ -199,9 +199,10 @@ final class FollowRun {
     /// How long before the follow began a line may have arrived and still
     /// be where they are — one another follower is keeping sent. Older,
     /// it is where they were when an earlier follow ended: their phone
-    /// stops sending when nobody follows. A kept line comes every twenty
-    /// seconds or so, checked every five, and then crosses the network.
-    static let freshLine: TimeInterval = 30
+    /// stops sending when nobody follows. A kept line comes every five
+    /// seconds or so, checked every one, and then crosses the network; and
+    /// their phone sends one the moment it sees a follow begin.
+    static let freshLine: TimeInterval = 12
 
     let person: UUID
     var estimate = ReadingEstimate()
@@ -220,8 +221,15 @@ final class FollowRun {
     /// The verse a landing under VoiceOver last went to. Not landed on
     /// again until they say something new.
     var spokenTo: (chapter: Int, verse: Int)?
-    /// When the page last stepped back.
+    /// When the page last stepped back, or last showed where they went
+    /// back to.
     var backStepAt: Date?
+    /// When this follow was last said again (A64).
+    var askedAt: Date?
+    /// How long the line of someone whose phone sends one may go unheard,
+    /// while they are here and reading, before the follow is said again:
+    /// six keepalives of a current app, one and a half of an older one's.
+    static let askAgainAfter: TimeInterval = 30
     /// Where the guess stood when a step moved nothing — the foot of the
     /// book, or a page that would not go. Held there until the guess moves
     /// a tenth of a screen or they say something new. A guess that was not

@@ -134,7 +134,8 @@ public enum PivotAligner {
     ///
     /// The reader's words are lined up with the pivot's by the longest common
     /// subsequence of stems, a content word weighing three times a function
-    /// word. Each reader word paired with a linked pivot word takes that
+    /// word, and then a content word left over pairs with the one pivot word
+    /// of its stem when that stem occurs once in each verse. Each reader word paired with a linked pivot word takes that
     /// link's original words. Content words keep theirs; a function word
     /// keeps its only between two content words that did, or beside one
     /// that took exactly the same words ("shall not perish"). Neighbouring
@@ -181,6 +182,22 @@ public enum PivotAligner {
             } else {
                 j -= 1
             }
+        }
+
+        // 2b. A content word the ordered match left out, whose stem occurs
+        // exactly once in each verse, pairs with that one word wherever it
+        // stands — the same word said earlier or later ("John answered
+        // them" against "John replied" at the other end of the verse).
+        var pivotPaired = Set(paired.compactMap { $0 })
+        var readerCount: [String: Int] = [:]
+        var pivotCount: [String: Int] = [:]
+        for token in r { readerCount[token.stem, default: 0] += 1 }
+        for token in p { pivotCount[token.stem, default: 0] += 1 }
+        for k in 0..<n where paired[k] == nil && r[k].isContent
+            && readerCount[r[k].stem] == 1 && pivotCount[r[k].stem] == 1 {
+            guard let j = p.firstIndex(where: { $0.stem == r[k].stem }), !pivotPaired.contains(j) else { continue }
+            paired[k] = j
+            pivotPaired.insert(j)
         }
 
         // 3. Candidates, and which of them stay.

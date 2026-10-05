@@ -84,6 +84,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -92,6 +93,7 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -206,12 +208,20 @@ private const val READING_LINE = 0.3f
 private val FOLLOW_TICK = 250.milliseconds
 
 /**
+ * How long the line of someone whose phone sends one may go unheard, while
+ * they are here and reading, before the follow is said again (A64): six
+ * keepalives of a current app, and one and a half of an older one's.
+ */
+private val FOLLOW_ASKED_AGAIN = 30.seconds
+
+/**
  * A line heard more than this before a follow began listening is where they
  * were a follow ago — their phone stopped sending when that one ended — not
  * where they are. Anything younger is a line somebody else's follow is
- * keeping sent, which is as good as one sent for this.
+ * keeping sent (every five seconds), which is as good as one sent for this;
+ * and their phone sends one the moment it sees a follow begin.
  */
-private val STALE_FIRST_WORD = 30.seconds
+private val STALE_FIRST_WORD = 12.seconds
 
 /**
  * How long a follow waits for the line their phone sends on seeing it, before
@@ -232,13 +242,24 @@ private val FLIGHT_TIMEOUT = 3.seconds
 private val LINES_TIMEOUT = 1500.milliseconds
 
 /** The reading line has come to rest this long after the page last moved. */
-private val LINE_SETTLES = 300.milliseconds
+private val LINE_SETTLES = 150.milliseconds
+
+/**
+ * Whether following keeps this screen on: only while the person followed is
+ * in the room and not idle (A64).
+ */
+internal fun followKeepsScreenOn(following: Uuid?, present: List<PresentPerson>): Boolean =
+    following != null && present.any { it.id == following && !it.isIdle }
 
 /** While the page is moving, where the line is goes no oftener than this. */
 private val LINE_IN_FLIGHT = 1.seconds
 
-/** And while nothing moves, it is said again this often to whoever follows. */
-private val LINE_KEEPALIVE = 20.seconds
+/**
+ * And while nothing moves, it is said again this often to whoever follows.
+ * It was twenty seconds, and one lost line held a follower still for most of
+ * that.
+ */
+private val LINE_KEEPALIVE = 5.seconds
 
 /** The room under each chapter's last line, before the passage end. */
 private val CHAPTER_FOOT = 8.dp
@@ -578,6 +599,16 @@ fun ReadingScreen(
             scope.launch { model.presence.withdraw() }
             model.bookDisappeared(reading)
         }
+    }
+
+    // While you follow someone who is here and reading, the screen stays on:
+    // a follow that went dark every minute was following nobody (A64). Not
+    // once they are idle, or gone — then the phone may sleep as it likes.
+    val view = LocalView.current
+    val stayAwake = followKeepsScreenOn(model.followingPersonID, model.presentPeople)
+    DisposableEffect(view, stayAwake) {
+        view.keepScreenOn = stayAwake
+        onDispose { view.keepScreenOn = false }
     }
 
     val listState = rememberLazyListState()
@@ -1650,6 +1681,7 @@ fun ReadingScreen(
         // wherever they are on this screen.
         var realign = true
         var backedAt: Instant? = null
+        var askedAt = Instant.DISTANT_PAST
         var stuck: Stuck? = null
         var grounded: Lost? = null
         var here = false
@@ -1688,6 +1720,20 @@ fun ReadingScreen(
                 }
                 here = true
                 val heard = model.heardReading(followed)
+                // Their phone has sent its line before and has gone quiet
+                // while they are here and reading: it may have lost sight of
+                // this follow — an older app dropped a person whenever one
+                // of their connections left. A changed presence is what it
+                // notices, so the follow is said again (A64). A current app
+                // never needs it, and a quiet follower is never seen at all.
+                val lastLine = heard?.takeIf { !it.fromPresence }?.report?.received
+                if (!model.readingQuietly && !person.isIdle && model.speaksReading(followed) &&
+                    now - startedAt >= FOLLOW_ASKED_AGAIN && now - askedAt >= FOLLOW_ASKED_AGAIN &&
+                    (lastLine == null || now - lastLine >= FOLLOW_ASKED_AGAIN)
+                ) {
+                    askedAt = now
+                    scope.launch { model.presence.askAgain() }
+                }
                 // Their line, if it is theirs now. One heard well before this
                 // follow began listening is where they were a follow ago, and
                 // the page does not go there first.
@@ -1822,6 +1868,13 @@ fun ReadingScreen(
                     !(lost.linesMissing && chapterLayouts[lost.chapter] != null)
                 ) {
                     continue
+                }
+                // Once the guess is on this screen at or below the top line,
+                // their going back is answered: the page shows it. Left
+                // standing, it was taken for a new one whenever their line
+                // dipped under the top, minutes later (A64).
+                if (y != null && y >= FollowCarriage.TOP_LINE * viewport && estimate.wentBackAt != null) {
+                    backedAt = now
                 }
                 val back = estimate.wentBackAt
                 val wentBack = back != null && backedAt.let { it == null || back > it }
@@ -2236,6 +2289,7 @@ fun ReadingScreen(
                                 reading = reading,
                                 chapter = n,
                                 model = model,
+                                copyright = chapterContent(n)?.copyright,
                                 nextChapterTitle = book?.chapterHeading(n + 1) ?: "${n + 1}",
                                 // Carrying on is your own going somewhere,
                                 // and it ends a follow before it moves.
@@ -2253,6 +2307,7 @@ fun ReadingScreen(
                     FinishingSection(
                         reading = reading,
                         bookName = book?.name ?: "",
+                        copyright = chapterContent(chapterCount)?.copyright,
                         container = container,
                         viewportHeight = viewportHeight,
                         onReachEnd = {
@@ -3444,6 +3499,23 @@ private fun HighlightLabelOverlay(
     }
 }
 
+/**
+ * A licensed edition's own copyright line, as it sends it with every chapter
+ * (A64): small and quiet, under the chapter it belongs to. Nothing for the
+ * bundled public-domain texts.
+ */
+@Composable
+private fun EditionCopyright(copyright: String?) {
+    if (copyright.isNullOrBlank()) return
+    Text(
+        text = copyright,
+        style = RibbonType.ui(11f),
+        color = Palette.muted,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.padding(horizontal = 32.dp),
+    )
+}
+
 // MARK: The finishing sequence (§6.5)
 
 /**
@@ -3454,6 +3526,7 @@ private fun HighlightLabelOverlay(
 private fun FinishingSection(
     reading: Reading,
     bookName: String,
+    copyright: String?,
     container: LayoutCoordinates?,
     viewportHeight: Float,
     onReachEnd: () -> Unit,
@@ -3471,6 +3544,7 @@ private fun FinishingSection(
             },
     ) {
         Spacer(Modifier.height(70.dp))
+        EditionCopyright(copyright)
         FireBecomesEmber(
             scale = reading.handiwork.scale,
             coalDepth = reading.handiwork.coalDepth,
@@ -3510,6 +3584,7 @@ fun PassageEnd(
     reading: Reading,
     chapter: Int,
     model: AppModel,
+    copyright: String? = null,
     nextChapterTitle: String,
     onContinue: () -> Unit,
     onClose: () -> Unit,
@@ -3523,6 +3598,7 @@ fun PassageEnd(
         modifier = modifier.fillMaxWidth(),
     ) {
         Spacer(Modifier.height(34.dp))
+        EditionCopyright(copyright)
         HairlineRule(Modifier.padding(start = 36.dp, end = 26.dp))
 
         if (room != null) {

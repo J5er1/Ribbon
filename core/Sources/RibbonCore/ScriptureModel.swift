@@ -53,10 +53,14 @@ public struct ScriptureBlock: Codable, Hashable, Sendable {
 public struct ScriptureChapter: Codable, Hashable, Sendable {
     public var n: Int
     public var blocks: [ScriptureBlock]
+    /// The edition's own copyright line, as a licensed edition sends it with
+    /// every chapter (A64). Nil for the bundled public-domain texts.
+    public var copyright: String?
 
-    public init(n: Int, blocks: [ScriptureBlock]) {
+    public init(n: Int, blocks: [ScriptureBlock], copyright: String? = nil) {
         self.n = n
         self.blocks = blocks
+        self.copyright = copyright
     }
 
     /// The verses present in this chapter, in order.

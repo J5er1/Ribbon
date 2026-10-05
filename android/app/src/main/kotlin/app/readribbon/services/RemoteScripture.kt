@@ -175,14 +175,20 @@ suspend fun ScriptureStore.ensureRemoteChapter(
     return chapter
 }
 
+/**
+ * The chapter as converted, named for the converter's format: a chapter
+ * converted the old way is never read again, and goes in the next prune.
+ */
 private fun ScriptureStore.Companion.licensedChapterFile(
     context: Context,
     address: VerseAddress,
     translation: Translation,
 ): File = File(
     ScriptureStore.licensedCacheDirectory(context),
-    "${translation.id.rawValue}-${address.bookID}-${address.chapter}.json",
+    "${translation.id.rawValue}-${address.bookID}-${address.chapter}$LICENSED_FORMAT_SUFFIX",
 )
+
+private val LICENSED_FORMAT_SUFFIX = ".v${APIBibleContent.FORMAT}.json"
 
 private fun ScriptureStore.pruneLicensedCache(
     context: Context,
@@ -193,7 +199,11 @@ private fun ScriptureStore.pruneLicensedCache(
     val mine = "${translation.id.rawValue}-"
     val files = ScriptureStore.licensedCacheDirectory(context).listFiles() ?: emptyArray()
     for (file in files) {
-        if (file.name.startsWith(mine) && !file.name.startsWith(keep)) {
+        // The kept book's chapters in this format stay, and so does one of
+        // them half-written (`.tmp`) by a fetch running beside this one.
+        val current = file.name.endsWith(LICENSED_FORMAT_SUFFIX) ||
+            file.name.endsWith("$LICENSED_FORMAT_SUFFIX.tmp")
+        if (file.name.startsWith(mine) && (!file.name.startsWith(keep) || !current)) {
             file.delete()
         }
     }

@@ -111,6 +111,7 @@ internal object RoomChannelWire {
         isIdle: Boolean,
         following: Uuid?,
         ref: String,
+        asked: Int = 0,
     ): JsonObject = buildJsonObject {
         put("topic", topic(roomID))
         put("event", "presence")
@@ -130,6 +131,8 @@ internal object RoomChannelWire {
                     }
                 }
                 if (following != null) put("followingPersonID", id(following))
+                // A follow said again (A64): only ever while following.
+                if (following != null && asked > 0) put("asked", asked)
             }
         }
         put("ref", ref)
