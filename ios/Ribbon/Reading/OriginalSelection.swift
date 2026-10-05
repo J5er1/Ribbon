@@ -82,9 +82,9 @@ struct OriginalContext {
     /// the finger — the link there, which may be one word or the few a
     /// phrase renders together. Moved, it is whatever the selection links.
     /// Nothing at all where nothing links, or the version has no links yet:
-    /// quiet rather than wrong. A held offset below zero is a hold that
-    /// found no word — the verse's number — and is quiet too; nil is a
-    /// lift the handles (or VoiceOver) hold, not a finger.
+    /// quiet rather than wrong. Held is a selection of one word — what a
+    /// long-press selects (A62); nil is anything more. A held offset below
+    /// zero names no word, and is quiet too.
     func line(_ range: VerseRange, held: Int?) -> OriginalLine? {
         if let held {
             guard held >= 0 else { return nil }

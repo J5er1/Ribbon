@@ -4,9 +4,9 @@ import RibbonCore
 // The original, on the page (A60, §7). Not a sheet and not glass over the
 // verse: a panel in the bottom chrome, on the composers' paper, cross-faded
 // in from the leave toolbar the way write and speak are. The selection
-// stays lifted above it with its handles live, and the panel says whatever
-// the handles now hold. A tap in the text leaves it, as it leaves a
-// composer, and the lift goes with it.
+// stays above it with its handles live, and the panel says whatever the
+// handles now hold. A tap in the text leaves it, as it leaves a composer,
+// and the selection goes with it (A62).
 //
 // Above the toolbar, while a verse is held, a quieter line says the held
 // word in the original (§7.5) and is the same door into the panel.
@@ -119,7 +119,8 @@ struct OriginalPanel: View {
     private var isHebrew: Bool { selection.language != .greek }
 
     private var content: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        let section = roomSection
+        return VStack(alignment: .leading, spacing: 16) {
             SmallCaps(Copy.originalHeading(selection.language, selection.range.formatted), size: 12)
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityFocused($headingFocused)
@@ -132,7 +133,9 @@ struct OriginalPanel: View {
                     .foregroundStyle(Palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            inThisRoom
+            if section != .omitted {
+                inThisRoom(section)
+            }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -254,69 +257,135 @@ struct OriginalPanel: View {
 
     // MARK: In this room
 
-    /// A version read here, and who reads it.
-    private struct RoomReading: Identifiable {
-        var translation: TranslationID
-        var who: String
-        var id: TranslationID { translation }
-    }
-
-    /// One version per line: yours first, then the others in the order of
-    /// the first person (by name) who reads each. Who reads it is named —
-    /// "you", "Ruth", "you and Ruth" — never counted.
-    private var readings: [RoomReading] {
-        var order: [TranslationID] = [translation]
-        var readers: [TranslationID: [String]] = [translation: [Copy.originalYou]]
-        let others = model.members(of: room)
+    /// Everyone else in the room, and the version each reads.
+    private var roomPeople: [RoomPerson] {
+        model.members(of: room)
             .filter { $0.personID != model.me?.id }
             .compactMap { model.person($0.personID) }
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-        for person in others {
-            let name = firstName(person.name).trimmingCharacters(in: .whitespaces)
-            if readers[person.translation] == nil {
-                order.append(person.translation)
-                readers[person.translation] = []
-            }
-            readers[person.translation]?.append(name.isEmpty ? Copy.someone : name)
-        }
-        return order.map { RoomReading(translation: $0, who: (readers[$0] ?? []).joined(separator: " and ")) }
+            .map { RoomPerson(id: $0.id, name: $0.name, version: $0.translation) }
+    }
+
+    /// How the room's versions say the selection, grouped by what they say
+    /// (A62, §13.3) — worked out in `RoomSection`, drawn here.
+    private var roomSection: RoomSection {
+        RoomSection.of(
+            yours: translation,
+            me: model.me?.id,
+            others: roomPeople,
+            saying: { says(in: $0) },
+            versionName: { versionName($0) },
+            notOnThisPhone: Copy.originalNotOnThisPhone)
+    }
+
+    /// A phrase is set large, as it is on the page; a whole verse, or more
+    /// than one, a step smaller so the blocks stay a few lines each.
+    private var roomWordsSize: CGFloat {
+        !selection.spansVerses && selection.verses.contains(where: \.isPartial) ? 19 : 16
     }
 
     /// Only where the room reads more than one version: a room of one
-    /// version has nothing to compare, and says nothing.
-    @ViewBuilder
-    private var inThisRoom: some View {
-        let readings = readings
-        if readings.count > 1 {
-            VStack(alignment: .leading, spacing: 12) {
-                SmallCaps(Copy.originalInThisRoom, size: 12)
-                ForEach(readings) { reading in
-                    VStack(alignment: .leading, spacing: 3) {
-                        SmallCaps("\(versionName(reading.translation)) · \(reading.who)", size: 12,
-                                  color: Palette.text.opacity(0.7))
-                        saying(in: reading.translation)
+    /// version has nothing to compare, and says nothing (the caller leaves
+    /// it out). Blocks arrive on `settle`, and at once under reduce motion.
+    private func inThisRoom(_ section: RoomSection) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            switch section {
+            case .omitted:
+                EmptyView()
+            case .agrees(let agreement):
+                // No heading, and the words are not said a third time: the
+                // page and the words above already say them. The others'
+                // faces, then the one line.
+                HStack(alignment: .center, spacing: 10) {
+                    if !agreement.faces.isEmpty {
+                        RoomFaces(readers: agreement.faces, room: room)
                     }
-                    .accessibilityElement(children: .combine)
+                    Text(agreement.line)
+                        .font(RibbonType.ui(14))
+                        .foregroundStyle(Palette.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(agreement.spoken)
+                .transition(.opacity)
+            case .blocks(let blocks):
+                SmallCaps(Copy.originalInThisRoom, size: 12)
+                    .accessibilityAddTraits(.isHeader)
+                    .transition(.opacity)
+                ForEach(blocks) { block in
+                    roomBlock(block)
+                        .transition(.opacity)
                 }
             }
-            .padding(.top, 4)
+        }
+        .padding(.top, 4)
+        .animation(RibbonMotion.settle(still: reduceMotion), value: Self.shape(of: section))
+    }
+
+    /// What changing makes the section move: which blocks there are, not
+    /// the words inside them as the handles go.
+    private static func shape(of section: RoomSection) -> [String] {
+        switch section {
+        case .omitted: return []
+        case .agrees: return ["agrees"]
+        case .blocks(let blocks): return blocks.map(\.id)
         }
     }
 
-    @ViewBuilder
-    private func saying(in version: TranslationID) -> some View {
-        if let pieces = says(in: version) {
-            // Where a version cannot say the same words part by part, its
-            // whole verse stands in, muted.
-            let whole = pieces.contains(where: \.isWholeVerse)
-            Text(pieces.map(\.text).joined(separator: " "))
-                .font(RibbonType.scripture(15))
-                .foregroundStyle(whole ? Palette.muted : Palette.text.opacity(0.9))
+    /// One thing said: the versions that say it in small caps, the words in
+    /// Literata, and who reads it. Yours has no card — its label says it is
+    /// yours. One element to VoiceOver: the words, the versions, every name.
+    private func roomBlock(_ block: RoomBlock) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            SmallCaps(block.label, size: 11, color: Palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
-        } else {
-            Text(Copy.originalNotOnThisPhone)
+            roomWords(block)
+                .fixedSize(horizontal: false, vertical: true)
+            if !block.readers.isEmpty {
+                HStack(alignment: .center, spacing: 10) {
+                    RoomFaces(readers: block.faces, room: room)
+                    SmallCaps(block.names, size: 11, color: Palette.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.top, 2)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(block.spoken)
+    }
+
+    /// Yours at full strength. Another rendering with the words yours does
+    /// not use at full strength and Medium, and the words it shares a step
+    /// back — weight as well as tone. A whole verse standing in is muted
+    /// throughout, as it always was; a version not here says so.
+    private func roomWords(_ block: RoomBlock) -> Text {
+        let size = roomWordsSize
+        switch block.kind {
+        case .notOnThisPhone:
+            return Text(block.words)
                 .font(RibbonType.ui(14))
                 .foregroundStyle(Palette.muted)
+        case .yours:
+            return Text(block.words)
+                .font(RibbonType.scripture(size))
+                .foregroundStyle(Palette.text)
+        case .other:
+            guard !block.isWholeVerse else {
+                return Text(block.words)
+                    .font(RibbonType.scripture(size))
+                    .foregroundStyle(Palette.muted)
+            }
+            let shared: Color = Palette.text.opacity(0.7)
+            let differs: Color = Palette.text
+            var words = AttributedString()
+            for run in block.runs {
+                var piece = AttributedString(run.text)
+                piece.foregroundColor = run.differs ? differs : shared
+                if run.differs { piece.font = RibbonType.scriptureMedium(size) }
+                words += piece
+            }
+            return Text(words)
+                .font(RibbonType.scripture(size))
         }
     }
 
@@ -349,9 +418,10 @@ struct OriginalPanel: View {
     // MARK: Licensed versions
 
     private var licensedWanted: [Translation] {
-        readings
-            .map(\.translation)
-            .filter { $0 != translation }
+        var seen: Set<TranslationID> = [translation]
+        return roomPeople
+            .map(\.version)
+            .filter { seen.insert($0).inserted }
             .compactMap { TranslationRegistry.translation(for: $0) }
             .filter { !$0.isBundled && $0.isConfigured }
     }
@@ -376,6 +446,41 @@ struct OriginalPanel: View {
                 withAnimation(RibbonMotion.arrive) { streamed[licensed.id] = chapter }
             }
         }
+    }
+}
+
+/// A few faces, overlapping, first on top (A62): the app's portrait — a
+/// monogram in the person's ink where there is no picture — each cut from
+/// the one under it by a ring of the panel's own paper and a hairline. Not
+/// a shadow, not glass. The row's names are beside it, not in it.
+struct RoomFaces: View {
+    @Environment(AppModel.self) private var model
+    let readers: [RoomReader]
+    let room: Room
+
+    static let face: CGFloat = 30
+    static let step: CGFloat = 21
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            ForEach(Array(readers.enumerated()), id: \.element.id) { index, reader in
+                PortraitView(
+                    person: model.person(reader.id),
+                    ink: model.membership(of: reader.id, in: room.id)?.ink,
+                    size: Self.face - 4,
+                    image: model.portrait(reader.id))
+                .overlay(Circle().strokeBorder(Palette.rule, lineWidth: 1))
+                .padding(2)
+                .background(Circle().fill(Palette.surface))
+                .offset(x: Self.step * CGFloat(index))
+                .zIndex(Double(readers.count - index))
+            }
+        }
+        .frame(
+            width: Self.face + Self.step * CGFloat(max(0, readers.count - 1)),
+            height: Self.face,
+            alignment: .leading)
+        .accessibilityHidden(true)
     }
 }
 

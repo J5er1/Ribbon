@@ -21,6 +21,14 @@ enum RibbonType {
         .custom(literata, size: size, relativeTo: .body)
     }
 
+    /// Literata at Medium, for the words another version here says that
+    /// yours does not (A62): weight as well as strength, so the difference
+    /// is never carried by tone alone. The face is variable; Medium is a
+    /// point on its weight axis, not a second file.
+    static func scriptureMedium(_ size: CGFloat) -> Font {
+        .custom(literata, size: size, relativeTo: .body).weight(.medium)
+    }
+
     /// Literata's italic, for a word's transliteration (A60): how to say it,
     /// set apart from what it means. The italic face is registered beside
     /// the roman, so the family finds it.

@@ -198,6 +198,11 @@ enum Copy {
     /// the language under the selection — never "the original", which is
     /// a word for the docs. Lower-case; the toolbar sets it in small caps.
     static func originalVerb(_ language: OriginalLanguage) -> String { "the \(language.rawValue)" }
+    /// S06 · native selection (A62): the toolbar's way to the whole verse,
+    /// shown while an end of the selection is part of a verse. Lower-case;
+    /// set in small caps. A long-press selects a word now; this, or a tap on
+    /// the verse's number, selects the verse.
+    static func wholeVerseVerb(several: Bool) -> String { several ? "the verses" : "the verse" }
     /// S06 · the original (A60): the panel's heading, set in small caps —
     /// "the Greek · John 1:1".
     static func originalHeading(_ language: OriginalLanguage, _ address: String) -> String {
@@ -216,6 +221,27 @@ enum Copy {
     static let originalInThisRoom = "In this room"
     /// S06 · the original (A60): who reads a version, when it is you.
     static let originalYou = "you"
+    /// S06 · the original (A62): names and versions said together, the way
+    /// a person would — "Ruth", "you and Ruth", "you, Ruth and Caleb". No
+    /// leading "the" before a version's name.
+    static func listed(_ items: [String]) -> String {
+        guard let last = items.last else { return "" }
+        guard items.count > 1 else { return last }
+        return items.dropLast().joined(separator: ", ") + " and " + last
+    }
+    /// S06 · the original (A62): the label over your own words in "In this
+    /// room" — your version, and any here that say the same — set in small
+    /// caps: "Yours · Berean Standard and American Standard".
+    static func roomYours(_ versions: [String]) -> String { "Yours · \(listed(versions))" }
+    /// S06 · the original (A62): the end of a row of names past three faces —
+    /// "you, Caleb, Faith and others". Never a number.
+    static let roomAndOthers = "and others"
+    /// S06 · the original (A62): the whole section, when the one other
+    /// person here says the selection as you do.
+    static func roomOneAgrees(_ name: String) -> String { "\(name) reads these words as you do." }
+    /// S06 · the original (A62): the whole section, when every version here
+    /// says the selection as yours does.
+    static let roomAllAgree = "Everyone here reads these words as you do."
     /// S06 · the original (A60): a licensed version somebody here reads
     /// that has not streamed to this device.
     @MainActor static var originalNotOnThisPhone: String { "Not on this \(deviceNoun) yet." }

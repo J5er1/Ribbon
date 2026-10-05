@@ -11,7 +11,6 @@ import app.readribbon.data.OriginalStore
 import app.readribbon.data.ScriptureStore
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -192,62 +191,39 @@ class OriginalPanelTest {
         assertEquals("the aramaic", whole.verb)
     }
 
-    @Test fun threeReadersOfOneVersionAreJoinedTheWayNamesAre() {
-        val readers = roomReaders(
-            mine = TranslationID.web,
-            others = listOf(
-                "Ruth Alderman" to TranslationID.web,
-                "Ann Brooke" to TranslationID.web,
-                "Mara Lee" to TranslationID.bsb,
-            ),
-        )
-        assertEquals(
-            listOf(TranslationID.web to "you and Ann and Ruth", TranslationID.bsb to "Mara"),
-            readers,
-        )
-    }
-
-    @Test fun aReaderWithNoNameIsSomeone() {
-        val readers = roomReaders(
-            mine = TranslationID.bsb,
-            others = listOf("" to TranslationID.bsb, "  " to TranslationID.web),
-        )
-        assertEquals(
-            listOf(TranslationID.bsb to "you and ${Copy.SOMEONE}", TranslationID.web to Copy.SOMEONE),
-            readers,
-        )
-    }
-
-    @Test fun theRoomsVersionsAreYoursFirstThenByName() {
-        val readers = roomReaders(
-            mine = TranslationID.bsb,
-            others = listOf(
-                "Ruth Alderman" to TranslationID.web,
-                "Ann Brooke" to TranslationID.bsb,
-                "Mara Lee" to TranslationID.web,
-            ),
-        )
-        assertEquals(
-            listOf(TranslationID.bsb to "you and Ann", TranslationID.web to "Mara and Ruth"),
-            readers,
-        )
-    }
-
     @Test fun eachVersionSaysTheSameWordsInItsOwn() {
         val chosen = mapOf(1 to listOf(6, 7, 8, 9, 10, 11))
         val web = scripture.chapter(VerseAddress("JHN", 1, 1), TranslationID.web)!!
         val links = original.links(TranslationID.web, "JHN", 1, web)
-        val line = roomVersionLine(TranslationID.web, "Ruth", chosen, links, web.ownTexts())
-        assertEquals("the Word was with God", line.words)
-        assertFalse(line.whole)
+        val said = roomSaying(chosen, links, web.ownTexts())!!
+        assertEquals("the Word was with God", said.phrase)
+        assertFalse(said.wholeVerse)
 
-        val unlinked = roomVersionLine(TranslationID.nkjv, "Ann", chosen, links = null, texts = web.ownTexts())
-        assertTrue("no links: the whole verse, said as such", unlinked.whole)
-        assertEquals(web.ownText(1)!!.trim(), unlinked.words)
+        val unlinked = roomSaying(chosen, links = null, texts = web.ownTexts())!!
+        assertTrue("no links: the whole verse, said as such", unlinked.wholeVerse)
+        assertEquals(web.ownText(1)!!.trim(), unlinked.phrase)
 
-        val missing = roomVersionLine(TranslationID.niv, "Ann", chosen, links = null, texts = null)
-        assertNull("not on this phone", missing.words)
-        assertNotNull(Copy.ORIGINAL_NOT_ON_THIS_PHONE)
+        assertNull("none of the verses here", roomSaying(chosen, links = null, texts = emptyMap()))
+
+        // Selected whole, a verse is said whole — to its last full stop, and
+        // not as a fallback.
+        val verse = roomSaying(chosen, links, web.ownTexts(), wholeVerses = setOf(1))!!
+        assertEquals(web.ownText(1)!!.trim(), verse.phrase)
+        assertFalse(verse.wholeVerse)
+    }
+
+    @Test fun yoursIsExactlyWhatIsSelected() {
+        val bsb = scripture.chapter(VerseAddress("JHN", 1, 1), TranslationID.bsb)!!
+        val text = bsb.ownText(1)!!
+        val phrase = "the Word was with God"
+        val from = text.indexOf(phrase)
+        val range = VerseRange(
+            bookID = "JHN", chapter = 1, startVerse = 1, endVerse = 1,
+            startChar = from, endChar = from + phrase.length, charTranslation = TranslationID.bsb,
+        )
+        assertEquals(phrase, yourSaying(range, bsb.ownTexts())!!.phrase)
+        val two = yourSaying(VerseRange("JHN", 1, 1, 2), bsb.ownTexts())!!.phrase
+        assertEquals(bsb.ownText(1)!!.trim() + " " + bsb.ownText(2)!!.trim(), two)
     }
 
     @Test fun aWordIsReadOutWithoutEmptyParts() {

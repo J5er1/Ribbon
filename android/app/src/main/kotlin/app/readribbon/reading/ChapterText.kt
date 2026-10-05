@@ -2,11 +2,8 @@ package app.readribbon.reading
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,6 +13,23 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
+import androidx.compose.foundation.text.contextmenu.provider.LocalTextContextMenuToolbarProvider
+import androidx.compose.foundation.text.contextmenu.provider.TextContextMenuDataProvider
+import androidx.compose.foundation.text.contextmenu.provider.TextContextMenuProvider
+import androidx.compose.foundation.text.selection.LocalTextSelectionColors
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.text.selection.SelectionState
+import androidx.compose.foundation.text.selection.TextSelectionColors
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.platform.LocalTextToolbar
+import androidx.compose.ui.platform.TextToolbar
+import androidx.compose.ui.platform.TextToolbarStatus
+import androidx.compose.ui.text.TextRange
+import kotlinx.coroutines.awaitCancellation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
@@ -24,7 +38,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
@@ -35,7 +48,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathOperation
-import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.lerp
@@ -67,7 +79,6 @@ import app.readribbon.core.BlockStyle
 import app.readribbon.core.Ink
 import app.readribbon.core.ScriptureChapter
 import app.readribbon.core.VerseRange
-import app.readribbon.design.LocalHaptics
 import app.readribbon.design.LocalRoomColours
 import app.readribbon.design.Palette
 import app.readribbon.design.RibbonMotion
@@ -107,6 +118,12 @@ import kotlin.math.roundToInt
 //   3. Verse hit-testing goes through getOffsetForPosition and back to a
 //      verse through the string annotations carried on every glyph of the
 //      verse — the analogue of iOS's `ribbonVerse` attribute.
+//   4. Selecting is the platform's own (A62): the BasicText sits in a
+//      SelectionContainer, so the long-press, the handles, the magnifier
+//      and the snapping to words are the ones every other page on the phone
+//      has. Every spoken word carries its place on the page as an
+//      annotation, which is how what is selected is read back as verses and
+//      words — the container's own offsets are not public.
 
 /** What the reading surface needs to know to set a chapter. */
 data class ReadingTheme(
@@ -168,6 +185,113 @@ private val WASH_TIP = 10.dp
 private const val WASH_ABOVE_BASELINE = 0.88f
 private const val WASH_BELOW_BASELINE = 0.28f
 
+/** Every spoken word carries its own place on the page: "pageStart:pageEnd". */
+private const val TAG_WORD = "ribbonWord"
+
+/**
+ * How far from a verse number's glyphs a tap still counts as a tap on the
+ * number (§13.2). The number is a small superscript, and a target only a
+ * stylus can hit is broken (§11, deviation 12).
+ */
+private val NUMBER_REACH = 16.dp
+
+/** The screen reader's two ends of the mark: a thumb's target, drawn as nothing. */
+private val END_TARGET = 44.dp
+
+/**
+ * How strongly the selection tints the words it covers: the accent, which is
+ * the app's furniture rather than anybody's ink, at a strength that cannot be
+ * mistaken for one of the eight washes (24%).
+ */
+private const val SELECTION_TINT = 0.22f
+
+/**
+ * One chapter's native selection (A62), as the reading screen drives it.
+ *
+ * The page selects the way every other page on the phone does — the
+ * platform's long-press, its handles and magnifier, its word snapping — and
+ * reports what is selected as verses and offsets. What the reading screen
+ * needs to do the other way round — take the selection to the whole verse,
+ * step an end by a word, let go of it — goes through here.
+ *
+ * Created once per chapter on screen, so only one chapter selects at a time:
+ * a selection begun in another chapter lets go of this one.
+ */
+@Stable
+class PageSelection {
+    internal val state = SelectionState()
+
+    /** Where a range sits on the page, once the page is set and laid out. */
+    internal var toPage: ((VerseRange) -> TextRange?)? = null
+
+    /** A selection asked for before the page could place it. */
+    internal var pending: VerseRange? = null
+
+    /** Whether anything is selected on this page right now. */
+    val isSelecting: Boolean get() = state.selectedTexts.any { it.isNotEmpty() }
+
+    /**
+     * Selects [range] on this page — its verses and offsets, whatever chapter
+     * and book it says. Held until the page is laid out if it is not yet.
+     */
+    fun select(range: VerseRange) {
+        val at = toPage?.invoke(range)
+        if (at == null) {
+            pending = range
+            return
+        }
+        pending = null
+        state.select(at)
+    }
+
+    /** Lets go of whatever is selected on this page. */
+    fun clear() {
+        pending = null
+        state.clear()
+    }
+}
+
+/**
+ * What is selected on a page: its two ends, as offsets into the verses' own
+ * text — null at an end that is the verse's own edge, so a selection of whole
+ * verses is stored as whole verses — and the word, when it is one word.
+ */
+@Immutable
+data class PageRange(
+    val startVerse: Int,
+    val startChar: Int?,
+    val endVerse: Int,
+    val endChar: Int?,
+    /** The one word selected, which the original line names (A60 §7.5). */
+    val word: HeldWord? = null,
+)
+
+/**
+ * The platform's floating text toolbar, never drawn (§13.2): no glass over a
+ * verse, and the page's own verbs are on Ribbon's toolbar at the foot.
+ * Holding the menu open until it is cancelled is what tells the selection the
+ * menu is "shown"; nothing is put on screen.
+ */
+private object NoTextContextMenu : TextContextMenuProvider {
+    override suspend fun showTextContextMenu(dataProvider: TextContextMenuDataProvider) {
+        awaitCancellation()
+    }
+}
+
+/** The same, for the older route a selection may take to its menu. */
+private object NoTextToolbar : TextToolbar {
+    override val status: TextToolbarStatus = TextToolbarStatus.Hidden
+    override fun showMenu(
+        rect: Rect,
+        onCopyRequested: (() -> Unit)?,
+        onPasteRequested: (() -> Unit)?,
+        onCutRequested: (() -> Unit)?,
+        onSelectAllRequested: (() -> Unit)?,
+    ) = Unit
+
+    override fun hide() = Unit
+}
+
 /**
  * One chapter, set as a page.
  *
@@ -176,27 +300,30 @@ private const val WASH_BELOW_BASELINE = 0.28f
  *   washes at 24%;
  *   overlapping inks multiply into a third colour — the correct emotional
  *   result (§4.5).
- * @param lifted the run currently lifted by a long-press (drawn raised, with
- *   a soft shadow), and what the two handles are attached to.
+ * @param selection this page's native selection (A62).
+ * @param lifted what is selected on this page while it is live — the
+ *   toolbar or the original is up — for the screen reader's two ends.
+ * @param held what was selected when a composer took the focus: the native
+ *   selection lets go when the keyboard comes up, so the words being written
+ *   about are drawn here, still, until the composer closes.
  * @param justMarked the verses you have this moment highlighted yourself, so
  *   the wash is drawn travelling across them rather than appearing on them.
  *   Null for everything else, including a highlight arriving from somebody
  *   else's phone.
  * @param onMarkDrawn the stroke has finished travelling and [justMarked] can
  *   be let go of.
- * @param onExtend one end of the lifted selection moved, to a verse and
- *   optionally to a word inside it. A null char means the whole verse at that
- *   end, which is what the first or last word of one comes back as.
+ * @param onSelected the selection changed, to a range — or to nothing.
+ * @param onSelectVerse a verse's "leave something here", for somebody who
+ *   cannot hold: the whole verse selected.
+ * @param onTapVerseNumber a tap on (or near) a verse's number, which takes
+ *   the whole verse (§13.2).
  * @param openNote an open note's carve-out: verse and the height to open
  *   beneath it.
  * @param onNoteSlot y offset (in this composable's coordinates) of the
  *   open-note carve, so the note card can sit in it.
- * @param onHeld where the finger was when a verse lifted: the verse, and the
- *   offset into its own text under the press point — the word the original
- *   line names (A60, §7.5). Called straight after [onLongPressVerse].
  * @param onOriginal a verse's "the original words" action, for somebody who
- *   cannot hold and then reach for the toolbar: lifts the verse and opens the
- *   original (A60). Null leaves the action off.
+ *   cannot hold and then reach for the toolbar: selects the verse and opens
+ *   the original (A60). Null leaves the action off.
  */
 @Composable
 fun ChapterText(
@@ -204,25 +331,24 @@ fun ChapterText(
     runningHead: String,
     theme: ReadingTheme,
     marks: List<VerseMark>,
+    selection: PageSelection,
     lifted: VerseRange?,
+    held: VerseRange?,
     justMarked: VerseRange?,
     onMarkDrawn: () -> Unit,
     openNote: OpenNote?,
     isFirstChapter: Boolean,
     showMarginHint: Boolean,
     onLayout: (ChapterLayout) -> Unit,
-    onLongPressVerse: (Int) -> Unit,
-    onDragToVerse: (Int) -> Unit,
-    onExtend: (atStart: Boolean, verse: Int, char: Int?) -> Unit,
-    onDragEnded: () -> Unit,
+    onSelected: (PageRange?) -> Unit,
     onTapVerse: (Int) -> Unit,
     onNoteSlot: (Dp) -> Unit,
     modifier: Modifier = Modifier,
-    onHeld: (verse: Int, offset: Int?) -> Unit = { _, _ -> },
+    onSelectVerse: (Int) -> Unit = {},
+    onTapVerseNumber: (Int) -> Unit = {},
     onOriginal: ((Int) -> Unit)? = null,
 ) {
     val density = LocalDensity.current
-    val haptics = LocalHaptics.current
     val reduceMotion = rememberReduceMotion()
 
     // The faces, resolved once at this size. Literata is variable on its
@@ -249,9 +375,14 @@ fun ChapterText(
     // carve's height is deliberately not in this key: the height lives in
     // the placeholder, which is passed alongside the string, so an
     // animating gap re-lays out the text without re-typesetting it.
+    //
+    // Nor is the selection (A62). The lift used to re-typeset the whole
+    // chapter — a shadow and a 2 pt rise on every verse it covered — on
+    // every verse a drag crossed. The native selection is painted by the
+    // text itself and changes nothing about how the page is set.
     val room = LocalRoomColours.current
     val page = remember(
-        chapter, runningHead, theme, lifted?.verses,
+        chapter, runningHead, theme,
         isFirstChapter, showMarginHint, slotVerse, density,
         bodyStyle, descriptorStyle, room,
     ) {
@@ -260,13 +391,11 @@ fun ChapterText(
             runningHead = runningHead,
             theme = theme,
             room = room,
-            liftedVerses = lifted?.verses,
             isFirstChapter = isFirstChapter,
             showMarginHint = showMarginHint,
             slotVerse = slotVerse,
             bodySpan = bodyStyle.toSpanStyle(),
             descriptorSpan = descriptorStyle.toSpanStyle(),
-            density = density,
         )
     }
 
@@ -286,27 +415,15 @@ fun ChapterText(
     }
 
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
-    // Whether this gesture already lifted a verse. A lift and a tap are the
-    // same touch until the finger has been down long enough, and only one of
-    // them may fire — the same exclusivity UIKit gets from a tap recogniser
-    // failing under a long press.
-    val gesture = remember { GestureState() }
 
     // The gesture handlers below outlive the composition that installed
     // them, so the callbacks are read through the composition rather than
     // captured once.
-    val currentLongPress by rememberUpdatedState(onLongPressVerse)
-    val currentDragTo by rememberUpdatedState(onDragToVerse)
-    val currentExtend by rememberUpdatedState(onExtend)
-    val currentDragEnded by rememberUpdatedState(onDragEnded)
     val currentTap by rememberUpdatedState(onTapVerse)
-    val currentHeld by rememberUpdatedState(onHeld)
+    val currentTapNumber by rememberUpdatedState(onTapVerseNumber)
+    val currentSelectVerse by rememberUpdatedState(onSelectVerse)
+    val currentSelected by rememberUpdatedState(onSelected)
     val currentOriginal by rememberUpdatedState(onOriginal)
-
-    fun verseAt(point: Offset): Int? {
-        val result = layout ?: return null
-        return page.verseAt(result.getOffsetForPosition(point))
-    }
 
     // Report geometry once per layout, not once per recomposition: the
     // enclosing screen re-evaluates on every scroll tick, and iOS coalesces
@@ -331,6 +448,56 @@ fun ChapterText(
         }
     }
 
+    // **The selection, read back (A62).** The platform owns the gesture, the
+    // handles, the magnifier and the snapping to words; what this page owns
+    // is what the selection *means*: a verse and a word at each end. The
+    // offset a SelectionContainer holds is not public, so it is read back
+    // from the words themselves — every spoken word carries its own place on
+    // the page, and the first and last of them in what is selected are the
+    // two ends, exact to the word, which is all a mark has ever stored.
+    //
+    // The last report is kept across a re-set page so a page that merely
+    // re-lays out does not report the same selection twice, and so the
+    // empty selection a chapter is born with is not news.
+    val lastReport = remember { arrayOfNulls<PageRange>(1) }
+    // The page can place a selection once it is laid out; asked before then,
+    // the selection waits (`pending`) and is placed below.
+    val laidOut = layout != null
+    DisposableEffect(selection, page, laidOut) {
+        if (laidOut) selection.toPage = page::pageSelection
+        onDispose { selection.toPage = null }
+    }
+    LaunchedEffect(selection, page, laidOut) {
+        if (!laidOut) return@LaunchedEffect
+        selection.pending?.let(selection::select)
+        snapshotFlow { selection.state.selectedTexts }.collect { texts ->
+            val decoded = page.rangeOf(texts)
+            if (decoded == null && texts.any { it.isNotEmpty() }) {
+                // Something is selected that is not words of a verse: the
+                // running head, the hint, a psalm's title, or a verse's
+                // number on its own. Holding the number takes its verse;
+                // anything else lets go, so there is never a selection the
+                // toolbar has nothing to say about.
+                //
+                // Unless words were selected a moment ago and a handle is
+                // passing over the blank and the number between two verses:
+                // the selection under the finger is not let go of, nor jumped
+                // to a whole verse. The words it had stand until it reaches
+                // words again.
+                val verse = page.versesIn(texts).singleOrNull()
+                val number = verse != null && texts.joinToString("") { it.text }.trim() == verse.toString()
+                if (lastReport[0] != null && !number) return@collect
+                val whole = verse?.let { VerseRange("", 0, it, it) }
+                if (whole != null) selection.select(whole) else selection.state.clear()
+                return@collect
+            }
+            if (decoded != lastReport[0]) {
+                lastReport[0] = decoded
+                currentSelected(decoded)
+            }
+        }
+    }
+
     // The washes, already eased to whatever they are part-way through
     // becoming. Computed here rather than in the draw because none of it
     // needs the layout: only the rectangles do.
@@ -342,6 +509,18 @@ fun ChapterText(
         still = reduceMotion,
     )
 
+    // The selection in the app's own colour: handles and tint in the accent,
+    // the furniture the old knob was drawn in, kept out of the eight inks
+    // and out of the reader's hands (§4.5).
+    val accent = Palette.accent
+    val selectionColours = remember(accent) {
+        TextSelectionColors(
+            handleColor = accent,
+            backgroundColor = accent.copy(alpha = SELECTION_TINT),
+        )
+    }
+    val heldTint = accent.copy(alpha = SELECTION_TINT)
+
     Box(
         modifier = modifier.padding(
             // iOS: textContainerInset = (0, gutterWidth + 8, 0, trailingMargin).
@@ -349,143 +528,106 @@ fun ChapterText(
             end = theme.trailingMargin,
         ),
     ) {
-        BasicText(
-            text = page.text,
-            modifier = Modifier
-                .fillMaxWidth()
-                .drawBehind {
-                    val result = layout ?: return@drawBehind
-                    drawWashes(result, page, washes, theme.fontSize, density)
-                }
-                // The long-press threshold is the platform's own
-                // (`ViewConfiguration.longPressTimeout`, 500 ms) rather than
-                // iOS's 0.45 s — a system value a reader may already have
-                // tuned, and not worth overriding.
-                .pointerInput(page) {
-                    detectDragGesturesAfterLongPress(
-                        onDragStart = { point ->
-                            gesture.lifted = true
-                            val pageOffset = layout?.getOffsetForPosition(point)
-                            pageOffset?.let(page::verseAt)?.let { verse ->
-                                // The haptic fires the moment the verse
-                                // lifts, not on touch-down (§9.3).
-                                haptics?.verseLifts()
-                                currentLongPress(verse)
-                                // And the word the finger is on, for the
-                                // original line over the toolbar (§7.5).
-                                currentHeld(verse, page.textOffset(verse, pageOffset))
-                            }
-                        },
-                        onDrag = { change, _ ->
-                            // The drag that extends the selection is the
-                            // same gesture that started it.
-                            verseAt(change.position)?.let(currentDragTo)
-                        },
-                        onDragEnd = { currentDragEnded() },
-                        onDragCancel = { currentDragEnded() },
-                    )
-                }
-                .pointerInput(page) {
-                    awaitEachGesture {
-                        awaitFirstDown(requireUnconsumed = false)
-                        gesture.lifted = false
-                        val up = waitForUpOrCancellation()
-                        if (up != null && !gesture.lifted) {
-                            verseAt(up.position)?.let(currentTap)
+        CompositionLocalProvider(
+            LocalTextSelectionColors provides selectionColours,
+            LocalTextContextMenuToolbarProvider provides NoTextContextMenu,
+            LocalTextToolbar provides NoTextToolbar,
+        ) {
+            SelectionContainer(state = selection.state) {
+                BasicText(
+                    text = page.text,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .drawBehind {
+                            val result = layout ?: return@drawBehind
+                            drawWashes(result, page, washes, theme.fontSize, density)
+                            // The words a composer is open about, still
+                            // tinted as they were selected (§13.2).
+                            if (held != null) drawHeld(result, page, held, heldTint)
                         }
-                    }
-                }
-                // Verse-by-verse VoiceOver/TalkBack navigation is served by
-                // the elements below, one per verse, so the text node itself
-                // must not also be read as one long run.
-                .clearAndSetSemantics { },
-            style = bodyStyle.copy(color = Palette.text),
-            inlineContent = inlineContent,
-            // Never a horizontal scroll (S02 edge cases): the measure wraps,
-            // and a hanging indent narrows the line rather than widening the
-            // page.
-            softWrap = true,
-            onTextLayout = { layout = it },
-        )
+                        // A tap: dismiss what is selected, if anything is;
+                        // otherwise a verse's number takes the verse, and
+                        // anywhere else opens what is there.
+                        .pointerInput(page, selection) {
+                            awaitEachGesture {
+                                val down = awaitFirstDown(requireUnconsumed = false)
+                                // Read before the selection's own tap clears
+                                // it, so a tap that lets go of a selection is
+                                // never also a tap on what is under it.
+                                val hadSelection = selection.isSelecting
+                                val up = waitForUpOrCancellation() ?: return@awaitEachGesture
+                                if (hadSelection) {
+                                    selection.clear()
+                                    return@awaitEachGesture
+                                }
+                                // The long-press is the selection's, and so is
+                                // whatever it selected: the finger coming up
+                                // afterwards is not a tap.
+                                val pressed = up.uptimeMillis - down.uptimeMillis
+                                if (pressed >= viewConfiguration.longPressTimeoutMillis ||
+                                    selection.isSelecting
+                                ) {
+                                    return@awaitEachGesture
+                                }
+                                val result = layout ?: return@awaitEachGesture
+                                val reach = NUMBER_REACH.toPx()
+                                val number = page.numberNear(result, up.position, reach)
+                                if (number != null) {
+                                    currentTapNumber(number)
+                                    return@awaitEachGesture
+                                }
+                                page.verseAt(result.getOffsetForPosition(up.position))
+                                    ?.let(currentTap)
+                            }
+                        }
+                        // Verse-by-verse VoiceOver/TalkBack navigation is
+                        // served by the elements below, one per verse, so the
+                        // text node itself must not also be read as one long
+                        // run.
+                        .clearAndSetSemantics { },
+                    style = bodyStyle.copy(color = Palette.text),
+                    inlineContent = inlineContent,
+                    // Never a horizontal scroll (S02 edge cases): the measure
+                    // wraps, and a hanging indent narrows the line rather than
+                    // widening the page.
+                    softWrap = true,
+                    onTextLayout = { layout = it },
+                )
+            }
+        }
 
-        // **The two handles S06 asks for.**
+        // **The two ends of the mark, for the screen reader (§11).**
         //
-        // "Extending — drag handles at both ends of the selection, snapping to
-        // verse boundaries." They did not exist. The only way to select more
-        // than one verse was to keep the finger down after the long press and
-        // drag; once it lifted, the selection was final. Overshoot by a verse
-        // — which is easy, because the thing under your thumb is the thing you
-        // cannot see — and the only way back was to mark it wrongly, tap it,
-        // and remove it. On the app's central act.
-        //
-        // They snap to verse boundaries and *only* to verse boundaries. S06's
-        // second clause, word boundaries on a slow drag, is not here and is
-        // not an oversight: `VerseRange` holds a start verse and an end verse,
-        // so a sub-verse highlight has nowhere to be stored. It is a change to
-        // the shared model on both platforms and the backend, not an Android
-        // drawing question. Written down in A41e rather than half-built.
+        // The platform's handles are popups a screen reader cannot reach, and
+        // a handle you can only drag is a handle that does not exist for half
+        // the people S06 was written for. So each end of a live selection is
+        // an element of its own, drawn as nothing and taking no touch, with
+        // the tap equivalents of dragging it: a word or a verse, either way.
         val lifting = layout
-        val liftedVerses = lifted?.verses
-        if (lifted != null && liftedVerses != null && lifting != null) {
+        if (lifted != null && lifting != null) {
             // The first line of the first verse and the last line of the last,
-            // not the corners of the box the selection fits inside. A verse
-            // that wraps is wider than its own last line, so a bounding box
-            // put the tail handle out at the end of the widest line — which,
-            // on a selection ending mid-paragraph, is somewhere in the middle
-            // of the *next* verse.
+            // not the corners of the box the selection fits inside.
             val head = page.pageRanges(lifted.startVerse, lifted.startChar, null)
                 .firstOrNull()?.let { enclosingRects(lifting, it) }?.firstOrNull()
             val tail = page.pageRanges(lifted.endVerse, null, lifted.endChar)
                 .lastOrNull()?.let { enclosingRects(lifting, it) }?.lastOrNull()
             if (head != null && tail != null) {
-                // Where a point on the page lands: a verse, and the word edge
-                // inside it. The first or last word of a verse comes back as
-                // `null` — the whole verse — so the ordinary case stays the
-                // ordinary case and stores nothing extra.
-                fun landing(point: Offset, atStart: Boolean): Triple<Int, Int?, Unit>? {
-                    val result = lifting
-                    val offset = result.getOffsetForPosition(point)
-                    val verse = page.verseAt(offset) ?: return null
-                    val body = page.verseText[verse] ?: return null
-                    val within = page.textOffset(verse, offset) ?: return null
-                    val edge = wordEdge(body, within, atStart)
-                    val whole = if (atStart) edge <= 0 else edge >= body.trimEnd().length
-                    return Triple(verse, if (whole) null else edge, Unit)
+                fun step(atStart: Boolean, forward: Boolean, byWord: Boolean) {
+                    page.steppedEnd(lifted, atStart, forward, byWord)?.let(selection::select)
                 }
-
-                SelectionHandle(
+                MarkEnd(
                     x = head.left,
-                    y = head.top,
+                    y = (head.top + head.bottom) / 2f,
                     label = Copy.WHERE_THE_MARK_STARTS,
                     density = density,
-                    onMoved = { point ->
-                        landing(point, atStart = true)?.let { (verse, char, _) ->
-                            currentExtend(true, verse, char)
-                        }
-                    },
-                    onSettled = { currentDragEnded() },
-                    onStep = { forward, byWord ->
-                        stepEnd(page, atStart = true, forward = forward,
-                            byWord = byWord, verse = lifted.startVerse,
-                            char = lifted.startChar, extend = currentExtend)
-                    },
+                    onStep = { forward, byWord -> step(atStart = true, forward, byWord) },
                 )
-                SelectionHandle(
+                MarkEnd(
                     x = tail.right,
-                    y = tail.bottom,
+                    y = (tail.top + tail.bottom) / 2f,
                     label = Copy.WHERE_THE_MARK_ENDS,
                     density = density,
-                    onMoved = { point ->
-                        landing(point, atStart = false)?.let { (verse, char, _) ->
-                            currentExtend(false, verse, char)
-                        }
-                    },
-                    onSettled = { currentDragEnded() },
-                    onStep = { forward, byWord ->
-                        stepEnd(page, atStart = false, forward = forward,
-                            byWord = byWord, verse = lifted.endVerse,
-                            char = lifted.endChar, extend = currentExtend)
-                    },
+                    onStep = { forward, byWord -> step(atStart = false, forward, byWord) },
                 )
             }
         }
@@ -509,12 +651,11 @@ fun ChapterText(
                             height = with(density) { bounds.height.toDp() },
                         )
                         // The two gestures the text carries, said out loud
-                        // (§11 Motor). These nodes used to carry a label and
-                        // nothing else, so the app's central act — leaving a
-                        // note at a verse — had a long-press-and-drag as its
-                        // only door. The lift plays its haptic here too, at
-                        // the moment the verse lifts, exactly as the drag's
-                        // own start does (§9.3).
+                        // (§11 Motor). "Leave something here" selects the
+                        // whole verse, the same selection the platform's own
+                        // gesture makes, so everything after it — the
+                        // toolbar, its verbs, the two ends above — is the
+                        // same for everybody.
                         .clearAndSetSemantics {
                             contentDescription = label
                             onClick(label = Copy.OPEN_WHATS_HERE) {
@@ -523,15 +664,13 @@ fun ChapterText(
                             }
                             customActions = listOfNotNull(
                                 CustomAccessibilityAction(Copy.LEAVE_SOMETHING_HERE) {
-                                    haptics?.verseLifts()
-                                    currentLongPress(verse)
+                                    currentSelectVerse(verse)
                                     true
                                 },
                                 // The original words, a third way in beside
                                 // the toolbar's verb and the line (A60).
                                 currentOriginal?.let { open ->
                                     CustomAccessibilityAction(Copy.ORIGINAL_ACTION) {
-                                        haptics?.verseLifts()
                                         open(verse)
                                         true
                                     }
@@ -548,20 +687,12 @@ fun ChapterText(
  * The edge of the word a character offset falls in.
  *
  * S06 asks for handles that snap "to verse boundaries by default and to word
- * boundaries when dragged slowly". The slow-drag half is deliberately not
- * built: a mode you enter by accident, according to how fast your thumb
- * happened to be moving, is not discoverable and not repeatable — you cannot
- * aim at it, and the same gesture gives two different answers. It would also
- * be the only speed-sensitive control in an app whose whole argument is
- * patience.
- *
- * Instead each handle always lands on a word edge: the one at the start of
- * the mark snaps back to the beginning of its word, the one at the end snaps
- * forward to the end of its. Which is *also* verse-boundary snapping, because
- * the first and last words of a verse are its edges — a handle dragged to
- * either end gives exactly the whole verse, and stores it as one (A41g). So
- * the default S06 wants is still the easiest thing to hit, and the precision
- * it wants is always available rather than hiding behind a speed.
+ * boundaries when dragged slowly". The platform's handles snap to words, and
+ * every end the page reports is a word edge — the start of a word or the end
+ * of one — because the words themselves are what it reads back. The first and
+ * last words of a verse are its edges, so a selection that reaches them is
+ * the whole verse and is stored as one; and "the verse" on the toolbar is the
+ * default S06 wants, said as a control rather than hidden behind a speed.
  */
 private fun wordEdge(text: String, at: Int, atStart: Boolean): Int {
     if (text.isEmpty()) return 0
@@ -589,97 +720,38 @@ private fun wordStep(text: String, from: Int, forward: Boolean, atStart: Boolean
     } else {
         while (i > 0 && text[i - 1].isWhitespace()) i--
         while (i > 0 && !text[i - 1].isWhitespace()) i--
+        // An end stepping back lands on the end of the word before, not on
+        // the end of the word it was already at: from its start, the edge
+        // forward is where it began.
+        if (!atStart) while (i > 0 && text[i - 1].isWhitespace()) i--
     }
     return wordEdge(text, i, atStart)
 }
 
 /**
- * Moving one end of the mark by a word or by a verse — the tap equivalents of
- * dragging a handle (§11). A word step that lands on a verse's first or last
- * word reports the whole verse, exactly as a drag there does.
- */
-private fun stepEnd(
-    page: ChapterPage,
-    atStart: Boolean,
-    forward: Boolean,
-    byWord: Boolean,
-    verse: Int,
-    char: Int?,
-    extend: (Boolean, Int, Int?) -> Unit,
-) {
-    val body = page.verseText[verse] ?: return
-    if (!byWord) {
-        val to = if (forward) verse + 1 else verse - 1
-        if (page.verseText.containsKey(to)) extend(atStart, to, null)
-        return
-    }
-    val last = body.trimEnd().length
-    val at = char ?: if (atStart) 0 else last
-    val next = wordStep(body, at, forward, atStart)
-    val whole = if (atStart) next <= 0 else next >= last
-    extend(atStart, verse, if (whole) null else next)
-}
-
-/** Whether this touch has already lifted a verse. */
-private class GestureState {
-    var lifted: Boolean = false
-}
-
-/**
- * One end of a lifted selection: a small knob you can pull, in the accent —
- * this is the app's own furniture rather than anybody's ink, and it is drawn
- * in the same chartreuse as the caret for that reason (§4.5 keeps chartreuse
- * out of the eight and out of the reader's hands).
- *
- * The knob is 10 dp and the target is 44 (§11, deviation 12), hung off the
- * corner it marks so the drawn part sits on the text's edge while the part a
- * thumb has to find is the size of a thumb.
- *
- * Every drag has the tap equivalent §11 requires, as two custom actions on the
- * handle itself — move this end on a verse, either way — because a handle you
- * can only *drag* is a handle that does not exist for half the people S06 was
- * written for.
+ * One end of a live selection, for the screen reader: a 44 dp element (§11,
+ * deviation 12) centred on the end it names, drawn as nothing and taking no
+ * touch — the platform's handle is what a finger holds. Its four actions are
+ * the tap equivalents of dragging it.
  */
 @Composable
-private fun SelectionHandle(
+private fun MarkEnd(
     x: Float,
     y: Float,
     label: String,
     density: Density,
-    onMoved: (Offset) -> Unit,
-    onSettled: () -> Unit,
     onStep: (forward: Boolean, byWord: Boolean) -> Unit,
 ) {
-    val accent = Palette.accent
-    val target = with(density) { HANDLE_TARGET.toPx() }
-    val knob = with(density) { HANDLE_KNOB.toPx() }
-    // Where the finger last was, in the text's own coordinates, so a drag can
-    // be hit-tested against the page exactly as the long-press drag is.
-    var travel by remember(x, y) { mutableStateOf(Offset(x, y)) }
-
+    val target = with(density) { END_TARGET.toPx() }
     Box(
         modifier = Modifier
-            // Centred on the corner it marks: the top-left of the first verse
-            // and the bottom-right of the last, which is where a hand expects
-            // the ends of a run of text to be held.
             .offset {
                 IntOffset(
                     (x - target / 2f).roundToInt(),
                     (y - target / 2f).roundToInt(),
                 )
             }
-            .size(HANDLE_TARGET)
-            .pointerInput(x, y) {
-                detectDragGestures(
-                    onDragStart = { travel = Offset(x, y) },
-                    onDragEnd = { onSettled() },
-                    onDragCancel = { onSettled() },
-                ) { change, delta ->
-                    change.consume()
-                    travel += delta
-                    onMoved(travel)
-                }
-            }
+            .size(END_TARGET)
             .semantics {
                 contentDescription = label
                 customActions = listOf(
@@ -701,17 +773,34 @@ private fun SelectionHandle(
                     },
                 )
             },
-        contentAlignment = Alignment.Center,
-    ) {
-        Canvas(Modifier.size(HANDLE_TARGET)) {
-            drawCircle(color = accent, radius = knob / 2f)
-        }
-    }
+    )
 }
 
-/** The knob, and the target around it (§11, deviation 12). */
-private val HANDLE_KNOB = 10.dp
-private val HANDLE_TARGET = 44.dp
+/**
+ * The words a composer is open about, tinted as the selection tinted them
+ * (§13.2). The composer takes the focus, and the platform lets go of a
+ * selection when the focus goes; this is the selection, frozen, so the
+ * reader can still see what they are writing about. A state, not a movement:
+ * it is there on the frame the selection goes.
+ */
+private fun DrawScope.drawHeld(
+    layout: TextLayoutResult,
+    page: ChapterPage,
+    held: VerseRange,
+    tint: Color,
+) {
+    // One run from the first letter to the last, numbers and gaps between
+    // included, exactly as the platform painted the selection it stands in
+    // for — not verse by verse, which left a notch at every number.
+    val selected = page.pageSelection(held) ?: return
+    for (rect in enclosingRects(layout, selected.start until selected.end)) {
+        drawRect(
+            color = tint,
+            topLeft = Offset(rect.left, rect.top),
+            size = Size(rect.width, rect.height),
+        )
+    }
+}
 
 // MARK: - The washes
 
@@ -1301,7 +1390,165 @@ private class ChapterPage(
     val orderedVerses: List<Int>,
     /** Index of the carve among the string's placeholders, if one is open. */
     val noteSlotIndex: Int?,
+    /** Verse → where its number's digits sit on the page (verse 1 has none). */
+    val numberRanges: Map<Int, IntRange> = emptyMap(),
 ) {
+
+    /**
+     * Where a verse's words begin in its own text: past any blank it opens
+     * with. A selection starting here starts at the verse's own edge.
+     */
+    fun lead(verse: Int): Int {
+        val body = verseText[verse] ?: return 0
+        var i = 0
+        while (i < body.length && body[i].isWhitespace()) i++
+        return i
+    }
+
+    /**
+     * Where a verse's words end in its own text, before any blank it closes
+     * with. A verse's own text very often ends in the space before the next
+     * one, and that space is the verse's edge, not a word: a selection ending
+     * on the last word is the whole verse (§13.1 — the trailing-space bug).
+     */
+    fun tail(verse: Int): Int = verseText[verse]?.trimEnd()?.length ?: 0
+
+    /**
+     * What a native selection says, as verses and offsets (A62).
+     *
+     * [selected] is the selection's own text, cut from the page with its
+     * annotations still on it. The first and last word annotations in it
+     * carry their own places on the page, so the two ends come back exact to
+     * the word: a word cut part-way by a handle counts whole, the way a mark
+     * always snapped outward to word edges. The verse numbers between, the
+     * gaps and the carve carry no words and so add nothing.
+     *
+     * Null when no word is selected: nothing, or only the running head, the
+     * hint, a psalm's title or a number.
+     */
+    fun rangeOf(selected: List<AnnotatedString>): PageRange? {
+        var first = Int.MAX_VALUE
+        var last = Int.MIN_VALUE
+        var words = 0
+        for (piece in selected) {
+            for (word in piece.getStringAnnotations(TAG_WORD, 0, piece.length)) {
+                val (a, b) = word.item.split(':').map(String::toInt)
+                first = min(first, a)
+                last = max(last, b)
+                words += 1
+            }
+        }
+        if (words == 0) return null
+        val startVerse = verseAt(first) ?: return null
+        val endVerse = verseAt(last - 1) ?: return null
+        val from = textOffset(startVerse, first) ?: return null
+        val to = textOffset(endVerse, last) ?: return null
+        val startChar = from.takeIf { it > lead(startVerse) }
+        val endChar = to.takeIf { it < tail(endVerse) }
+        return PageRange(
+            startVerse = startVerse,
+            startChar = startChar,
+            endVerse = endVerse,
+            endChar = endChar,
+            // One word: the word a long-press picked, which is the held word
+            // the original line names (A60 §7.5).
+            word = if (words == 1) HeldWord(startVerse, from) else null,
+        )
+    }
+
+    /** The verses a selection touches through their annotations at all. */
+    fun versesIn(selected: List<AnnotatedString>): Set<Int> = buildSet {
+        for (piece in selected) {
+            for (tag in piece.getStringAnnotations(TAG_VERSE, 0, piece.length)) {
+                tag.item.toIntOrNull()?.let(::add)
+            }
+        }
+    }
+
+    /**
+     * Where a range sits on the page, as the native selection holds it: from
+     * the first letter it covers to the last. Null ends are the verse's own
+     * edges — its first and last letters, not the blank either side.
+     */
+    fun pageSelection(range: VerseRange): TextRange? {
+        val from = range.startChar ?: lead(range.startVerse)
+        val to = range.endChar ?: tail(range.endVerse)
+        val start = pageRanges(range.startVerse, from, null).firstOrNull()?.first ?: return null
+        val end = pageRanges(range.endVerse, null, to).lastOrNull()?.last ?: return null
+        if (end + 1 <= start) return null
+        return TextRange(start, end + 1)
+    }
+
+    /**
+     * The verse whose number is under, or within [reach] of, a point — the
+     * nearest, when two are. The number is a small superscript, so the
+     * target is the glyphs and a thumb's width around them (§13.2).
+     */
+    fun numberNear(layout: TextLayoutResult, point: Offset, reach: Float): Int? {
+        val length = layout.layoutInput.text.length
+        var best: Int? = null
+        var bestDistance = Float.MAX_VALUE
+        for ((verse, digits) in numberRanges) {
+            if (digits.last >= length) continue
+            var left = Float.MAX_VALUE
+            var top = Float.MAX_VALUE
+            var right = -Float.MAX_VALUE
+            var bottom = -Float.MAX_VALUE
+            for (i in digits) {
+                val box = layout.getBoundingBox(i)
+                left = min(left, box.left)
+                top = min(top, box.top)
+                right = max(right, box.right)
+                bottom = max(bottom, box.bottom)
+            }
+            val dx = max(0f, max(left - point.x, point.x - right))
+            val dy = max(0f, max(top - point.y, point.y - bottom))
+            if (dx > reach || dy > reach) continue
+            val distance = dx * dx + dy * dy
+            if (distance < bestDistance) {
+                bestDistance = distance
+                best = verse
+            }
+        }
+        return best
+    }
+
+    /**
+     * One end of a range moved a word or a verse, either way — the tap
+     * equivalents of dragging a handle (§11). A word step that reaches a
+     * verse's first or last word gives the whole verse at that end. Null when
+     * the end cannot go that way: off the chapter, or past the other end.
+     */
+    fun steppedEnd(range: VerseRange, atStart: Boolean, forward: Boolean, byWord: Boolean): VerseRange? {
+        val verse = if (atStart) range.startVerse else range.endVerse
+        val char = if (atStart) range.startChar else range.endChar
+        val body = verseText[verse] ?: return null
+        val toVerse: Int
+        val toChar: Int?
+        if (byWord) {
+            val at = char ?: if (atStart) lead(verse) else tail(verse)
+            val next = wordStep(body, at, forward, atStart)
+            toVerse = verse
+            toChar = if (atStart) next.takeIf { it > lead(verse) } else next.takeIf { it < tail(verse) }
+        } else {
+            toVerse = if (forward) verse + 1 else verse - 1
+            if (!verseText.containsKey(toVerse)) return null
+            toChar = null
+        }
+        // Never past the other end: the two ends are a start and an end, and
+        // one stepping over the other would quietly swap which is which.
+        val start = if (atStart) toVerse to (toChar ?: lead(toVerse)) else
+            range.startVerse to (range.startChar ?: lead(range.startVerse))
+        val end = if (atStart) range.endVerse to (range.endChar ?: tail(range.endVerse)) else
+            toVerse to (toChar ?: tail(toVerse))
+        if (start.first > end.first || (start.first == end.first && start.second >= end.second)) return null
+        val moved = if (atStart) {
+            range.copy(startVerse = toVerse, startChar = toChar)
+        } else {
+            range.copy(endVerse = toVerse, endChar = toChar)
+        }
+        return moved.takeIf { it != range }
+    }
 
     /** The verse a character offset belongs to, or null in the chrome. */
     fun verseAt(offset: Int): Int? {
@@ -1395,13 +1642,11 @@ private fun buildChapterPage(
     // The room, passed rather than read: this typesets a page, it does not
     // compose one, and the room's ink follows the wallpaper now.
     room: RoomColours,
-    liftedVerses: IntRange?,
     isFirstChapter: Boolean,
     showMarginHint: Boolean,
     slotVerse: Int?,
     bodySpan: SpanStyle,
     descriptorSpan: SpanStyle,
-    density: Density,
 ): ChapterPage {
     val builder = AnnotatedString.Builder()
     val inline = mutableMapOf<String, InlineTextContent>()
@@ -1410,22 +1655,13 @@ private fun buildChapterPage(
     val verseText = mutableMapOf<Int, StringBuilder>()
     val segments = mutableMapOf<Int, MutableList<TextSegment>>()
     val ordered = mutableListOf<Int>()
+    val numbers = mutableMapOf<Int, IntRange>()
     var placeholderCount = 0
     var noteSlotIndex: Int? = null
 
     val ivory = room.text
     val em = theme.fontSize
     val lineHeight = (em * theme.lineHeightMultiple).sp
-
-    // The lift: the verse is drawn raised, over a soft shadow. Compose's
-    // BaselineShift is a fraction of the span's own size where UIKit's
-    // baselineOffset is in points, so the 2 pt rise is expressed as one.
-    val liftShadow = Shadow(
-        color = Color.Black.copy(alpha = 0.7f),
-        offset = Offset(0f, with(density) { 3.dp.toPx() }),
-        blurRadius = with(density) { 8.dp.toPx() },
-    )
-    val liftShift = BaselineShift(2f / em)
 
     var paragraphOpen = false
 
@@ -1495,6 +1731,19 @@ private fun buildChapterPage(
                     ),
                 )
                 body.append(text)
+                // And every word in it carries its own place on the page, so
+                // a native selection can be read back to the word (A62).
+                var i = 0
+                while (i < text.length) {
+                    if (text[i].isWhitespace()) {
+                        i++
+                        continue
+                    }
+                    var j = i
+                    while (j < text.length && !text[j].isWhitespace()) j++
+                    builder.addStringAnnotation(TAG_WORD, "${start + i}:${start + j}", start + i, start + j)
+                    i = j
+                }
             }
         }
     }
@@ -1588,11 +1837,13 @@ private fun buildChapterPage(
                     letterSpacing = 0.sp,
                 )
                 // A thin space after the number, never a word space.
+                val digits = builder.length
                 appendRun(numberSpan, v, "$v ", spoken = false)
+                numbers[v] = digits until digits + v.toString().length
                 wrote = true
             }
 
-            var attributes = if (block.s == BlockStyle.d) {
+            val attributes = if (block.s == BlockStyle.d) {
                 descriptorSpan.copy(color = room.muted)
             } else {
                 bodySpan.copy(
@@ -1603,12 +1854,9 @@ private fun buildChapterPage(
                     },
                 )
             }
-            // A descriptor is a psalm title, not a verse: it is never lifted
-            // and never hit-tested.
+            // A descriptor is a psalm title, not a verse: it is never
+            // selected as one and never hit-tested.
             val bodyVerse = runningVerse.takeIf { block.s != BlockStyle.d }
-            if (liftedVerses != null && bodyVerse != null && bodyVerse in liftedVerses) {
-                attributes = attributes.copy(shadow = liftShadow, baselineShift = liftShift)
-            }
             appendRun(attributes, bodyVerse, span.t)
             wrote = true
 
@@ -1648,6 +1896,7 @@ private fun buildChapterPage(
         verseSegments = segments.mapValues { it.value.toList() },
         orderedVerses = ordered.sorted(),
         noteSlotIndex = noteSlotIndex,
+        numberRanges = numbers,
     )
 }
 

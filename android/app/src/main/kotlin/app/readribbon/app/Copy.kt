@@ -274,8 +274,9 @@ object Copy {
      * them was closed. It also closed them to anybody who cannot hold a press
      * for the platform timeout and then drag.
      *
-     * Extending a range stays drag-only, which is honest: the toolbar acts on
-     * whatever is lifted, and one verse is the common case.
+     * "Leave something here" selects the whole verse, the same selection
+     * the platform's long-press makes (A62); the two ends of it are then
+     * elements of their own, stepped a word or a verse at a time.
      */
     const val OPEN_WHATS_HERE = "open what's here"
     const val LEAVE_SOMETHING_HERE = "leave something here"
@@ -418,6 +419,15 @@ object Copy {
     fun originalVerb(language: OriginalLanguage) = "the ${language.name}"
 
     /**
+     * S06 · native selection (A62): the leave toolbar's control that takes
+     * the selection out to the whole verse — or verses, when it spans more
+     * than one. A long-press selects a word now; this is the whole-verse
+     * default S06 asks for, said as exactly what it does. Lower-case; the
+     * toolbar sets it in small caps.
+     */
+    fun wholeVerseVerb(several: Boolean) = if (several) "the verses" else "the verse"
+
+    /**
      * S06 · the original (A60): the panel's heading, set in small caps —
      * "the Greek · John 1:1".
      */
@@ -447,6 +457,42 @@ object Copy {
     const val ORIGINAL_YOU = "you"
 
     /**
+     * S06 · the original (A62): names and versions said together, the way a
+     * person would — "Ruth", "you and Ruth", "you, Ruth and Caleb". No
+     * leading "the" before a version's name.
+     */
+    fun listed(items: List<String>): String = when (items.size) {
+        0 -> ""
+        1 -> items[0]
+        else -> items.dropLast(1).joinToString(", ") + " and " + items.last()
+    }
+
+    /**
+     * S06 · the original (A62): the label over your own words in "In this
+     * room" — your version, and any here that say the same — set in small
+     * caps: "Yours · Berean Standard and American Standard".
+     */
+    fun roomYours(versions: List<String>) = "Yours · ${listed(versions)}"
+
+    /**
+     * S06 · the original (A62): the end of a row of names past three faces —
+     * "you, Caleb, Faith and others". Never a number.
+     */
+    const val ROOM_AND_OTHERS = "and others"
+
+    /**
+     * S06 · the original (A62): the whole section, when the one other person
+     * here says the selection as you do.
+     */
+    fun roomOneAgrees(name: String) = "$name reads these words as you do."
+
+    /**
+     * S06 · the original (A62): the whole section, when every version here
+     * says the selection as yours does.
+     */
+    const val ROOM_ALL_AGREE = "Everyone here reads these words as you do."
+
+    /**
      * S06 · the original (A60): a licensed version somebody here reads that
      * has not streamed to this phone. Swift says the device's own noun.
      */
@@ -460,7 +506,7 @@ object Copy {
 
     /**
      * S06 · the original (A60): a verse's third TalkBack action, beside
-     * [OPEN_WHATS_HERE] and [LEAVE_SOMETHING_HERE]. It lifts the verse and
+     * [OPEN_WHATS_HERE] and [LEAVE_SOMETHING_HERE]. It selects the verse and
      * opens the panel.
      */
     const val ORIGINAL_ACTION = "the original words"
