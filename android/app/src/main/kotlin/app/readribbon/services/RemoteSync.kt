@@ -791,43 +791,22 @@ class RemoteSync(
         }
         val roomIDs = mine.map { it.roomId }
         if (roomIDs.isEmpty()) return RoomGraph()
-        val roomList = "in.(${roomIDs.joinToString(",") { it.lowercased() }})"
 
-        val rooms = withAuthRetry {
-            SupabaseClient.json.decodeFromString<List<RoomRow>>(
-                client.select(table = "rooms", query = listOf("id" to roomList)))
-        }
-        val memberships = withAuthRetry {
-            SupabaseClient.json.decodeFromString<List<MembershipRow>>(
-                client.select(table = "memberships", query = listOf("room_id" to roomList)))
-        }
+        val rooms = selectAll<RoomRow>("rooms", "id", roomIDs)
+        val memberships = selectAll<MembershipRow>("memberships", "room_id", roomIDs)
         val personIDs = memberships.map { it.personId }.toSet()
         var profiles: List<ProfileRow> = emptyList()
         if (personIDs.isNotEmpty()) {
-            val personList = "in.(${personIDs.joinToString(",") { it.lowercased() }})"
-            profiles = withAuthRetry {
-                SupabaseClient.json.decodeFromString<List<ProfileRow>>(
-                    client.select(table = "profiles", query = listOf("id" to personList)))
-            }
+            profiles = selectAll<ProfileRow>("profiles", "id", personIDs)
         }
-        val readings = withAuthRetry {
-            SupabaseClient.json.decodeFromString<List<ReadingRow>>(
-                client.select(table = "readings", query = listOf("room_id" to roomList)))
-        }
-        val quietDays = withAuthRetry {
-            SupabaseClient.json.decodeFromString<List<QuietDayRow>>(
-                client.select(table = "quiet_days", query = listOf("room_id" to roomList)))
-        }
+        val readings = selectAll<ReadingRow>("readings", "room_id", roomIDs)
+        val quietDays = selectAll<QuietDayRow>("quiet_days", "room_id", roomIDs)
         // The link is the whole mechanism (S15), and there should be one of
         // it per room: without this, a second device has no live invite to
         // find and mints another rather than re-offering the one that is
         // already out there.
-        val invites = runCatching {
-            withAuthRetry {
-                SupabaseClient.json.decodeFromString<List<InviteRow>>(
-                    client.select(table = "invites", query = listOf("room_id" to roomList)))
-            }
-        }.getOrDefault(emptyList())
+        val invites = runCatching { selectAll<InviteRow>("invites", "room_id", roomIDs) }
+            .getOrDefault(emptyList())
         val readingIDs = readings.map { it.id }
         var fires: List<FireRow> = emptyList()
         var fuelEvents: List<FuelEventRow> = emptyList()
@@ -842,74 +821,41 @@ class RemoteSync(
         var cardAnswers: List<CardAnswerRow> = emptyList()
 
         if (readingIDs.isNotEmpty()) {
-            val readingList = "in.(${readingIDs.joinToString(",") { it.lowercased() }})"
-            fires = withAuthRetry {
-                SupabaseClient.json.decodeFromString<List<FireRow>>(
-                    client.select(table = "fires", query = listOf("reading_id" to readingList)))
-            }
-            fuelEvents = withAuthRetry {
-                SupabaseClient.json.decodeFromString<List<FuelEventRow>>(
-                    client.select(table = "fuel_events", query = listOf("reading_id" to readingList)))
-            }
+            fires = selectAll<FireRow>("fires", "reading_id", readingIDs, orderedBy = listOf("reading_id"))
+            fuelEvents = selectAll<FuelEventRow>("fuel_events", "reading_id", readingIDs)
             // The two that the merge now *prunes* against carry whether they
             // actually arrived, because an empty list from a failed request
             // would otherwise read as "the room has none" and take every note
-            // in it off the phone.
-            withAuthRetry {
-                runCatching {
-                    SupabaseClient.json.decodeFromString<List<NoteRow>>(
-                        client.select(table = "notes", query = listOf("reading_id" to readingList)))
-                }
-            }.onSuccess { notes = it; notesComplete = true }
-            withAuthRetry {
-                runCatching {
-                    SupabaseClient.json.decodeFromString<List<HighlightRow>>(
-                        client.select(
-                            table = "highlights",
-                            query = listOf("reading_id" to readingList),
-                        ),
-                    )
-                }
-            }.onSuccess { highlights = it; highlightsComplete = true }
-            positions = withAuthRetry {
-                runCatching {
-                    SupabaseClient.json.decodeFromString<List<PositionRow>>(
-                        client.select(table = "positions", query = listOf("reading_id" to readingList)))
-                }.getOrDefault(emptyList())
-            }
-            ribbons = withAuthRetry {
-                runCatching {
-                    SupabaseClient.json.decodeFromString<List<RibbonRow>>(
-                        client.select(table = "ribbons", query = listOf("reading_id" to readingList)))
-                }.getOrDefault(emptyList())
-            }
-            cards = withAuthRetry {
-                runCatching {
-                    SupabaseClient.json.decodeFromString<List<CardRow>>(
-                        client.select(table = "cards", query = listOf("reading_id" to readingList)))
-                }.getOrDefault(emptyList())
-            }
+            // in it off the phone — and arrived means every page of every
+            // request, not the first thousand rows.
+            runCatching { selectAll<NoteRow>("notes", "reading_id", readingIDs) }
+                .onSuccess { notes = it; notesComplete = true }
+            runCatching { selectAll<HighlightRow>("highlights", "reading_id", readingIDs) }
+                .onSuccess { highlights = it; highlightsComplete = true }
+            positions = runCatching {
+                selectAll<PositionRow>(
+                    "positions", "reading_id", readingIDs, orderedBy = listOf("reading_id", "person_id"))
+            }.getOrDefault(emptyList())
+            ribbons = runCatching {
+                selectAll<RibbonRow>("ribbons", "reading_id", readingIDs, orderedBy = listOf("reading_id"))
+            }.getOrDefault(emptyList())
+            cards = runCatching { selectAll<CardRow>("cards", "reading_id", readingIDs) }
+                .getOrDefault(emptyList())
 
             val noteIDs = notes.map { it.id }
             if (noteIDs.isNotEmpty()) {
-                val noteList = "in.(${noteIDs.joinToString(",") { it.lowercased() }})"
-                noteFounds = withAuthRetry {
-                    runCatching {
-                        SupabaseClient.json.decodeFromString<List<NoteFoundRow>>(
-                            client.select(table = "note_founds", query = listOf("note_id" to noteList)))
-                    }.getOrDefault(emptyList())
-                }
+                noteFounds = runCatching {
+                    selectAll<NoteFoundRow>(
+                        "note_founds", "note_id", noteIDs, orderedBy = listOf("note_id", "person_id"))
+                }.getOrDefault(emptyList())
             }
 
             val cardIDs = cards.map { it.id }
             if (cardIDs.isNotEmpty()) {
-                val cardList = "in.(${cardIDs.joinToString(",") { it.lowercased() }})"
-                cardAnswers = withAuthRetry {
-                    runCatching {
-                        SupabaseClient.json.decodeFromString<List<CardAnswerRow>>(
-                            client.select(table = "card_answers", query = listOf("card_id" to cardList)))
-                    }.getOrDefault(emptyList())
-                }
+                cardAnswers = runCatching {
+                    selectAll<CardAnswerRow>(
+                        "card_answers", "card_id", cardIDs, orderedBy = listOf("card_id", "person_id"))
+                }.getOrDefault(emptyList())
             }
         }
         // Swift mutates one `graph` as it goes; RoomGraph is immutable here,
@@ -922,6 +868,26 @@ class RemoteSync(
             noteFounds = noteFounds, highlights = highlights,
             positions = positions, ribbons = ribbons, cards = cards, cardAnswers = cardAnswers,
             notesComplete = notesComplete, highlightsComplete = highlightsComplete)
+    }
+
+    /**
+     * Every row of [table] whose [column] is one of [ids], every page of it
+     * ([SupabaseClient.selectAll]), a hundred and fifty ids to a request: a
+     * filter is written into the URL, and the gateway refuses one past about
+     * 16 KB — a few hundred notes' ids had come to that, and the founds for
+     * them were lost without a word.
+     */
+    private suspend inline fun <reified T> selectAll(
+        table: String,
+        column: String,
+        ids: Collection<Uuid>,
+        orderedBy: List<String> = listOf("id"),
+    ): List<T> = ids.toList().chunked(IDS_PER_REQUEST).flatMap { chunk ->
+        val list = "in.(${chunk.joinToString(",") { it.lowercased() }})"
+        withAuthRetry {
+            SupabaseClient.json.decodeFromString<List<T>>(
+                client.selectAll(table, listOf(column to list), orderedBy))
+        }
     }
 
     /**
@@ -1245,6 +1211,8 @@ class RemoteSync(
     )
 
     companion object {
+        /** Ids written into one request's filter. */
+        const val IDS_PER_REQUEST = 150
 
         /**
          * The `exp` claim, read without a JWT library: the payload is the

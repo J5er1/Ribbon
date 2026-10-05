@@ -638,114 +638,88 @@ final class RemoteSync {
         }
         let roomIDs = mine.map(\.roomId)
         guard !roomIDs.isEmpty else { return graph }
-        let roomList = "in.(\(roomIDs.map { $0.uuidString.lowercased() }.joined(separator: ",")))"
 
-        graph.rooms = try await withAuthRetry {
-            try await self.client.select(
-                [RoomRow].self, from: "rooms",
-                query: [URLQueryItem(name: "id", value: roomList)])
-        }
-        graph.memberships = try await withAuthRetry {
-            try await self.client.select(
-                [MembershipRow].self, from: "memberships",
-                query: [URLQueryItem(name: "room_id", value: roomList)])
-        }
+        graph.rooms = try await selectAll(RoomRow.self, from: "rooms", where: "id", in: roomIDs)
+        graph.memberships = try await selectAll(
+            MembershipRow.self, from: "memberships", where: "room_id", in: roomIDs)
         let personIDs = Set(graph.memberships.map(\.personId))
         if !personIDs.isEmpty {
-            let personList = "in.(\(personIDs.map { $0.uuidString.lowercased() }.joined(separator: ",")))"
-            graph.profiles = try await withAuthRetry {
-                try await self.client.select(
-                    [ProfileRow].self, from: "profiles",
-                    query: [URLQueryItem(name: "id", value: personList)])
-            }
+            graph.profiles = try await selectAll(ProfileRow.self, from: "profiles", where: "id", in: personIDs)
         }
-        graph.readings = try await withAuthRetry {
-            try await self.client.select(
-                [ReadingRow].self, from: "readings",
-                query: [URLQueryItem(name: "room_id", value: roomList)])
-        }
-        graph.quietDays = try await withAuthRetry {
-            try await self.client.select(
-                [QuietDayRow].self, from: "quiet_days",
-                query: [URLQueryItem(name: "room_id", value: roomList)])
-        }
+        graph.readings = try await selectAll(ReadingRow.self, from: "readings", where: "room_id", in: roomIDs)
+        graph.quietDays = try await selectAll(
+            QuietDayRow.self, from: "quiet_days", where: "room_id", in: roomIDs)
         // The link is the whole mechanism (S15), and there should be one of
         // it per room: without this, a second device has no live invite to
         // find and mints another rather than re-offering the one that is
         // already out there.
-        graph.invites = (try? await withAuthRetry {
-            try await self.client.select(
-                [InviteRow].self, from: "invites",
-                query: [URLQueryItem(name: "room_id", value: roomList)])
-        }) ?? []
+        graph.invites = (try? await selectAll(InviteRow.self, from: "invites", where: "room_id", in: roomIDs)) ?? []
         let readingIDs = graph.readings.map(\.id)
         if readingIDs.isEmpty {
             graph.notesComplete = true
             graph.highlightsComplete = true
         } else {
-            let readingList = "in.(\(readingIDs.map { $0.uuidString.lowercased() }.joined(separator: ",")))"
-            graph.fires = try await withAuthRetry {
-                try await self.client.select(
-                    [FireRow].self, from: "fires",
-                    query: [URLQueryItem(name: "reading_id", value: readingList)])
-            }
-            graph.fuelEvents = try await withAuthRetry {
-                try await self.client.select(
-                    [FuelEventRow].self, from: "fuel_events",
-                    query: [URLQueryItem(name: "reading_id", value: readingList)])
-            }
-            if let notes = try? await withAuthRetry({
-                try await self.client.select(
-                    [NoteRow].self, from: "notes",
-                    query: [URLQueryItem(name: "reading_id", value: readingList)])
-            }) {
+            graph.fires = try await selectAll(
+                FireRow.self, from: "fires", where: "reading_id", in: readingIDs, orderedBy: ["reading_id"])
+            graph.fuelEvents = try await selectAll(
+                FuelEventRow.self, from: "fuel_events", where: "reading_id", in: readingIDs)
+            // Complete only once every page of every request has come back:
+            // the phone prunes its notes and marks against these (A36).
+            if let notes = try? await selectAll(NoteRow.self, from: "notes", where: "reading_id", in: readingIDs) {
                 graph.notes = notes
                 graph.notesComplete = true
             }
             let noteIDs = graph.notes.map(\.id)
             if !noteIDs.isEmpty {
-                let noteList = "in.(\(noteIDs.map { $0.uuidString.lowercased() }.joined(separator: ",")))"
-                graph.noteFounds = (try? await withAuthRetry {
-                    try await self.client.select(
-                        [NoteFoundRow].self, from: "note_founds",
-                        query: [URLQueryItem(name: "note_id", value: noteList)])
-                }) ?? []
+                graph.noteFounds = (try? await selectAll(
+                    NoteFoundRow.self, from: "note_founds", where: "note_id", in: noteIDs,
+                    orderedBy: ["note_id", "person_id"])) ?? []
             }
-            if let highlights = try? await withAuthRetry({
-                try await self.client.select(
-                    [HighlightRow].self, from: "highlights",
-                    query: [URLQueryItem(name: "reading_id", value: readingList)])
-            }) {
+            if let highlights = try? await selectAll(
+                HighlightRow.self, from: "highlights", where: "reading_id", in: readingIDs) {
                 graph.highlights = highlights
                 graph.highlightsComplete = true
             }
-            graph.ribbons = (try? await withAuthRetry {
-                try await self.client.select(
-                    [RibbonRow].self, from: "ribbons",
-                    query: [URLQueryItem(name: "reading_id", value: readingList)])
-            }) ?? []
-            graph.positions = (try? await withAuthRetry {
-                try await self.client.select(
-                    [PositionRow].self, from: "positions",
-                    query: [URLQueryItem(name: "reading_id", value: readingList)])
-            }) ?? []
-            graph.cards = (try? await withAuthRetry {
-                try await self.client.select(
-                    [CardRow].self, from: "cards",
-                    query: [URLQueryItem(name: "reading_id", value: readingList)])
-            }) ?? []
+            graph.ribbons = (try? await selectAll(
+                RibbonRow.self, from: "ribbons", where: "reading_id", in: readingIDs,
+                orderedBy: ["reading_id"])) ?? []
+            graph.positions = (try? await selectAll(
+                PositionRow.self, from: "positions", where: "reading_id", in: readingIDs,
+                orderedBy: ["reading_id", "person_id"])) ?? []
+            graph.cards = (try? await selectAll(CardRow.self, from: "cards", where: "reading_id", in: readingIDs)) ?? []
             let cardIDs = graph.cards.map(\.id)
             if !cardIDs.isEmpty {
-                let cardList = "in.(\(cardIDs.map { $0.uuidString.lowercased() }.joined(separator: ",")))"
-                graph.cardAnswers = (try? await withAuthRetry {
-                    try await self.client.select(
-                        [CardAnswerRow].self, from: "card_answers",
-                        query: [URLQueryItem(name: "card_id", value: cardList)])
-                }) ?? []
+                graph.cardAnswers = (try? await selectAll(
+                    CardAnswerRow.self, from: "card_answers", where: "card_id", in: cardIDs,
+                    orderedBy: ["card_id", "person_id"])) ?? []
             }
         }
         return graph
     }
+
+    /// Every row of `table` whose `column` is one of `ids`, every page of it
+    /// (`SupabaseClient.selectAll`), a hundred and fifty ids to a request: a
+    /// filter is written into the URL, and the gateway refuses one past about
+    /// 16 KB — a few hundred notes' ids had come to that, and the founds for
+    /// them were lost without a word.
+    private func selectAll<T: Decodable>(
+        _ type: T.Type, from table: String, where column: String, in ids: some Collection<UUID>,
+        orderedBy key: [String] = ["id"]
+    ) async throws -> [T] {
+        let all = Array(ids)
+        var rows: [T] = []
+        for start in stride(from: 0, to: all.count, by: Self.idsPerRequest) {
+            let chunk = all[start..<min(start + Self.idsPerRequest, all.count)]
+            let list = "in.(\(chunk.map { $0.uuidString.lowercased() }.joined(separator: ",")))"
+            rows += try await withAuthRetry {
+                try await self.client.selectAll(
+                    T.self, from: table, query: [URLQueryItem(name: column, value: list)], orderedBy: key)
+            }
+        }
+        return rows
+    }
+
+    static let idsPerRequest = 150
 
     /// The face, asked for conditionally (§2.7). A network failure reads as
     /// `.unchanged`: the device keeps the face it has, which is what it

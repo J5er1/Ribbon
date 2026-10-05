@@ -4158,6 +4158,61 @@ A62. **Native selection, and a room of eleven (amends S05, S06, A41g and
     - **A long verse that differs** is shown whole. Trimming it to the
       words that differ, with a little either side, was the judge's "later".
 
+A63. **Every row, not the first thousand; and no public channel.** Owner,
+    asked whether what a room shares would be rate- or size-limited by
+    Supabase Realtime: *"Will the things getting shared get rate limited or
+    size limited by supabase realtime"*, and then, of the two fixes offered,
+    *"Yeah"*.
+
+    **Realtime was not the limit.** Presence, the `reading` line, taps and
+    the `room_changed` nudge are all that travel on the room channel; the
+    largest is about half a kilobyte against a 3,000 KB cap on Pro, and a
+    busy room of eleven sends some 10–45 of the project's 500 messages a
+    second. The one Realtime limit ever reached — five presence messages a
+    phone in thirty seconds — has not been reached since A58's budget
+    (Realtime logs, 24 September to 5 October).
+
+    **The Data API was.** Marks, notes, voice, cards and ribbons are rows,
+    pulled over PostgREST, which ends a response at the project's max rows
+    (1,000 by default) and says nothing in the body. Every pull asked once,
+    so past a thousand marks in a person's rooms the answer was an arbitrary
+    thousand, the pull still called it complete, and the merge then pruned
+    every mark it had not been given (A36) — from every phone, and with the
+    notes the phone's own recordings. A room of eleven marking twice a week
+    each would have reached it in about ten months. Every select in
+    `pullRooms` now goes through `selectAll` (`SupabaseClient`, both
+    phones): each page asks for `count=exact`, so the end is the count and
+    not a short page — a project whose cap is under the page size is still
+    read to the end — and a single-column key pages by keyset, so a row
+    deleted between pages cannot slide another out of the answer and get it
+    pruned. The three composite-key tables (`note_founds`, `card_answers`,
+    `positions`) page by offset; the phone merges them and never prunes
+    against them. Notes and marks are complete only when every page of every
+    request came back. The id lists written into a filter go a hundred and
+    fifty to a request: the gateway refuses a URL past about 16 KB, which a
+    few hundred notes' founds had come to, and that failure was swallowed.
+    `SelectAllPagesTest` runs the Android client against a small PostgREST
+    (filters, order, limit, offset, a max-rows cap, the count); the Swift
+    client was run against the same shape of server on Linux, at a cap of
+    1,000 and of 400, and brought back every row both times.
+
+    **A refused join no longer goes public.** A refused private join used to
+    come back on a public channel for the rest of the session — written for
+    a project without the Realtime policies, which this one has had since 25
+    September. But it took any refusal: a Realtime restart, a token the
+    server had just seen expire, a busy minute. The phone then sat on a
+    channel the others were not on, so it saw nobody and nobody saw it, and
+    its presence was readable by anyone holding the room's id. It now tries
+    the private join again with the same growing wait every other failure
+    gets, and logs the server's reason. Nothing joins public any more; the
+    dashboard's Realtime setting that still allows public channels can be
+    turned off.
+
+    **Still not here:** a pull still fetches everything every time (paging
+    makes it whole, not small); and if the whole project ever goes over its
+    messages-per-second, both phones still reconnect on the ordinary
+    backoff rather than a longer one for that reason.
+
 ## iOS (phase four): the second pass
 
 Android took a design pass of its own (A18–A51) and the two platforms

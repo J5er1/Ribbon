@@ -242,6 +242,71 @@ actor SupabaseClient {
         return try Self.decoder.decode(T.self, from: data)
     }
 
+    /// Rows asked for in one response; the project's own cap may be lower.
+    static let pageSize = 1000
+
+    /// Every row a filter matches, not only the first page of it.
+    /// PostgREST ends a response at the project's max rows (1,000 unless the
+    /// dashboard says otherwise) and the body gives no sign it stopped short,
+    /// so a year of a room's marks came back as an arbitrary thousand and the
+    /// pull pruned the rest from the phone. Each page asks for the exact
+    /// count, so the end is known rather than guessed from a short page.
+    /// A single-column key pages by keyset — the next page starts after the
+    /// last key read — so a row deleted between two pages cannot shift
+    /// another out of the answer. A composite key pages by offset: those
+    /// tables are merged into the phone, never pruned against.
+    func selectAll<T: Decodable>(
+        _ type: T.Type, from table: String, query: [URLQueryItem], orderedBy key: [String]
+    ) async throws -> [T] {
+        var rows: [T] = []
+        var after: String?
+        while true {
+            var items = query
+            items.append(URLQueryItem(name: "order", value: key.map { "\($0).asc" }.joined(separator: ",")))
+            items.append(URLQueryItem(name: "limit", value: String(Self.pageSize)))
+            if key.count == 1, let after {
+                items.append(URLQueryItem(name: key[0], value: "gt.\(after)"))
+            } else if key.count > 1, !rows.isEmpty {
+                items.append(URLQueryItem(name: "offset", value: String(rows.count)))
+            }
+            var components = URLComponents(
+                url: base.appending(path: "rest/v1/\(table)"), resolvingAgainstBaseURL: false)!
+            components.queryItems = items
+            var request = URLRequest(url: components.url!)
+            request.httpMethod = "GET"
+            try apply(headers: &request)
+            request.setValue("count=exact", forHTTPHeaderField: "Prefer")
+            let data: Data, response: HTTPURLResponse
+            do {
+                (data, response) = try await runWithResponse(request)
+            } catch SupabaseError.http(416, _) where key.count > 1 && !rows.isEmpty {
+                // Rows deleted since the last page put the offset past the
+                // end (PGRST103): there is nothing after it.
+                break
+            }
+            let page = try Self.decoder.decode([T].self, from: data)
+            rows += page
+            if page.isEmpty { break }
+            // Keyset: the count is of what is left after `after`. Offset: of all of it.
+            let total = Self.total(contentRange: response.value(forHTTPHeaderField: "Content-Range"))
+            if let total, page.count >= (key.count == 1 ? total : total - (rows.count - page.count)) { break }
+            if key.count == 1 {
+                let objects = try JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+                guard let last = objects?.last?[key[0]] as? String else {
+                    throw SupabaseError.http(0, "no \(key[0]) to page \(table) after")
+                }
+                after = last
+            }
+        }
+        return rows
+    }
+
+    /// The `1234` of a `Content-Range: 0-999/1234`; nil for `*` or no header.
+    static func total(contentRange: String?) -> Int? {
+        guard let contentRange, let slash = contentRange.lastIndex(of: "/") else { return nil }
+        return Int(contentRange[contentRange.index(after: slash)...])
+    }
+
     /// Upsert rows; last-write-wins per object is safe because objects are
     /// single-author (§13). `onConflict` names a unique constraint's
     /// columns when the merge key isn't the primary key (memberships merge
@@ -445,6 +510,10 @@ actor SupabaseClient {
     }
 
     private func run(_ request: URLRequest) async throws -> Data {
+        try await runWithResponse(request).0
+    }
+
+    private func runWithResponse(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw SupabaseError.http(0, "")
@@ -452,7 +521,7 @@ actor SupabaseClient {
         guard (200..<300).contains(http.statusCode) else {
             throw SupabaseError.http(http.statusCode, String(data: data, encoding: .utf8) ?? "")
         }
-        return data
+        return (data, http)
     }
 
     static let encoder: JSONEncoder = {
