@@ -658,13 +658,13 @@ final class RoomChannel: PresenceService {
             if json["topic"] as? String == topic { scheduleReconnect() }
         case "presence_state":
             guard let payload = json["payload"] as? [String: Any] else { return }
-            presence.reset(to: payload.mapValues(connections))
+            presence.reset(to: payload.mapValues { connections($0) })
             emitRoster()
         case "presence_diff":
             guard let payload = json["payload"] as? [String: Any] else { return }
             presence.apply(
-                joins: (payload["joins"] as? [String: Any] ?? [:]).mapValues(connections),
-                leaves: (payload["leaves"] as? [String: Any] ?? [:]).mapValues(connections))
+                joins: (payload["joins"] as? [String: Any] ?? [:]).mapValues { connections($0) },
+                leaves: (payload["leaves"] as? [String: Any] ?? [:]).mapValues { connections($0) })
             emitRoster()
         case "broadcast":
             handleBroadcast(json)

@@ -4236,6 +4236,9 @@ A64. **Following, measured and mended; and the New King James as it is
     entry per connection by its `phx_ref`, as Phoenix's own client does, and
     a person leaves with their last; whom they follow is read from whichever
     of their phones last said so. Replayed: 64–82% → 99%, no run stuck.
+    The price of that last rule: a follow ended on a new socket while the
+    old one is still listed shows as "with you" until the server lets the
+    old one go, a minute at most.
 
     **Still a reader on an older app.** That fix is the reader's, and an
     older reader's phone still loses a follower that way. A follower whose

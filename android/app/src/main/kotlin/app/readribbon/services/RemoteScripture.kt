@@ -199,9 +199,11 @@ private fun ScriptureStore.pruneLicensedCache(
     val mine = "${translation.id.rawValue}-"
     val files = ScriptureStore.licensedCacheDirectory(context).listFiles() ?: emptyArray()
     for (file in files) {
-        if (file.name.startsWith(mine) &&
-            (!file.name.startsWith(keep) || !file.name.endsWith(LICENSED_FORMAT_SUFFIX))
-        ) {
+        // The kept book's chapters in this format stay, and so does one of
+        // them half-written (`.tmp`) by a fetch running beside this one.
+        val current = file.name.endsWith(LICENSED_FORMAT_SUFFIX) ||
+            file.name.endsWith("$LICENSED_FORMAT_SUFFIX.tmp")
+        if (file.name.startsWith(mine) && (!file.name.startsWith(keep) || !current)) {
             file.delete()
         }
     }
