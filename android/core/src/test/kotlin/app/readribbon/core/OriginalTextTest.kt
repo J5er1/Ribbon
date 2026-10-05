@@ -544,6 +544,28 @@ class OriginalTextTest {
     }
 
     @Test
+    fun testWordAtInAStretchTheLinksLeaveOutIsNil() {
+        // A licensed version linked through the Berean Standard: "And
+        // behold," and "says the Lord" are words the pivot found no partner
+        // for. A line in them sends no word, so the follower keeps the share
+        // of the verse rather than jumping to the next linked word.
+        val text = "And behold, I come quickly, says the Lord. "
+        val links = listOf(
+            AlignmentLink(12, 18, listOf(0)),  // I come
+            AlignmentLink(19, 26, listOf(1)),  // quickly
+        )
+        assertEquals(43, text.length)
+        // On "And" (offset 2): "I come" is ten units on.
+        assertNull(OriginalWords.word(2.0 / 43.0, text, links))
+        // On the space before "I" (offset 11): the word just after it.
+        assertEquals(0, OriginalWords.word(11.0 / 43.0, text, links))
+        // On the comma after "quickly" (offset 26): the link just before.
+        assertEquals(1, OriginalWords.word(26.0 / 43.0, text, links))
+        // On "the Lord", past every link and well past the last.
+        assertNull(OriginalWords.word(0.9, text, links))
+    }
+
+    @Test
     fun testWordAtEmptyTextOrNoLinksIsNil() {
         assertNull(OriginalWords.word(0.5, "", john1Links))
         assertNull(OriginalWords.word(0.5, john1, emptyList()))

@@ -17,6 +17,8 @@ internal data class Stance(
     val isIdle: Boolean,
     val following: Uuid?,
     val name: String,
+    /** How many times this follow has been said again (A64). */
+    val asked: Int = 0,
 )
 
 /**

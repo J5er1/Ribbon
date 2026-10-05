@@ -539,18 +539,33 @@ public enum OriginalWords {
     // someone is reading, as the owner put it, and brings everyone to the
     // same words, not just the same share of the verse.
 
+    /// How far past the line a link may start and still be the word under
+    /// it: the space and the comma between two words, no more.
+    static let wordReach = 2
+
     /// The original word under a reading line `part` of the way down a
-    /// verse, on the page of the person being followed: the first link that
-    /// ends past that point (the one under it, or the next one when the line
-    /// sits in a gap), else the last, and the first of its words. Nil for a
-    /// verse with no text or no links — the follower then keeps the fraction.
+    /// verse, on the page of the person being followed: the link under that
+    /// point, or one that starts just after it (the line on the space or the
+    /// comma before a word), and the first of its words. Nil for a verse
+    /// with no text or no links, and nil when the line sits in a stretch the
+    /// links leave out — the follower then keeps the fraction. A licensed
+    /// version is linked through the Berean Standard and leaves four words
+    /// in ten out, and the next link along can be a line further on: tried
+    /// on the KJV against the Berean Standard, sending it put the follower
+    /// eight or more words ahead twice as often as the fraction did.
     public static func word(at part: Double, text: String, links: [AlignmentLink]) -> Int? {
         let length = text.utf16.count
         guard length > 0, !links.isEmpty else { return nil }
         let offset = Int((fraction(part) * Double(length)).rounded(.down))
         let sorted = links.sorted { $0.start < $1.start }
-        let link = sorted.first { $0.end > offset } ?? sorted[sorted.count - 1]
-        return link.words.min()
+        if let link = sorted.first(where: { $0.end > offset }) {
+            guard link.start - offset <= wordReach else { return nil }
+            return link.words.min()
+        }
+        // Past every link: the last, if the line is on what follows it.
+        let last = sorted[sorted.count - 1]
+        guard offset - last.end <= wordReach else { return nil }
+        return last.words.min()
     }
 
     /// How far down a verse one original word sits on the follower's page:

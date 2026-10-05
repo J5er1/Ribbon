@@ -458,20 +458,36 @@ object OriginalWords {
     // someone is reading, as the owner put it, and brings everyone to the
     // same words, not just the same share of the verse.
 
+    /** How far past the line a link may start and still be the word under
+     * it: the space and the comma between two words, no more. */
+    internal const val WORD_REACH = 2
+
     /**
      * The original word under a reading line [part] of the way down a verse,
-     * on the page of the person being followed: the first link that ends past
-     * that point (the one under it, or the next one when the line sits in a
-     * gap), else the last, and the first of its words. Null for a verse with
-     * no text or no links — the follower then keeps the fraction.
+     * on the page of the person being followed: the link under that point, or
+     * one that starts just after it (the line on the space or the comma before
+     * a word), and the first of its words. Null for a verse with no text or no
+     * links, and null when the line sits in a stretch the links leave out —
+     * the follower then keeps the fraction. A licensed version is linked
+     * through the Berean Standard and leaves four words in ten out, and the
+     * next link along can be a line further on: tried on the KJV against the
+     * Berean Standard, sending it put the follower eight or more words ahead
+     * twice as often as the fraction did.
      */
     fun word(part: Double, text: String, links: List<AlignmentLink>): Int? {
         val length = text.length
         if (length == 0 || links.isEmpty()) return null
         val offset = floor(fraction(part) * length.toDouble()).toInt()
         val sorted = links.sortedBy { it.start }
-        val link = sorted.firstOrNull { it.end > offset } ?: sorted.last()
-        return link.words.minOrNull()
+        val link = sorted.firstOrNull { it.end > offset }
+        if (link != null) {
+            if (link.start - offset > WORD_REACH) return null
+            return link.words.minOrNull()
+        }
+        // Past every link: the last, if the line is on what follows it.
+        val last = sorted.last()
+        if (offset - last.end > WORD_REACH) return null
+        return last.words.minOrNull()
     }
 
     /**

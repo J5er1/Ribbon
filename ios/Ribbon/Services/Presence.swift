@@ -75,6 +75,13 @@ protocol PresenceService: AnyObject {
     /// room, you are simply not in the book.
     func withdraw() async
 
+    /// Say the follow again, as a presence that has changed (A64). The
+    /// phone you follow has gone quiet while it is here and reading: an
+    /// older app lost sight of a follower whenever one of their connections
+    /// left, and a changed presence is what it notices. Supabase drops a
+    /// track that says nothing new, so the counter that changes is the point.
+    func askAgain() async
+
     /// Where this page's reading line is, and the last thing on its
     /// screen, for whoever is following you. Kept every time; sent only
     /// while somebody present is following you (§4.2), never while reading
@@ -99,6 +106,9 @@ protocol PresenceService: AnyObject {
 }
 
 extension PresenceService {
+    /// Nothing to ask of a line that is not a room channel.
+    func askAgain() async {}
+
     /// An announcement made by something you did.
     func present(
         position: VerseAddress?, scrollFraction: Double,

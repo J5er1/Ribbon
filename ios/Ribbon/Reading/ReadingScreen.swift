@@ -308,6 +308,7 @@ struct ReadingScreen: View {
                             PassageEndView(
                                 reading: reading,
                                 chapter: n,
+                                copyright: chapterContent(n)?.copyright,
                                 nextChapterTitle: book?.chapterHeading(n + 1) ?? "\(n + 1)",
                                 // Under reduce motion the page does not fly a
                                 // chapter's length: it is simply there (§11).
@@ -1180,6 +1181,7 @@ struct ReadingScreen: View {
         // no confetti, no badge, and no number.
         VStack(spacing: 18) {
             Spacer().frame(height: 70)
+            EditionCopyright(text: chapterContent(book?.chapterCount ?? 1)?.copyright)
             FireBecomesEmber(
                 scale: reading.handiwork.scale, coalDepth: reading.handiwork.coalDepth,
                 begin: didReachEnd,
@@ -1495,6 +1497,21 @@ struct ReadingScreen: View {
             run.forget(at: now)
             return
         }
+        // Their phone has sent its line before and has gone quiet while
+        // they are here and reading: it may have lost sight of this follow
+        // — an older app dropped a person whenever one of their connections
+        // left. A changed presence is what it notices, so the follow is said
+        // again (A64). A current app never needs it, and a quiet follower
+        // is never seen at all.
+        if !model.readingQuietly, !them.isIdle, model.speaksReading(run.person),
+           now.timeIntervalSince(run.startedAt) >= FollowRun.askAgainAfter,
+           now.timeIntervalSince(run.askedAt ?? .distantPast) >= FollowRun.askAgainAfter {
+            let line = model.heard(from: run.person).flatMap { $0.fromPresence ? nil : $0.report.received }
+            if line.map({ now.timeIntervalSince($0) >= FollowRun.askAgainAfter }) ?? true {
+                run.askedAt = now
+                Task { await model.presence.askAgain() }
+            }
+        }
         let chapterCount = book?.chapterCount ?? 1
         if let heard = model.heard(from: run.person), run.takes(heard) {
             run.fed = heard.report.received
@@ -1559,6 +1576,13 @@ struct ReadingScreen: View {
             ? .spoken
             : (UIAccessibility.isReduceMotionEnabled ? .calm : .moving)
         if manner != .spoken { run.spokenTo = nil }
+        // Once the guess is on this screen at or below the top line, their
+        // going back is answered: the page shows it. Left standing, it was
+        // taken for a new one whenever their line dipped under the top,
+        // minutes later (A64).
+        if let y, Double(y) >= FollowCarriage.topLine * Double(viewport), run.estimate.wentBackAt != nil {
+            run.backStepAt = now
+        }
         var wentBack = false
         if let back = run.estimate.wentBackAt {
             wentBack = run.backStepAt.map { back > $0 } ?? true
@@ -1997,7 +2021,7 @@ struct ReadingScreen: View {
     /// and to whoever follows.
     private func settleSoon() {
         let state = followState
-        state.settleDue = Date().addingTimeInterval(0.3)
+        state.settleDue = Date().addingTimeInterval(0.15)
         guard state.settleTask == nil else { return }
         state.settleTask = Task {
             while let due = state.settleDue, due > Date(), !Task.isCancelled {
@@ -2359,10 +2383,28 @@ struct ReadingScreen: View {
 // S03 — the passage end: the one place with more than one thing to do.
 // Generous space, a hairline rule at the measure's width, the card (S08/S09),
 // the continue control, and the Wave larger here as the deliberate close.
+/// A licensed edition's own copyright line, as it sends it with every
+/// chapter (A64): small and quiet, under the chapter it belongs to. Nothing
+/// for the bundled public-domain texts.
+struct EditionCopyright: View {
+    let text: String?
+
+    var body: some View {
+        if let text, !text.isEmpty {
+            Text(text)
+                .font(RibbonType.ui(11))
+                .foregroundStyle(Palette.muted)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+        }
+    }
+}
+
 struct PassageEndView: View {
     @Environment(AppModel.self) private var model
     let reading: Reading
     let chapter: Int
+    var copyright: String?
     let nextChapterTitle: String
     var onContinue: () -> Void
     var onClose: () -> Void
@@ -2370,6 +2412,7 @@ struct PassageEndView: View {
     var body: some View {
         VStack(spacing: 26) {
             Spacer().frame(height: 34)
+            EditionCopyright(text: copyright)
             HairlineRule()
                 .padding(.leading, 36)
                 .padding(.trailing, 26)

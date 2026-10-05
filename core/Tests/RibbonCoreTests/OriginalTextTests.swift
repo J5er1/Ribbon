@@ -512,6 +512,27 @@ final class OriginalTextTests: XCTestCase {
         XCTAssertEqual(OriginalWords.word(at: 0.5, text: john1, links: john1Links.reversed()), 6)
     }
 
+    func testWordAtInAStretchTheLinksLeaveOutIsNil() {
+        // A licensed version linked through the Berean Standard: "And
+        // behold," and "says the Lord" are words the pivot found no partner
+        // for. A line in them sends no word, so the follower keeps the share
+        // of the verse rather than jumping to the next linked word.
+        let text = "And behold, I come quickly, says the Lord. "
+        let links = [
+            AlignmentLink(start: 12, end: 18, words: [0]),  // I come
+            AlignmentLink(start: 19, end: 26, words: [1]),  // quickly
+        ]
+        XCTAssertEqual(text.utf16.count, 43)
+        // On "And" (offset 2): "I come" is ten units on.
+        XCTAssertNil(OriginalWords.word(at: 2.0 / 43.0, text: text, links: links))
+        // On the space before "I" (offset 11): the word just after it.
+        XCTAssertEqual(OriginalWords.word(at: 11.0 / 43.0, text: text, links: links), 0)
+        // On the comma after "quickly" (offset 26): the link just before.
+        XCTAssertEqual(OriginalWords.word(at: 26.0 / 43.0, text: text, links: links), 1)
+        // On "the Lord", past every link and well past the last.
+        XCTAssertNil(OriginalWords.word(at: 0.9, text: text, links: links))
+    }
+
     func testWordAtEmptyTextOrNoLinksIsNil() {
         XCTAssertNil(OriginalWords.word(at: 0.5, text: "", links: john1Links))
         XCTAssertNil(OriginalWords.word(at: 0.5, text: john1, links: []))

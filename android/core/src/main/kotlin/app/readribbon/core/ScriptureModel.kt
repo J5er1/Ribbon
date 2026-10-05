@@ -56,7 +56,12 @@ data class ScriptureBlock(
 @Serializable
 data class ScriptureChapter(
     val n: Int,
-    val blocks: List<ScriptureBlock>
+    val blocks: List<ScriptureBlock>,
+    /**
+     * The edition's own copyright line, as a licensed edition sends it with
+     * every chapter (A64). Null for the bundled public-domain texts.
+     */
+    val copyright: String? = null,
 ) {
 
     /** The verses present in this chapter, in order. */

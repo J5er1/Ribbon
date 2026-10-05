@@ -4213,6 +4213,99 @@ A63. **Every row, not the first thousand; and no public channel.** Owner,
     messages-per-second, both phones still reconnect on the ordinary
     backoff rather than a longer one for that reason.
 
+A64. **Following, measured and mended; and the New King James as it is
+    read.** Asked to verify that following works better, it was measured: the
+    same reading sessions — steady, skimming, put down, going back, crossing
+    a chapter, resting at its end, two versions, two screen sizes, a phone
+    left to lock — replayed through the real Android code from before A58
+    and from A63, with the iPhone's guess run through the Swift core and its
+    page ported. Before, the reader's words were on the follower's screen
+    0–5% of the time in those long chapters; at A63, 91–99.6%, about four
+    lines behind. The live Realtime logs agree: 248 presence closures in the
+    ten days before the budget, none since. Owner, on what it found: *"The
+    most common translation used is nkjv just for reference and yea write the
+    fixes let's get them all in I'll update it on Xcode today"*.
+
+    **A person left when any one of their connections did.** Presence is
+    keyed by person and a leave names one connection, but the room dropped
+    the whole person on any leave — a second device closing, or a reconnect
+    whose old socket the server reaped after the new one had joined. The
+    reader's phone then thought nobody followed it and stopped sending its
+    line, and nothing started it again: in those runs the follower stalled,
+    half of them near 40%. `PresenceLedger` (core, both platforms) keeps one
+    entry per connection by its `phx_ref`, as Phoenix's own client does, and
+    a person leaves with their last; whom they follow is read from whichever
+    of their phones last said so. Replayed: 64–82% → 99%, no run stuck.
+
+    **Still a reader on an older app.** That fix is the reader's, and an
+    older reader's phone still loses a follower that way. A follower whose
+    reader has sent a line before, and is here and reading, but has been
+    silent for thirty seconds, says the follow again — as a presence with an
+    `asked` count, because Supabase drops a track that says nothing new, and
+    a changed presence is what the older app notices. It is an ordinary move
+    in the presence budget, never the slot kept for starting a follow.
+
+    **The follower's screen went dark.** Neither phone kept the screen on, so
+    a follow went black with the auto-lock: 20–36% of the time. While you
+    follow someone who is here and not idle the screen stays on (iOS's idle
+    timer, Android's keep-screen-on), and once they are idle or gone it may
+    sleep. At a one-minute lock, dark 20% → 3–5%.
+
+    **A lost line held the follower for twenty seconds.** The keepalive is
+    five seconds now (checked every second on iOS), and a first line counts
+    as fresh for twelve seconds rather than thirty. At 5% loss, steady
+    following 96% → 99%.
+
+    **Smaller.** The line settles 150 ms after the page instead of 300
+    (skimming 91% → 92%). A "they went back" is answered once the guess is on
+    the screen at or below the top line, so it is no longer taken for a new
+    one minutes later (the last stray backward step). Presence counts a send
+    as gone a second past the thirty-second window, not a quarter of one —
+    the server counts arrivals, the phone departures — and a send prompted at
+    the edge, rather than scheduled past it, now waits for it too.
+
+    Tried and left, at 24 seeds against every scenario: a lower reported line
+    (its cost on small screens), capping the guess when only presence speaks
+    (it costs every reader who is still reading), coalescing small steps (the
+    word leaves the foot of small screens). The follower on a smaller screen
+    than the reader's still runs a little ahead after a page turn, and a
+    quiet follower still follows at presence's precision (Law 3).
+
+    **The New King James.** It is what most readers here use, and it comes
+    through API.Bible:
+    - *Its copyright line is shown.* API.Bible sends it with every chapter;
+      the converter keeps it on the chapter and the page sets it, small,
+      under each licensed chapter. API.Bible's usage reporting (FUMS) is not
+      done (still-to-do §7).
+    - *"LORD" reads LORD.* The edition sets the divine name in small caps,
+      which the page has none of; read plain it said "Lord", Adonai's word.
+      Text inside `sc`/`nd` is written in capitals — ASCII, so no offset
+      into the text moves.
+    - *A chapter converted once is converted again when the converter
+      changes.* Cached chapters are named for `APIBibleContent.format` (2)
+      and the old ones pruned, so two phones in a room hold the same text;
+      iOS no longer also keeps raw payloads in its URL cache, and the proxy
+      says `private, no-store` (it needs redeploying for that to apply).
+    - *Following across versions sends a word only when one is under the
+      line.* A licensed version is linked through the Berean Standard and
+      leaves words out; the next linked word along could be a line further
+      on. Now a line in such a stretch sends no word and the follower keeps
+      the share of the verse: on real New King James text, 0.99 → 0.55
+      words off on average, 8+ words ahead 2.5% → 0.4%.
+    - *The pivot pairs a word said elsewhere in the verse* when its stem
+      occurs once in each ("John answered" against "John replied"): on the
+      KJV, 57.8% → 61.0% of content words linked at 98.3% precision, and
+      fewer marks fall back to the whole verse.
+    - *A verse marker that ends its paragraph keeps its number.*
+
+    Measured on the KJV (all of it) and on five real New King James chapters
+    fetched through the app's own proxy, kept out of the repository. Same-
+    version following needed nothing: two New King James phones use the
+    share of the verse, exact once both hold the same text.
+
+    Nothing here has run on a phone. Android and both cores are built and
+    tested here; the iPhone is compiled by CI.
+
 ## iOS (phase four): the second pass
 
 Android took a design pass of its own (A18–A51) and the two platforms

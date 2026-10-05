@@ -79,6 +79,8 @@ final class RoomChannel: PresenceService {
         var isIdle: Bool
         var following: UUID?
         var name: String
+        /// How many times this follow has been said again (A64).
+        var asked = 0
     }
 
     /// Where this page's reading line last was, kept for whoever starts
@@ -140,6 +142,8 @@ final class RoomChannel: PresenceService {
     private var ref = 0
     private var joinRef: String?
     private var reconnectAttempt = 0
+    /// How many times the current follow has been said again (A64).
+    private var asked = 0
     private var pendingHeartbeats = 0
     /// A change that happened while the line was down, to send on arrival.
     private var pendingAnnounce = false
@@ -258,11 +262,19 @@ final class RoomChannel: PresenceService {
         // having moved it: it keeps whatever stillness it had.
         let still = isIdle
             || (!activity && Date().timeIntervalSince(lastActivity) >= Self.idleAfter)
+        // Another follow, or none, starts the count of asking again over.
+        if following != announcement?.following { asked = 0 }
         announcement = Announcement(
             position: position, scrollFraction: scrollFraction,
             isIdle: still, following: following)
         if activity, !isIdle { lastActivity = Date() }
         if !wasAnnouncing { startIdleWatch() }
+        reconcilePresence()
+    }
+
+    func askAgain() async {
+        guard phase == .joined, announcement?.following != nil else { return }
+        asked += 1
         reconcilePresence()
     }
 
@@ -475,7 +487,9 @@ final class RoomChannel: PresenceService {
     private func reconcilePresence(joining: Bool = false) {
         guard phase == .joined, topic != nil, let person else { return }
         let want = announcement.map {
-            Said(position: $0.position, isIdle: $0.isIdle, following: $0.following, name: person.name)
+            Said(
+                position: $0.position, isIdle: $0.isIdle, following: $0.following, name: person.name,
+                asked: $0.following == nil ? 0 : asked)
         }
         // Nothing new, or nothing to take back from a line that never heard
         // anything.
@@ -547,6 +561,8 @@ final class RoomChannel: PresenceService {
         }
         if let following = announcement.following {
             meta["followingPersonID"] = following.uuidString.lowercased()
+            // A follow said again (A64): only ever while following.
+            if asked > 0 { meta["asked"] = asked }
         }
         return send([
             "topic": topic,

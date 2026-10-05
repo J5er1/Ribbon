@@ -188,6 +188,11 @@ final class AppModel {
         readingHeard[personID]
     }
 
+    /// Whether their phone has sent its line this session (A58).
+    func speaksReading(_ personID: UUID) -> Bool {
+        speaksReading.contains(personID)
+    }
+
     /// A reading line arrived. One person can have the book open on two
     /// phones, and a follow sticks to one of them: whichever last said
     /// something new — a different place, or a scroll under way. A phone

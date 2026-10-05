@@ -174,6 +174,9 @@ class RoomChannel(
     private var joinRef: String? = null
 
     private var reconnectAttempt = 0
+
+    /** How many times the current follow has been said again (A64). */
+    private var asked = 0
     private var pendingHeartbeats = 0
 
     /** A change that happened while the line was down, to send on arrival. */
@@ -275,8 +278,18 @@ class RoomChannel(
             // has not touched the page in four minutes is still, whoever is
             // carrying it (§4.2).
             val still = isIdle || now - lastActivity >= IDLE_AFTER_MS
+            // Another follow, or none, starts the count of asking again over.
+            if (following != announcement?.following) asked = 0
             announcement = Announcement(position, scrollFraction, still, following)
             if (idleJob == null) startIdleWatchLocked()
+            reconcileLocked()
+        }
+    }
+
+    override suspend fun askAgain() {
+        mutex.withLock {
+            if (phase != Phase.JOINED || announcement?.following == null) return
+            asked += 1
             reconcileLocked()
         }
     }
@@ -528,7 +541,9 @@ class RoomChannel(
         val room = roomID ?: return
         val me = person ?: return
         val current = announcement
-        val desired = current?.let { Stance(it.position, it.isIdle, it.following, me.name) }
+        val desired = current?.let {
+            Stance(it.position, it.isIdle, it.following, me.name, if (it.following != null) asked else 0)
+        }
         when (val verdict = budget.reconcile(desired, joining)) {
             PresenceBudget.Verdict.Quiet -> cancelPendingLocked()
             PresenceBudget.Verdict.Track -> {
@@ -543,6 +558,7 @@ class RoomChannel(
                         isIdle = current.isIdle,
                         following = current.following,
                         ref = nextRefLocked(),
+                        asked = desired?.asked ?: 0,
                     ),
                 )
                 if (wrote) budget.wrote(desired)

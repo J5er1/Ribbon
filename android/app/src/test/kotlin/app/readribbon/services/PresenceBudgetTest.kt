@@ -146,4 +146,21 @@ class PresenceBudgetTest {
         assertFalse(PresenceBudget.isPresenceLimit(null, "presence"))
         assertFalse(PresenceBudget.isPresenceLimit("rate limit reached", "broadcast"))
     }
+
+    /**
+     * Saying a follow again (A64) changes what the room heard, so it goes —
+     * but as an ordinary move, inside the four, never the slot kept for
+     * starting or ending a follow.
+     */
+    @Test
+    fun aFollowSaidAgainIsAnOrdinaryMove() {
+        assertEquals(Verdict.Track, say(at(1, following = ruth)))
+        assertEquals(Verdict.Quiet, say(at(1, following = ruth)))
+        for (asked in 1..3) {
+            now += 1_000
+            assertEquals(Verdict.Track, say(at(1, following = ruth).copy(asked = asked)))
+        }
+        now += 1_000
+        assertTrue(say(at(1, following = ruth).copy(asked = 4)) is Verdict.Later)
+    }
 }
