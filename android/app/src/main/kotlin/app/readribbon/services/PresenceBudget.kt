@@ -123,7 +123,7 @@ internal class PresenceBudget(private val clock: () -> Long) {
     }
 
     private fun forgetBefore(now: Long) {
-        while (sends.isNotEmpty() && now - sends.first() >= WINDOW_MS) sends.removeFirst()
+        while (sends.isNotEmpty() && now - sends.first() >= WINDOW_MS + MARGIN_MS) sends.removeFirst()
     }
 
     companion object {
@@ -136,8 +136,15 @@ internal class PresenceBudget(private val clock: () -> Long) {
         /** What ordinary movement may use of it; the rest is kept. */
         const val TRACKS = 4
 
-        /** A little past the window's edge, so a send never lands on it. */
-        const val MARGIN_MS = 250L
+        /**
+         * Past the window's edge before a send counts as gone. The server
+         * counts a message when it arrives and this when it leaves, so a
+         * first send held up on the way would otherwise let a sixth land
+         * inside the server's window. A second covers a slow network; a
+         * quarter of one did not, and a send prompted at the edge (rather
+         * than scheduled past it) skipped even that.
+         */
+        const val MARGIN_MS = 1_000L
 
         /**
          * Whether a `system` message is the server saying presence hit its

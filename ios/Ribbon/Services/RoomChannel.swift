@@ -99,7 +99,9 @@ final class RoomChannel: PresenceService {
     private var person: Person?
     private var phase: Phase = .closed
     private var announcement: Announcement?
-    private var presenceStore: [String: [String: Any]] = [:]
+    /// Everyone here, one entry per connection (`PresenceLedger`): a person
+    /// leaves when their last phone does, not when any one of them does.
+    private var presence = PresenceLedger<[String: Any]>()
     /// Nil: this connection has said nothing about you, or has taken it
     /// back. A join starts it at nil — the server has never heard this
     /// socket — which is why the join always tracks.
@@ -161,9 +163,13 @@ final class RoomChannel: PresenceService {
     private static let presenceWindow: Duration = .seconds(30)
     private static let presenceSendsForPlaces = 4
     private static let presenceSendsAtAll = 5
+    /// Past the window's edge before a send counts as gone: the server
+    /// counts a message when it arrives, this when it leaves (PresenceBudget
+    /// on Android keeps the same second).
+    private static let presenceMargin: Duration = .seconds(1)
     /// A reading line that has not moved still says so this often, while
     /// somebody follows it — a still screen is somewhere, not nowhere.
-    private static let readingKeepaliveEvery: Duration = .seconds(20)
+    private static let readingKeepaliveEvery: Duration = .seconds(5)
     /// Every chapter and verse number a book has, with room to spare.
     private static let places = 1...999
 
@@ -239,7 +245,7 @@ final class RoomChannel: PresenceService {
         joinRef = nil
         said = nil
         followers = []
-        presenceStore.removeAll()
+        presence.removeAll()
         pendingHeartbeats = 0
     }
 
@@ -478,7 +484,7 @@ final class RoomChannel: PresenceService {
             return
         }
         let now = ContinuousClock.now
-        presenceSends.removeAll { now - $0 >= Self.presenceWindow }
+        presenceSends.removeAll { now - $0 >= Self.presenceWindow + Self.presenceMargin }
         // Leaving, appearing, and starting or ending a follow take the slot
         // held back for them: "Ruth is with you", and the end of it, travel
         // at once — and so does the book opened again a moment after it was
@@ -487,7 +493,7 @@ final class RoomChannel: PresenceService {
         let allowed = urgent ? Self.presenceSendsAtAll : Self.presenceSendsForPlaces
         guard joining || presenceSends.count < allowed else {
             let oldest = presenceSends.min() ?? now
-            waitForPresence(until: oldest + Self.presenceWindow + .milliseconds(250))
+            waitForPresence(until: oldest + Self.presenceWindow + Self.presenceMargin)
             return
         }
         pendingPresence?.cancel(); pendingPresence = nil
@@ -567,9 +573,10 @@ final class RoomChannel: PresenceService {
         lastReadingSent = ContinuousClock.now
     }
 
-    /// While somebody follows, a still line says where it is every twenty
+    /// While somebody follows, a still line says where it is every five
     /// seconds: a phone that has just started following, or lost a
-    /// message, is never left guessing for long.
+    /// message, is never left guessing for long. It was twenty, and one
+    /// lost line held a follower still for most of that.
     private func keepReadingAlive() {
         guard !followers.isEmpty, phase == .joined, reading != nil else {
             readingKeepalive?.cancel(); readingKeepalive = nil
@@ -579,7 +586,7 @@ final class RoomChannel: PresenceService {
         let mine = generation
         readingKeepalive = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(5))
+                try? await Task.sleep(for: .seconds(1))
                 guard !Task.isCancelled, let self, mine == self.generation else { return }
                 if let last = self.lastReadingSent, ContinuousClock.now - last < Self.readingKeepaliveEvery { continue }
                 self.sayReading()
@@ -635,21 +642,13 @@ final class RoomChannel: PresenceService {
             if json["topic"] as? String == topic { scheduleReconnect() }
         case "presence_state":
             guard let payload = json["payload"] as? [String: Any] else { return }
-            presenceStore.removeAll()
-            for (key, value) in payload {
-                if let meta = firstMeta(value) { presenceStore[key] = meta }
-            }
+            presence.reset(to: payload.mapValues(connections))
             emitRoster()
         case "presence_diff":
             guard let payload = json["payload"] as? [String: Any] else { return }
-            if let leaves = payload["leaves"] as? [String: Any] {
-                for key in leaves.keys { presenceStore.removeValue(forKey: key) }
-            }
-            if let joins = payload["joins"] as? [String: Any] {
-                for (key, value) in joins {
-                    if let meta = firstMeta(value) { presenceStore[key] = meta }
-                }
-            }
+            presence.apply(
+                joins: (payload["joins"] as? [String: Any] ?? [:]).mapValues(connections),
+                leaves: (payload["leaves"] as? [String: Any] ?? [:]).mapValues(connections))
             emitRoster()
         case "broadcast":
             handleBroadcast(json)
@@ -763,19 +762,25 @@ final class RoomChannel: PresenceService {
         }
     }
 
-    private func firstMeta(_ value: Any) -> [String: Any]? {
+    /// A person's connections as the server lists them, each named by the
+    /// `phx_ref` of its latest track.
+    private func connections(_ value: Any) -> [PresenceLedger<[String: Any]>.Connection] {
         guard let dictionary = value as? [String: Any],
               let metas = dictionary["metas"] as? [[String: Any]]
-        else { return nil }
-        return metas.first
+        else { return [] }
+        return metas.map { .init(ref: $0["phx_ref"] as? String, meta: $0) }
     }
 
     private func emitRoster() {
         guard let me = person?.id.uuidString.lowercased() else { return }
         var roster: [PresentPerson] = []
-        for (key, meta) in presenceStore {
+        for key in presence.keys {
             // Your own portrait is never in the presence line (§4.2, S07).
             if key == me { continue }
+            guard let meta = presence.latest(key) else { continue }
+            // Whom they follow, from whichever of their phones last said so:
+            // a second device sitting on another page is not the end of it.
+            let following = presence.latest(key, where: { $0["followingPersonID"] is String })?["followingPersonID"]
             guard let id = UUID(uuidString: (meta["id"] as? String) ?? key),
                   id.uuidString.lowercased() != me
             else { continue }
@@ -798,7 +803,7 @@ final class RoomChannel: PresenceService {
                 position: position,
                 scrollFraction: (meta["scrollFraction"] as? NSNumber)?.doubleValue ?? 0,
                 isIdle: (meta["isIdle"] as? NSNumber)?.boolValue ?? false,
-                followingPersonID: (meta["followingPersonID"] as? String).flatMap(UUID.init(uuidString:))))
+                followingPersonID: (following as? String).flatMap(UUID.init(uuidString:))))
         }
         // A stable order: the line must not reshuffle itself every time
         // somebody scrolls.

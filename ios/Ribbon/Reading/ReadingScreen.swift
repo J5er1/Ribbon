@@ -290,6 +290,13 @@ struct ReadingScreen: View {
             pivotBreaks: pivot?.ownSpanBreaks() ?? [:])
     }
 
+    /// Whether following keeps this screen on: only while the person
+    /// followed is in the room and not idle (A64).
+    private var followKeepsScreenOn: Bool {
+        guard let following = model.followingPersonID else { return false }
+        return model.presentPeople.contains { $0.id == following && !$0.isIdle }
+    }
+
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
@@ -409,6 +416,7 @@ struct ReadingScreen: View {
                 // A follow does not outlive its page. Leaving the book is
                 // the untrack, which says it.
                 if model.followingPersonID != nil { model.followingPersonID = nil }
+                UIApplication.shared.isIdleTimerDisabled = false
                 followState.settleTask?.cancel()
                 followState.settleTask = nil
             }
@@ -416,6 +424,12 @@ struct ReadingScreen: View {
                 followState.isOpen = open
                 // Let up from the pull: where the page is can be said now.
                 if open { settleSoon() }
+            }
+            // While you follow someone who is here and reading, the phone
+            // does not lock: a follow that went dark every minute was
+            // following nobody (A64). Not once they are idle, or gone.
+            .onChange(of: followKeepsScreenOn, initial: true) { _, awake in
+                UIApplication.shared.isIdleTimerDisabled = awake
             }
             .onChange(of: model.channelOpens) { _, _ in
                 // The room's line is back after the app was away. The

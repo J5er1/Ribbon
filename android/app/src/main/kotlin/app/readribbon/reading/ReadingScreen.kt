@@ -84,6 +84,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -209,9 +210,10 @@ private val FOLLOW_TICK = 250.milliseconds
  * A line heard more than this before a follow began listening is where they
  * were a follow ago — their phone stopped sending when that one ended — not
  * where they are. Anything younger is a line somebody else's follow is
- * keeping sent, which is as good as one sent for this.
+ * keeping sent (every five seconds), which is as good as one sent for this;
+ * and their phone sends one the moment it sees a follow begin.
  */
-private val STALE_FIRST_WORD = 30.seconds
+private val STALE_FIRST_WORD = 12.seconds
 
 /**
  * How long a follow waits for the line their phone sends on seeing it, before
@@ -234,11 +236,22 @@ private val LINES_TIMEOUT = 1500.milliseconds
 /** The reading line has come to rest this long after the page last moved. */
 private val LINE_SETTLES = 300.milliseconds
 
+/**
+ * Whether following keeps this screen on: only while the person followed is
+ * in the room and not idle (A64).
+ */
+internal fun followKeepsScreenOn(following: Uuid?, present: List<PresentPerson>): Boolean =
+    following != null && present.any { it.id == following && !it.isIdle }
+
 /** While the page is moving, where the line is goes no oftener than this. */
 private val LINE_IN_FLIGHT = 1.seconds
 
-/** And while nothing moves, it is said again this often to whoever follows. */
-private val LINE_KEEPALIVE = 20.seconds
+/**
+ * And while nothing moves, it is said again this often to whoever follows.
+ * It was twenty seconds, and one lost line held a follower still for most of
+ * that.
+ */
+private val LINE_KEEPALIVE = 5.seconds
 
 /** The room under each chapter's last line, before the passage end. */
 private val CHAPTER_FOOT = 8.dp
@@ -578,6 +591,16 @@ fun ReadingScreen(
             scope.launch { model.presence.withdraw() }
             model.bookDisappeared(reading)
         }
+    }
+
+    // While you follow someone who is here and reading, the screen stays on:
+    // a follow that went dark every minute was following nobody (A64). Not
+    // once they are idle, or gone — then the phone may sleep as it likes.
+    val view = LocalView.current
+    val stayAwake = followKeepsScreenOn(model.followingPersonID, model.presentPeople)
+    DisposableEffect(view, stayAwake) {
+        view.keepScreenOn = stayAwake
+        onDispose { view.keepScreenOn = false }
     }
 
     val listState = rememberLazyListState()

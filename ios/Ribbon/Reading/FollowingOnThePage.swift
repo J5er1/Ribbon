@@ -199,9 +199,10 @@ final class FollowRun {
     /// How long before the follow began a line may have arrived and still
     /// be where they are — one another follower is keeping sent. Older,
     /// it is where they were when an earlier follow ended: their phone
-    /// stops sending when nobody follows. A kept line comes every twenty
-    /// seconds or so, checked every five, and then crosses the network.
-    static let freshLine: TimeInterval = 30
+    /// stops sending when nobody follows. A kept line comes every five
+    /// seconds or so, checked every one, and then crosses the network; and
+    /// their phone sends one the moment it sees a follow begin.
+    static let freshLine: TimeInterval = 12
 
     let person: UUID
     var estimate = ReadingEstimate()
