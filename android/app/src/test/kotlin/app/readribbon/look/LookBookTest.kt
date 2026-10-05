@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,6 +52,7 @@ import app.readribbon.core.ScriptureSpan
 import app.readribbon.core.TranslationID
 import app.readribbon.core.VerseAddress
 import app.readribbon.core.VerseRange
+import app.readribbon.core.displayName
 import app.readribbon.data.AppState
 import app.readribbon.data.LocalStore
 import app.readribbon.design.Appearance
@@ -67,12 +69,19 @@ import app.readribbon.reading.HeldWord
 import app.readribbon.reading.OriginalPanel
 import app.readribbon.reading.originalReadingOf
 import app.readribbon.reading.originalUnderLift
-import app.readribbon.reading.roomVersionLines
+import app.readribbon.reading.rememberSelected
+import app.readribbon.reading.RoomPerson
+import app.readribbon.reading.RoomSaid
+import app.readribbon.reading.RoomSection
+import app.readribbon.reading.roomSayingOnPhone
+import app.readribbon.reading.roomSection
+import app.readribbon.reading.roomSectionOf
 import app.readribbon.reading.LeaveToolbar
 import app.readribbon.reading.ReadingScreen
 import app.readribbon.reading.ReadingTheme
 import app.readribbon.reading.ReflectionCardView
 import app.readribbon.reading.VerseMark
+import app.readribbon.reading.WriteComposer
 import app.readribbon.screens.AppearanceScreen
 import app.readribbon.screens.BookChooserContent
 import app.readribbon.screens.InviteContent
@@ -1073,17 +1082,16 @@ class LookBookTest {
                             redLetter = false,
                         ),
                         marks = listOf(VerseMark(1, null, null, Ink.teal)),
+                        selection = rememberSelected(null),
                         lifted = null,
+                        held = null,
                         justMarked = VerseRange("JHN", 1, 1, 1),
                         onMarkDrawn = {},
                         openNote = null,
                         isFirstChapter = true,
                         showMarginHint = false,
                         onLayout = {},
-                        onLongPressVerse = {},
-                        onDragToVerse = {},
-                        onExtend = { _, _, _ -> },
-                        onDragEnded = {},
+                        onSelected = {},
                         onTapVerse = {},
                         onNoteSlot = {},
                         modifier = Modifier.padding(top = 60.dp),
@@ -1153,17 +1161,16 @@ class LookBookTest {
                             redLetter = false,
                         ),
                         marks = inks.value,
+                        selection = rememberSelected(null),
                         lifted = null,
+                        held = null,
                         justMarked = marking.value,
                         onMarkDrawn = {},
                         openNote = null,
                         isFirstChapter = true,
                         showMarginHint = false,
                         onLayout = {},
-                        onLongPressVerse = {},
-                        onDragToVerse = {},
-                        onExtend = { _, _, _ -> },
-                        onDragEnded = {},
+                        onSelected = {},
                         onTapVerse = {},
                         onNoteSlot = {},
                         modifier = Modifier.padding(top = 60.dp),
@@ -1235,17 +1242,16 @@ class LookBookTest {
                         VerseMark(1, his, his + "was with God, and the Word".length, Ink.teal),
                         VerseMark(2, null, null, Ink.moss),
                     ),
+                    selection = rememberSelected(null),
                     lifted = null,
+                    held = null,
                     justMarked = null,
                     onMarkDrawn = {},
                     openNote = null,
                     isFirstChapter = true,
                     showMarginHint = false,
                     onLayout = {},
-                    onLongPressVerse = {},
-                    onDragToVerse = {},
-                    onExtend = { _, _, _ -> },
-                    onDragEnded = {},
+                    onSelected = {},
                     onTapVerse = {},
                     onNoteSlot = {},
                     modifier = Modifier.padding(top = 60.dp),
@@ -1255,62 +1261,152 @@ class LookBookTest {
     }
 
     /**
-     * A lifted selection with S06's two handles on it — the ends of the mark
-     * you are about to make, which until now could not be adjusted at all.
+     * The native selection (A62): a phrase of John 1:1 selected the way any
+     * page on the phone selects, tinted in the accent rather than in anybody's
+     * ink, with the toolbar at the foot offering "the verse" because an end
+     * is part-way. The platform's handles are popups of their own: the
+     * picture shows them where the test host puts them, and the device is
+     * where they are judged.
      */
-    @Test fun theSelectionHandles() {
-        val chapter = ScriptureChapter(
-            n = 1,
-            blocks = listOf(
-                ScriptureBlock(
-                    s = BlockStyle.p,
-                    x = listOf(
-                        ScriptureSpan(
-                            v = 1,
-                            t = "In the beginning was the Word, and the Word was with " +
-                                "God, and the Word was God. ",
-                        ),
-                        ScriptureSpan(
-                            v = 2,
-                            t = "He was with God in the beginning. ",
-                        ),
-                        ScriptureSpan(
-                            v = 3,
-                            t = "Through him all things were made.",
-                        ),
-                    ),
-                ),
+    @Test fun theSelection() {
+        val open = reading("JHN", FireScale.medium)
+        val m = model(
+            AppState(
+                me = me,
+                people = mapOf(me.id to me, ruth.id to ruth),
+                rooms = listOf(room),
+                memberships = listOf(membership(me, null), membership(ruth, null)),
+                readings = listOf(open),
+                currentRoomID = room.id,
             ),
         )
-        shoot("selection-handles") {
+        val text = selectionChapter.blocks.first().x.first().t
+        val phrase = "the Word was with God"
+        val from = text.indexOf(phrase)
+        val range = VerseRange(
+            bookID = "JHN", chapter = 1, startVerse = 1, endVerse = 1,
+            startChar = from, endChar = from + phrase.length,
+            charTranslation = TranslationID.bsb,
+        )
+        shoot("selection") {
             OnTheGround {
-                ChapterText(
-                    chapter = chapter,
-                    runningHead = "John 1",
-                    theme = ReadingTheme(
-                        fontSize = 19f,
-                        lineHeightMultiple = 1.62f,
-                        redLetter = false,
-                    ),
-                    marks = emptyList(),
-                    lifted = VerseRange("JHN", 1, 1, 2),
-                    justMarked = null,
-                    onMarkDrawn = {},
-                    openNote = null,
-                    isFirstChapter = true,
-                    showMarginHint = false,
-                    onLayout = {},
-                    onLongPressVerse = {},
-                    onDragToVerse = {},
-                    onExtend = { _, _, _ -> },
-                    onDragEnded = {},
-                    onTapVerse = {},
-                    onNoteSlot = {},
-                    modifier = Modifier.padding(top = 60.dp),
-                )
+                Box(Modifier.fillMaxSize()) {
+                    ChapterText(
+                        chapter = selectionChapter,
+                        runningHead = "John 1",
+                        theme = ReadingTheme(
+                            fontSize = 19f,
+                            lineHeightMultiple = 1.62f,
+                            redLetter = false,
+                        ),
+                        marks = listOf(VerseMark(verse = 2, from = null, to = null, ink = Ink.teal)),
+                        selection = rememberSelected(range),
+                        lifted = range,
+                        held = null,
+                        justMarked = null,
+                        onMarkDrawn = {},
+                        openNote = null,
+                        isFirstChapter = true,
+                        showMarginHint = false,
+                        onLayout = {},
+                        onSelected = {},
+                        onTapVerse = {},
+                        onNoteSlot = {},
+                        modifier = Modifier.padding(top = 60.dp),
+                    )
+                    LeaveToolbar(
+                        model = m,
+                        room = m.state.rooms.first(),
+                        range = range,
+                        roomPaused = false,
+                        onHighlight = {},
+                        onWrite = {},
+                        onSpeak = {},
+                        wholeVerse = Copy.wholeVerseVerb(several = false),
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 40.dp),
+                    )
+                }
             }
         }
     }
+
+    /**
+     * The same words held while the write composer has the focus (§13.2):
+     * the platform lets go of a selection when the keyboard comes up, and the
+     * page draws what it was, still, so the note is visibly about something.
+     */
+    @Test fun theSelectionHeld() {
+        val text = selectionChapter.blocks.first().x.first().t
+        val phrase = "the Word was with God"
+        val from = text.indexOf(phrase)
+        val range = VerseRange(
+            bookID = "JHN", chapter = 1, startVerse = 1, endVerse = 2,
+            startChar = from, charTranslation = TranslationID.bsb,
+        )
+        shoot("selection-held") {
+            OnTheGround {
+                Box(Modifier.fillMaxSize()) {
+                    ChapterText(
+                        chapter = selectionChapter,
+                        runningHead = "John 1",
+                        theme = ReadingTheme(
+                            fontSize = 19f,
+                            lineHeightMultiple = 1.62f,
+                            redLetter = false,
+                        ),
+                        marks = listOf(VerseMark(verse = 2, from = null, to = null, ink = Ink.teal)),
+                        selection = rememberSelected(null),
+                        lifted = null,
+                        held = range,
+                        justMarked = null,
+                        onMarkDrawn = {},
+                        openNote = null,
+                        isFirstChapter = true,
+                        showMarginHint = false,
+                        onLayout = {},
+                        onSelected = {},
+                        onTapVerse = {},
+                        onNoteSlot = {},
+                        modifier = Modifier.padding(top = 60.dp),
+                    )
+                    WriteComposer(
+                        verse = range.start,
+                        onSave = {},
+                        onCancel = {},
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 40.dp),
+                    )
+                }
+            }
+        }
+    }
+
+    private val selectionChapter = ScriptureChapter(
+        n = 1,
+        blocks = listOf(
+            ScriptureBlock(
+                s = BlockStyle.p,
+                x = listOf(
+                    ScriptureSpan(
+                        v = 1,
+                        t = "In the beginning was the Word, and the Word was with " +
+                            "God, and the Word was God. ",
+                    ),
+                    ScriptureSpan(
+                        v = 2,
+                        t = "He was with God in the beginning. ",
+                    ),
+                    ScriptureSpan(
+                        v = 3,
+                        t = "Through him all things were made.",
+                    ),
+                ),
+            ),
+        ),
+    )
 
     /**
      * The long-press toolbar, in the case that has eight inks in it.
@@ -1403,22 +1499,145 @@ class LookBookTest {
     }
 
     /**
-     * The panel with no word open, so its foot is in the picture: how each
-     * version read in this room says the phrase, and the licensed one that
-     * has not reached this phone.
+     * The panel with no word open, so its foot is in the picture: how the
+     * room's versions say the phrase (A62). The World English says it as
+     * yours does, so it joins your block; the New International has not
+     * reached this phone, and its block says so.
      */
     @Test fun theOriginalInThisRoom() {
         val m = roomOfThreeVersions("JHN")
+        val (chapter, range) = johnPhrase(m, 1, "the Word was with God")
+        shootOriginal("original-room", m, chapter, range, open = null)
+    }
+
+    /**
+     * A room of eleven on four versions (A62, §13.3): "Through Him" in John
+     * 1:3, and the whole verse. Grouped by what is said, so eleven people
+     * are three blocks for the phrase and four for the verse, each with
+     * three faces at most and "and others" after them — never a number.
+     * (For the phrase, the World English's word links put "through him"
+     * under the wrong Greek word, so its whole verse stands in, muted.)
+     *
+     * The King James and American Standard are stand-ins with their own
+     * public-domain wording, here in the fixture only; the app carries
+     * neither. The Berean Standard and World English are the phone's own.
+     */
+    @Test fun theOriginalInARoomOfEleven() {
+        val m = roomOfThreeVersions("JHN")
+        val (chapter, range) = johnPhrase(m, 3, "Through Him")
+        shootOriginal(
+            "original-room-eleven", m, chapter, range, open = null,
+            room = roomOfEleven(m, chapter, range), scrolledToEnd = true,
+        )
+    }
+
+    @Test fun theOriginalInARoomOfElevenWholeVerse() {
+        val m = roomOfThreeVersions("JHN")
         val chapter = m.scripture.chapter(VerseAddress("JHN", 1, 1), TranslationID.bsb)!!
-        val text = chapter.ownText(1)!!
-        val phrase = "the Word was with God"
+        val range = VerseRange(bookID = "JHN", chapter = 1, startVerse = 3, endVerse = 3)
+        shootOriginal(
+            "original-room-eleven-verse", m, chapter, range, open = null,
+            room = roomOfEleven(m, chapter, range), scrolledToEnd = true,
+        )
+    }
+
+    /**
+     * Every version here says the phrase as yours does: no heading, no
+     * words said a third time — one muted line, and three of the others'
+     * faces.
+     */
+    @Test fun theOriginalWhenTheRoomAgrees() {
+        val open = reading("JHN", FireScale.medium)
+        val ruthWeb = ruth.copy(translation = TranslationID.web)
+        val annWeb = ann.copy(translation = TranslationID.web)
+        val caleb = Person(name = "Caleb")
+        val m = model(
+            AppState(
+                me = me,
+                people = listOf(me, ruthWeb, annWeb, caleb).associateBy { it.id },
+                rooms = listOf(room),
+                memberships = listOf(
+                    membership(me, Ink.teal),
+                    membership(ruthWeb, Ink.crimson),
+                    membership(annWeb, Ink.moss),
+                    membership(caleb, Ink.indigo),
+                ),
+                readings = listOf(open),
+                currentRoomID = room.id,
+            ),
+        )
+        val (chapter, range) = johnPhrase(m, 1, "the Word was with God")
+        shootOriginal("original-room-agrees", m, chapter, range, open = null)
+    }
+
+    /** [phrase], selected in John 1:[verse] on the Berean Standard's page. */
+    private fun johnPhrase(m: AppModel, verse: Int, phrase: String): Pair<ScriptureChapter, VerseRange> {
+        val chapter = m.scripture.chapter(VerseAddress("JHN", 1, 1), TranslationID.bsb)!!
+        val text = chapter.ownText(verse)!!
         val from = text.indexOf(phrase)
-        val range = VerseRange(
-            bookID = "JHN", chapter = 1, startVerse = 1, endVerse = 1,
+        check(from >= 0) { "“$phrase” is not in John 1:$verse" }
+        return chapter to VerseRange(
+            bookID = "JHN", chapter = 1, startVerse = verse, endVerse = verse,
             startChar = from, endChar = from + phrase.length,
             charTranslation = TranslationID.bsb,
         )
-        shootOriginal("original-room", m, chapter, range, open = null)
+    }
+
+    /**
+     * Eleven people, four versions, eight inks: the last three joined after
+     * the inks were claimed, and wear a monogram without one.
+     */
+    private fun roomOfEleven(m: AppModel, chapter: ScriptureChapter, range: VerseRange): RoomSection {
+        val kjv = TranslationID("kjv")
+        val asv = TranslationID("asv")
+        val whole = range.startChar == null
+        // Public-domain wording of John 1:3, for the two stand-ins.
+        val standIns = mapOf(
+            kjv to if (whole) {
+                "All things were made by him; and without him was not any thing made that was made."
+            } else {
+                "by him"
+            },
+            asv to if (whole) {
+                "All things were made through him; and without him was not anything made that hath been made."
+            } else {
+                "through him"
+            },
+        )
+        fun seat(name: String, version: TranslationID, ink: Ink?) = RoomPerson(Person(name = name), version, ink)
+        val you = RoomPerson(me, TranslationID.bsb, Ink.teal)
+        val others = listOf(
+            seat("Ruth Alderman", TranslationID.web, Ink.crimson),
+            seat("Ann Brooke", kjv, Ink.moss),
+            seat("Ben", kjv, Ink.ochre),
+            seat("Caleb", TranslationID.bsb, Ink.indigo),
+            seat("Dana", asv, Ink.plum),
+            seat("Eli", TranslationID.web, Ink.clay),
+            seat("Faith", TranslationID.bsb, Ink.rose),
+            seat("Gabe", kjv, null),
+            seat("Hope", asv, null),
+            seat("Isaac", TranslationID.bsb, null),
+        )
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val reading = originalReadingOf(m.original, m.scripture, range, TranslationID.bsb, chapter)!!
+        val onPhone = runBlocking {
+            listOf(TranslationID.bsb, TranslationID.web).associateWith {
+                roomSayingOnPhone(m, context, reading, it, TranslationID.bsb, chapter, fetch = false)
+            }
+        }
+        return roomSection(
+            yours = TranslationID.bsb,
+            me = you,
+            others = others,
+            saying = { version -> onPhone[version] ?: standIns[version]?.let(::RoomSaid) },
+            versionName = {
+                when (it) {
+                    kjv -> "King James"
+                    asv -> "American Standard"
+                    else -> it.displayName
+                }
+            },
+        )
     }
 
     /**
@@ -1438,11 +1657,13 @@ class LookBookTest {
         chapter: ScriptureChapter,
         range: VerseRange,
         open: Pair<Int, Int>?,
+        room: RoomSection? = null,
+        scrolledToEnd: Boolean = false,
     ) {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val reading = originalReadingOf(m.original, m.scripture, range, TranslationID.bsb, chapter)!!
-        val lines = runBlocking {
-            roomVersionLines(m, context, room, reading, TranslationID.bsb, chapter, fetch = false)
+        val section = room ?: runBlocking {
+            roomSectionOf(m, context, this@LookBookTest.room, reading, TranslationID.bsb, chapter, fetch = false)
         }
         val lexicon = m.original.lexicon
         val parsings = m.original.parsings
@@ -1458,28 +1679,31 @@ class LookBookTest {
                         runningHead = head,
                         theme = ReadingTheme(fontSize = 19f, lineHeightMultiple = 1.62f, redLetter = false),
                         marks = emptyList(),
+                        selection = rememberSelected(range),
                         lifted = range,
+                        held = null,
                         justMarked = null,
                         onMarkDrawn = {},
                         openNote = null,
                         isFirstChapter = range.chapter == 1,
                         showMarginHint = false,
                         onLayout = {},
-                        onLongPressVerse = {},
-                        onDragToVerse = {},
-                        onExtend = { _, _, _ -> },
-                        onDragEnded = {},
+                        onSelected = {},
                         onTapVerse = {},
                         onNoteSlot = {},
                         modifier = Modifier.padding(top = 40.dp),
                     )
+                    val scroll = rememberScrollState()
+                    // Where a reader who scrolled down the panel would stop.
+                    if (scrolledToEnd) LaunchedEffect(scroll.maxValue) { scroll.scrollTo(scroll.maxValue) }
                     OriginalPanel(
                         reading = reading,
                         versionName = "Berean Standard",
                         lexicon = lexicon,
                         parsings = parsings,
-                        room = lines,
+                        room = section,
                         initiallyOpen = open,
+                        scroll = scroll,
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .padding(bottom = 24.dp),

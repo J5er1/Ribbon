@@ -51,85 +51,10 @@ struct ChapterLayout: Equatable {
     /// line — S02 edge cases).
     var verseFirstLineY: [Int: CGFloat] = [:]
     var height: CGFloat = 0
-    /// The two ends of the lifted range, in the view's coordinates: where
-    /// the handles go (A41g).
-    var liftStart: CGRect?
-    var liftEnd: CGRect?
 }
 
-/// One run of a verse's text, in both coordinate systems at once: where it
-/// begins inside the verse, and where it begins on the page.
-struct TextSegment: Equatable {
-    var verse: Int
-    var textStart: Int
-    var pageStart: Int
-    var length: Int
-}
-
-/// The chapter, typeset: where every verse ended up in the string.
-struct ChapterPage {
-    var verseText: [Int: String] = [:]
-    var verseSegments: [Int: [TextSegment]] = [:]
-
-    func length(of verse: Int) -> Int { (verseText[verse] as NSString?)?.length ?? 0 }
-
-    /// Where a stretch of one verse's own text sits on the page. `from` and
-    /// `to` are offsets into the verse's text, half-open; nil means "from
-    /// the beginning" and "to the end". A list, because a verse can be
-    /// several runs — every line of a psalm is one.
-    func pageRanges(verse: Int, from: Int?, to: Int?) -> [NSRange] {
-        guard let segments = verseSegments[verse] else { return [] }
-        let low = from ?? 0
-        let high = to ?? length(of: verse)
-        var result: [NSRange] = []
-        for segment in segments {
-            let start = max(low, segment.textStart)
-            let end = min(high, segment.textStart + segment.length)
-            if end > start {
-                result.append(NSRange(location: segment.pageStart + (start - segment.textStart), length: end - start))
-            }
-        }
-        return result
-    }
-
-    /// The verse and the offset into its text at a page index, if the index
-    /// is in a verse.
-    func place(atPageIndex index: Int) -> (verse: Int, offset: Int)? {
-        for (verse, segments) in verseSegments {
-            for segment in segments where index >= segment.pageStart && index < segment.pageStart + segment.length {
-                return (verse, segment.textStart + (index - segment.pageStart))
-            }
-        }
-        return nil
-    }
-
-    /// Snap an offset to the nearest word edge in the given direction: the
-    /// start of a word going back, the end of one going forward.
-    func wordEdge(verse: Int, offset: Int, forward: Bool) -> Int {
-        let text = (verseText[verse] ?? "") as NSString
-        let length = text.length
-        var i = max(0, min(length, offset))
-        if forward {
-            while i < length, isSpace(text.character(at: i)) { i += 1 }
-            while i < length, !isSpace(text.character(at: i)) { i += 1 }
-        } else {
-            while i > 0, isSpace(text.character(at: i - 1)) { i -= 1 }
-            while i > 0, !isSpace(text.character(at: i - 1)) { i -= 1 }
-        }
-        return i
-    }
-
-    /// One word further on, or one back, from an offset that is already on
-    /// an edge.
-    func wordStep(verse: Int, offset: Int, forward: Bool) -> Int {
-        let edge = wordEdge(verse: verse, offset: offset, forward: forward)
-        return edge == offset ? wordEdge(verse: verse, offset: forward ? offset + 1 : offset - 1, forward: forward) : edge
-    }
-
-    private func isSpace(_ unit: unichar) -> Bool {
-        unit == 0x20 || unit == 0x0A || unit == 0x09 || unit == 0x2009 || unit == 0xA0
-    }
-}
+// `ChapterPage` — the chapter typeset, in plain characters, and the
+// selection mapping over it — is in ChapterPage.swift (A62).
 
 /// A wash, resolved for drawing: the page ranges it covers, its colour, and
 /// how far it has arrived.
@@ -214,6 +139,15 @@ final class InkLayoutManager: NSLayoutManager {
     /// The body font's point size, scaled — what the band is measured in.
     var bodySize: CGFloat = 19
     var reduceMotion = false
+    /// The verse a note is being left on, while the composer has the focus
+    /// and the selection has let go (S05, A62): its glyphs, drawn raised
+    /// with a soft shadow. Drawn, never typeset — it costs a redraw, not a
+    /// layout. Under reduce motion it is the same still state; it never
+    /// travels.
+    var held: [NSRange] = []
+
+    /// How far a held verse is raised.
+    static let lift: CGFloat = 2
 
     static let bleedX: CGFloat = 2
     static let bleedY: CGFloat = 1.2
@@ -309,7 +243,39 @@ final class InkLayoutManager: NSLayoutManager {
     override func drawGlyphs(forGlyphRange glyphsToShow: NSRange, at origin: CGPoint) {
         let remaining = carveRemaining(at: CACurrentMediaTime())
         forEachStretch(of: glyphsToShow, remaining: remaining) { range, dy in
-            super.drawGlyphs(forGlyphRange: range, at: CGPoint(x: origin.x, y: origin.y + dy))
+            forEachHeld(of: range) { piece, raised in
+                guard raised, let context = UIGraphicsGetCurrentContext() else {
+                    super.drawGlyphs(forGlyphRange: piece, at: CGPoint(x: origin.x, y: origin.y + dy))
+                    return
+                }
+                // The lift the long-press used to set into the text, drawn
+                // here instead: the same shadow, the same 2 pt.
+                context.saveGState()
+                context.setShadow(
+                    offset: CGSize(width: 0, height: 3), blur: 8,
+                    color: UIColor.black.withAlphaComponent(0.7).cgColor)
+                super.drawGlyphs(forGlyphRange: piece, at: CGPoint(x: origin.x, y: origin.y + dy - Self.lift))
+                context.restoreGState()
+            }
+        }
+    }
+
+    /// A range of glyphs, cut where the held verse begins and ends.
+    private func forEachHeld(of glyphs: NSRange, _ body: (NSRange, Bool) -> Void) {
+        guard !held.isEmpty else {
+            body(glyphs, false)
+            return
+        }
+        var cuts: Set<Int> = [glyphs.location, NSMaxRange(glyphs)]
+        for range in held {
+            for edge in [range.location, NSMaxRange(range)]
+            where edge > glyphs.location && edge < NSMaxRange(glyphs) {
+                cuts.insert(edge)
+            }
+        }
+        let sorted = cuts.sorted()
+        for (from, to) in zip(sorted, sorted.dropFirst()) where to > from {
+            body(NSRange(location: from, length: to - from), held.contains { NSLocationInRange(from, $0) })
         }
     }
 
@@ -452,45 +418,33 @@ final class InkLayoutManager: NSLayoutManager {
 // MARK: - The chapter view
 
 /// The way into the page for the screen around it: the typeset page and
-/// the geometry of the lift, without the screen having to hold a UIKit
-/// view. One per chapter on screen.
+/// its selection, without the screen having to hold a UIKit view. One per
+/// chapter on screen.
 @MainActor
 final class ChapterPageHandle {
     fileprivate(set) var page = ChapterPage()
     fileprivate weak var textView: UITextView?
+    fileprivate weak var coordinator: ChapterTextView.Coordinator?
 
-    /// The verse and offset under a point in the chapter view's
-    /// coordinates. `wordsOnly` leaves out the verse number and the
-    /// leading, where no word is: a hold there has none to say in the
-    /// original (A60, §7.5).
-    func place(at point: CGPoint, wordsOnly: Bool = false) -> (verse: Int, offset: Int)? {
-        guard let view = textView, let text = view.attributedText, text.length > 0 else { return nil }
-        let inContainer = CGPoint(
-            x: point.x - view.textContainerInset.left,
-            y: point.y - view.textContainerInset.top)
-        let index = view.layoutManager.characterIndex(
-            for: inContainer, in: view.textContainer,
-            fractionOfDistanceBetweenInsertionPoints: nil)
-        guard index < text.length else { return nil }
-        if let placed = page.place(atPageIndex: index) { return placed }
-        if wordsOnly { return nil }
-        // On a verse number, or in the leading: the verse the glyph belongs
-        // to, at its start.
-        if let verse = text.attribute(.ribbonVerse, at: index, effectiveRange: nil) as? Int {
-            return (verse, 0)
-        }
-        return nil
+    /// Selects a stretch of the page, the way a finger would (A62): the
+    /// toolbar's "the verse", a verse's number tapped, VoiceOver's "leave
+    /// something here" and "the original words". The system draws it and
+    /// gives it handles; what it now holds is reported as any selection is.
+    func select(_ ends: PageEnds) {
+        coordinator?.select(ends)
     }
 
-    func wordEdge(verse: Int, offset: Int, forward: Bool) -> Int {
-        page.wordEdge(verse: verse, offset: offset, forward: forward)
+    /// Lets go of whatever this page has selected.
+    func clearSelection() {
+        coordinator?.clearSelection()
     }
 
-    func wordStep(verse: Int, offset: Int, forward: Bool) -> Int {
-        page.wordStep(verse: verse, offset: offset, forward: forward)
+    /// The stretch widened to whole words, for a highlight (A62). Read from
+    /// the page as the view last set it: a handle made again before the
+    /// screen kept it has never been handed a page of its own.
+    func outwardToWords(_ ends: PageEnds) -> PageEnds {
+        (coordinator?.page ?? page).outwardToWords(ends)
     }
-
-    func length(of verse: Int) -> Int { page.length(of: verse) }
 
     /// The VoiceOver element that reads a verse, for a move that wants to
     /// hand the listener the verse it came to.
@@ -506,6 +460,50 @@ final class VerseElement: UIAccessibilityElement {
     var verse = 0
 }
 
+/// One end of the selection, as VoiceOver reaches it (§11, A41g, A62). The
+/// system's handles have no tap equivalent; these do: swipe up or down to
+/// move the end a word, and the actions for a verse either way.
+final class SelectionEndElement: UIAccessibilityElement {
+    var step: ((_ forward: Bool) -> Void)?
+
+    override func accessibilityIncrement() { step?(true) }
+    override func accessibilityDecrement() { step?(false) }
+}
+
+/// The chapter's text view. Selectable, never editable (A62): the system
+/// gives the hold its word, the handles, the loupe, a pointer's drag and
+/// shift-arrow on a keyboard. What it does not give is its edit menu — a
+/// glass callout over a verse, which the brief never allows, with Copy and
+/// Look Up on licensed words — nor its double- and triple-tap, which S02
+/// keeps reserved.
+final class PageTextView: UITextView {
+    override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+        // Selecting is the system's own interaction and stays; every verb
+        // the menu would offer is Ribbon's toolbar's instead.
+        action == #selector(UIResponderStandardEditActions.select(_:))
+    }
+
+    override func addGestureRecognizer(_ gestureRecognizer: UIGestureRecognizer) {
+        super.addGestureRecognizer(gestureRecognizer)
+        quietMultipleTaps()
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        quietMultipleTaps()
+    }
+
+    /// Double-tap: nothing, reserved (S02). The text view's own double- and
+    /// triple-tap would select a word and a paragraph — and race the tap
+    /// that opens a verse's notes. Turned off wherever UIKit adds them.
+    func quietMultipleTaps() {
+        for case let tap as UITapGestureRecognizer in gestureRecognizers ?? []
+        where tap.numberOfTapsRequired >= 2 && tap.isEnabled {
+            tap.isEnabled = false
+        }
+    }
+}
+
 struct ChapterTextView: UIViewRepresentable {
     let chapter: ScriptureChapter
     /// The version `chapter` is in. A version changed while the book is
@@ -519,9 +517,10 @@ struct ChapterTextView: UIViewRepresentable {
     let marks: [VerseMark]
     /// A mark you made just now, to be revealed along its words.
     let justMarked: UUID?
-    /// The range lifted by a long-press (drawn raised, with a soft shadow),
-    /// with its handles.
-    let lifted: VerseRange?
+    /// The verse a note is being left on while the composer has the focus
+    /// (S05): drawn raised, with a soft shadow, because the selection that
+    /// chose it has let go of the page (A62).
+    let heldVerse: Int?
     /// An open note's carve-out: verse and the height to open beneath it.
     let openNote: (verse: Int, height: CGFloat)?
     let isFirstChapter: Bool
@@ -529,14 +528,19 @@ struct ChapterTextView: UIViewRepresentable {
     let handle: ChapterPageHandle
 
     var onLayout: (ChapterLayout) -> Void
-    /// A verse held: the verse, and where in its own text the finger came
-    /// down — the word the original line opens on (A60, §7.5). Nil from
-    /// VoiceOver's action, which has no finger.
-    var onLongPressVerse: (Int, Int?) -> Void
-    var onDragToVerse: (Int) -> Void
-    var onDragEnded: () -> Void
+    /// The selection on this page, as the verses' own text (A62) — and,
+    /// when it is one word, where that word starts: the word held, which
+    /// the original line says (A60, §7.5). Nil when the page lets go.
+    var onSelection: (PageEnds?, Int?) -> Void
+    /// A verse's number tapped: the whole verse, selected.
+    var onVerseNumber: (Int) -> Void
+    /// A tap on the page while it had a selection: that tap only lets go
+    /// (S02 — dismiss first), whatever the system did with it first.
+    var onLetGo: () -> Void
     var onTapVerse: (Int) -> Void
-    /// VoiceOver's way to the original words of a verse (A60): lift it and
+    /// VoiceOver's "leave something here": the verse, selected whole.
+    var onLeaveSomethingHere: (Int) -> Void
+    /// VoiceOver's way to the original words of a verse (A60): select it and
     /// open the panel in one action.
     var onOriginalWords: (Int) -> Void
     /// Your own mark drawn to its end: the screen may forget `justMarked`.
@@ -558,38 +562,54 @@ struct ChapterTextView: UIViewRepresentable {
         container.widthTracksTextView = true
         layoutManager.addTextContainer(container)
 
-        let view = UITextView(frame: .zero, textContainer: container)
+        let view = PageTextView(frame: .zero, textContainer: container)
         view.isEditable = false
-        view.isSelectable = false
+        // Native selection (A62): the system's hold, handles and loupe, in
+        // the accent the old knob had. Its menu, its drag and drop, its
+        // writing tools and its multiple taps are turned away.
+        view.isSelectable = true
+        view.tintColor = UIColor(Palette.chartreuse)
+        view.textDragInteraction?.isEnabled = false
+        view.writingToolsBehavior = .none
+        view.isFindInteractionEnabled = false
+        view.dataDetectorTypes = []
+        view.delegate = context.coordinator
         view.isScrollEnabled = false
         view.backgroundColor = .clear
         view.textContainerInset = UIEdgeInsets(
             top: 0, left: theme.gutterWidth + 8, bottom: 0, right: theme.trailingMargin)
         view.adjustsFontForContentSizeCategory = true
 
-        let longPress = UILongPressGestureRecognizer(
-            target: context.coordinator, action: #selector(Coordinator.longPressed(_:)))
-        longPress.minimumPressDuration = 0.45
-        view.addGestureRecognizer(longPress)
-
+        // Ours, beside the system's own: it reads the touch before the
+        // system's tap can clear a selection, so a tap on a selected page
+        // only lets go.
         let tap = UITapGestureRecognizer(
             target: context.coordinator, action: #selector(Coordinator.tapped(_:)))
+        tap.delegate = context.coordinator
         view.addGestureRecognizer(tap)
+        view.quietMultipleTaps()
 
         context.coordinator.textView = view
         handle.textView = view
+        handle.coordinator = context.coordinator
         return view
+    }
+
+    /// A page leaving the lazy stack takes its selection with it.
+    static func dismantleUIView(_ view: UITextView, coordinator: Coordinator) {
+        coordinator.pageLeft()
     }
 
     func updateUIView(_ view: UITextView, context: Context) {
         context.coordinator.parent = self
         handle.textView = view
+        handle.coordinator = context.coordinator
         // Rebuild the page only when something that sets it changed — the
-        // body re-evaluates on every scroll tick, and NSShadow has no
-        // value equality, so an isEqual comparison can't be the gate.
+        // body re-evaluates on every scroll tick. A selection is not one of
+        // those things (A62): the system draws it over the page as set, so
+        // a handle crossing a word costs no typesetting at all.
         let buildKey = [
             runningHead, String(chapter.n), translation.rawValue, String(describing: theme),
-            lifted.map(String.init(describing:)) ?? "-",
             String(isFirstChapter), String(showMarginHint),
         ].joined(separator: "|")
         let rebuilt = context.coordinator.builtKey != buildKey
@@ -597,16 +617,15 @@ struct ChapterTextView: UIViewRepresentable {
             context.coordinator.builtKey = buildKey
             let (text, page) = Self.attributedText(
                 chapter: chapter, runningHead: runningHead, theme: theme,
-                lifted: lifted, isFirstChapter: isFirstChapter,
-                showMarginHint: showMarginHint)
-            view.attributedText = text
+                isFirstChapter: isFirstChapter, showMarginHint: showMarginHint)
+            context.coordinator.setPage(text, page: page, on: view)
             handle.page = page
-            context.coordinator.page = page
         }
         if let ink = view.layoutManager as? InkLayoutManager {
             ink.bodySize = RibbonType.uiScripture(theme.fontSize).pointSize
             ink.reduceMotion = UIAccessibility.isReduceMotionEnabled
             context.coordinator.updateWashes(on: ink, view: view)
+            context.coordinator.updateHeld(on: ink, verse: heldVerse, rebuilt: rebuilt)
         }
         // The open note carves space beneath its verse's last line.
         var exclusions: [UIBezierPath] = []
@@ -670,11 +689,11 @@ struct ChapterTextView: UIViewRepresentable {
     // MARK: Coordinator
 
     @MainActor
-    final class Coordinator: NSObject {
+    final class Coordinator: NSObject, UITextViewDelegate, UIGestureRecognizerDelegate {
         var parent: ChapterTextView
         weak var textView: UITextView?
         var builtKey: String?
-        var page = ChapterPage()
+        private(set) var page = ChapterPage()
         private var pendingReport = false
         /// The washes as last settled, so an arrival knows what it is
         /// arriving over.
@@ -683,10 +702,26 @@ struct ChapterTextView: UIViewRepresentable {
         /// The open note's carve as it was last applied: what the next one
         /// moves from.
         var carve: Carve?
-        /// The verses VoiceOver reads, one element each, and the order they
-        /// were last handed to the view in.
+        /// The verses VoiceOver reads, one element each, and the elements
+        /// last handed to the view, in order.
         private var verseElements: [Int: VerseElement] = [:]
-        private var elementOrder: [Int] = []
+        private var elementOrder: [ObjectIdentifier] = []
+        /// Where each verse was last laid out, in the view's coordinates.
+        private var verseRects: [Int: CGRect] = [:]
+        /// The selection's two ends as VoiceOver reaches them, by which end
+        /// (true is the start). Kept, like the verses', so focus stays put.
+        private var endElements: [Bool: SelectionEndElement] = [:]
+        /// What this page last said it had selected, so each change is said
+        /// once (A62).
+        private var selected: PageEnds?
+        /// Whether the page had a selection when the finger came down: the
+        /// system's own tap may clear it before ours is told.
+        private var hadSelectionAtTouch = false
+        /// The page's own changes to the selection, being made: not the
+        /// reader's, and said once they are done.
+        private var quiet = false
+        /// The verse drawn held for a composer, as last drawn.
+        private var heldVerse: Int?
 
         init(_ parent: ChapterTextView) {
             self.parent = parent
@@ -851,6 +886,205 @@ struct ChapterTextView: UIViewRepresentable {
             }
         }
 
+        // MARK: Setting
+
+        /// The page set anew: new words, so a selection on the old ones is
+        /// let go of rather than carried onto letters it never held.
+        func setPage(_ text: NSAttributedString, page: ChapterPage, on view: UITextView) {
+            quiet = true
+            view.attributedText = text
+            // Not carried onto the new words: the system keeps a range,
+            // clamped, and would draw it over letters nobody chose.
+            if view.selectedRange.length > 0 {
+                view.selectedRange = NSRange(location: 0, length: 0)
+            }
+            quiet = false
+            self.page = page
+            letGoQuietly()
+        }
+
+        /// The page has left the lazy stack, and its selection with it.
+        func pageLeft() {
+            letGoQuietly()
+        }
+
+        /// Tells the screen this page holds nothing now — on the next turn,
+        /// because this is asked in the middle of a view update.
+        private func letGoQuietly() {
+            guard selected != nil else { return }
+            selected = nil
+            let parent = self.parent
+            DispatchQueue.main.async { parent.onSelection(nil, nil) }
+        }
+
+        /// The held verse for a composer (S05, A62): drawn, not typeset.
+        func updateHeld(on ink: InkLayoutManager, verse: Int?, rebuilt: Bool) {
+            guard rebuilt || verse != heldVerse else { return }
+            heldVerse = verse
+            let held = verse.map { verse in
+                page.pageRanges(verse: verse, from: nil, to: nil).map {
+                    ink.glyphRange(forCharacterRange: $0, actualCharacterRange: nil)
+                }
+            } ?? []
+            guard held != ink.held else { return }
+            ink.held = held
+            ink.invalidateDisplay(forGlyphRange: NSRange(location: 0, length: ink.numberOfGlyphs))
+        }
+
+        // MARK: Selection (A62)
+
+        func textViewDidChangeSelection(_ textView: UITextView) {
+            guard !quiet else { return }
+            selectionMoved(in: textView)
+        }
+
+        /// No edit menu. An empty one, because nil asks for the system's:
+        /// a glass callout over a verse, which is never drawn there.
+        func textView(
+            _ textView: UITextView, editMenuForTextIn range: NSRange, suggestedActions: [UIMenuElement]
+        ) -> UIMenu? {
+            UIMenu(children: [])
+        }
+
+        /// The system's selection, read as the verses' own text — on every
+        /// change, a binary search and no typesetting.
+        private func selectionMoved(in view: UITextView) {
+            let range = view.selectedRange
+            if let ends = page.ends(of: range) {
+                report(ends)
+                return
+            }
+            guard range.length > 0 else {
+                report(nil)
+                return
+            }
+            // Nothing of a verse's own words is under it: the running head,
+            // the hint, a psalm's title — which hold nothing, so the
+            // selection goes — or a verse's number, which holds its verse.
+            let verse = page.verse(numberUnder: range)
+            // Or only the space between two words, a handle passing over
+            // it: what was said stands until the handle comes to a letter.
+            // Let go of here, the toolbar would leave and come back, and
+            // the selection would be taken out from under the finger.
+            if verse == nil, selected != nil, page.ordered.contains(where: {
+                NSIntersectionRange(NSRange(location: $0.pageStart, length: $0.length), range).length > 0
+            }) {
+                return
+            }
+            report(nil)
+            DispatchQueue.main.async { [weak self, weak view] in
+                guard let self, let view, view.selectedRange == range else { return }
+                if let verse {
+                    self.select(.whole(verse))
+                } else {
+                    self.setSelectedRange(NSRange(location: range.location, length: 0), on: view)
+                }
+            }
+        }
+
+        private func report(_ ends: PageEnds?) {
+            guard ends != selected else { return }
+            let lifts = selected == nil && ends != nil
+            selected = ends
+            // One transient the moment something is lifted, and no ticks as
+            // the handles move (build book §9.3).
+            if lifts { Haptics.shared.verseLifts() }
+            parent.onSelection(ends, ends.flatMap { page.heldWord($0) })
+            if let view = textView { updateAccessibilityElements(on: view) }
+        }
+
+        /// Selects a stretch, the way a finger would.
+        func select(_ ends: PageEnds) {
+            guard let view = textView, let range = page.selection(of: ends) else { return }
+            if !view.isFirstResponder { _ = view.becomeFirstResponder() }
+            setSelectedRange(range, on: view)
+        }
+
+        func clearSelection() {
+            guard let view = textView else { return }
+            if view.selectedRange.length > 0 {
+                setSelectedRange(NSRange(location: view.selectedRange.location, length: 0), on: view)
+            } else {
+                report(nil)
+            }
+        }
+
+        private func setSelectedRange(_ range: NSRange, on view: UITextView) {
+            quiet = true
+            view.selectedRange = range
+            quiet = false
+            selectionMoved(in: view)
+        }
+
+        // MARK: Taps
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+            hadSelectionAtTouch = selected != nil || (textView?.selectedRange.length ?? 0) > 0
+            return true
+        }
+
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+        ) -> Bool {
+            true
+        }
+
+        @objc func tapped(_ gesture: UITapGestureRecognizer) {
+            guard let view = textView else { return }
+            // Tapping the text: dismiss first (S02). A tap on a selected
+            // page only lets go, and never opens what is under it.
+            if hadSelectionAtTouch {
+                hadSelectionAtTouch = false
+                parent.onLetGo()
+                return
+            }
+            let location = gesture.location(in: view)
+            if let verse = verseNumber(near: location, in: view) {
+                parent.onVerseNumber(verse)
+                return
+            }
+            if let verse = verse(at: location) {
+                parent.onTapVerse(verse)
+            }
+        }
+
+        /// The verse whose number is under a tap, or within 16 pt of it
+        /// along its line: the figures are a small superscript, and a finger
+        /// is not. Up and down it reaches only a little past its own line —
+        /// the figures' box is already the line's height, and 16 pt more
+        /// would take the words of the lines above and below, whose notes a
+        /// tap there opens.
+        private func verseNumber(near point: CGPoint, in view: UITextView) -> Int? {
+            let reach: CGFloat = 16
+            let reachAcrossLines: CGFloat = 6
+            var nearest: (verse: Int, distance: CGFloat)?
+            for (verse, range) in page.numbers {
+                // The figures, without the thin space after them.
+                let figures = NSRange(location: range.location, length: max(1, range.length - 1))
+                let glyphs = view.layoutManager.glyphRange(forCharacterRange: figures, actualCharacterRange: nil)
+                guard glyphs.length > 0 else { continue }
+                let rect = view.layoutManager.boundingRect(forGlyphRange: glyphs, in: view.textContainer)
+                    .offsetBy(dx: view.textContainerInset.left, dy: view.textContainerInset.top)
+                guard rect.insetBy(dx: -reach, dy: -reachAcrossLines).contains(point) else { continue }
+                let distance = hypot(point.x - rect.midX, point.y - rect.midY)
+                if nearest.map({ distance < $0.distance }) ?? true { nearest = (verse, distance) }
+            }
+            return nearest?.verse
+        }
+
+        func verse(at point: CGPoint) -> Int? {
+            guard let view = textView, let text = view.attributedText, text.length > 0 else { return nil }
+            let inContainer = CGPoint(
+                x: point.x - view.textContainerInset.left,
+                y: point.y - view.textContainerInset.top)
+            let index = view.layoutManager.characterIndex(
+                for: inContainer, in: view.textContainer,
+                fractionOfDistanceBetweenInsertionPoints: nil)
+            guard index < text.length else { return nil }
+            return text.attribute(.ribbonVerse, at: index, effectiveRange: nil) as? Int
+        }
+
         // MARK: Layout
 
         func reportLayoutSoon() {
@@ -884,47 +1118,33 @@ struct ChapterTextView: UIViewRepresentable {
             }
             layout.height = view.sizeThatFits(
                 CGSize(width: view.bounds.width, height: .greatestFiniteMagnitude)).height
-            if let lifted = parent.lifted {
-                let (start, end) = liftEnds(of: lifted, in: view)
-                layout.liftStart = start
-                layout.liftEnd = end
-            }
-            updateAccessibilityElements(on: view, verseRect: verseRect)
+            verseRects = verseRect
+            updateAccessibilityElements(on: view)
             parent.onLayout(layout)
         }
 
-        /// The glyph boxes at the two ends of the lifted range, in the
-        /// view's coordinates.
-        private func liftEnds(of lifted: VerseRange, in view: UITextView) -> (CGRect?, CGRect?) {
-            let startRanges = page.pageRanges(verse: lifted.startVerse, from: lifted.startChar, to: nil)
-            let endRanges = page.pageRanges(verse: lifted.endVerse, from: nil, to: lifted.endChar)
-            func box(at index: Int) -> CGRect? {
-                let glyph = view.layoutManager.glyphRange(forCharacterRange: NSRange(location: index, length: 1), actualCharacterRange: nil)
-                guard glyph.length > 0 else { return nil }
-                return view.layoutManager.boundingRect(forGlyphRange: glyph, in: view.textContainer)
-                    .offsetBy(dx: view.textContainerInset.left, dy: view.textContainerInset.top)
-            }
-            let start = startRanges.first.flatMap { box(at: $0.location) }
-            let end = endRanges.last.flatMap { box(at: max($0.location, $0.location + $0.length - 1)) }
-            return (start, end)
-        }
+        // MARK: VoiceOver
 
         /// Verse-by-verse VoiceOver navigation (§11): one element per
         /// verse, so a swipe moves by verse — and the label obeys Law 2
         /// ("Verse nine." then the words; never a position report). Each
         /// verse carries the two things a finger can do to it, and the way
-        /// to its original words (A60).
+        /// to its original words (A60). While something is selected, its two
+        /// ends follow the verses they are in (A62): the system's handles
+        /// have no tap equivalent, and these do.
         ///
-        /// The elements are made once per verse and kept. The page is laid
-        /// out again whenever anything above it redraws — a follow's step
-        /// among them — and a fresh set every time took VoiceOver's focus
-        /// away from the listener at every step. Now a frame or a label is
-        /// touched only when it changed, and the view is handed a new list
-        /// only when the verses on the page did.
-        private func updateAccessibilityElements(on view: UITextView, verseRect: [Int: CGRect]) {
+        /// The elements are made once and kept. The page is laid out again
+        /// whenever anything above it redraws — a follow's step among them
+        /// — and a fresh set every time took VoiceOver's focus away from the
+        /// listener at every step. Now a frame or a label is touched only
+        /// when it changed, and the view is handed a new list only when the
+        /// elements on the page did.
+        private func updateAccessibilityElements(on view: UITextView) {
+            var elements: [UIAccessibilityElement] = []
             var order: [Int] = []
+            let ends = selected
             for verse in page.verseText.keys.sorted() {
-                guard let rect = verseRect[verse], let body = page.verseText[verse] else { continue }
+                guard let rect = verseRects[verse], let body = page.verseText[verse] else { continue }
                 order.append(verse)
                 let label = Copy.verseSpoken(verse, body.trimmingCharacters(in: .whitespacesAndNewlines))
                 let element = verseElements[verse] ?? makeElement(verse: verse, in: view)
@@ -934,14 +1154,22 @@ struct ChapterTextView: UIViewRepresentable {
                 if element.accessibilityLabel != label {
                     element.accessibilityLabel = label
                 }
+                elements.append(element)
+                if let ends, verse == ends.startVerse, let start = placeEnd(start: true, of: ends, in: view) {
+                    elements.append(start)
+                }
+                if let ends, verse == ends.endVerse, let end = placeEnd(start: false, of: ends, in: view) {
+                    elements.append(end)
+                }
             }
             if verseElements.count != order.count {
                 verseElements = verseElements.filter { order.contains($0.key) }
             }
-            guard order != elementOrder || view.isAccessibilityElement else { return }
-            elementOrder = order
+            let identities = elements.map { ObjectIdentifier($0) }
+            guard identities != elementOrder || view.isAccessibilityElement else { return }
+            elementOrder = identities
             view.isAccessibilityElement = false
-            view.accessibilityElements = order.compactMap { verseElements[$0] }
+            view.accessibilityElements = elements
         }
 
         private func makeElement(verse: Int, in view: UITextView) -> VerseElement {
@@ -953,7 +1181,7 @@ struct ChapterTextView: UIViewRepresentable {
                     return true
                 },
                 UIAccessibilityCustomAction(name: Copy.leaveSomethingHere) { [weak self] _ in
-                    self?.parent.onLongPressVerse(verse, nil)
+                    self?.parent.onLeaveSomethingHere(verse)
                     return true
                 },
                 UIAccessibilityCustomAction(name: Copy.originalAction) { [weak self] _ in
@@ -965,50 +1193,88 @@ struct ChapterTextView: UIViewRepresentable {
             return element
         }
 
-        func verse(at point: CGPoint) -> Int? {
-            guard let view = textView, let text = view.attributedText, text.length > 0 else { return nil }
-            let inContainer = CGPoint(
-                x: point.x - view.textContainerInset.left,
-                y: point.y - view.textContainerInset.top)
-            let index = view.layoutManager.characterIndex(
-                for: inContainer, in: view.textContainer,
-                fractionOfDistanceBetweenInsertionPoints: nil)
-            guard index < text.length else { return nil }
-            return text.attribute(.ribbonVerse, at: index, effectiveRange: nil) as? Int
+        /// One end of the selection, placed on its letter and saying the
+        /// word it is on.
+        private func placeEnd(start: Bool, of ends: PageEnds, in view: UITextView) -> SelectionEndElement? {
+            let ranges = start
+                ? page.pageRanges(verse: ends.startVerse, from: ends.startChar, to: nil)
+                : page.pageRanges(verse: ends.endVerse, from: nil, to: ends.endChar)
+            guard let range = start ? ranges.first : ranges.last else { return nil }
+            let index = start ? range.location : max(range.location, NSMaxRange(range) - 1)
+            let glyph = view.layoutManager.glyphRange(
+                forCharacterRange: NSRange(location: index, length: 1), actualCharacterRange: nil)
+            guard glyph.length > 0 else { return nil }
+            let box = view.layoutManager.boundingRect(forGlyphRange: glyph, in: view.textContainer)
+                .offsetBy(dx: view.textContainerInset.left, dy: view.textContainerInset.top)
+            let element = endElements[start] ?? makeEnd(start: start, in: view)
+            // A finger's width, on the end's letter (§11).
+            let frame = CGRect(x: (start ? box.minX : box.maxX) - 22, y: box.midY - 22, width: 44, height: 44)
+            if element.accessibilityFrameInContainerSpace != frame {
+                element.accessibilityFrameInContainerSpace = frame
+            }
+            let word = endWord(start: start, of: ends)
+            if element.accessibilityValue != word {
+                element.accessibilityValue = word
+            }
+            return element
         }
 
-        @objc func longPressed(_ gesture: UILongPressGestureRecognizer) {
-            guard let view = textView else { return }
-            switch gesture.state {
-            case .began:
-                let location = gesture.location(in: view)
-                if let verse = verse(at: location) {
-                    Haptics.shared.verseLifts()
-                    // Where in the verse's own text the finger is, so the
-                    // original line can say the word under it (§7.5). A
-                    // press that found no letter (the verse's number, the
-                    // leading) held no word: -1, before the verse's text,
-                    // so the line stays quiet rather than naming the whole
-                    // verse. Nil is kept for a lift no finger made.
-                    let placed = parent.handle.place(at: location, wordsOnly: true)
-                    parent.onLongPressVerse(verse, placed?.verse == verse ? placed?.offset ?? -1 : -1)
-                }
-            case .changed:
-                if let verse = verse(at: gesture.location(in: view)) {
-                    parent.onDragToVerse(verse)
-                }
-            case .ended, .cancelled:
-                parent.onDragEnded()
-            default:
-                break
+        /// The word an end is on: the first of the selection, or the last.
+        private func endWord(start: Bool, of ends: PageEnds) -> String {
+            let verse = start ? ends.startVerse : ends.endVerse
+            let text = (page.verseText[verse] ?? "") as NSString
+            var from: Int, to: Int
+            if start {
+                from = ends.startChar ?? ChapterPage.leadingBlank(text)
+                to = page.wordEdge(verse: verse, offset: from, forward: true)
+            } else {
+                to = ends.endChar ?? (text.length - ChapterPage.trailingBlank(text))
+                from = page.wordEdge(verse: verse, offset: to, forward: false)
             }
+            from = max(0, min(from, text.length))
+            to = max(from, min(to, text.length))
+            return text.substring(with: NSRange(location: from, length: to - from))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
-        @objc func tapped(_ gesture: UITapGestureRecognizer) {
-            guard let view = textView else { return }
-            if let verse = verse(at: gesture.location(in: view)) {
-                parent.onTapVerse(verse)
+        private func makeEnd(start: Bool, in view: UITextView) -> SelectionEndElement {
+            let element = SelectionEndElement(accessibilityContainer: view)
+            element.accessibilityLabel = start ? Copy.whereTheMarkStarts : Copy.whereTheMarkEnds
+            element.accessibilityTraits = .adjustable
+            element.step = { [weak self] forward in
+                _ = self?.stepEnd(start: start, byVerse: false, forward: forward)
             }
+            element.accessibilityCustomActions = [
+                UIAccessibilityCustomAction(name: Copy.aVerseFurtherOn) { [weak self] _ in
+                    self?.stepEnd(start: start, byVerse: true, forward: true) ?? false
+                },
+                UIAccessibilityCustomAction(name: Copy.aVerseBack) { [weak self] _ in
+                    self?.stepEnd(start: start, byVerse: true, forward: false) ?? false
+                },
+                UIAccessibilityCustomAction(name: Copy.aWordFurtherOn) { [weak self] _ in
+                    self?.stepEnd(start: start, byVerse: false, forward: true) ?? false
+                },
+                UIAccessibilityCustomAction(name: Copy.aWordBack) { [weak self] _ in
+                    self?.stepEnd(start: start, byVerse: false, forward: false) ?? false
+                },
+            ]
+            endElements[start] = element
+            return element
+        }
+
+        /// One end moved a word or a verse — the drag a finger would make,
+        /// made by an action (§11).
+        private func stepEnd(start: Bool, byVerse: Bool, forward: Bool) -> Bool {
+            guard let ends = selected,
+                  let moved = page.stepped(ends, start: start, byVerse: byVerse, forward: forward)
+            else { return false }
+            select(moved)
+            // A verse away, the end is somewhere else in the list: the
+            // listener is kept on it.
+            if byVerse, let element = endElements[start] {
+                UIAccessibility.post(notification: .layoutChanged, argument: element)
+            }
+            return true
         }
     }
 
@@ -1030,7 +1296,7 @@ struct ChapterTextView: UIViewRepresentable {
 
     static func attributedText(
         chapter: ScriptureChapter, runningHead: String, theme: ReadingTheme,
-        lifted: VerseRange?, isFirstChapter: Bool, showMarginHint: Bool
+        isFirstChapter: Bool, showMarginHint: Bool
     ) -> (NSAttributedString, ChapterPage) {
         let result = NSMutableAttributedString()
         var page = ChapterPage()
@@ -1104,9 +1370,12 @@ struct ChapterTextView: UIViewRepresentable {
             for span in block.x {
                 if let verse = span.v { runningVerse = verse }
                 if let verse = span.v, verse != 1 {
-                    // The verse number: small caps superscript, ~45%.
+                    // The verse number: small caps superscript, ~45%. Where
+                    // it is set is kept, for a tap on it (A62).
+                    let number = "\(verse)\u{2009}"
+                    page.number(verse, at: blockStart + blockText.length, length: (number as NSString).length)
                     blockText.append(NSAttributedString(
-                        string: "\(verse)\u{2009}",
+                        string: number,
                         attributes: [
                             .font: RibbonType.uiSmallCaps(theme.fontSize * 0.62),
                             .foregroundColor: ivory.withAlphaComponent(0.45),
@@ -1131,11 +1400,7 @@ struct ChapterTextView: UIViewRepresentable {
                     // Where this run sits in the verse's own text and on
                     // the page — the two coordinate systems a phrase mark
                     // moves between.
-                    let textStart = (page.verseText[verse] as NSString?)?.length ?? 0
-                    let length = (span.t as NSString).length
-                    page.verseText[verse, default: ""] += span.t
-                    page.verseSegments[verse, default: []].append(TextSegment(
-                        verse: verse, textStart: textStart, pageStart: blockStart + blockText.length, length: length))
+                    page.append(span.t, verse: verse, at: blockStart + blockText.length)
                 }
                 blockText.append(NSAttributedString(string: span.t, attributes: attributes))
             }
@@ -1151,22 +1416,6 @@ struct ChapterTextView: UIViewRepresentable {
         // keeps its own walk because it sets the page as it goes; the two
         // must never disagree.
         assert(page.verseText == chapter.ownTexts(), "the page's own text has left the core's")
-
-        // The lift: the words in the range raised, with a soft shadow —
-        // whole verses, or the phrase between the handles.
-        if let lifted {
-            for verse in lifted.verses {
-                let from = verse == lifted.startVerse ? lifted.startChar : nil
-                let to = verse == lifted.endVerse ? lifted.endChar : nil
-                for range in page.pageRanges(verse: verse, from: from, to: to) where NSMaxRange(range) <= result.length {
-                    let shadow = NSShadow()
-                    shadow.shadowColor = UIColor.black.withAlphaComponent(0.7)
-                    shadow.shadowBlurRadius = 8
-                    shadow.shadowOffset = CGSize(width: 0, height: 3)
-                    result.addAttributes([.shadow: shadow, .baselineOffset: 2], range: range)
-                }
-            }
-        }
         return (result, page)
     }
 }

@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -97,7 +98,8 @@ import app.readribbon.design.rememberReduceMotion
 // Aramaic or Greek words under exactly what was selected — the word, how to
 // say it, what your version says for it — and one of those words opens its
 // dictionary form, its definition, its grammar and its number. Under them,
-// how each version read in this room says the same words, and who reads it.
+// how the room's other versions say the same words, grouped by what they
+// say (A62, RoomSection.kt).
 //
 // It is not a sheet and it is not glass over a verse. It is the foot of the
 // page, the way the write and speak composers are: the toolbar cross-fades
@@ -178,21 +180,6 @@ data class OriginalLine(
     val spoken: String get() = Copy.originalWordSpoken(translit, rendering ?: "", "")
 }
 
-/**
- * One version read in this room, and how it says the selected words.
- *
- * @property words the phrase, or the whole verse where the version cannot be
- *   matched word for word ([whole]); null when the version is licensed and
- *   has not reached this phone.
- */
-@Immutable
-data class RoomVersionLine(
-    val translation: TranslationID,
-    val readers: String,
-    val words: String?,
-    val whole: Boolean,
-)
-
 // MARK: - What the panel says
 
 /** Whether the selection stops part-way through [verse]. */
@@ -204,7 +191,7 @@ internal fun isPartial(range: VerseRange, verse: Int): Boolean {
 }
 
 /** The selection's own-text offsets at [verse]. */
-private fun offsets(range: VerseRange, verse: Int): Pair<Int?, Int?> {
+internal fun offsets(range: VerseRange, verse: Int): Pair<Int?, Int?> {
     val single = range.startVerse == range.endVerse
     if (verse == range.startVerse) return range.startChar to (if (single) range.endChar else null)
     if (verse == range.endVerse) return null to range.endChar
@@ -379,64 +366,12 @@ internal fun originalLine(
 }
 
 /**
- * The versions read in this room, each with who reads it: yours first, then
- * the others in the order of their readers' names. You are "you"; everybody
- * else is their first name.
- */
-internal fun roomReaders(
-    mine: TranslationID,
-    others: List<Pair<String, TranslationID>>,
-): List<Pair<TranslationID, String>> {
-    val byVersion = linkedMapOf<TranslationID, MutableList<String>>()
-    byVersion.getOrPut(mine) { mutableListOf() } += Copy.ORIGINAL_YOU
-    for ((name, version) in others.sortedBy { firstName(it.first).lowercase() }) {
-        byVersion.getOrPut(version) { mutableListOf() } += firstName(name).trim().ifEmpty { Copy.SOMEONE }
-    }
-    // "you", "you and Ruth", "you and Ruth and Ann": joined the way the
-    // app's other names are, and the iPhone's panel.
-    return byVersion.map { (version, names) -> version to names.joinToString(" and ") }
-}
-
-/**
- * How one version says the chosen words: in each verse, the ranges its links
- * give for them, read from its own text; where that comes to nothing, the
- * verse whole, and [RoomVersionLine.whole] says so. Null [texts] is a
- * version that has not reached this phone.
- */
-internal fun roomVersionLine(
-    translation: TranslationID,
-    readers: String,
-    chosen: Map<Int, List<Int>>,
-    links: Map<Int, List<AlignmentLink>>?,
-    texts: Map<Int, String>?,
-    breaks: Map<Int, List<Int>> = emptyMap(),
-): RoomVersionLine {
-    if (texts == null) return RoomVersionLine(translation, readers, null, whole = false)
-    var whole = false
-    val pieces = mutableListOf<String>()
-    for ((verse, words) in chosen.toSortedMap()) {
-        val text = texts[verse] ?: continue
-        val verseLinks = links?.get(verse)
-        val ranges = if (verseLinks != null) OriginalWords.ranges(words.toSet(), verseLinks, text) else emptyList()
-        val (from, to) = if (ranges.isEmpty()) {
-            whole = true
-            0 to text.length
-        } else {
-            ranges.first().start to ranges.last().end
-        }
-        pieces += spoken(text, from, to, breaks[verse].orEmpty()).trim()
-    }
-    if (pieces.isEmpty()) return RoomVersionLine(translation, readers, null, whole = false)
-    return RoomVersionLine(translation, readers, pieces.joinToString(" "), whole)
-}
-
-/**
  * `text[from, to)` as a reader would see it: a line of poetry is glued to
  * the next in a verse's own text ("O LORD?Who is like You"), because the
  * page breaks the line instead; here, out of the page, the break becomes a
  * space.
  */
-private fun spoken(text: String, from: Int, to: Int, breaks: List<Int>): String {
+internal fun spoken(text: String, from: Int, to: Int, breaks: List<Int>): String {
     val low = from.coerceIn(0, text.length)
     val high = to.coerceIn(low, text.length)
     val out = StringBuilder()
@@ -538,56 +473,6 @@ internal fun originalReadingOf(
     )
 }
 
-/**
- * How each version read in [room] says the selected words (§7.2). A bundled
- * version's text is on the phone; a licensed one's comes from its cache, or
- * — when [fetch] is set and the phone is online — through the licensed path
- * the page itself uses. One that cannot be had says so. Off the main thread.
- *
- * @param mine your version, whose chapter is [myContent] — the page's own.
- */
-internal suspend fun roomVersionLines(
-    model: AppModel,
-    context: Context,
-    room: Room,
-    reading: OriginalReading,
-    mine: TranslationID,
-    myContent: ScriptureChapter?,
-    fetch: Boolean,
-): List<RoomVersionLine> {
-    val me = model.me?.id
-    val others = model.members(room)
-        .filter { it.personID != me }
-        .mapNotNull { model.person(it.personID) }
-        .map { it.name to it.translation }
-    val range = reading.range
-    val address = VerseAddress(range.bookID, range.chapter, 1)
-    return roomReaders(mine, others).map { (translation, readers) ->
-        val content = if (translation == mine && myContent != null) {
-            myContent
-        } else {
-            val licensed = TranslationRegistry.translation(translation)?.takeIf { !it.isBundled }
-            when {
-                licensed == null -> withContext(Dispatchers.IO) { model.scripture.chapter(address, translation) }
-                else -> withContext(Dispatchers.IO) {
-                    model.scripture.cachedRemoteChapter(context, address, licensed)
-                } ?: if (fetch && model.isOnline) {
-                    model.scripture.ensureRemoteChapter(context, address, licensed)
-                } else {
-                    null
-                }
-            }
-        }
-        val links = content?.let {
-            withContext(Dispatchers.IO) { model.original.links(translation, range.bookID, range.chapter, it) }
-        }
-        roomVersionLine(
-            translation, readers, reading.chosen, links, content?.ownTexts(),
-            content?.ownSpanBreaks().orEmpty(),
-        )
-    }
-}
-
 // MARK: - The line
 
 /** Isolates a run of another direction inside a line (FSI … PDI). */
@@ -663,11 +548,12 @@ private const val PANEL_BODY = 17f
  * @param versionName your version's display name, for the whole-verse line.
  * @param lexicon Strong's dictionary, once read; a word's detail waits for it.
  * @param parsings the grammar codes' long forms, once read.
- * @param room how each version read in this room says the words; null while
- *   that is being worked out, and the section is left out when everyone
+ * @param room how the room's versions say the words, grouped ([roomSectionOf]);
+ *   null while that is being worked out. It says nothing when everyone
  *   reads one version — your own words are already in the row above.
  * @param initiallyOpen a word whose detail is open to begin with: the held
  *   word the line named, when the line or the verb opened the panel (§7.5).
+ * @param scroll where the panel is scrolled to, past its 55% ceiling.
  */
 @Composable
 fun OriginalPanel(
@@ -675,9 +561,10 @@ fun OriginalPanel(
     versionName: String,
     lexicon: Lexicon?,
     parsings: Parsings?,
-    room: List<RoomVersionLine>?,
+    room: RoomSection?,
     modifier: Modifier = Modifier,
     initiallyOpen: Pair<Int, Int>? = null,
+    scroll: ScrollState = rememberScrollState(),
 ) {
     val reduceMotion = rememberReduceMotion()
     val density = LocalDensity.current
@@ -700,7 +587,7 @@ fun OriginalPanel(
             .heightIn(max = ceiling)
             .background(Palette.surface, RoundedCornerShape(14.dp))
             .border(1.dp, Palette.rule, RoundedCornerShape(14.dp))
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scroll)
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -754,17 +641,13 @@ fun OriginalPanel(
             )
         }
 
-        if (room != null && room.size > 1) {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                SmallCaps(
-                    Copy.ORIGINAL_IN_THIS_ROOM,
-                    size = 12f,
-                    modifier = Modifier
-                        .padding(top = 4.dp)
-                        .semantics { heading() },
-                )
-                for (line in room) RoomLine(line)
-            }
+        // How the room's other versions say the same words (A62, §13.3):
+        // grouped by what they say, yours first. A phrase is set large, as
+        // it is on the page; a whole verse, or more, a step smaller.
+        if (room != null) {
+            val range = reading.range
+            val phrase = range.startVerse == range.endVerse && isPartial(range, range.startVerse)
+            InThisRoom(room, wordsSize = if (phrase) 19f else 16f)
         }
     }
 }
@@ -929,32 +812,6 @@ private fun WordDetail(
         }
         strongs?.let {
             SmallCaps(Copy.originalStrongs(it), size = 11f, color = Palette.muted.copy(alpha = 0.8f))
-        }
-    }
-}
-
-/**
- * One version read in this room: its name and who reads it, small, and its
- * words for the selection — muted where it is the whole verse, because that
- * is the fallback rather than the answer.
- */
-@Composable
-private fun RoomLine(line: RoomVersionLine) {
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        SmallCaps(
-            "${line.translation.displayName} · ${line.readers}",
-            size = 11f,
-            color = Palette.muted,
-        )
-        val words = line.words
-        if (words == null) {
-            Text(text = Copy.ORIGINAL_NOT_ON_THIS_PHONE, style = RibbonType.ui(14f), color = Palette.muted)
-        } else {
-            Text(
-                text = words,
-                style = RibbonType.scripture(16f),
-                color = if (line.whole) Palette.muted else Palette.text,
-            )
         }
     }
 }

@@ -133,6 +133,7 @@ import app.readribbon.design.BookSheet
 import app.readribbon.design.FadesUnderReduceMotion
 import app.readribbon.design.HairlineRule
 import app.readribbon.design.InkDot
+import app.readribbon.design.LocalHaptics
 import app.readribbon.design.Measure
 import app.readribbon.design.NoteMark
 import app.readribbon.design.Palette
@@ -399,8 +400,17 @@ fun ReadingScreen(
     fun chapterContent(n: Int): ScriptureChapter? = bookText?.chapter(n) ?: remoteChapters[n]
 
     // Composition state
+    //
+    // What is selected (A62): the platform's own selection on one chapter's
+    // page, read back as verses and words. `lifted` keeps its old name — it
+    // is still the one thing the toolbar, the original, the follow and the
+    // composers are about — but nothing is raised off the page any more.
     var lifted by remember { mutableStateOf<VerseRange?>(null) }
     var liftedChapter by remember { mutableStateOf<Int?>(null) }
+
+    /** Each chapter on screen's native selection, by chapter. */
+    val selections = remember { HashMap<Int, PageSelection>() }
+    val haptics = LocalHaptics.current
 
     /**
      * The verse you have this moment marked, so the page can draw the stroke
@@ -416,9 +426,9 @@ fun ReadingScreen(
     var composer by remember { mutableStateOf<ComposerState?>(null) }
 
     /**
-     * Where the finger was when the lift began — the word the original line
-     * names (§7.5). Let go of as soon as the handles move: from then on the
-     * line says what is selected rather than what was held.
+     * The word the original line names (§7.5): the one word a long-press
+     * selects. Let go of as soon as the selection is more than a word: from
+     * then on the line says what is selected rather than what was held.
      */
     var heldAt by remember { mutableStateOf<HeldWord?>(null) }
     val recorder = remember(context) { VoiceRecorder(context) }
@@ -861,7 +871,16 @@ fun ReadingScreen(
         book?.chapterHeading(readingChapter) ?: "${reading.bookID} $readingChapter"
     }
 
+    /**
+     * Whether a composer has the focus. The platform lets go of a selection
+     * when the keyboard takes the focus, so from here until the composer
+     * closes the selection is frozen: what the page reports is not news, and
+     * the words being written about are drawn held instead (§13.2).
+     */
+    fun pinned(): Boolean = composer is ComposerState.Write || composer is ComposerState.Speak
+
     fun clearLift() {
+        liftedChapter?.let { selections[it]?.clear() }
         lifted = null
         liftedChapter = null
         composer = null
@@ -878,28 +897,78 @@ fun ReadingScreen(
         editingNote = null
     }
 
-    fun beginLift(chapter: Int, verse: Int) {
-        liftedChapter = chapter
-        lifted = VerseRange(
-            bookID = reading.bookID, chapter = chapter, startVerse = verse, endVerse = verse,
+    /**
+     * A chapter's selection changed (A62): the platform's long-press, its
+     * handles, or one of the ways in below. The toolbar comes up with the
+     * first word selected and goes with the last; the original line and the
+     * panel follow whatever is selected now.
+     *
+     * The translation is stamped only while an offset is actually being
+     * carried: those numbers mean nothing in anybody else's words, and a
+     * range of whole verses has to stay exactly what it has always been on
+     * the wire (A41g). The version on this page is yours (A60); the original
+     * words worked out from the offsets when the mark is made are what carry
+     * it to theirs.
+     */
+    fun selectionChanged(chapter: Int, range: PageRange?) {
+        if (pinned()) {
+            // A composer is open on the held words: a hold on the page now
+            // would be a second selection with nothing to say about it, so
+            // it is let go of rather than left lying under the composer.
+            if (range != null) selections[chapter]?.clear()
+            return
+        }
+        if (range == null) {
+            // Only the chapter that holds the selection can let go of it: a
+            // chapter the selection has just left reports its own nothing.
+            if (liftedChapter == chapter) clearLift()
+            return
+        }
+        val other = liftedChapter
+        if (other != null && other != chapter) selections[other]?.clear()
+        val next = VerseRange(
+            bookID = reading.bookID,
+            chapter = chapter,
+            startVerse = range.startVerse,
+            endVerse = range.endVerse,
+            startChar = range.startChar,
+            endChar = range.endChar,
         )
-        composer = ComposerState.Toolbar
-        heldAt = null
+        val stamped = if (next.isWholeVerses) next else next.copy(charTranslation = translation)
+        liftedChapter = chapter
+        if (stamped != lifted) lifted = stamped
+        heldAt = range.word
+        if (composer == null) composer = ComposerState.Toolbar
     }
 
-    /** The word under the finger as the verse lifted (§7.5). */
-    fun holdAt(chapter: Int, verse: Int, offset: Int?) {
-        if (liftedChapter != chapter || lifted?.verses != verse..verse) return
-        // A press that found no letter (the verse's number) held no word:
-        // an offset before the verse's text, under which nothing links, so
-        // the line stays quiet rather than naming the whole verse.
-        heldAt = HeldWord(verse, offset ?: -1)
+    /**
+     * The whole of [verses] selected, by something other than the platform's
+     * own gesture: a tap on a verse's number, the toolbar's "the verse", or a
+     * screen reader's "leave something here". The page selects it the same
+     * way a long-press would, so everything after is the same for everybody.
+     * A selection made from nothing plays the lift's haptic, the moment it
+     * lifts (§9.3); the platform's long-press plays its own.
+     */
+    fun selectVerses(chapter: Int, verses: IntRange) {
+        if (pinned()) clearLift()
+        val fresh = lifted == null
+        val other = liftedChapter
+        if (other != null && other != chapter) selections[other]?.clear()
+        val whole = VerseRange(
+            bookID = reading.bookID, chapter = chapter, startVerse = verses.first, endVerse = verses.last,
+        )
+        liftedChapter = chapter
+        lifted = whole
+        heldAt = null
+        if (composer == null) composer = ComposerState.Toolbar
+        if (fresh) haptics?.verseLifts()
+        selections[chapter]?.select(whole)
     }
 
     /**
      * The original words for what is lifted, from the toolbar's verb, the
-     * line over it, or a verse's own action (A60). The lift stays: the panel
-     * is about it, and the handles keep working while it is open.
+     * line over it, or a verse's own action (A60). The selection stays: the
+     * panel is about it, and the handles keep working while it is open.
      */
     fun openOriginal(opens: Pair<Int, Int>? = null) {
         if (lifted == null) return
@@ -907,52 +976,16 @@ fun ReadingScreen(
         composer = ComposerState.Original(opens)
     }
 
-    fun extendLift(chapter: Int, verse: Int) {
-        if (liftedChapter != chapter) return
-        val current = lifted ?: return
-        val extended = VerseRange(
-            bookID = reading.bookID,
-            chapter = chapter,
-            startVerse = minOf(current.startVerse, verse),
-            endVerse = maxOf(current.endVerse, verse),
-        )
-        if (extended != current) {
-            lifted = extended
-            heldAt = null
-        }
-    }
-
     /**
-     * One end of the lift moved, by a handle (S06) or by its tap equivalent.
-     *
-     * `char` is an offset into that verse's own text, or null for the whole
-     * verse at that end — which is what the first or last word comes back as,
-     * so marking a whole verse never quietly becomes a mark on all of its
-     * words. The translation is stamped only while an offset is actually
-     * being carried: those numbers mean nothing in anybody else's words, and
-     * a range of whole verses has to stay exactly what it has always been on
-     * the wire (A41g).
+     * A composer opening on what is selected. It takes the focus, and the
+     * platform's selection goes with the focus; the selection is let go of
+     * here, deliberately, and the page draws the words held until the
+     * composer closes.
      */
-    fun moveLiftEnd(atStart: Boolean, verse: Int, char: Int?) {
-        val current = lifted ?: return
-        val moved = if (atStart) {
-            current.copy(startVerse = verse, startChar = char)
-        } else {
-            current.copy(endVerse = verse, endChar = char)
-        }
-        val stamped = if (moved.isWholeVerses) {
-            moved.copy(charTranslation = null)
-        } else {
-            // The version on this page, which is yours (A60). The offsets
-            // mean nothing in anybody else's words; the original words
-            // worked out from them when the mark is made are what carry it
-            // to theirs.
-            moved.copy(charTranslation = translation)
-        }
-        if (stamped != current) {
-            lifted = stamped
-            heldAt = null
-        }
+    fun compose(state: ComposerState) {
+        editingNote = null
+        composer = state
+        liftedChapter?.let { selections[it]?.clear() }
     }
 
     fun closeNote() {
@@ -999,6 +1032,19 @@ fun ReadingScreen(
         model.highlights(reading, chapter)
             .firstOrNull { verse in it.range.verses }
             ?.let { highlightLabel = it }
+    }
+
+    /**
+     * A tap on a verse's number: the whole verse (§13.2) — unless something
+     * is already up, in which case the tap dismisses it and does nothing
+     * else, the same as a tap anywhere in the text.
+     */
+    fun tapVerseNumber(chapter: Int, verse: Int) {
+        if (composer != null || lifted != null) {
+            clearLift()
+            return
+        }
+        selectVerses(chapter, verse..verse)
     }
 
     fun follow(person: PresentPerson) {
@@ -2116,7 +2162,14 @@ fun ReadingScreen(
                             openNoteVerse = openNoteVerse,
                             noteSlotY = noteSlotY[n],
                             noteCardHeight = noteCardHeight,
-                            lifted = if (liftedChapter == n) lifted else null,
+                            // Live while the toolbar or the original is up;
+                            // held, drawn still, while a composer has the
+                            // focus (§13.2).
+                            lifted = lifted.takeIf {
+                                liftedChapter == n &&
+                                    (composer is ComposerState.Toolbar || composer is ComposerState.Original)
+                            },
+                            held = lifted.takeIf { liftedChapter == n && pinned() },
                             justMarked = justMarked
                                 ?.takeIf { it.chapter == n && it.bookID == reading.bookID },
                             onMarkDrawn = { justMarked = null },
@@ -2131,10 +2184,23 @@ fun ReadingScreen(
                                 }
                             },
                             onFrame = { frame -> trackReading(n, frame) },
-                            onLongPressVerse = { verse -> beginLift(n, verse) },
-                            onHeld = { verse, offset -> holdAt(n, verse, offset) },
+                            onSelection = { selection, here ->
+                                if (here) {
+                                    selections[n] = selection
+                                } else {
+                                    if (selections[n] === selection) selections.remove(n)
+                                    // A selected chapter scrolled far enough
+                                    // to leave the page takes its selection
+                                    // with it — unless a composer is open on
+                                    // it, which keeps the words it is about.
+                                    if (liftedChapter == n && !pinned()) clearLift()
+                                }
+                            },
+                            onSelected = { range -> selectionChanged(n, range) },
+                            onSelectVerse = { verse -> selectVerses(n, verse..verse) },
+                            onTapVerseNumber = { verse -> tapVerseNumber(n, verse) },
                             onOriginal = { verse ->
-                                beginLift(n, verse)
+                                selectVerses(n, verse..verse)
                                 // A verse with no original words here (one
                                 // the oldest copies leave out) has nothing to
                                 // open: it stays lifted under the toolbar, as
@@ -2144,10 +2210,16 @@ fun ReadingScreen(
                                     ?.chapter(n)?.words(verse)
                                 if (!words.isNullOrEmpty()) openOriginal()
                             },
-                            onDragToVerse = { verse -> extendLift(n, verse) },
-                            onExtend = { atStart, verse, char -> moveLiftEnd(atStart, verse, char) },
                             onTapVerse = { verse -> tapVerse(n, verse) },
-                            onToggleNote = { address -> toggleNote(address) },
+                            onToggleNote = { address ->
+                                // A note opening carves the page under a
+                                // live selection: let the selection go
+                                // first, as a tap in the text would.
+                                if (composer is ComposerState.Toolbar || composer is ComposerState.Original) {
+                                    clearLift()
+                                }
+                                toggleNote(address)
+                            },
                             onTakeBack = { note, stackSize ->
                                 model.takeBack(note)
                                 if (stackSize <= 1) closeNote()
@@ -2275,28 +2347,28 @@ fun ReadingScreen(
                 }
             }
             // Who in the room reads what, read here so a change — someone
-            // switching version, or coming in — redraws their line.
+            // switching version, or coming in — redraws the section.
             val roomVersions = originalReading?.let {
                 model.room(reading)?.let { r ->
-                    model.members(r).map { it.personID to model.person(it.personID)?.translation }
+                    model.members(r).map { Triple(it.personID, model.person(it.personID)?.translation, it.ink) }
                 }
             }
-            val roomLines by produceState<List<RoomVersionLine>?>(
+            val roomSection by produceState<RoomSection?>(
                 null, originalReading?.chosen, originalReading?.range, translation, model.isOnline, roomVersions,
             ) {
                 val shown = originalReading
                 val ofRoom = model.room(reading)
                 if (shown == null || ofRoom == null) {
                     // Closed: the next selection starts from nothing rather
-                    // than from the last one's lines.
+                    // than from the last one's section.
                     value = null
                     return@produceState
                 }
                 // What the phone already holds, at once; then a licensed
                 // version that had not come yet, if it can be fetched now.
-                value = roomVersionLines(model, context, ofRoom, shown, translation, liftedContent, fetch = false)
-                if (value.orEmpty().any { it.words == null } && model.isOnline) {
-                    value = roomVersionLines(model, context, ofRoom, shown, translation, liftedContent, fetch = true)
+                value = roomSectionOf(model, context, ofRoom, shown, translation, liftedContent, fetch = false)
+                if (value?.waitsForAVersion == true && model.isOnline) {
+                    value = roomSectionOf(model, context, ofRoom, shown, translation, liftedContent, fetch = true)
                 }
             }
 
@@ -2319,10 +2391,17 @@ fun ReadingScreen(
                 originalReading = originalReading,
                 lexicon = lexicon,
                 parsings = parsings,
-                roomLines = roomLines,
+                roomSection = roomSection,
                 versionName = translation.displayName,
                 // Opened from a hold, on the word the line names (§7.5).
                 onOriginal = { openOriginal(underLift?.line?.opens) },
+                // The toolbar's "the verse": the selection taken out to the
+                // whole of the verses it touches (§13.2).
+                onWholeVerse = {
+                    val chapter = liftedChapter
+                    val range = lifted
+                    if (chapter != null && range != null) selectVerses(chapter, range.verses)
+                },
                 editingNote = editingNote,
                 recorder = recorder,
                 followBackOffer = followBackOffer,
@@ -2347,14 +2426,8 @@ fun ReadingScreen(
                 // opened from the toolbar is a *new* note, and the one way
                 // this defect gets back in is somebody adding a third route
                 // in that does not go through the dismiss.
-                onWrite = { address ->
-                    editingNote = null
-                    composer = ComposerState.Write(address)
-                },
-                onSpeak = { address ->
-                    editingNote = null
-                    composer = ComposerState.Speak(address)
-                },
+                onWrite = { address -> compose(ComposerState.Write(address)) },
+                onSpeak = { address -> compose(ComposerState.Speak(address)) },
                 onSaveWritten = { address, body ->
                     // Belt to the brace above: an edit only counts as one if
                     // it is still about the verse the note lives at. Anything
@@ -2567,6 +2640,7 @@ private fun ChapterSection(
     noteSlotY: Dp?,
     noteCardHeight: Dp,
     lifted: VerseRange?,
+    held: VerseRange?,
     justMarked: VerseRange?,
     onMarkDrawn: () -> Unit,
     measureInset: Dp,
@@ -2581,11 +2655,12 @@ private fun ChapterSection(
     onNoteSlot: (Dp) -> Unit,
     onNoteCardHeight: (Dp) -> Unit,
     onFrame: (Rect) -> Unit,
-    onLongPressVerse: (Int) -> Unit,
-    onHeld: (Int, Int?) -> Unit,
+    /** This chapter's selection coming onto the page (true) and leaving it. */
+    onSelection: (PageSelection, Boolean) -> Unit,
+    onSelected: (PageRange?) -> Unit,
+    onSelectVerse: (Int) -> Unit,
+    onTapVerseNumber: (Int) -> Unit,
     onOriginal: (Int) -> Unit,
-    onDragToVerse: (Int) -> Unit,
-    onExtend: (Boolean, Int, Int?) -> Unit,
     onTapVerse: (Int) -> Unit,
     onToggleNote: (VerseAddress) -> Unit,
     onTakeBack: (Note, Int) -> Unit,
@@ -2606,6 +2681,16 @@ private fun ChapterSection(
         animationSpec = RibbonMotion.arrive<Float>(reduceMotion),
         label = "chapter-arrival",
     )
+
+    // One selection per chapter on the page, so one chapter selects at a
+    // time (A62). Told to the reading screen while it is here, which is how
+    // the toolbar's verbs and the screen reader reach it.
+    val selection = remember { PageSelection() }
+    val currentOnSelection by rememberUpdatedState(onSelection)
+    DisposableEffect(selection) {
+        currentOnSelection(selection, true)
+        onDispose { currentOnSelection(selection, false) }
+    }
 
     if (chapter != null) {
         // Worked out again only when a mark, the version or the text changes:
@@ -2632,7 +2717,9 @@ private fun ChapterSection(
                     redLetter = model.settings.redLetter,
                 ),
                 marks = marks,
+                selection = selection,
                 lifted = lifted,
+                held = held,
                 justMarked = justMarked,
                 onMarkDrawn = onMarkDrawn,
                 openNote = openNoteVerse
@@ -2641,13 +2728,11 @@ private fun ChapterSection(
                 isFirstChapter = n == 1,
                 showMarginHint = !model.state.hasSeenMarginHint && n == 1,
                 onLayout = onLayout,
-                onLongPressVerse = onLongPressVerse,
-                onDragToVerse = onDragToVerse,
-                onExtend = onExtend,
-                onDragEnded = {},
+                onSelected = onSelected,
                 onTapVerse = onTapVerse,
                 onNoteSlot = onNoteSlot,
-                onHeld = onHeld,
+                onSelectVerse = onSelectVerse,
+                onTapVerseNumber = onTapVerseNumber,
                 onOriginal = onOriginal,
             )
 
@@ -3030,9 +3115,11 @@ private fun BottomChrome(
     originalReading: OriginalReading?,
     lexicon: Lexicon?,
     parsings: Parsings?,
-    roomLines: List<RoomVersionLine>?,
+    roomSection: RoomSection?,
     versionName: String,
     onOriginal: () -> Unit,
+    /** The toolbar's "the verse": the selection taken to whole verses. */
+    onWholeVerse: () -> Unit,
     editingNote: Note?,
     recorder: VoiceRecorder,
     followBackOffer: FollowBackOfferState,
@@ -3086,6 +3173,14 @@ private fun BottomChrome(
                     originalVerb = underLift?.verb,
                     onOriginal = onOriginal,
                     line = underLift?.line,
+                    // Only while an end is part-way through a verse: a
+                    // selection of whole verses has nothing to widen to.
+                    wholeVerse = if (bar.isWholeVerses) {
+                        null
+                    } else {
+                        Copy.wholeVerseVerb(several = bar.startVerse != bar.endVerse)
+                    },
+                    onWholeVerse = onWholeVerse,
                     modifier = Modifier.padding(bottom = 14.dp),
                 )
             }
@@ -3144,7 +3239,7 @@ private fun BottomChrome(
                     versionName = versionName,
                     lexicon = lexicon,
                     parsings = parsings,
-                    room = roomLines,
+                    room = roomSection,
                     initiallyOpen = (heldComposer.value as? ComposerState.Original)?.opens,
                     modifier = Modifier.padding(bottom = 10.dp),
                 )

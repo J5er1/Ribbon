@@ -77,6 +77,8 @@ reasoning.
    hit. What remains a departure is the speed: no mode is entered by how
    fast a thumb happens to move, for the reasons A41g gives. Android's
    toolbar dropped the phrase the handles set until A60 found it.
+   *(Changed since, by A62: the handles are the platform's own, and the
+   whole verse is "the verse" on the toolbar or a tap on its number.)*
 
 9. **Following, live presence, and thinking-of-you are backed by
    `RoomChannel` on iOS and Android.** (September 2026; rebuilt September
@@ -2279,7 +2281,10 @@ A41g. **A mark on a phrase.** A41e built S06's two handles and stopped at its
     precision it wants is always there rather than hiding behind a speed.
 
     Each handle carries four tap equivalents (§11) rather than two: a word
-    either way, and a verse either way.
+    either way, and a verse either way. *(Changed since, by A62: the
+    selection and its handles are the platform's; a long-press selects a
+    word, and the two ends keep their word and verse steps for screen
+    readers.)*
 
     **Still not here:** a sub-verse mark cannot be shown to somebody reading
     another translation as anything narrower than the verse. Doing better
@@ -3681,7 +3686,8 @@ A60. **A mark follows its words, and everybody reads their own version
       it follows the selection. Tap it — or the verb — for the rest, and
       while the lift is still a hold the panel opens on that word with its
       detail already open, on both phones. Nothing linked under the finger
-      (a verse number, say), and the line says nothing.
+      (a verse number, say), and the line says nothing. *(Changed since, by
+      A62: holding a word selects that word, and it is the word held.)*
 
     From a selection, the way in is a third verb on the toolbar, after
     speak, saying the language of the words the panel will show — "the
@@ -3940,6 +3946,218 @@ A61. **What's new, on launch (reverses §6.2's "no what's new").** Owner's
       the old value back, and the screen shows once more on a later plain
       launch. The race is the same one every one-time flag already has.
 
+A62. **Native selection, and a room of eleven (amends S05, S06, A41g and
+    deviation 8).** Owner's call, in the owner's words: *"I guess the whole
+    selecting feature is the one thing that makes it struggle maybe we
+    should allow the native select and work around that and also imagine a
+    room of 11 people how long that list would get there's better ways try
+    em."* Both halves were explored on both phones, with spikes, and three
+    designs for the room were drawn and judged. Asked, the owner chose
+    three things: for the room, *"Grouped + differences"*; for the whole
+    verse, *"Both"* — a control on the toolbar and a tap on the verse's
+    number; and capitals *ignored* when versions are compared, so the
+    Berean's reverent "Him" is the World English's "him".
+
+    **Why the selection struggled.** The lift was typeset. A held verse was
+    raised by a shadow in the page's own text, so it was part of what the
+    page was built from, and every word a handle crossed set and laid out
+    the whole chapter again. That is the struggle the owner felt. The
+    platforms already draw a selection without touching the text under it;
+    on iPhone, mapping one to a verse range was measured at about 0.65 µs a
+    change. So the page is now selectable the way any page of text is, and
+    Ribbon reads what the platform selected rather than drawing its own.
+
+    **What changes for the reader.**
+
+    - **A long-press selects a word**, the platform's way, with the
+      platform's handles, magnifier and highlight, tinted in the app's
+      accent. It used to lift the whole verse. S05's lift — *"It lifts about
+      2 pt with a soft shadow — the verse becomes a physical thing you're
+      holding"* — survives where it means most: while write or speak is
+      open, the platform has let go of the selection (the composer has the
+      focus), and the words the note is about are drawn held until it
+      closes. Drawn, not typeset; it costs a redraw.
+    - **The whole verse is one tap away, two ways.** S06 wants the handles
+      *"snapping to verse boundaries by default"*; the default is a word
+      now, so the verse needed a way back. While either end of a selection
+      is part-way through a verse, the toolbar carries "the verse" — "the
+      verses" across more than one — which takes the selection out to whole
+      verses. And a tap on a verse's number selects that verse. The number
+      is a small superscript, so a tap within about 16 points of it counts.
+      A tap on the number no longer opens what is here; a tap on the words
+      still does.
+    - **A selection that reaches a verse's first and last words is the whole
+      verse**, and is stored as one — which is how A41g's handles worked,
+      kept. When something is highlighted the stored ends are taken outward
+      to whole words, then anchored to their Hebrew or Greek (A60), then the
+      selection lets go.
+    - **A tap while something is selected only lets go.** It never also
+      opens the notes of the verse it landed on.
+    - **One word selected is the word held.** A60's "Hold: shows both" comes
+      for free: the line above the inks names the word in the original.
+      Move a handle and the line follows the selection, as before.
+    - **A selection holds a follow**, as a lift did, and a chapter leaving
+      the page takes its selection with it.
+
+    **The system menu is gone**, on both phones: no Copy, no Look Up, no
+    Translate, no Share. It is a floating slab of glass laid over the verse
+    a person is reading — the brief's list of things not to do starts with
+    glass panels — and its first item copies Scripture out of the app,
+    which for a licensed version is not ours to offer (§16.8). Ribbon's own
+    toolbar at the foot is the menu: highlight, write, speak, the language,
+    and now the verse.
+
+    **Double-tap stays reserved** (S02: *"double-tap: nothing, reserved"*).
+    The iPhone's text view comes with its own double- and triple-tap; they
+    are switched off (I39). Android's selection container is given no
+    double-tap of its own; whether the platform answers one is for a
+    device to show.
+
+    **A bug found, and gone.** While the iPhone was being spiked: 5,563 of
+    14,752 verses checked have their own text ending in a space, the gap
+    before the next verse. The old handle at the end of a selection stopped
+    at the last letter, and a mark counted as reaching the end only past
+    that space — so a handle taken to a verse's last word stored a partial
+    mark with its version, not the whole verse. 5,131 verses were affected.
+    A verse's trailing blank is its edge now, on both phones, and a
+    selection to the last word is the whole verse
+    (`aSelectionToAVersesLastWordIsTheWholeVerse`).
+
+    **Two more, found in review.** A handle dragged over the blank and the
+    number between two verses briefly selects nothing but those, and the
+    page took that for a press on the running head: the selection, its
+    handles and the toolbar went from under the finger. Now, once words
+    are selected, a selection of only the gap is not reported and the words
+    stand (`aHandlePassingOverTheGapBetweenVersesKeepsTheWords`); a fresh
+    press on a number still takes its verse, and on the head or the hint,
+    nothing. And on Android a long-press made while write or speak was open
+    left a second selection under the composer with no toolbar to act on
+    it; it is let go of at once now, and the note keeps its verse.
+
+    **For screen readers** each verse is still one element with "open
+    what's here", "leave something here" and "the original words";
+    "leave something here" selects the whole verse. While something is
+    selected its two ends are elements of their own — "Where the mark
+    starts", "Where the mark ends" — adjusted a word at a time and moved a
+    verse at a time by action, which is what A41g's handles carried. The
+    plan put Android's steps on the toolbar's range label instead; they are
+    on the two ends, as on the iPhone, so the two phones say the same.
+
+    **In this room, for eleven.** A60 listed each version somebody read,
+    who read it, and its words. At two people that was right. At eleven on
+    four versions it was every name in the room and the selection said four
+    times over, inside a panel capped at 55% of the screen. Three
+    designs were built as look-book spikes and judged at two people and at
+    eleven: one block per thing said, with faces (46 of 60); yours, then
+    only what differs (42); and a row of chips, one version at a time (33).
+    The owner took the first, with three things from the second. What
+    shipped:
+
+    - **Grouped by what is said.** Versions whose words for the selection
+      are the same words in the same order are one block. Capitals and
+      punctuation are ignored; order is not — the World English's "All
+      things were made through him" is not the Berean's "Through Him all
+      things were made", even with every word shared. So eleven people on
+      four versions are as many blocks as there are different wordings: two
+      or three for a phrase, four for John 1:3 whole. The list grows with
+      how much the versions disagree, not with how many people came.
+    - **Yours first, and no card.** A small-caps label, "Yours · Berean
+      Standard", with any other version here that says the same added to
+      it — "Yours · Berean Standard and American Standard" — and your face
+      first in its row.
+    - **Every other block** is its versions' names in small caps, then the
+      words in Literata, with the words that differ from yours at full
+      strength and Medium weight and the words you share at 70% — weight as
+      well as strength, never colour alone — then a row of faces.
+    - **Faces stop at three.** At most three overlapping faces (the room's
+      own portraits and monograms), then first names in small caps, ending
+      "and others" past three. Never a number.
+    - **When every version agrees with yours** there is no heading and no
+      list, and the words are not said again: one muted line, "Ruth reads
+      these words as you do." with one other person, "Everyone here reads
+      these words as you do." with more, beside up to three faces. When
+      everyone reads your version the section is left out, as before.
+    - **A version not on this phone yet** is one block of its own, "Not on
+      this phone yet.", with its readers, and it keeps the room from
+      agreeing: nobody is told the room reads the words as they do about
+      words this phone cannot see.
+    - **A version that cannot be matched word for word** — its links come
+      to nothing for the selection, so its whole verse stands in, as A60
+      had it — is shown muted and is not set against yours word by word,
+      which would mark nearly every word as different. In John 1:3 the
+      World English's own links put "through him" under the wrong Greek
+      word (A60's known one), so for "Through Him" its whole verse stands
+      in.
+    - Blocks arrive on `settle`, and are simply there under reduce motion;
+      a block already there stays put while a handle moves. The panel keeps
+      its 55% cap and scrolls. Each block is one TalkBack and VoiceOver
+      element, reading the words, then the versions, then every first name,
+      including those past "and others".
+
+    It compares versions, never people (§6.12), as A60's list did.
+
+    **Where it lives.** The grouping is in the core, `RoomRenderings`
+    (RibbonCore and its port): your version's phrase and every other
+    version's, each with its readers, in; groups out — versions, the words,
+    which words differ, readers, whether it is yours — and the versions not
+    on this phone kept apart. Words are the aligner's own tokens
+    (`PivotAligner`), compared without case. The difference is a
+    longest-common-subsequence over those words, walked the same way on
+    both phones so a tie marks the same word. On the phones: `RoomSection`
+    (both) builds the section from the room's members and draws it;
+    `ChapterPage` (iPhone) and the page builder (Android) turn the
+    platform's selection into a verse range and back. Five lines are new in
+    `Copy`, in the same order on both phones: "the verse" / "the verses",
+    "Yours · …" (versions listed the way a person says them, "A, B and
+    C"), "and others", and the two agreement lines. A60's room strings —
+    the heading, "you", "Not on this phone yet." — all still have callers,
+    so none is removed. iOS's `SelectionHandle` is deleted, and Android's
+    handles, gesture state and typeset lift with it.
+
+    **Tests that hold it.** In RibbonCore and its port, same names, same
+    inputs: `RoomRenderingsTests` — eleven on a phrase and on a whole verse,
+    capitals, punctuation (curly quotes, a dash, a line break, "Lord’s" and
+    "Lord's"), reordering, the differing words' edges, other versions that
+    agree sharing a block, readers with yours first, a version not on this
+    phone, a room of one version, every version agreeing. On Android:
+    `ChapterSelectionTest` (the platform's selection read back to a verse
+    range, the last word being the whole verse, the gap between verses, a
+    tap that only lets go, the number's reach, the head selecting nothing,
+    the system toolbar never asked for, the held words, the screen reader's
+    ends), `ReadingSelectionTest` (long-press to toolbar to the verse, a
+    held word marked and anchored to its Greek, the original following an
+    end, writing freezing the selection), `RoomSectionTest`,
+    `InThisRoomTest`, and the look book — `theSelection`,
+    `theSelectionHeld`, `theOriginalInThisRoom`, and new
+    `theOriginalInARoomOfEleven` (its phrase and its whole verse) and
+    `theOriginalWhenTheRoomAgrees`, on both palettes, looked at. The room
+    of eleven reads four versions; the King James and American Standard in
+    it are public-domain stand-ins in the test fixture, and the app carries
+    neither. The spikes are deleted. 163 tests in the Swift core, 167 in
+    the Kotlin, 232 in the Android app; lint has no errors.
+
+    **Not exercised on a device**, on either phone: the platform's handles,
+    magnifier and highlight over the washes; whether a double-tap selects
+    anything; the handles near the foot of the screen and over the toolbar;
+    a handle dragged to the edge scrolling the page while a follow holds;
+    the faces and the fade of a block in the panel. The iPhone has not run
+    at all (I39).
+
+    **Still not here:**
+
+    - **The highlight and the mark can differ by a character.** The
+      platform's word ends at punctuation and Ribbon's at a space, so a
+      selection can show "God" and store "God." The stored mark is the
+      whole word, which is the one that matters.
+    - **A handle let go on the gap between verses** leaves the toolbar
+      acting on the words selected just before — visible, and nothing lost.
+    - **Two chapters selected at once on Android.** If the platform reports
+      a selection in a new chapter before letting go of the old one, which
+      report comes first decides whether an open panel follows the new
+      selection or closes. The iPhone lets go of the old page itself (I39).
+    - **A long verse that differs** is shown whole. Trimming it to the
+      words that differ, with a little either side, was the judge's "later".
+
 A63. **Every row, not the first thousand; and no public channel.** Owner,
     asked whether what a room shares would be rate- or size-limited by
     Supabase Realtime: *"Will the things getting shared get rate limited or
@@ -4109,7 +4327,7 @@ I8. **A mark on a phrase (A41g), and the washes (A41b/d/f).** `VerseRange`
     word edges; each has four VoiceOver actions — a verse or a word, either
     way — and the whole verse has "open what's here" and "leave something
     here" (§11). *(Changed since, by A60: anyone else sees the same words in
-    their own version.)*
+    their own version. And by A62 and I39: the handles are UIKit's own.)*
 
     The wash is redrawn: one path per mark, filled once (no dark band at a
     line break, no staggered rows, one shape), hung off the baseline (0.88
@@ -4723,6 +4941,52 @@ I38. **What's new, on iOS (A61).** The decisions are A61's, and so is the
       were checked under the Linux harness; the screen has SwiftUI previews
       only. The text renderers are the likeliest place for the first build
       to fail, and the motion and VoiceOver focus have not run.
+
+I39. **Native selection, and a room of eleven, on iOS (A62).** The decisions
+    are A62's; what is only iOS's:
+
+    - **The page is a selectable, uneditable `UITextView`.** Its
+      `selectedRange` becomes a verse range through `ChapterPage` — `ends(of:)`
+      one way, `selection(of:)` the other, for a selection the app makes
+      itself (a number tapped, "the verse", "leave something here"). The
+      mapping was checked on Linux against the bundled text: 658 chapters,
+      15,636 verses, 39,367 random selections mapped there and back,
+      314,936 steps of an end, 321,056 one-word holds and 14,978 verse
+      numbers.
+    - **The system's extras are switched off twice where once might not
+      hold.** The edit menu is an empty `UIMenu` and `canPerformAction`
+      answers no; text drag is off, Writing Tools are off, and the view's
+      own double- and triple-tap recognisers are disabled, which is what
+      keeps double-tap reserved. The tint is the brand's chartreuse.
+    - **The held verse is lifted, not banded.** While write or speak is
+      open, `InkLayoutManager` draws the verse raised 2 pt with a soft
+      shadow — S05's lift, kept, but drawn rather than typeset, so it costs
+      a redraw. Android freezes the selection's own tint instead.
+    - **Speak takes no focus**, so the selection and its handles stayed up
+      under the recorder, and one handle dragged took the toolbar back and
+      lost the recording. Opening write or speak lets go of the page's
+      selection itself; the note keeps its verse.
+    - **One page holds a selection at a time.** A new selection in another
+      chapter lets go of the old page, whose report that it has let go is
+      then ignored, so a later tap there cannot wipe the new one.
+    - **A page rebuilt for a new version or theme** starts with nothing
+      selected. UIKit keeps `selectedRange` across new text and clamps it
+      onto the new words; it is reset now, quietly.
+    - **The number's reach is 16 points along the line and 6 across it.**
+      The figures' box already spans the full height of the line, so 16
+      points up and down reached into the lines above and below, and a tap
+      on their words selected the number's verse instead of opening its
+      own notes.
+    - **Written without Xcode.** `swiftc -parse` passes on every file of the
+      reading screen, `Copy` and `RibbonType`; the room's grouping, its
+      names and its lines were checked on Linux (48 checks). The app has not
+      been compiled here and has not run. The likeliest surprises are
+      UIKit's: whether an empty `UIMenu` keeps the menu away on iOS 26;
+      whether UIKit adds its multi-tap recognisers back; whether a
+      selection the app makes shows handles on a view that cannot be
+      edited; a second haptic, if iOS plays its own on the long-press; and
+      in the panel, Literata's Medium, the overlapping faces and a block's
+      fade inside the measured scroll view.
 
 ## Licensed translations (decided: API.Bible)
 

@@ -11,8 +11,10 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Canvas
@@ -199,6 +201,10 @@ fun leaveToolbarExit(): ExitTransition {
  *   original words for it.
  * @param line the original line (§7.5), shown directly above the inks, or
  *   null for the quiet case: nothing linked under the finger.
+ * @param wholeVerse "the verse" or "the verses" — the selection taken out to
+ *   the whole of the verses it touches (§13.2) — or null when it already is
+ *   whole verses. The platform's long-press selects a word; this is the
+ *   default S06 asks for, said as a control.
  */
 @Composable
 fun LeaveToolbar(
@@ -213,7 +219,10 @@ fun LeaveToolbar(
     originalVerb: String? = null,
     onOriginal: () -> Unit = {},
     line: OriginalLine? = null,
+    wholeVerse: String? = null,
+    onWholeVerse: () -> Unit = {},
 ) {
+    val reduceMotion = rememberReduceMotion()
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -243,6 +252,40 @@ fun LeaveToolbar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
+            // "The verse", first and pinned: it is about what is selected,
+            // which everything after it acts on. It comes and goes with a
+            // part-way end, opening its own room in the bar rather than
+            // pushing the verbs about on a cut; under reduce motion it is
+            // simply there or not (§11). Held through its exit so the words
+            // do not blank before it has gone.
+            val heldWhole = remember { mutableStateOf(wholeVerse) }
+            if (wholeVerse != null) heldWhole.value = wholeVerse
+            AnimatedVisibility(
+                visible = wholeVerse != null,
+                enter = fadeIn(RibbonMotion.settle(reduceMotion)) +
+                    expandHorizontally(RibbonMotion.settle(reduceMotion)),
+                exit = fadeOut(RibbonMotion.settle(reduceMotion)) +
+                    shrinkHorizontally(RibbonMotion.settle(reduceMotion)),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    QuietControl(
+                        title = heldWhole.value ?: "",
+                        onClick = onWholeVerse,
+                        color = Palette.text,
+                        size = 13f,
+                    )
+                    Box(
+                        Modifier
+                            .width(1.dp)
+                            .height(20.dp)
+                            .background(Palette.rule),
+                    )
+                }
+            }
+
             // Two people: eight swatches, pick per highlight, last-used
             // pre-selected. Three or more: one swatch — yours (§4.5).
             // Paused: only highlight shows, greyed and inert — the room

@@ -35,20 +35,20 @@ struct ReadingScreen: View {
     var onStartAnother: () -> Void
 
     // Composition state
-    @State private var lifted: VerseRange?
-    @State private var liftedChapter: Int?
-    /// Where in the lifted verse's own text the finger came down, while the
-    /// lift is still the one the hold made: the word the original line
-    /// says (A60, §7.5). -1 for a hold that found no word (the verse's
-    /// number), which keeps the line quiet. Gone as soon as a handle moves:
-    /// nil is a lift the handles hold, and the panel then opens on no word.
-    @State private var heldOffset: Int?
+    /// What the page has selected (A62). A reference the body never reads:
+    /// a handle crossing a word redraws the toolbar over it, and nothing
+    /// else — not the page, not every chapter's marks.
+    @State private var selection = PageSelection()
+    /// The verse a note is being written or spoken on, drawn held while the
+    /// composer has the focus and the page's selection has let go (S05).
+    @State private var heldVerse: VerseAddress?
     @State private var composer: ComposerState?
     @State private var recorder = VoiceRecorder()
     @State private var editingNote: Note?
     /// A mark you made just now, revealed along its words (A41d).
     @State private var justMarked: UUID?
-    /// The typeset page of each chapter on screen, for the handles.
+    /// The typeset page of each chapter on screen, and the way to its
+    /// selection (A62).
     @State private var pages: [Int: ChapterPageHandle] = [:]
     /// The chapter list (A31), from the running-head pill at the foot.
     @State private var showChapters = false
@@ -133,13 +133,14 @@ struct ReadingScreen: View {
         case toolbar
         case write(VerseAddress)
         case speak(VerseAddress)
-        /// The original words of the lifted selection (A60, §7): opened on
-        /// a word when it came from the held word's line.
+        /// The original words of the selection (A60, §7): opened on a word
+        /// when it came from the held word's line.
         case original(OriginalSelection.WordID?)
 
-        /// The lift keeps its handles: under the toolbar, and under the
-        /// original, which follows them.
-        var keepsHandles: Bool {
+        /// The toolbar and the panel follow the selection as it moves.
+        /// Write and speak take the focus, and the page lets go of it; the
+        /// verse they are on stays held (A62).
+        var followsSelection: Bool {
             switch self {
             case .toolbar, .original: return true
             case .write, .speak: return false
@@ -362,8 +363,9 @@ struct ReadingScreen: View {
                 followState.phase = newPhase
                 // A gesture is a drag that scrolls, and nothing less. A
                 // finger resting on the page — a tap on a verse, a note's
-                // mark, a long press to lift — only holds the follow still
-                // while it is there.
+                // mark, a long press to select — only holds the follow still
+                // while it is there. A selection, once made, holds it for as
+                // long as it is up (`pageIsBusy`).
                 if newPhase == .tracking, oldPhase == .idle { followState.restAtTouch = restingPlace() }
                 if newPhase == .interacting, oldPhase != .interacting { gestureBegan() }
                 if oldPhase == .interacting, newPhase != .interacting { gestureEnded() }
@@ -627,7 +629,7 @@ struct ReadingScreen: View {
                         dynamicTypeSize: dynamicTypeSize),
                     marks: marks(chapter: n),
                     justMarked: justMarked,
-                    lifted: liftedChapter == n ? lifted : nil,
+                    heldVerse: heldVerse?.chapter == n ? heldVerse?.verse : nil,
                     openNote: openNote(in: n),
                     isFirstChapter: n == 1,
                     showMarginHint: !model.state.hasSeenMarginHint && n == 1,
@@ -637,19 +639,17 @@ struct ReadingScreen: View {
                         continueLanding(in: n)
                         settleSoon()
                     },
-                    onLongPressVerse: { verse, offset in beginLift(chapter: n, verse: verse, at: offset) },
-                    onDragToVerse: { verse in extendLift(chapter: n, verse: verse) },
-                    onDragEnded: {},
+                    onSelection: { ends, held in selectionChanged(ends, held: held, chapter: n) },
+                    onVerseNumber: { verse in tapVerseNumber(chapter: n, verse: verse) },
+                    onLetGo: { clearSelection() },
                     onTapVerse: { verse in tapVerse(chapter: n, verse: verse) },
+                    onLeaveSomethingHere: { verse in select(.whole(verse), chapter: n) },
                     onOriginalWords: { verse in openOriginal(chapter: n, verse: verse) },
                     onMarkDrawn: { justMarked = nil },
                     onNoteSlot: { y in noteSlotY[n] = y })
 
                 gutterMarks(chapter: n)
                 openNoteCard(chapter: n)
-                if liftedChapter == n, lifted != nil, composer?.keepsHandles == true {
-                    liftHandles(chapter: n)
-                }
                 if let mark = landingMark, mark.chapter == n {
                     // Nothing to see: a point in the chapter for the scroll
                     // view to aim at, set so that the verse's line comes to
@@ -801,84 +801,6 @@ struct ReadingScreen: View {
             VerseAddress(bookID: reading.bookID, chapter: chapter, verse: 1), translation: licensed)
     }
 
-    // MARK: The handles (A41g)
-
-    /// The two ends of the lift, draggable to a word's edge — and, for a
-    /// finger that cannot drag, four actions each (§11).
-    @ViewBuilder
-    private func liftHandles(chapter: Int) -> some View {
-        let layout = chapterLayouts[chapter] ?? ChapterLayout()
-        if let start = layout.liftStart {
-            SelectionHandle(
-                label: Copy.whereTheMarkStarts,
-                onDrag: { point in moveHandle(chapter: chapter, start: true, to: point) },
-                onVerse: { forward in stepHandleVerse(chapter: chapter, start: true, forward: forward) },
-                onWord: { forward in stepHandleWord(chapter: chapter, start: true, forward: forward) })
-            .position(x: start.minX, y: start.maxY + 8)
-        }
-        if let end = layout.liftEnd {
-            SelectionHandle(
-                label: Copy.whereTheMarkEnds,
-                onDrag: { point in moveHandle(chapter: chapter, start: false, to: point) },
-                onVerse: { forward in stepHandleVerse(chapter: chapter, start: false, forward: forward) },
-                onWord: { forward in stepHandleWord(chapter: chapter, start: false, forward: forward) })
-            .position(x: end.maxX, y: end.maxY + 8)
-        }
-    }
-
-    private func moveHandle(chapter: Int, start: Bool, to point: CGPoint) {
-        guard let handle = pages[chapter], let current = lifted,
-              let placed = handle.place(at: point)
-        else { return }
-        let edge = handle.wordEdge(verse: placed.verse, offset: placed.offset, forward: !start)
-        setLift(chapter: chapter, start: start, verse: placed.verse, offset: edge, current: current)
-    }
-
-    private func stepHandleVerse(chapter: Int, start: Bool, forward: Bool) {
-        guard let current = lifted else { return }
-        let verse = (start ? current.startVerse : current.endVerse) + (forward ? 1 : -1)
-        // A verse the page does not have — before the first or past the
-        // last — is not a place a mark can go.
-        guard verse >= 1, let page = pages[chapter], page.length(of: verse) > 0 else { return }
-        setLift(chapter: chapter, start: start, verse: verse, offset: start ? 0 : page.length(of: verse), current: current)
-    }
-
-    private func stepHandleWord(chapter: Int, start: Bool, forward: Bool) {
-        guard let handle = pages[chapter], let current = lifted else { return }
-        let verse = start ? current.startVerse : current.endVerse
-        let length = handle.length(of: verse)
-        let offset = start ? (current.startChar ?? 0) : (current.endChar ?? length)
-        setLift(chapter: chapter, start: start, verse: verse, offset: handle.wordStep(verse: verse, offset: offset, forward: forward), current: current)
-    }
-
-    /// One end moved. A whole verse is a whole verse: an end at its first
-    /// or last letter is stored as nil, so the mark reads the same on a
-    /// page in another version.
-    private func setLift(chapter: Int, start: Bool, verse: Int, offset: Int, current: VerseRange) {
-        let length = pages[chapter]?.length(of: verse) ?? 0
-        let clamped = max(0, min(length, offset))
-        var startVerse = current.startVerse, endVerse = current.endVerse
-        var startChar = current.startChar, endChar = current.endChar
-        if start {
-            startVerse = verse
-            startChar = clamped == 0 ? nil : clamped
-        } else {
-            endVerse = verse
-            endChar = clamped >= length ? nil : clamped
-        }
-        let next = VerseRange(
-            bookID: reading.bookID, chapter: chapter,
-            startVerse: startVerse, endVerse: endVerse,
-            startChar: startChar, endChar: endChar,
-            charTranslation: (startChar == nil && endChar == nil) ? nil : translation)
-        if next != current {
-            lifted = next
-            // The selection is the handles' now: the line says what they
-            // hold, not the word first held.
-            heldOffset = nil
-        }
-    }
-
     private func openNote(in chapter: Int) -> (verse: Int, height: CGFloat)? {
         guard let openNoteVerse, openNoteVerse.chapter == chapter else { return nil }
         return (openNoteVerse.verse, noteCardHeight)
@@ -985,67 +907,45 @@ struct ReadingScreen: View {
     @ViewBuilder
     private var bottomChrome: some View {
         switch composer {
-        case .toolbar:
-            if let lifted, let chapter = liftedChapter {
-                let context = originalContext(chapter: chapter)
-                let selection = context.selection(lifted)
-                let line = context.line(lifted, held: heldOffset)
-                LeaveToolbar(
-                    room: room,
-                    range: lifted,
-                    roomPaused: room.isPaused,
-                    onHighlight: { ink in
-                        // The original words under the phrase go with it,
-                        // worked out now from this page's links (A60): a
-                        // mark is never changed once made, so this is the
-                        // only moment they can be.
-                        let anchored = OriginalWords.anchored(
-                            lifted, links: wordLinks(chapter: chapter), source: model.original.source)
-                        let made = model.addHighlight(anchored, ink: ink, in: reading)
-                        justMarked = made?.id
-                        clearLift()
-                    },
-                    // The toolbar gives way to what it opened: a
-                    // cross-fade in the same place, rather than a cut.
-                    onWrite: {
-                        withAnimation(RibbonMotion.arrive) {
-                            composer = .write(VerseAddress(bookID: reading.bookID, chapter: chapter, verse: lifted.startVerse))
-                        }
-                    },
-                    onSpeak: {
-                        withAnimation(RibbonMotion.arrive) {
-                            composer = .speak(VerseAddress(bookID: reading.bookID, chapter: chapter, verse: lifted.startVerse))
-                        }
-                    },
-                    // The verb and the line open the same panel, on the
-                    // held word when there is one (§7.3, §7.5).
-                    originalVerb: selection.map { Copy.originalVerb($0.language) },
-                    originalLine: line,
-                    onOriginal: {
-                        withAnimation(RibbonMotion.arrive) {
-                            composer = .original(line?.opens)
-                        }
-                    })
-                .padding(.bottom, 14)
-            }
-        case .original(let opening):
-            // The panel says whatever the lift holds now — the handles stay
-            // live above it — and a tap in the text leaves it, lift and all,
-            // as it leaves a composer.
-            if let lifted, let chapter = liftedChapter,
-               let selection = originalContext(chapter: chapter).selection(lifted) {
-                OriginalPanel(
-                    selection: selection,
-                    room: room,
-                    translation: translation,
-                    pageTexts: chapterContent(chapter)?.ownTexts() ?? [:],
-                    pageBreaks: chapterContent(chapter)?.ownSpanBreaks() ?? [:],
-                    maxHeight: viewportHeight * 0.55,
-                    opening: opening,
-                    onClose: clearLift)
-                .padding(.bottom, 10)
-                .transition(.opacity)
-            }
+        case .toolbar, .original:
+            SelectionChrome(
+                selection: selection,
+                composer: composer ?? .toolbar,
+                room: room,
+                translation: translation,
+                maxPanelHeight: viewportHeight * 0.55,
+                originalContext: { originalContext(chapter: $0) },
+                pageText: { n in
+                    let page = chapterContent(n)
+                    return (page?.ownTexts() ?? [:], page?.ownSpanBreaks() ?? [:])
+                },
+                onHighlight: { range, chapter, ink in highlight(range, chapter: chapter, ink: ink) },
+                // The toolbar gives way to what it opened: a cross-fade in
+                // the same place, rather than a cut. The verse stays held,
+                // drawn by the page; the system's selection is let go of, so
+                // its handles cannot move under a composer — speak takes no
+                // focus from the page — and the page says nothing new.
+                onWrite: { address in
+                    withAnimation(RibbonMotion.arrive) {
+                        heldVerse = address
+                        composer = .write(address)
+                    }
+                    pages[address.chapter]?.clearSelection()
+                },
+                onSpeak: { address in
+                    withAnimation(RibbonMotion.arrive) {
+                        heldVerse = address
+                        composer = .speak(address)
+                    }
+                    pages[address.chapter]?.clearSelection()
+                },
+                // The verb and the line open the same panel, on the held
+                // word when there is one (§7.3, §7.5).
+                onOriginal: { word in
+                    withAnimation(RibbonMotion.arrive) { composer = .original(word) }
+                },
+                onWholeVerses: { range, chapter in select(PageEnds(range).wholeVerses, chapter: chapter) },
+                onClose: { clearSelection() })
         case .write(let address):
             WriteComposer(
                 verse: address,
@@ -1059,9 +959,9 @@ struct ReadingScreen: View {
                         considerAsking()
                     }
                     editingNote = nil
-                    clearLift()
+                    clearSelection()
                 },
-                onCancel: { editingNote = nil; clearLift() })
+                onCancel: { editingNote = nil; clearSelection() })
             .padding(.bottom, 10)
             .transition(.opacity)
         case .speak(let address):
@@ -1071,9 +971,9 @@ struct ReadingScreen: View {
                 onKeep: { url, waveform in
                     model.leaveVoiceNote(audioURL: url, waveform: waveform, at: address, in: reading)
                     considerAsking()
-                    clearLift()
+                    clearSelection()
                 },
-                onDismiss: clearLift)
+                onDismiss: { clearSelection() })
             .padding(.horizontal, 40)
             .padding(.bottom, 14)
             .readableColumn()
@@ -1143,6 +1043,78 @@ struct ReadingScreen: View {
             }
             .padding(.bottom, 6)
             .animation(RibbonMotion.arrive, value: model.followingPersonID == nil)
+        }
+    }
+
+    /// The foot of the page while something is selected (A62): the toolbar
+    /// or the original panel, both following the selection as the handles
+    /// move. A view of its own, so a handle crossing a word re-reads this
+    /// and nothing else.
+    private struct SelectionChrome: View {
+        let selection: PageSelection
+        let composer: ComposerState
+        let room: Room
+        let translation: TranslationID
+        /// A little over half the screen; past that the panel scrolls.
+        let maxPanelHeight: CGFloat
+        var originalContext: (Int) -> OriginalContext
+        /// A chapter's own text and its poetic line breaks, verse by verse.
+        var pageText: (Int) -> (texts: [Int: String], breaks: [Int: [Int]])
+        var onHighlight: (VerseRange, Int, Ink) -> Void
+        var onWrite: (VerseAddress) -> Void
+        var onSpeak: (VerseAddress) -> Void
+        var onOriginal: (OriginalSelection.WordID?) -> Void
+        var onWholeVerses: (VerseRange, Int) -> Void
+        var onClose: () -> Void
+
+        var body: some View {
+            if let range = selection.range, let chapter = selection.chapter {
+                switch composer {
+                case .toolbar:
+                    let context = originalContext(chapter)
+                    let chosen = context.selection(range)
+                    // One word selected is the word held: the line says it,
+                    // with what your version says for it (A60, §7.5).
+                    let line = context.line(range, held: selection.held)
+                    let verse = VerseAddress(bookID: range.bookID, chapter: chapter, verse: range.startVerse)
+                    LeaveToolbar(
+                        room: room,
+                        range: range,
+                        roomPaused: room.isPaused,
+                        onHighlight: { ink in onHighlight(range, chapter, ink) },
+                        onWrite: { onWrite(verse) },
+                        onSpeak: { onSpeak(verse) },
+                        originalVerb: chosen.map { Copy.originalVerb($0.language) },
+                        originalLine: line,
+                        onOriginal: { onOriginal(line?.opens) },
+                        // Only while an end is partial: whole verses need no
+                        // widening.
+                        wholeVerseVerb: range.isWholeVerses
+                            ? nil : Copy.wholeVerseVerb(several: range.startVerse != range.endVerse),
+                        onWholeVerse: { onWholeVerses(range, chapter) })
+                    .padding(.bottom, 14)
+                case .original(let opening):
+                    // The panel says whatever is selected now — the handles
+                    // stay live above it — and a tap in the text leaves it,
+                    // selection and all, as it leaves a composer.
+                    if let chosen = originalContext(chapter).selection(range) {
+                        let page = pageText(chapter)
+                        OriginalPanel(
+                            selection: chosen,
+                            room: room,
+                            translation: translation,
+                            pageTexts: page.texts,
+                            pageBreaks: page.breaks,
+                            maxHeight: maxPanelHeight,
+                            opening: opening,
+                            onClose: onClose)
+                        .padding(.bottom, 10)
+                        .transition(.opacity)
+                    }
+                case .write, .speak:
+                    EmptyView()
+                }
+            }
         }
     }
 
@@ -1236,60 +1208,118 @@ struct ReadingScreen: View {
         }
     }
 
-    // MARK: Intents
+    // MARK: Selection (A62)
 
-    private func beginLift(chapter: Int, verse: Int, at offset: Int?) {
-        withAnimation(RibbonMotion.arrive) {
-            liftedChapter = chapter
-            lifted = VerseRange(bookID: reading.bookID, chapter: chapter, startVerse: verse, endVerse: verse)
-            heldOffset = offset
-            composer = .toolbar
-        }
-    }
-
-    /// VoiceOver's way to the original words (A60, §7.3): the verse lifted
-    /// and the panel open, in one action. A verse with no original words —
-    /// one the earliest manuscripts lack — is lifted as the hold lifts it.
-    private func openOriginal(chapter: Int, verse: Int) {
-        let range = VerseRange(bookID: reading.bookID, chapter: chapter, startVerse: verse, endVerse: verse)
-        guard originalContext(chapter: chapter).selection(range) != nil else {
-            beginLift(chapter: chapter, verse: verse, at: nil)
+    /// A page's selection changed: the system's, under a finger, or one
+    /// the page was asked to make. Said for every word a handle crosses, so
+    /// it touches the selection — which only the toolbar reads — and the
+    /// composer only the first time.
+    private func selectionChanged(_ ends: PageEnds?, held: Int?, chapter: Int) {
+        guard let ends else {
+            // A page letting go. Another chapter's selection is not this
+            // page's to end, and a composer that has taken the focus keeps
+            // its verse though the page has let go of it.
+            guard selection.chapter == chapter, selection.range != nil else { return }
+            if composer?.followsSelection == false { return }
+            clearSelection(touchingThePage: false)
             return
         }
-        withAnimation(RibbonMotion.arrive) {
-            liftedChapter = chapter
-            lifted = range
-            heldOffset = nil
-            composer = .original(nil)
+        let range = verseRange(ends, chapter: chapter)
+        let before = selection.chapter
+        if selection.range != range { selection.range = range }
+        if selection.chapter != chapter { selection.chapter = chapter }
+        if selection.held != held { selection.held = held }
+        letGoOfOtherPage(before, now: chapter)
+        // The toolbar and the panel follow it. Anything else gives way to
+        // the toolbar, as a hold always took over from a composer.
+        if composer?.followsSelection != true {
+            editingNote = nil
+            withAnimation(RibbonMotion.arrive) {
+                heldVerse = nil
+                composer = .toolbar
+            }
         }
     }
 
-    private func extendLift(chapter: Int, verse: Int) {
-        guard liftedChapter == chapter, let current = lifted else { return }
-        let extended = VerseRange(
-            bookID: reading.bookID, chapter: chapter,
-            startVerse: min(current.startVerse, verse),
-            endVerse: max(current.endVerse, verse))
-        if extended != current {
-            lifted = extended
-            heldOffset = nil
+    /// A stretch selected for you — a verse's number tapped, the toolbar's
+    /// "the verse", VoiceOver's "leave something here" or "the original
+    /// words". Said here at once, because VoiceOver has no finger on the
+    /// page, and drawn by the page, which then says it back.
+    private func select(_ ends: PageEnds, chapter: Int, opening: ComposerState = .toolbar) {
+        let before = selection.chapter
+        selection.range = verseRange(ends, chapter: chapter)
+        selection.chapter = chapter
+        selection.held = nil
+        letGoOfOtherPage(before, now: chapter)
+        editingNote = nil
+        withAnimation(RibbonMotion.arrive) {
+            heldVerse = nil
+            composer = opening
         }
+        pages[chapter]?.select(ends)
     }
 
-    private func clearLift() {
+    /// One selection on the screen: a chapter that held it lets go when the
+    /// next is made in another. Said after the selection has moved, so that
+    /// page's letting go is not taken for this one's.
+    private func letGoOfOtherPage(_ before: Int?, now chapter: Int) {
+        guard let before, before != chapter else { return }
+        pages[before]?.clearSelection()
+    }
+
+    /// Nothing selected and nothing composing: the toolbar, the panel or
+    /// the composer goes, and the page lets go of what it held — unless it
+    /// is the page that let go, and is telling us.
+    private func clearSelection(touchingThePage: Bool = true) {
+        let chapter = selection.chapter
+        selection.range = nil
+        selection.chapter = nil
+        selection.held = nil
         withAnimation(RibbonMotion.arrive) {
-            lifted = nil
-            liftedChapter = nil
-            heldOffset = nil
+            heldVerse = nil
             composer = nil
         }
+        if touchingThePage, let chapter { pages[chapter]?.clearSelection() }
+    }
+
+    /// A highlight, made of whole words — whatever part of one a handle was
+    /// let go on — with the original words under them (A60): a mark is
+    /// never changed once made, so this is the only moment they can be.
+    private func highlight(_ range: VerseRange, chapter: Int, ink: Ink) {
+        let ends = pages[chapter]?.outwardToWords(PageEnds(range)) ?? PageEnds(range)
+        let anchored = OriginalWords.anchored(
+            verseRange(ends, chapter: chapter), links: wordLinks(chapter: chapter), source: model.original.source)
+        let made = model.addHighlight(anchored, ink: ink, in: reading)
+        justMarked = made?.id
+        clearSelection()
+    }
+
+    /// A stretch of this page as a mark is made of it. The offsets are this
+    /// version's, and said to be; whole verses carry none.
+    private func verseRange(_ ends: PageEnds, chapter: Int) -> VerseRange {
+        VerseRange(
+            bookID: reading.bookID, chapter: chapter,
+            startVerse: ends.startVerse, endVerse: ends.endVerse,
+            startChar: ends.startChar, endChar: ends.endChar,
+            charTranslation: ends.isWholeVerses ? nil : translation)
+    }
+
+    // MARK: Intents
+
+    /// VoiceOver's way to the original words (A60, §7.3): the verse selected
+    /// and the panel open, in one action. A verse with no original words —
+    /// one the earliest manuscripts lack — is selected, with the toolbar.
+    private func openOriginal(chapter: Int, verse: Int) {
+        let range = VerseRange(bookID: reading.bookID, chapter: chapter, startVerse: verse, endVerse: verse)
+        let opens = originalContext(chapter: chapter).selection(range) != nil
+        select(.whole(verse), chapter: chapter, opening: opens ? .original(nil) : .toolbar)
     }
 
     private func tapVerse(chapter: Int, verse: Int) {
         // Tapping the text: dismiss the toolbar first; then notes; then a
         // highlight's label.
-        if composer != nil {
-            clearLift()
+        if composer != nil || selection.range != nil {
+            clearSelection()
             return
         }
         let address = VerseAddress(bookID: reading.bookID, chapter: chapter, verse: verse)
@@ -1303,7 +1333,21 @@ struct ReadingScreen: View {
         }
     }
 
+    /// A verse's number tapped: the whole verse, selected (A62) — the other
+    /// way to it, beside the toolbar's "the verse". Something already up is
+    /// dismissed first, as by any tap in the text.
+    private func tapVerseNumber(chapter: Int, verse: Int) {
+        if composer != nil || selection.range != nil {
+            clearSelection()
+            return
+        }
+        select(.whole(verse), chapter: chapter)
+    }
+
     private func toggleNote(at address: VerseAddress) {
+        // A selection goes first: the carve would move the words out from
+        // under the system's highlight while it is drawn where they were.
+        if selection.range != nil { clearSelection() }
         followState.noteMovedAt = Date()
         withAnimation(RibbonMotion.settle) {
             if openNoteVerse == address {
@@ -1621,7 +1665,7 @@ struct ReadingScreen: View {
     /// Everything that keeps the page still for now, whatever the guess
     /// says: a finger on it, a scroll or a move of ours under way, the
     /// rubber band, and anything the reader is doing on the page — a verse
-    /// lifted, the toolbar, a composer or the original words up, a note
+    /// selected, the toolbar, a composer or the original words up, a note
     /// open or unfurling, the chapter list, the presence panel, a
     /// highlight's label, the book closing. The page never moves out from
     /// under what you are doing.
@@ -1662,7 +1706,7 @@ struct ReadingScreen: View {
         run.flying = nil
         return fingerDown || state.phase != .idle || now < state.movingUntil
             || state.bandInPlay || !state.viewportMeasured || closing
-            || lifted != nil || composer != nil || openNoteVerse != nil
+            || selection.range != nil || composer != nil || openNoteVerse != nil
             || now.timeIntervalSince(state.noteMovedAt) < RibbonMotion.settleDuration + 0.1
             || showChapters || state.panelOpen || highlightLabel != nil
     }
@@ -2347,5 +2391,27 @@ struct PassageEndView: View {
             .accessibilityLabel(Copy.closeTheBook)
             Spacer().frame(height: 30)
         }
+    }
+}
+
+/// What the page has selected (A62): written as the system's selection
+/// moves, read by the toolbar and the panel and by nothing else in the
+/// screen's body, so a handle crossing a word redraws only them.
+@MainActor
+@Observable
+final class PageSelection {
+    /// The selection as a mark would be made of it; nil when nothing is.
+    var range: VerseRange?
+    /// The chapter it is in.
+    var chapter: Int?
+    /// When it is one word, where that word starts in its verse's own
+    /// text: the word held, which the original line says (A60, §7.5).
+    var held: Int?
+}
+
+extension PageEnds {
+    /// A stored stretch, as the page counts it: the same verses and offsets.
+    init(_ range: VerseRange) {
+        self.init(startVerse: range.startVerse, startChar: range.startChar, endVerse: range.endVerse, endChar: range.endChar)
     }
 }

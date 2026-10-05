@@ -1,11 +1,12 @@
 import SwiftUI
 import RibbonCore
 
-// Leaving a note (S05): the toolbar rises from the bottom after the
-// long-press — the ink swatches, write, speak. Highlighting (S06) shares
-// the toolbar, and so does the original (A60): a third verb, and a quiet
-// line above the inks saying the held word in the original. Dismissed by
-// tapping anywhere in the text.
+// Leaving a note (S05): the toolbar rises from the bottom once something is
+// selected — the ink swatches, write, speak. Highlighting (S06) shares the
+// toolbar, and so does the original (A60): a third verb, and a quiet line
+// above the inks saying the held word in the original. While an end of the
+// selection is part of a verse, a quiet "the verse" over it widens it to the
+// whole verse (A62). Dismissed by tapping anywhere in the text.
 
 enum ComposerMode: Equatable {
     case toolbar
@@ -32,6 +33,10 @@ struct LeaveToolbar: View {
     /// wrong.
     var originalLine: OriginalLine? = nil
     var onOriginal: () -> Void = {}
+    /// "the verse", "the verses" — nil when the selection is whole verses
+    /// already (A62).
+    var wholeVerseVerb: String? = nil
+    var onWholeVerse: () -> Void = {}
 
     var body: some View {
         VStack(spacing: 6) {
@@ -42,6 +47,13 @@ struct LeaveToolbar: View {
                 // It comes and goes as the handles find words and lose
                 // them: a fade, never a movement.
                 OriginalLineView(line: originalLine, onOpen: onOriginal)
+                    .transition(.opacity)
+            }
+            if let wholeVerseVerb {
+                // Says exactly what it does: the selection becomes the whole
+                // verse. It goes once the selection is whole — a fade, never
+                // a movement.
+                QuietControl(title: wholeVerseVerb, action: onWholeVerse)
                     .transition(.opacity)
             }
             HStack(spacing: 0) {
@@ -119,6 +131,7 @@ struct LeaveToolbar: View {
             .ribbonGlass(in: Capsule(), interactive: true)
         }
         .animation(RibbonMotion.arrive, value: originalLine)
+        .animation(RibbonMotion.arrive, value: wholeVerseVerb)
         // It rises from the foot of the page; under reduce motion it fades
         // in where it will be used (§11).
         .transition(reduceMotion
