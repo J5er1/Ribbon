@@ -164,7 +164,11 @@ sits on its own dark capsule, the Hebrew large and clear with every point,
 and no verse shows through it — on the iPhone the glass blurs what is under
 it, on Android it is a faint trace at most. Do the same in a Greek book. On
 the iPhone, "the verse" is now the first thing on the bar; on a small
-phone the verbs all stay on the screen and the inks scroll. In a paused
+phone the verbs all stay on the screen and the inks scroll. Known edge: a
+room of three or more, part of a verse selected, at 320 points (Display Zoom)
+or a large text size, works out 20–35 points wider than the screen on paper,
+on both phones — look at it there; if the bar runs off the edge it needs a
+design call (a shorter "the verse", or the verbs on two rows). In a paused
 room, "New notes need the room…" sits on the same glass. With Reduce
 Transparency on (iPhone), the capsule is solid.
 
