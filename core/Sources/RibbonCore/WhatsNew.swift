@@ -35,6 +35,17 @@ public enum WhatsNewItem: String, Codable, Hashable, Sendable, CaseIterable {
     case roomGroups
     /// The New King James as printed: LORD, and its copyright line (A64).
     case lordReadsLord
+    /// You opens like the front of a Bible: your name, your face, a ribbon
+    /// for every room you read in, and a colophon at the foot (A66).
+    case flyleaf
+    /// Every book you have finished, with whoever, on one shelf (A66).
+    case yourShelf
+    /// Each version is shown in its own words, and a ribbon marks yours (A66).
+    case versionsByReading
+    /// The notification switches say who, in the words the phone will use (A66).
+    case notificationsByName
+    /// Quiet hours are one band, the night, rather than two wheels (A66).
+    case quietHoursNight
 }
 
 /// A release worth telling someone about. The id is a name, not a version
@@ -59,6 +70,9 @@ public enum WhatsNew {
     /// skipped three releases hears about the one they are on, and the rest
     /// are simply how the app is now — there for the reading, from You.
     public static let releases: [WhatsNewRelease] = [
+        WhatsNewRelease(
+            id: "2026-10-flyleaf", released: "2026-10-07",
+            items: [.flyleaf, .yourShelf, .versionsByReading, .notificationsByName, .quietHoursNight]),
         WhatsNewRelease(
             id: "2026-10-following", released: "2026-10-06",
             items: [.followingStays, .nativeSelection, .roomGroups, .lordReadsLord]),

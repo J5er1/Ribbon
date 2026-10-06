@@ -23,13 +23,14 @@ class WhatsNewTest {
 
     @Test
     fun testTodaysRelease() {
-        assertEquals("2026-10-following", WhatsNew.releases.firstOrNull()?.id)
+        assertEquals("2026-10-flyleaf", WhatsNew.releases.firstOrNull()?.id)
         assertEquals(
             listOf(
-                WhatsNewItem.followingStays,
-                WhatsNewItem.nativeSelection,
-                WhatsNewItem.roomGroups,
-                WhatsNewItem.lordReadsLord,
+                WhatsNewItem.flyleaf,
+                WhatsNewItem.yourShelf,
+                WhatsNewItem.versionsByReading,
+                WhatsNewItem.notificationsByName,
+                WhatsNewItem.quietHoursNight,
             ),
             WhatsNew.releases.firstOrNull()?.items,
         )
@@ -40,7 +41,7 @@ class WhatsNewTest {
     @Test
     fun testTheListReadsNewestFirstAndTellsEachThingOnce() {
         val ids = WhatsNew.releases.map { it.id }
-        assertEquals(listOf("2026-10-following", "2026-10-original"), ids)
+        assertEquals(listOf("2026-10-flyleaf", "2026-10-following", "2026-10-original"), ids)
         assertEquals(ids.size, ids.toSet().size)
         val days = WhatsNew.releases.map { it.released }
         assertTrue(days.all { it.length == 10 })
@@ -50,18 +51,23 @@ class WhatsNewTest {
         assertEquals(WhatsNewItem.entries.size, told.size)
     }
 
-    // Someone who saw the first release's screen sees this one's, once.
+    // Someone who saw an earlier release's screen sees this one's, once —
+    // and someone two behind hears about this one, not the backlog.
     @Test
-    fun testAnUpdaterWhoSawTheFirstSeesTheSecond() {
+    fun testAnUpdaterWhoSawAnEarlierOneSeesThisOne() {
         assertEquals(
-            "2026-10-following",
+            "2026-10-flyleaf",
+            WhatsNew.toShow(lastSeen = "2026-10-following", hasHistory = true, plainLaunch = true)?.id,
+        )
+        assertEquals(
+            "2026-10-flyleaf",
             WhatsNew.toShow(lastSeen = "2026-10-original", hasHistory = true, plainLaunch = true)?.id,
         )
         assertEquals(
-            "2026-10-following",
-            WhatsNew.seenAfter(lastSeen = "2026-10-original", hasHistory = true, plainLaunch = true, shown = true),
+            "2026-10-flyleaf",
+            WhatsNew.seenAfter(lastSeen = "2026-10-following", hasHistory = true, plainLaunch = true, shown = true),
         )
-        assertNull(WhatsNew.toShow(lastSeen = "2026-10-following", hasHistory = true, plainLaunch = true))
+        assertNull(WhatsNew.toShow(lastSeen = "2026-10-flyleaf", hasHistory = true, plainLaunch = true))
     }
 
     @Test
@@ -73,6 +79,11 @@ class WhatsNewTest {
         assertEquals("nativeSelection", WhatsNewItem.nativeSelection.name)
         assertEquals("roomGroups", WhatsNewItem.roomGroups.name)
         assertEquals("lordReadsLord", WhatsNewItem.lordReadsLord.name)
+        assertEquals("flyleaf", WhatsNewItem.flyleaf.name)
+        assertEquals("yourShelf", WhatsNewItem.yourShelf.name)
+        assertEquals("versionsByReading", WhatsNewItem.versionsByReading.name)
+        assertEquals("notificationsByName", WhatsNewItem.notificationsByName.name)
+        assertEquals("quietHoursNight", WhatsNewItem.quietHoursNight.name)
         val json = Json.encodeToString(
             listOf(WhatsNewItem.original, WhatsNewItem.ownVersion, WhatsNewItem.followingWords),
         )

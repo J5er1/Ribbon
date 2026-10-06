@@ -11,16 +11,17 @@ final class WhatsNewTests: XCTestCase {
     // MARK: Today's release
 
     func testTodaysRelease() {
-        XCTAssertEqual(WhatsNew.releases.first?.id, "2026-10-following")
+        XCTAssertEqual(WhatsNew.releases.first?.id, "2026-10-flyleaf")
         XCTAssertEqual(
-            WhatsNew.releases.first?.items, [.followingStays, .nativeSelection, .roomGroups, .lordReadsLord])
+            WhatsNew.releases.first?.items,
+            [.flyleaf, .yourShelf, .versionsByReading, .notificationsByName, .quietHoursNight])
     }
 
     // Read again from You (A65): every release, newest first, each dated,
     // and every thing new told in exactly one of them.
     func testTheListReadsNewestFirstAndTellsEachThingOnce() {
         let ids = WhatsNew.releases.map(\.id)
-        XCTAssertEqual(ids, ["2026-10-following", "2026-10-original"])
+        XCTAssertEqual(ids, ["2026-10-flyleaf", "2026-10-following", "2026-10-original"])
         XCTAssertEqual(Set(ids).count, ids.count)
         let days = WhatsNew.releases.map(\.released)
         XCTAssertTrue(days.allSatisfy { $0.count == 10 })
@@ -30,15 +31,19 @@ final class WhatsNewTests: XCTestCase {
         XCTAssertEqual(told.count, WhatsNewItem.allCases.count)
     }
 
-    // Someone who saw the first release's screen sees this one's, once.
-    func testAnUpdaterWhoSawTheFirstSeesTheSecond() {
+    // Someone who saw an earlier release's screen sees this one's, once —
+    // and someone two behind hears about this one, not the backlog.
+    func testAnUpdaterWhoSawAnEarlierOneSeesThisOne() {
+        XCTAssertEqual(
+            WhatsNew.toShow(lastSeen: "2026-10-following", hasHistory: true, plainLaunch: true)?.id,
+            "2026-10-flyleaf")
         XCTAssertEqual(
             WhatsNew.toShow(lastSeen: "2026-10-original", hasHistory: true, plainLaunch: true)?.id,
-            "2026-10-following")
+            "2026-10-flyleaf")
         XCTAssertEqual(
-            WhatsNew.seenAfter(lastSeen: "2026-10-original", hasHistory: true, plainLaunch: true, shown: true),
-            "2026-10-following")
-        XCTAssertNil(WhatsNew.toShow(lastSeen: "2026-10-following", hasHistory: true, plainLaunch: true))
+            WhatsNew.seenAfter(lastSeen: "2026-10-following", hasHistory: true, plainLaunch: true, shown: true),
+            "2026-10-flyleaf")
+        XCTAssertNil(WhatsNew.toShow(lastSeen: "2026-10-flyleaf", hasHistory: true, plainLaunch: true))
     }
 
     func testItemRawValues() throws {
@@ -49,6 +54,11 @@ final class WhatsNewTests: XCTestCase {
         XCTAssertEqual(WhatsNewItem.nativeSelection.rawValue, "nativeSelection")
         XCTAssertEqual(WhatsNewItem.roomGroups.rawValue, "roomGroups")
         XCTAssertEqual(WhatsNewItem.lordReadsLord.rawValue, "lordReadsLord")
+        XCTAssertEqual(WhatsNewItem.flyleaf.rawValue, "flyleaf")
+        XCTAssertEqual(WhatsNewItem.yourShelf.rawValue, "yourShelf")
+        XCTAssertEqual(WhatsNewItem.versionsByReading.rawValue, "versionsByReading")
+        XCTAssertEqual(WhatsNewItem.notificationsByName.rawValue, "notificationsByName")
+        XCTAssertEqual(WhatsNewItem.quietHoursNight.rawValue, "quietHoursNight")
         let json = try JSONEncoder().encode([WhatsNewItem.original, .ownVersion, .followingWords])
         XCTAssertEqual(String(decoding: json, as: UTF8.self), #"["original","ownVersion","followingWords"]"#)
     }

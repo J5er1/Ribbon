@@ -50,6 +50,24 @@ enum class WhatsNewItem {
 
     /** The New King James as printed: LORD, and its copyright line (A64). */
     lordReadsLord,
+
+    /**
+     * You opens like the front of a Bible: your name, your face, a ribbon
+     * for every room you read in, and a colophon at the foot (A66).
+     */
+    flyleaf,
+
+    /** Every book you have finished, with whoever, on one shelf (A66). */
+    yourShelf,
+
+    /** Each version is shown in its own words, and a ribbon marks yours (A66). */
+    versionsByReading,
+
+    /** The notification switches say who, in the words the phone will use (A66). */
+    notificationsByName,
+
+    /** Quiet hours are one band, the night, rather than two pickers (A66). */
+    quietHoursNight,
 }
 
 /**
@@ -71,6 +89,17 @@ object WhatsNew {
      * are simply how the app is now — there for the reading, from You.
      */
     val releases: List<WhatsNewRelease> = listOf(
+        WhatsNewRelease(
+            id = "2026-10-flyleaf",
+            released = "2026-10-07",
+            items = listOf(
+                WhatsNewItem.flyleaf,
+                WhatsNewItem.yourShelf,
+                WhatsNewItem.versionsByReading,
+                WhatsNewItem.notificationsByName,
+                WhatsNewItem.quietHoursNight,
+            ),
+        ),
         WhatsNewRelease(
             id = "2026-10-following",
             released = "2026-10-06",
