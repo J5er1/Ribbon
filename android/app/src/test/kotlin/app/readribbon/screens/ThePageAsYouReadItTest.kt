@@ -3,6 +3,7 @@
 package app.readribbon.screens
 
 import android.content.Context
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsNotSelected
@@ -15,8 +16,11 @@ import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.test.core.app.ApplicationProvider
 import app.readribbon.app.AppModel
 import app.readribbon.app.Copy
@@ -171,4 +175,23 @@ class ThePageAsYouReadItTest {
         assertEquals(28f, range.range.endInclusive, 0f)
         assertEquals("twenty-three stops between the ends", 23, range.steps)
     }
+
+    /**
+     * At the largest font scale on a narrow phone, each of Weight's stops is
+     * still one whole word on one line: "Heavier" is wider than a third of
+     * the control there, and it gives way in size rather than being cut.
+     */
+    @Config(qualifiers = "w320dp-h700dp-xhdpi", fontScale = 2f)
+    @Test fun theWeightsStopsAreWholeAtTheLargestFontScale() {
+        show()
+        for (word in listOf(Copy.WEIGHT_LIGHTER, Copy.WEIGHT_HEAVIER)) {
+            val node = compose.onNodeWithText(word, useUnmergedTree = true)
+            val layouts = mutableListOf<TextLayoutResult>()
+            node.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+            val layout = layouts.single()
+            assertEquals("$word is one line", 1, layout.lineCount)
+            assertFalse("$word is not cut", layout.hasVisualOverflow)
+        }
+    }
 }
+

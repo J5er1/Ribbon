@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
@@ -687,10 +688,17 @@ private fun Segments(
                         animationSpec = RibbonMotion.handled(still),
                         label = "the-chosen-word",
                     )
+                    // One line that gives way before it is cut: at the
+                    // largest font scale "Heavier" is wider than a third of
+                    // the control on a narrow phone, and a stop nobody can
+                    // read is no stop (§11). Never larger than the words'
+                    // own size; as small as 0.6 of it, as on iPhone.
                     Text(
                         text = label,
                         style = RibbonType.ui(15f),
                         color = wordColour,
+                        maxLines = 1,
+                        autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = 15.sp),
                     )
                 }
             }

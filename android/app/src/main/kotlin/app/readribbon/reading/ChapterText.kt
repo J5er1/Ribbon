@@ -1872,7 +1872,12 @@ private fun buildChapterPage(
                 opened = false
             }
             if (!opened) {
-                beginParagraph(leading(if (wrote) continuation else paragraph, index, opensAVerseLine = false))
+                // After the carve, a paragraph that starts a verse's line
+                // keeps that line's leading, as it would with no note open —
+                // so the carve opens and closes with nothing below it hopping
+                // by half a line.
+                val opensAVerseLine = wrote && index in lineStarts
+                beginParagraph(leading(if (wrote) continuation else paragraph, index, opensAVerseLine))
                 opened = true
             } else if (index in lineStarts && builder.length > paragraphFrom) {
                 // The verse's line is a paragraph of its own, on the

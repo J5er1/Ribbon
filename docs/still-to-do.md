@@ -228,6 +228,11 @@ The page, the way you read it (A68, I41), on both phones:
 - iPhone with VoiceOver: Line spacing and Weight read each stop by its own
   word (Close, Book, Open; Lighter, Book, Heavier), the chosen one as
   selected.
+- The largest text size on the narrowest phone (iPhone AX3–AX5; Android
+  200%): "Lighter" and "Heavier" are whole words on one line, a little
+  smaller, never cut.
+- With a verse to a line, open a note under a verse and close it again:
+  nothing below the note jumps.
 - Size at 28 with the largest text the phone allows: Psalm 119's indented
   lines still wrap and nothing is clipped.
 - Android: with a book open behind You, change the size or a verse to a

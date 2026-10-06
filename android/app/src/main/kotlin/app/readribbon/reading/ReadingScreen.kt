@@ -1573,8 +1573,16 @@ fun ReadingScreen(
         // lines are reported in: until then the lines on hand are the old
         // page's, and agree with the old page.
         repeat(2) { withFrameNanos { } }
-        if (placeOnScreen(point) is Placed.Away) listState.scrollToItem(itemIndexOfChapter(point.chapter))
-        snapshotFlow { placeOnScreen(point) }.first { it is Placed.At }
+        // Aimed only from the chapter's own item. A chapter pushed off the
+        // screen keeps the lines it last reported — the old page's — and
+        // `placeOnScreen` will place it from a passage end still on screen
+        // above it, which is right for a follow and wrong here: landing from
+        // those lines would put the reading line a line or more off the
+        // verse. With its item on screen, the item's measured size has to
+        // agree with its lines before it is placed at all.
+        fun chapterShown() = listState.layoutInfo.visibleItemsInfo.any { it.key == "chapter-${point.chapter}" }
+        if (!chapterShown()) listState.scrollToItem(itemIndexOfChapter(point.chapter))
+        snapshotFlow { placeOnScreen(point).takeIf { chapterShown() } }.first { it is Placed.At }
         if (landing?.arrived == false || (latestAddress ?: here) != here) return@LaunchedEffect
         landOn(here, animated = false)
     }

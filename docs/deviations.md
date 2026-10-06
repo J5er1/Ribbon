@@ -5426,7 +5426,10 @@ I41. **The page, the way you read it, on iOS (A68), and settings that
       container, so the label its caller gave it was handed to each stop:
       VoiceOver read Line spacing's three as "Line spacing", told apart only
       by "selected", and Weight's would have been the same. It now contains
-      its stops, each saying its own word, under the control's name.
+      its stops, each saying its own word, under the control's name. Its
+      words also give way in size, to 0.6, before they are cut: "Heavier"
+      is wider than a third of the control at AX3 on a narrow phone. Android's
+      segments do the same at its largest font scale.
 
 ## Licensed translations (decided: API.Bible)
 

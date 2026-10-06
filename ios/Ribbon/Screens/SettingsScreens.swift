@@ -325,8 +325,14 @@ struct Segments: View {
                         Button {
                             selection = index
                         } label: {
+                            // One line that gives way before it is cut:
+                            // at the largest text sizes "Heavier" is wider
+                            // than a third of the control on a narrow phone,
+                            // and a stop nobody can read is no stop (§11).
                             Text(options[index])
                                 .font(RibbonType.ui(15))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.6)
                                 .foregroundStyle(index == selection ? Palette.text : Palette.muted)
                                 .frame(width: width, height: proxy.size.height)
                                 .contentShape(Rectangle())

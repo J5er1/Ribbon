@@ -14,7 +14,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.LocalTextToolbar
 import androidx.compose.ui.platform.TextToolbar
@@ -29,6 +28,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import app.readribbon.app.Copy
@@ -126,7 +126,12 @@ class ChapterSelectionTest {
         ),
     )
 
-    private class Page(val chapter: ScriptureChapter, versePerLine: Boolean = false) {
+    private class Page(chapter: ScriptureChapter, versePerLine: Boolean = false) {
+        /** The chapter on the page; a test may set another in its place. */
+        val shown = mutableStateOf(chapter)
+        val chapter: ScriptureChapter get() = shown.value
+        /** The note open beneath a verse, carving the page there, or none. */
+        val openNote = mutableStateOf<OpenNote?>(null)
         val selection = PageSelection()
         val reports = mutableListOf<PageRange?>()
         val taps = mutableListOf<Int>()
@@ -156,7 +161,7 @@ class ChapterSelectionTest {
             held = page.held.value,
             justMarked = null,
             onMarkDrawn = {},
-            openNote = null,
+            openNote = page.openNote.value,
             isFirstChapter = true,
             showMarginHint = false,
             onLayout = {},
@@ -611,6 +616,38 @@ class ChapterSelectionTest {
 
     @Test fun aTapBesideAVersesLastLineOpensThatVerseOnALineOfItsOwn() =
         aTapBesideAVersesLastLineOpensThatVerse(paragraph, versePerLine = true)
+
+    /**
+     * Opening a note under a verse moves what follows down by the carve, and
+     * by nothing else. Between two blocks it always did; with a verse to a
+     * line (A68) the line after the carve keeps its verse line's leading, so
+     * the page below lands where it would between blocks — not hopping as the
+     * note opens and again as it closes. Read at the verse after the one
+     * below the carve: the line under the carve starts where the carve ends
+     * either way, and it is that line's own height that the leading changes.
+     */
+    @Test fun aNoteOpensWithNothingBelowItHopping() {
+        val page = setPage(chapter, versePerLine = true)
+        fun drop(): Float {
+            compose.runOnIdle { page.openNote.value = null }
+            compose.waitForIdle()
+            val closed = bounds(3, three).top
+            compose.runOnIdle { page.openNote.value = OpenNote(verse = 1, height = 100.dp) }
+            compose.waitForIdle()
+            val open = bounds(3, three).top
+            compose.runOnIdle { page.openNote.value = null }
+            compose.waitForIdle()
+            return open - closed
+        }
+
+        val betweenBlocks = drop()
+        compose.runOnIdle { page.shown.value = paragraph }
+        compose.waitForIdle()
+        val betweenVerseLines = drop()
+
+        assertTrue("the carve opens the page", betweenBlocks > px(90f))
+        assertEquals("a verse's line drops as a block does", betweenBlocks, betweenVerseLines, 0.5f)
+    }
 
     /**
      * A line for every verse moves where verses begin and nothing else: the
