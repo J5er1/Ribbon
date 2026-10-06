@@ -5156,9 +5156,12 @@ I40. **The page goes to the verse: the moves inside a chapter are made on
       the top of the screen when the move is made. A distance is exact and
       needs no view to be found. They ease a frame at a time on a display
       link, on the same ease-out as every other move, so the lazy stack
-      builds what comes into view as it comes; a finger on the page stops
-      one where it is. The chapter's own move is still the proxy's, by the
-      row, which the phones do reach. The marks are points now, not views.
+      builds what comes into view as it comes, each frame moving on by its
+      own share from wherever the page is; a finger on the page stops one
+      where it is, and so does any move the proxy makes, which a move left
+      running would otherwise undo on its next frame. The chapter's own
+      move is still the proxy's, by the row, which the phones do reach. The
+      marks are points now, not views.
     - **A chapter a flight never reached is flown to again.** A streamed
       chapter's placeholder is a tenth of the chapter's height, and the
       chapter above a landing getting its words pushed the landing's own off

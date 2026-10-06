@@ -32,10 +32,11 @@ final class PageScroller {
     private var run: Run?
 
     private struct Run {
-        var from: CGFloat
-        var to: CGFloat
+        var distance: CGFloat
         var start: CFTimeInterval
         var duration: CFTimeInterval
+        /// How much of the distance has been moved so far.
+        var eased: Double = 0
         var done: () -> Void
     }
 
@@ -68,8 +69,8 @@ final class PageScroller {
             Self.later(done)
             return
         }
-        run = Run(from: from, to: to, start: CACurrentMediaTime(), duration: duration, done: done)
-        let link = CADisplayLink(target: PageScrollerTicker(self), selector: #selector(PageScrollerTicker.tick))
+        run = Run(distance: to - from, start: CACurrentMediaTime(), duration: duration, done: done)
+        let link = CADisplayLink(target: PageScrollerTicker(self), selector: #selector(PageScrollerTicker.tick(_:)))
         link.add(to: .main, forMode: .common)
         self.link = link
     }
@@ -86,9 +87,26 @@ final class PageScroller {
             return
         }
         let t = min(1, max(0, (CACurrentMediaTime() - run.start) / run.duration))
-        let y = run.from + (run.to - run.from) * CGFloat(Self.easeOut(t))
+        // Each frame moves on by its own share of the distance, from where
+        // the page is now: a page the stack has nudged mid-move — rows above
+        // measured as they came — keeps the nudge rather than being set back.
+        let eased = Self.easeOut(t)
+        let step = run.distance * CGFloat(eased - run.eased)
+        self.run?.eased = eased
+        let inset = scrollView.adjustedContentInset
+        let lowest = -inset.top
+        let highest = max(lowest, scrollView.contentSize.height - scrollView.bounds.height + inset.bottom)
+        let y = min(max(scrollView.contentOffset.y + step, lowest), highest)
         scrollView.setContentOffset(CGPoint(x: scrollView.contentOffset.x, y: y), animated: false)
         if t >= 1 { finish() }
+    }
+
+    /// Ends the move under way, where it is, before the page is moved some
+    /// other way — a chapter's row, by the scroll proxy. A move left running
+    /// sets the offset again on its next frame, and would carry the page
+    /// straight back from wherever the proxy had put it.
+    func stop() {
+        finish()
     }
 
     /// Ends the move under way, if there is one, and says it is done.
@@ -129,8 +147,15 @@ private final class PageScrollerTicker: NSObject {
         self.scroller = scroller
     }
 
-    @objc func tick() {
-        scroller?.tick()
+    @objc func tick(_ link: CADisplayLink) {
+        // The page went mid-move. The run loop holds the link, not the
+        // page: left running, it would fire every frame for as long as the
+        // app is open.
+        guard let scroller else {
+            link.invalidate()
+            return
+        }
+        scroller.tick()
     }
 }
 

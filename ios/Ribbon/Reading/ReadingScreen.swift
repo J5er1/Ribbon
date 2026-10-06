@@ -322,6 +322,7 @@ struct ReadingScreen: View {
                                 onContinue: {
                                     endFollow()
                                     endLanding()
+                                    pageScroller.stop()
                                     withAnimation(RibbonMotion.settle(still: reduceMotion)) { proxy.scrollTo(n + 1, anchor: .top) }
                                 },
                                 onClose: close)
@@ -480,6 +481,7 @@ struct ReadingScreen: View {
                     // A chapter chosen: it is somewhere else now, and a
                     // landing lets go.
                     endLanding()
+                    pageScroller.stop()
                     withAnimation(RibbonMotion.settle(still: reduceMotion)) {
                         proxy.scrollTo(command, anchor: .top)
                     }
@@ -501,6 +503,9 @@ struct ReadingScreen: View {
                     }
                     return
                 }
+                // A move of ours still under way would set the page back on
+                // its next frame, from wherever the proxy puts it.
+                pageScroller.stop()
                 withAnimation(move.animated ? RibbonMotion.settle(still: reduceMotion) : nil) {
                     switch move.target {
                     case .chapter(let n, let anchor):
@@ -1872,6 +1877,9 @@ struct ReadingScreen: View {
                 guard let fetched = await model.scripture.ensureRemoteChapter(address, translation: licensed) else { return }
                 withAnimation(RibbonMotion.arrive) {
                     remoteChapters[RemoteChapter(translation: licensed.id, chapter: n)] = fetched
+                    // Its placeholder's own fetch may have failed first:
+                    // the chapter came, and is not one that would not.
+                    chapterFailed.remove(n)
                 }
             }
         }

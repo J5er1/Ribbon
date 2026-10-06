@@ -172,6 +172,10 @@ two, since one is on iOS 27:
   rubber band); drag again: the follow ends.
 - With Reduce Motion on: the steps fade rather than glide, and land in the
   same place.
+- Fling the page while following (the rubber band), and let go: it comes
+  back where it was, and the follow carries on stepping afterwards — the
+  fling is ended by setting the offset where it is, and if iOS keeps
+  reporting it as decelerating the follow would wait.
 
 A mark following its words (A60, I37) — compiled on both platforms by CI,
 never yet run on a phone:
