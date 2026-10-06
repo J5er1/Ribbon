@@ -154,9 +154,23 @@ And what A64 changed, on the same two phones:
   other on the Berean: following lands on the same words.
 
 What's new (A65): update over an older build and open the app — the screen
-shows "Staying on the same page" with its four pictures moving. Then You →
+shows "Staying on the same page" with its five pictures moving. Then You →
 What's new: both releases, newest first, each under its day; Done, back and
 Esc go back to You, and the next launch does not show it again.
+
+The held word's line (A66), on both phones: hold a word of Exodus 15 near
+the foot of the screen, so the verses run on under the toolbar. The line
+sits on its own dark capsule, the Hebrew large and clear with every point,
+and no verse shows through it — on the iPhone the glass blurs what is under
+it, on Android it is a faint trace at most. Do the same in a Greek book. On
+the iPhone, "the verse" is now the first thing on the bar; on a small
+phone the verbs all stay on the screen and the inks scroll. Known edge: a
+room of three or more, part of a verse selected, at 320 points (Display Zoom)
+or a large text size, works out 20–35 points wider than the screen on paper,
+on both phones — look at it there; if the bar runs off the edge it needs a
+design call (a shorter "the verse", or the verbs on two rows). In a paused
+room, "New notes need the room…" sits on the same glass. With Reduce
+Transparency on (iPhone), the capsule is solid.
 
 The page going to the verse (I40), on an iPhone — on each of the owner's
 two, since one is on iOS 27:

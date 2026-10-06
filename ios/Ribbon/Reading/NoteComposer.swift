@@ -3,10 +3,11 @@ import RibbonCore
 
 // Leaving a note (S05): the toolbar rises from the bottom once something is
 // selected — the ink swatches, write, speak. Highlighting (S06) shares the
-// toolbar, and so does the original (A60): a third verb, and a quiet line
-// above the inks saying the held word in the original. While an end of the
-// selection is part of a verse, a quiet "the verse" over it widens it to the
-// whole verse (A62). Dismissed by tapping anywhere in the text.
+// toolbar, and so does the original (A60): a third verb, and a line above
+// the inks saying the held word in the original, on glass of its own. While
+// an end of the selection is part of a verse, "the verse", first on the
+// bar, widens it to the whole verse (A62). Nothing above the bar is bare on
+// the page (A66). Dismissed by tapping anywhere in the text.
 
 enum ComposerMode: Equatable {
     case toolbar
@@ -41,7 +42,12 @@ struct LeaveToolbar: View {
     var body: some View {
         VStack(spacing: 6) {
             if roomPaused {
+                // Over the page, like the line: on the bar's glass, never
+                // bare on the verses (A66).
                 SmallCaps(Copy.newNotesNeedTheRoom, size: 12)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .ribbonGlass(in: Capsule())
             }
             if let originalLine {
                 // It comes and goes as the handles find words and lose
@@ -49,14 +55,28 @@ struct LeaveToolbar: View {
                 OriginalLineView(line: originalLine, onOpen: onOriginal)
                     .transition(.opacity)
             }
-            if let wholeVerseVerb {
-                // Says exactly what it does: the selection becomes the whole
-                // verse. It goes once the selection is whole — a fade, never
-                // a movement.
-                QuietControl(title: wholeVerseVerb, action: onWholeVerse)
-                    .transition(.opacity)
-            }
             HStack(spacing: 0) {
+                // "The verse", first and pinned, as on Android: it is about
+                // what is selected, which everything after it acts on. Says
+                // exactly what it does — the selection becomes the whole
+                // verse — and goes once the selection is whole, a fade. It
+                // was a quiet line over the bar, bare on the page; on the
+                // bar it is read like the verbs beside it (A66).
+                if let wholeVerseVerb {
+                    Button(action: onWholeVerse) {
+                        SmallCaps(wholeVerseVerb, size: 13, color: Palette.text)
+                            .lineLimit(1)
+                            .fixedSize()
+                            .frame(minWidth: 44, minHeight: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.leading, 16)
+                    .padding(.trailing, 6)
+                    .transition(.opacity)
+                    Rectangle().fill(Palette.rule).frame(width: 1, height: 20)
+                        .transition(.opacity)
+                }
                 // Two people: eight swatches, pick per highlight, last-used
                 // pre-selected. Three or more: one swatch — yours (§4.5).
                 // Paused: only highlight shows, greyed and inert — the room

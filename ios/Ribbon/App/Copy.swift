@@ -654,6 +654,12 @@ enum Copy {
     /// What's new (A65): the divine name, and the copyright line.
     static let whatsNewLordBody =
         "LORD reads LORD where the Hebrew has the divine name, and each chapter carries its copyright line."
+    /// What's new (A66): the held word's line, readable over the page.
+    static let whatsNewReadableTitle = "The Hebrew, easy to read"
+    /// What's new (A66): what changed about it — its own ground, a larger
+    /// word, and no verse running through it.
+    static let whatsNewReadableBody =
+        "The word you hold, in Hebrew or Greek, sits on its own ground above the toolbar, set larger, with no verse running through it."
     /// What's new (A61): the one way on, pinned at the foot. It says where
     /// it goes, because that is all it does.
     static let whatsNewDone = "To the room"

@@ -4349,6 +4349,46 @@ A65. **Every release says what it brought, and all of them can be read again
     reader can notice adds its entry, its words and its pictures, on both
     phones.
 
+A66. **The held word's line is read on its own ground (amends A60).** Owner:
+    *"The Hebrew on highlight is very difficult to read"*. The line over the
+    toolbar that says the held word in the original (§7.5) had nothing
+    behind it. It was drawn over the page, muted, the Hebrew at 17 with its
+    points, and the verse under the foot of the screen ran straight through
+    it — a word of Exodus 15:11 held, "נֶאְדָּר · ne’·dār · majestic" sat on
+    "LORD? / Who is like You—majestic in". The look book only ever drew it
+    on bare ground, which is how it was missed; it now draws it on a page
+    (`theOriginalLineOnThePage`).
+
+    - *The line sits on the toolbar's material*, a capsule of its own that
+      hugs what it says, the same glass the long-press toolbar is (the build
+      book's "the long-press toolbar: yes"). It fades in and out as before,
+      and is still one line, a button with a finger's height.
+    - *The original word is at full strength and larger*: Hebrew 21, Greek
+      18, against 14 for the words beside it. How to say it and what your
+      version says stay muted.
+    - *Nothing above the bar is bare on the page.* The paused room's line
+      goes on the same glass, on both phones. On the iPhone "the verse" was
+      a quiet line over the bar; it is on the bar now, first, as on Android
+      since A62 — the same words in the same order, and read like the verbs
+      beside it.
+    - *Android's material is denser* — the unlit ground at 0.9 over the
+      raised surface, not 0.72. iOS's glass blurs what lies under it, so the
+      verses beneath are a smear; Android has no backdrop blur (the reasoning
+      is over `ribbonGlass` in `NoteComposer.kt`), and at 0.72 the verses read through sharp, under
+      the line and under the toolbar's own verbs. Measured on the look
+      book's page: text under the bar 25 levels over the ground before, 8
+      after — a trace. Every piece of Android's floating chrome uses it: the
+      toolbar, the line, the composers, the way out, the chapter pill, the
+      highlight's label. The reading screen's second copy of the material,
+      which was the same but for its clip, is gone; there is one.
+
+    It is told in this release's entry, `2026-10-following`, as a fifth
+    thing: *The Hebrew, easy to read*, with a picture of a word held, its
+    line arriving bare and tangled in the verse above, then the ground
+    coming under it and the Hebrew growing and brightening. The release had
+    not gone out when this was added; had it, this would have been a release
+    of its own.
+
 ## iOS (phase four): the second pass
 
 Android took a design pass of its own (A18–A51) and the two platforms
