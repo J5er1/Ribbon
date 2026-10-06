@@ -52,6 +52,12 @@ enum class WhatsNewItem {
     lordReadsLord,
 
     /**
+     * The held word's line, readable over the page: on glass of its own,
+     * the Hebrew larger and at full strength (A66).
+     */
+    originalReadable,
+
+    /**
      * You opens like the front of a Bible: your name, your face, a ribbon
      * for every room you read in, and a colophon at the foot (A67).
      */
@@ -115,6 +121,7 @@ object WhatsNew {
                 WhatsNewItem.nativeSelection,
                 WhatsNewItem.roomGroups,
                 WhatsNewItem.lordReadsLord,
+                WhatsNewItem.originalReadable,
             ),
         ),
         WhatsNewRelease(

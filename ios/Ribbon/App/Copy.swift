@@ -711,9 +711,10 @@ enum Copy {
         "Follow someone reading another version and you arrive at the words they are reading, not just the verse."
     /// What's new (A65): following stays with the person you follow (A64).
     static let whatsNewFollowingStaysTitle = "Following stays with them"
-    /// What's new (A65): the screen kept on, and a follow that is not lost.
+    /// What's new (A65, I40): the page on their verse, the screen kept on,
+    /// and a follow that is not lost.
     static let whatsNewFollowingStaysBody =
-        "While you follow someone who is reading, your screen stays on. A dropped connection or a second phone no longer loses them."
+        "Your page goes to the verse they are reading and moves on with them. While you follow, your screen stays on, and a dropped connection or a second phone no longer loses them."
     /// What's new (A65): the phone's own selection (A62).
     static let whatsNewSelectionTitle = "Selecting, the way your phone does"
     /// What's new (A65): how to take a whole verse — the number, or the
@@ -730,6 +731,12 @@ enum Copy {
     /// What's new (A65): the divine name, and the copyright line.
     static let whatsNewLordBody =
         "LORD reads LORD where the Hebrew has the divine name, and each chapter carries its copyright line."
+    /// What's new (A66): the held word's line, readable over the page.
+    static let whatsNewReadableTitle = "The Hebrew, easy to read"
+    /// What's new (A66): what changed about it — its own ground, a larger
+    /// word, and no verse running through it.
+    static let whatsNewReadableBody =
+        "The word you hold, in Hebrew or Greek, sits on its own ground above the toolbar, set larger, with no verse running through it."
     /// What's new (A61): the one way on, pinned at the foot. It says where
     /// it goes, because that is all it does.
     static let whatsNewDone = "To the room"

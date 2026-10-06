@@ -1946,6 +1946,74 @@ class LookBookTest {
     }
 
     /**
+     * The line where it is read: over the page, not on bare ground. A word
+     * of Exodus 15:11 held with the chapter running on under the toolbar,
+     * the way the reading screen draws it — the bar at the foot, the verses
+     * still going behind it.
+     */
+    @Test fun theOriginalLineOnThePage() {
+        val m = model(
+            AppState(
+                me = me,
+                people = mapOf(me.id to me, ruth.id to ruth),
+                rooms = listOf(room),
+                memberships = listOf(membership(me, null), membership(ruth, null)),
+                readings = listOf(reading("EXO", FireScale.medium)),
+                currentRoomID = room.id,
+            ),
+        )
+        val exodus = m.scripture.chapter(VerseAddress("EXO", 15, 1), TranslationID.bsb)!!
+        val verse = exodus.ownText(11)!!
+        val majestic = verse.indexOf("majestic")
+        val range = VerseRange(
+            bookID = "EXO", chapter = 15, startVerse = 11, endVerse = 11,
+            startChar = majestic, endChar = majestic + "majestic".length,
+            charTranslation = TranslationID.bsb,
+        )
+        val under = originalUnderLift(m.original, range, HeldWord(11, majestic + 2), TranslationID.bsb, exodus)!!
+        shoot("original-line-on-the-page") {
+            OnTheGround {
+                Box(Modifier.fillMaxSize()) {
+                    ChapterText(
+                        chapter = excerpt(exodus, 6..18),
+                        runningHead = "Exodus 15",
+                        theme = ReadingTheme(fontSize = 19f, lineHeightMultiple = 1.62f, redLetter = false),
+                        marks = emptyList(),
+                        selection = rememberSelected(range),
+                        lifted = range,
+                        held = null,
+                        justMarked = null,
+                        onMarkDrawn = {},
+                        openNote = null,
+                        isFirstChapter = false,
+                        showMarginHint = false,
+                        onLayout = {},
+                        onSelected = {},
+                        onTapVerse = {},
+                        onNoteSlot = {},
+                        modifier = Modifier.padding(top = 40.dp),
+                    )
+                    LeaveToolbar(
+                        model = m,
+                        room = m.state.rooms.first(),
+                        range = range,
+                        roomPaused = false,
+                        onHighlight = {},
+                        onWrite = {},
+                        onSpeak = {},
+                        originalVerb = under.verb,
+                        line = under.line,
+                        wholeVerse = Copy.wholeVerseVerb(several = false),
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 14.dp),
+                    )
+                }
+            }
+        }
+    }
+
+    /**
      * What's new (A61, §12.3), as it stands when the launch mark lifts off
      * it: the heading, the latest release's first pictures, and the way on
      * pinned at the foot. Then scrolled to the foot, so the last is in the
@@ -2058,6 +2126,46 @@ class LookBookTest {
         still = false
         appearance.wallpaperColour = false
         capture("whats-new-again-foot-ribbon")
+    }
+
+    /**
+     * The release's fifth picture (A66) on its own, through its beats: at
+     * rest; the word held and its line arrived bare over the verse above,
+     * tangled in its letters; the ground coming under it as the Hebrew grows;
+     * and on its ground, the frame reduce motion holds — then reduce motion
+     * itself, on both palettes.
+     */
+    @Test fun theWhatsNewHebrewOnItsGround() {
+        val appearance = Appearance(ApplicationProvider.getApplicationContext())
+        appearance.wallpaperColour = true
+        // The release that told it, under its own title — not whichever
+        // release is newest, which is now the front of the book's.
+        val following = app.readribbon.core.WhatsNew.releases.single { it.id == "2026-10-following" }
+        val release = following.copy(items = listOf(app.readribbon.core.WhatsNewItem.originalReadable))
+        var still by mutableStateOf(false)
+        var at by mutableStateOf<Long?>(0L)
+        compose.setContent {
+            RibbonTheme(appearance = appearance) {
+                CompositionLocalProvider(app.readribbon.design.LocalReduceMotion provides still) {
+                    Box(Modifier.fillMaxSize()) {
+                        WhatsNewScreen(release = release, onLeave = {}, frozenAt = at)
+                    }
+                }
+            }
+        }
+        for (t in listOf(0L, 1_800L, 2_500L, 3_600L)) {
+            at = t
+            capture("whats-new-readable-at-$t")
+        }
+        appearance.wallpaperColour = false
+        capture("whats-new-readable-at-3600-ribbon")
+        at = 1_800L
+        capture("whats-new-readable-at-1800-ribbon")
+        at = null
+        still = true
+        capture("whats-new-readable-still-ribbon")
+        appearance.wallpaperColour = true
+        capture("whats-new-readable-still")
     }
 
     private fun shootWhatsNew(name: String, still: Boolean, frozenAt: Long?) {

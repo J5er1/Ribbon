@@ -120,6 +120,7 @@ import app.readribbon.design.rememberBackPeel
 import app.readribbon.design.rememberReduceMotion
 import app.readribbon.design.room
 import app.readribbon.fire.drawEmber
+import app.readribbon.reading.LINE_HEBREW_SIZE
 import app.readribbon.reading.SELECTION_TINT
 
 // What's new (A61, §12.3): one screen, once per release, between the launch
@@ -477,6 +478,7 @@ internal val WhatsNewItem.title: String
         WhatsNewItem.nativeSelection -> Copy.WHATS_NEW_NATIVE_SELECTION_TITLE
         WhatsNewItem.roomGroups -> Copy.WHATS_NEW_ROOM_GROUPS_TITLE
         WhatsNewItem.lordReadsLord -> Copy.WHATS_NEW_LORD_TITLE
+        WhatsNewItem.originalReadable -> Copy.WHATS_NEW_READABLE_TITLE
         WhatsNewItem.flyleaf -> Copy.WHATS_NEW_FLYLEAF_TITLE
         WhatsNewItem.yourShelf -> Copy.WHATS_NEW_SHELF_TITLE
         WhatsNewItem.versionsByReading -> Copy.WHATS_NEW_VERSIONS_TITLE
@@ -494,6 +496,7 @@ internal val WhatsNewItem.body: String
         WhatsNewItem.nativeSelection -> Copy.WHATS_NEW_NATIVE_SELECTION_BODY
         WhatsNewItem.roomGroups -> Copy.WHATS_NEW_ROOM_GROUPS_BODY
         WhatsNewItem.lordReadsLord -> Copy.WHATS_NEW_LORD_BODY
+        WhatsNewItem.originalReadable -> Copy.WHATS_NEW_READABLE_BODY
         WhatsNewItem.flyleaf -> Copy.WHATS_NEW_FLYLEAF_BODY
         WhatsNewItem.yourShelf -> Copy.WHATS_NEW_SHELF_BODY
         WhatsNewItem.versionsByReading -> Copy.WHATS_NEW_VERSIONS_BODY
@@ -556,6 +559,7 @@ internal val WhatsNewItem.timeline: Timeline
         -> Timeline(LOOP_MS, STILL_AT)
         WhatsNewItem.followingStays -> Timeline(LONG_LOOP_MS, STAYS_STILL_AT)
         WhatsNewItem.nativeSelection -> Timeline(LONG_LOOP_MS, SELECTION_STILL_AT)
+        WhatsNewItem.originalReadable -> Timeline(LONG_LOOP_MS, READABLE_STILL_AT)
         WhatsNewItem.quietHoursNight -> Timeline(LONG_LOOP_MS, NIGHT_STILL_AT)
         WhatsNewItem.yourPage -> Timeline(LONG_LOOP_MS, PAGE_STILL_AT)
     }
@@ -708,6 +712,41 @@ internal data class LordFrame(val name: Float)
 
 internal fun lordFrame(t: Int): LordFrame =
     LordFrame(name = beat(t, at = 900, ms = 480) * (1f - beat(t, at = 3300, ms = 400)))
+
+/** The Hebrew, easy to read: the word held, the line on its ground, the Hebrew large and full. */
+internal const val READABLE_STILL_AT = 3600
+
+/**
+ * The Hebrew, easy to read (A66): a press settles on "majestic" and the
+ * page's selection tint takes it ([wash]); the line for it arrives over the
+ * line above as it used to, bare — muted, the Hebrew at its old size, the
+ * verse running straight through it ([bare]) — and is left there long enough
+ * to see the trouble. Then the toolbar's material comes under it ([ground])
+ * as the Hebrew grows and comes up to full strength ([grow]), on one beat.
+ */
+internal data class ReadableFrame(
+    val press: Float,
+    val wash: Float,
+    val bare: Float,
+    val ground: Float,
+    val grow: Float,
+)
+
+internal fun readableFrame(t: Int): ReadableFrame {
+    // All of it settles back together, on one 400 ms beat — the iPhone's
+    // way, every value going home at once.
+    val back = 1f - beat(t, at = 4600, ms = 400)
+    // Held bare for 0.9 s, then mended on one beat: the ground and the word
+    // together, because that is what one change did.
+    val mend = beat(t, at = 2300, ms = 480) * back
+    return ReadableFrame(
+        press = beat(t, at = 500, ms = 320) * back,
+        wash = beat(t, at = 820, ms = 320) * back,
+        bare = beat(t, at = 1000, ms = 400) * back,
+        ground = mend,
+        grow = mend,
+    )
+}
 
 // The third release's six (A67, and A68's page).
 
@@ -877,6 +916,17 @@ private const val BEGINNING_REACH = "was the Word"
 private const val SHEPHERD_LINE = "The Lord is my shepherd"
 private const val NAME = "Lord"
 
+/**
+ * The fifth (A66): Exodus 15:11 as the Berean Standard sets it, two lines of
+ * the song, and the line the page shows for its "majestic" — the Hebrew,
+ * how to say it, and the version's own word.
+ */
+private const val SONG_UPPER = "Who among the gods is like You, O LORD?"
+private const val SONG_LOWER = "Who is like You—majestic in holiness,"
+private const val SONG_HELD = "majestic"
+private const val SONG_HEBREW = "נֶאְדָּר"
+private const val SONG_TRANSLIT = "ne’·dār"
+
 /** The faces' inks in "In this room": the room's own, never the accent. */
 private val FACE_INKS = listOf(Ink.teal, Ink.plum, Ink.clay)
 
@@ -906,6 +956,30 @@ private val PRESS_SETTLED_RADIUS = 15.dp
 /** The selection's handles, drawn as the phone draws its own: a thin bar with a round end. */
 private val HANDLE_BAR = 2.dp
 private val HANDLE_KNOB = 4.5.dp
+
+/**
+ * The held word's line, as OriginalPanel sets it: the Hebrew at its old 17
+ * and at its new 21 (`LINE_HEBREW_SIZE`), the words beside it at the
+ * interface's 14, on a capsule of the toolbar's material that hugs it.
+ */
+private const val LINE_UI_SIZE = 14f
+private const val HEBREW_WAS = 17f
+private const val HEBREW_NOW = LINE_HEBREW_SIZE
+private val LINE_PAD_X = 16.dp
+private val LINE_PAD_Y = 5.dp
+
+/**
+ * The material, drawn as NoteComposer's `ribbonGlass` lays it down: the
+ * raised surface, the unlit ground over it nearly opaque, and the hairline
+ * edge catching a little more light along the top. Whatever verse is under
+ * it is a trace, not a line to read.
+ */
+private const val GROUND_RAISED = 0.55f
+private const val GROUND_TINT = 0.92f
+private val GROUND_EDGE = 1.dp
+
+/** Air between the ground's lower edge and the held word's tint under it. */
+private val GROUND_CLEARS = 3.dp
 
 /** A reader's face in "In this room", made small: a dot of their ink in a ring of the paper. */
 private val FACE_DOT = 6.dp
@@ -940,6 +1014,7 @@ private fun Vignette(item: WhatsNewItem, startAfter: Long, frozenAt: Long?, modi
             scripture = RibbonFonts.literata(FontWeight.Normal, 19f),
             medium = RibbonFonts.literata(FontWeight.Medium, 19f),
             italic = RibbonFonts.literata(FontWeight.Normal, 14f, italic = true),
+            hebrew = RibbonFonts.hebrew,
             display = RibbonFonts.literata(FontWeight.Medium, FLYLEAF_NAME_SIZE),
             specimen = RibbonFonts.literata(FontWeight.Normal, SPECIMEN_SIZE),
             page = RibbonFonts.literata(FontWeight(PAGE_BOOK), PAGE_SIZE),
@@ -981,6 +1056,10 @@ private fun Vignette(item: WhatsNewItem, startAfter: Long, frozenAt: Long?, modi
         WhatsNewItem.lordReadsLord -> Modifier.drawWithCache {
             val page = layOutTheName(measurer, inks, faces)
             onDrawBehind { drawTheName(page, inks, lordFrame(clock.longValue.toInt())) }
+        }
+        WhatsNewItem.originalReadable -> Modifier.drawWithCache {
+            val page = layOutTheHeldLine(measurer, inks, faces)
+            onDrawBehind { drawTheHeldLine(page, inks, readableFrame(clock.longValue.toInt())) }
         }
         WhatsNewItem.flyleaf -> Modifier.drawWithCache {
             val page = layOutTheFlyleaf(measurer, inks, faces, smallCaps)
@@ -1032,6 +1111,7 @@ private class VignetteFaces(
     val scripture: FontFamily,
     val medium: FontFamily,
     val italic: FontFamily,
+    val hebrew: FontFamily,
     val display: FontFamily,
     val specimen: FontFamily,
     /** The small page's, at Book and at Heavier on Literata's own axis (A68). */
@@ -1740,6 +1820,209 @@ private fun DrawScope.drawTheName(page: TheName, inks: VignetteInks, frame: Lord
     drawText(page.line, topLeft = page.lineAt)
     faded(1f - frame.name) { drawText(page.plain, topLeft = page.plainAt) }
     faded(frame.name) { drawText(page.printed, topLeft = page.printedAt) }
+}
+
+// MARK: The held word's line
+
+/**
+ * Two lines of Exodus 15:11 at the page's size, "majestic" held in the
+ * lower, and the line for it over the middle of the upper — where the
+ * reading screen draws it, over whatever verse lies above the toolbar.
+ *
+ * The Hebrew is set once, at its new size, and drawn smaller while the line
+ * is still the old one; the words after it are set once and move along as
+ * it grows, so the line stays centred and nothing is measured while the
+ * picture runs. The ground is the grown line's, so the line fills it as it
+ * grows rather than the ground growing round it.
+ */
+private class TheHeldLine(
+    val upper: TextLayoutResult,
+    val upperAt: Offset,
+    val lower: TextLayoutResult,
+    val lowerAt: Offset,
+    /** The held word's selection: its stretch of the lower line, at the height of the letters. */
+    val held: Rect,
+    val press: Offset,
+    val hebrew: TextLayoutResult,
+    val rest: TextLayoutResult,
+    /** The line's own baseline, the Hebrew's and the words' after it. */
+    val baseline: Float,
+    val centreX: Float,
+    /** The Hebrew's old size, as a share of its new. */
+    val was: Float,
+    val ground: Rect,
+    val edge: Float,
+    val pen: Pen,
+)
+
+private fun CacheDrawScope.layOutTheHeldLine(
+    measurer: TextMeasurer,
+    inks: VignetteInks,
+    faces: VignetteFaces,
+): TheHeldLine {
+    val inset = INSET.toPx()
+    val room = size.width - inset * 2
+    val style = TextStyle(fontFamily = faces.scripture, fontSize = 19.sp, color = inks.text)
+    // Both lines at one size — whichever fits the longer — as the page sets
+    // a song: one size of type, line under line.
+    val fits = listOf(SONG_UPPER, SONG_LOWER).minOf {
+        fitted(measurer, AnnotatedString(it), style, room).layoutInput.style.fontSize.value
+    }
+    val set = style.copy(fontSize = fits.sp)
+    fun lay(text: String) =
+        measurer.measure(AnnotatedString(text), set, softWrap = false, maxLines = 1, density = this)
+    val upper = lay(SONG_UPPER)
+    val lower = lay(SONG_LOWER)
+    val em = set.fontSize.toPx()
+    val pen = pen()
+
+    // The line, as OriginalPanel sets it — the Hebrew in its own face, how
+    // to say it in Literata's italic, the version's word and the dots in the
+    // interface's — smaller all together if its ground would not fit.
+    val padX = LINE_PAD_X.toPx()
+    fun setLine(scale: Float): Pair<TextLayoutResult, TextLayoutResult> {
+        val hebrew = measurer.measure(
+            AnnotatedString(SONG_HEBREW),
+            TextStyle(fontFamily = faces.hebrew, fontSize = (HEBREW_NOW * scale).sp, color = inks.text),
+            softWrap = false,
+            maxLines = 1,
+            density = this,
+        )
+        val dot = "  ·  "
+        val rest = measurer.measure(
+            buildAnnotatedString {
+                append(dot)
+                withStyle(SpanStyle(fontFamily = faces.italic, fontStyle = FontStyle.Italic)) { append(SONG_TRANSLIT) }
+                append(dot)
+                append(SONG_HELD)
+            },
+            RibbonType.ui(LINE_UI_SIZE * scale).copy(
+                color = inks.muted,
+                lineHeight = TextUnit.Unspecified,
+                textDirection = TextDirection.Ltr,
+            ),
+            softWrap = false,
+            maxLines = 1,
+            density = this,
+        )
+        return hebrew to rest
+    }
+    var (hebrew, rest) = setLine(1f)
+    val natural = hebrew.size.width + rest.size.width + padX * 2
+    if (natural > room) {
+        val scale = (room - padX * 2) / (hebrew.size.width + rest.size.width) * 0.98f
+        setLine(scale).let { (h, r) -> hebrew = h; rest = r }
+    }
+
+    // Vertically, from the upper line's baseline: the ground centred on the
+    // middle of its letters, and the lower line far enough under it that the
+    // held word's selection is clear of the ground — at the page's own
+    // leading wherever that is already so.
+    val ascent = maxOf(hebrew.getLineBaseline(0), rest.getLineBaseline(0))
+    val descent = maxOf(
+        hebrew.size.height - hebrew.getLineBaseline(0),
+        rest.size.height - rest.getLineBaseline(0),
+    )
+    val groundHeight = ascent + descent + LINE_PAD_Y.toPx() * 2
+    val middle = -em * 0.36f
+    val groundTop = middle - groundHeight / 2f
+    val groundBottom = middle + groundHeight / 2f
+    val heldAbove = em * WASH_ABOVE_BASELINE + pen.bleedY
+    val heldBelow = em * WASH_BELOW_BASELINE + pen.bleedY
+    val lead = maxOf(em * 1.62f, groundBottom + GROUND_CLEARS.toPx() + heldAbove)
+    val blockTop = minOf(groundTop, -heldAbove)
+    val blockBottom = lead + heldBelow
+    val upperBaseline = (size.height - (blockBottom - blockTop)) / 2f - blockTop
+    val lowerBaseline = upperBaseline + lead
+
+    // The two lines as one block, centred; the line over the upper's middle.
+    val x = (size.width - maxOf(upper.size.width, lower.size.width)) / 2f
+    val upperAt = Offset(x, upperBaseline - upper.getLineBaseline(0))
+    val lowerAt = Offset(x, lowerBaseline - lower.getLineBaseline(0))
+    val centreX = upperAt.x + upper.size.width / 2f
+    val word = lower.stretch(SONG_LOWER, SONG_HELD).translate(lowerAt)
+    val groundWidth = hebrew.size.width + rest.size.width + padX * 2
+
+    return TheHeldLine(
+        upper = upper,
+        upperAt = upperAt,
+        lower = lower,
+        lowerAt = lowerAt,
+        held = Rect(word.left, lowerBaseline - heldAbove, word.right, lowerBaseline + heldBelow),
+        press = Offset(word.center.x, lowerBaseline - em * 0.38f),
+        hebrew = hebrew,
+        rest = rest,
+        baseline = upperBaseline + groundTop + LINE_PAD_Y.toPx() + ascent,
+        centreX = centreX,
+        was = HEBREW_WAS / HEBREW_NOW,
+        ground = Rect(
+            left = centreX - groundWidth / 2f,
+            top = upperBaseline + groundTop,
+            right = centreX + groundWidth / 2f,
+            bottom = upperBaseline + groundBottom,
+        ),
+        edge = GROUND_EDGE.toPx(),
+        pen = pen,
+    )
+}
+
+private fun DrawScope.drawTheHeldLine(page: TheHeldLine, inks: VignetteInks, frame: ReadableFrame) {
+    press(page.pen, page.press, inks.text, frame.press)
+
+    // The page's own selection on the held word, behind its glyphs.
+    val held = frame.wash
+    if (held > 0f) {
+        drawRect(
+            color = inks.accent.copy(alpha = SELECTION_TINT * held),
+            topLeft = page.held.topLeft,
+            size = page.held.size,
+        )
+    }
+    drawText(page.upper, topLeft = page.upperAt)
+    drawText(page.lower, topLeft = page.lowerAt)
+
+    // The ground comes under the line, over the verse it used to sit bare
+    // on: the toolbar's material — its two layers fading in as one — and
+    // its hairline edge.
+    val ground = frame.ground
+    if (ground > 0f) {
+        val g = page.ground
+        faded(ground) {
+            for (layer in listOf(inks.raised.copy(alpha = GROUND_RAISED), inks.ground.copy(alpha = GROUND_TINT))) {
+                drawRoundRect(color = layer, topLeft = g.topLeft, size = g.size, cornerRadius = CornerRadius(g.height / 2f))
+            }
+        }
+        val e = page.edge
+        drawRoundRect(
+            brush = Brush.verticalGradient(
+                listOf(inks.text.copy(alpha = 0.14f), inks.rule),
+                startY = g.top,
+                endY = g.bottom,
+            ),
+            topLeft = g.topLeft + Offset(e / 2f, e / 2f),
+            size = Size(g.width - e, g.height - e),
+            cornerRadius = CornerRadius((g.height - e) / 2f),
+            alpha = ground,
+            style = Stroke(width = e),
+        )
+    }
+
+    // The line: bare and muted at first, the Hebrew at its old size; then
+    // the Hebrew grows and comes up to the page's full ink, and the words
+    // after it make room.
+    faded(frame.bare) {
+        val k = lerp(page.was, 1f, frame.grow)
+        val hebrewWidth = page.hebrew.size.width * k
+        val left = page.centreX - (hebrewWidth + page.rest.size.width) / 2f
+        scale(k, pivot = Offset(left, page.baseline)) {
+            drawText(
+                page.hebrew,
+                color = lerpColor(inks.muted, inks.text, frame.grow),
+                topLeft = Offset(left, page.baseline - page.hebrew.getLineBaseline(0)),
+            )
+        }
+        drawText(page.rest, topLeft = Offset(left + hebrewWidth, page.baseline - page.rest.getLineBaseline(0)))
+    }
 }
 
 // MARK: - The third release's pictures (A67)

@@ -15,6 +15,12 @@ final class WhatsNewTests: XCTestCase {
         XCTAssertEqual(
             WhatsNew.releases.first?.items,
             [.flyleaf, .yourShelf, .versionsByReading, .yourPage, .notificationsByName, .quietHoursNight])
+        // The Hebrew made easy to read (A66) belongs to the release before.
+        let following = WhatsNew.releases.dropFirst().first
+        XCTAssertEqual(following?.id, "2026-10-following")
+        XCTAssertEqual(
+            following?.items,
+            [.followingStays, .nativeSelection, .roomGroups, .lordReadsLord, .originalReadable])
     }
 
     // Read again from You (A65): every release, newest first, each dated,
@@ -54,6 +60,7 @@ final class WhatsNewTests: XCTestCase {
         XCTAssertEqual(WhatsNewItem.nativeSelection.rawValue, "nativeSelection")
         XCTAssertEqual(WhatsNewItem.roomGroups.rawValue, "roomGroups")
         XCTAssertEqual(WhatsNewItem.lordReadsLord.rawValue, "lordReadsLord")
+        XCTAssertEqual(WhatsNewItem.originalReadable.rawValue, "originalReadable")
         XCTAssertEqual(WhatsNewItem.flyleaf.rawValue, "flyleaf")
         XCTAssertEqual(WhatsNewItem.yourShelf.rawValue, "yourShelf")
         XCTAssertEqual(WhatsNewItem.versionsByReading.rawValue, "versionsByReading")

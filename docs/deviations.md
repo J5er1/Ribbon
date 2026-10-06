@@ -4349,6 +4349,46 @@ A65. **Every release says what it brought, and all of them can be read again
     reader can notice adds its entry, its words and its pictures, on both
     phones.
 
+A66. **The held word's line is read on its own ground (amends A60).** Owner:
+    *"The Hebrew on highlight is very difficult to read"*. The line over the
+    toolbar that says the held word in the original (§7.5) had nothing
+    behind it. It was drawn over the page, muted, the Hebrew at 17 with its
+    points, and the verse under the foot of the screen ran straight through
+    it — a word of Exodus 15:11 held, "נֶאְדָּר · ne’·dār · majestic" sat on
+    "LORD? / Who is like You—majestic in". The look book only ever drew it
+    on bare ground, which is how it was missed; it now draws it on a page
+    (`theOriginalLineOnThePage`).
+
+    - *The line sits on the toolbar's material*, a capsule of its own that
+      hugs what it says, the same glass the long-press toolbar is (the build
+      book's "the long-press toolbar: yes"). It fades in and out as before,
+      and is still one line, a button with a finger's height.
+    - *The original word is at full strength and larger*: Hebrew 21, Greek
+      18, against 14 for the words beside it. How to say it and what your
+      version says stay muted.
+    - *Nothing above the bar is bare on the page.* The paused room's line
+      goes on the same glass, on both phones. On the iPhone "the verse" was
+      a quiet line over the bar; it is on the bar now, first, as on Android
+      since A62 — the same words in the same order, and read like the verbs
+      beside it.
+    - *Android's material is denser* — the unlit ground at 0.9 over the
+      raised surface, not 0.72. iOS's glass blurs what lies under it, so the
+      verses beneath are a smear; Android has no backdrop blur (the reasoning
+      is over `ribbonGlass` in `NoteComposer.kt`), and at 0.72 the verses read through sharp, under
+      the line and under the toolbar's own verbs. Measured on the look
+      book's page: text under the bar 25 levels over the ground before, 8
+      after — a trace. Every piece of Android's floating chrome uses it: the
+      toolbar, the line, the composers, the way out, the chapter pill, the
+      highlight's label. The reading screen's second copy of the material,
+      which was the same but for its clip, is gone; there is one.
+
+    It is told in this release's entry, `2026-10-following`, as a fifth
+    thing: *The Hebrew, easy to read*, with a picture of a word held, its
+    line arriving bare and tangled in the verse above, then the ground
+    coming under it and the Hebrew growing and brightening. The release had
+    not gone out when this was added; had it, this would have been a release
+    of its own.
+
 A67. **The front of the book: You and the settings, made by hand
     (2026-10-flyleaf).** Owner: *"what would make the settings and profile
     more on brand? what can we do to make it more interesting and any other
@@ -5332,6 +5372,64 @@ I39. **Native selection, and a room of eleven, on iOS (A62).** The decisions
       edited; a second haptic, if iOS plays its own on the long-press; and
       in the panel, Literata's Medium, the overlapping faces and a block's
       fade inside the measured scroll view.
+
+I40. **The page goes to the verse: the moves inside a chapter are made on
+    the scroll view itself.** Owner, iPhone to iPhone on the latest build,
+    both on the New King James: *"ngl the following still doesnt work"* —
+    *"this has been 'fixed' 4-5 times"*. Asked what it did: the follower's
+    page went to the top of a chapter, and did not put itself right when
+    the reader scrolled on. And asked to open a book where they had left off
+    partway through a chapter, with no follow at all: it opened at the top
+    of that chapter.
+
+    That last answer is the cause, and it is not in following. A move to a
+    verse is two moves on the iPhone: the chapter, to its head, by the lazy
+    stack's own row (`scrollTo(n, anchor:)`), and then the verse, inside the
+    chapter, by a one-point mark set in the chapter's row and aimed at with
+    `scrollTo(LandingMark())`. Every follow step and the rubber band's
+    return aimed at a mark in the same way (`FollowMark`). On the phones the
+    proxy never found a mark inside a row: the move "finished", nothing
+    moved, the landing counted itself arrived, and a step was recorded as
+    one that would not go. So every landing stopped at a chapter's head —
+    opening on your place, a named place, a follow's flight — and a follow
+    never stepped after it. A54, A58, A59 and A64 each fixed the guess above
+    this and were measured in simulation and on Android, which scrolls by
+    item index and offset and has none of it; the iPhone's own moves had
+    never run on a phone. (iOS 27 is reported to have narrowed what the
+    proxy reaches in a lazy stack further; one of the owner's phones is on
+    it.)
+
+    - **The moves inside a chapter are made on the UIKit scroll view that
+      backs the page** (`PageScroller`), found from a probe behind the
+      stack, by the distance the page measures from the chapter's frame to
+      the top of the screen when the move is made. A distance is exact and
+      needs no view to be found. They ease a frame at a time on a display
+      link, on the same ease-out as every other move, so the lazy stack
+      builds what comes into view as it comes, each frame moving on by its
+      own share from wherever the page is; a finger on the page stops one
+      where it is, and so does any move the proxy makes, which a move left
+      running would otherwise undo on its next frame. The chapter's own
+      move is still the proxy's, by the row, which the phones do reach. The
+      marks are points now, not views.
+    - **A chapter a flight never reached is flown to again.** A streamed
+      chapter's placeholder is a tenth of the chapter's height, and the
+      chapter above a landing getting its words pushed the landing's own off
+      the page — and cancelled its fetch, which belonged to the placeholder.
+      After a quarter of a minute the follow gave up and barred that chapter
+      until the reader said something new, and a reader reading a still
+      screen says the same thing every five seconds. It is barred now only
+      when it would not come, or was reached and still could not be landed
+      on.
+    - **A flight fetches its chapter, and the one above it, itself**, so
+      neither depends on a placeholder the stack can let go of.
+    - **A landing that set off for a chapter whose words had not come** may
+      turn back down to its verse when they arrive. The one-way rule (I30)
+      read where a 355-point placeholder put the page as which way the verse
+      was, and an upward landing onto one stopped at the chapter's head.
+
+    Android needs none of this and is unchanged. Written without Xcode:
+    `swiftc -parse` passes and CI compiles it; nothing here has run on a
+    phone.
 
 I41. **The front of the book, on iOS (A67): the last of the system's
     controls, drawn.** The decisions are A67's; what is only iOS's:

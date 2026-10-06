@@ -236,6 +236,7 @@ private struct WhatsNewItemView: View {
         case .nativeSelection: NativeSelectionVignette(startsAfter: startsAfter)
         case .roomGroups: RoomGroupsVignette(startsAfter: startsAfter)
         case .lordReadsLord: DivineNameVignette(startsAfter: startsAfter)
+        case .originalReadable: ReadableLineVignette(startsAfter: startsAfter)
         case .flyleaf: FlyleafVignette(startsAfter: startsAfter)
         case .yourShelf: YourShelfVignette(startsAfter: startsAfter)
         case .versionsByReading: VersionsByReadingVignette(startsAfter: startsAfter)
@@ -254,6 +255,7 @@ private struct WhatsNewItemView: View {
         case .nativeSelection: return Copy.whatsNewSelectionTitle
         case .roomGroups: return Copy.whatsNewRoomGroupsTitle
         case .lordReadsLord: return Copy.whatsNewLordTitle
+        case .originalReadable: return Copy.whatsNewReadableTitle
         case .flyleaf: return Copy.whatsNewFlyleafTitle
         case .yourShelf: return Copy.whatsNewShelfTitle
         case .versionsByReading: return Copy.whatsNewVersionsTitle
@@ -272,6 +274,7 @@ private struct WhatsNewItemView: View {
         case .nativeSelection: return Copy.whatsNewSelectionBody
         case .roomGroups: return Copy.whatsNewRoomGroupsBody
         case .lordReadsLord: return Copy.whatsNewLordBody
+        case .originalReadable: return Copy.whatsNewReadableBody
         case .flyleaf: return Copy.whatsNewFlyleafBody
         case .yourShelf: return Copy.whatsNewShelfBody
         case .versionsByReading: return Copy.whatsNewVersionsBody
@@ -434,6 +437,45 @@ private enum Vignette {
             .foregroundStyle(Palette.text)
     }
     static let smallCapital: CGFloat = 0.78
+
+    // MARK: The Hebrew, easy to read
+
+    /// Exodus 15:11 as the Berean Standard has it, over two lines of a
+    /// page — one text, so the two shrink together when the well is narrow:
+    /// the line over the toolbar sits on the upper one, and the word held is
+    /// in the lower.
+    static var songOfTheSea: Text {
+        Text("Who among the gods is like You, O LORD?\nWho is like You—\(words("majestic", .held)) in holiness,")
+    }
+    /// How far over the upper line's baseline its middle is, where the
+    /// line over the toolbar is centred.
+    static let lineMiddle: CGFloat = Vignette.textSize * 0.36
+
+    /// The held word in the original, as the line over the toolbar says it:
+    /// the Hebrew, then how to say it in italic and what the Berean says
+    /// for it, between muted dots.
+    static let hebrew = "נֶאְדָּר"
+    static var hebrewSaid: Text {
+        let translit = Text(verbatim: "ne’·dār").font(RibbonType.scriptureItalic(14))
+        // Its first space set verbatim, so that nothing reading the line
+        // as Markdown can take it off the front.
+        return Text("\(Text(verbatim: " · "))\(translit) · \(Text(verbatim: "majestic"))")
+            .font(RibbonType.ui(14))
+            .foregroundStyle(Palette.muted)
+    }
+    /// The Hebrew as the line set it bare on the page, and as it sets it on
+    /// its own ground (A66; `OriginalLineView.hebrewSize`).
+    static let bareHebrew: CGFloat = 17
+    static let readableHebrew: CGFloat = 21
+    /// The bar's material as a picture can have it, with no glass to blur
+    /// what is under it: the unlit ground, nearly opaque, its edge the
+    /// palette's hairline.
+    static let barGround: Double = 0.92
+    /// Between the page's two lines: room for the line's ground to cover
+    /// the middle of the upper one and stop short of the word held below.
+    static let pageLeading: CGFloat = 10
+    /// The line's room inside its ground, as Android's.
+    static let barPadding = EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 16)
 
     // MARK: Your name in the front of the book
 
@@ -1433,7 +1475,185 @@ private struct DivineName: TextRenderer, Animatable {
     }
 }
 
-// MARK: 8. Your name in the front of the book
+// MARK: 8. The Hebrew, easy to read
+
+/// Exodus 15:11 over two lines of a page: a press settles on "majestic" and
+/// the phone's tint takes it; the line over the toolbar arrives bare over
+/// the line above — muted all through, the Hebrew small, the verse running
+/// through it — and is left there long enough to see the trouble. Then the
+/// bar's ground comes under it, and the Hebrew grows and brightens on it.
+/// Then all of it settles back.
+private struct ReadableLineVignette: View {
+    let startsAfter: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    @State private var press = 0.0
+    @State private var selected = 0.0
+    @State private var line = 0.0
+    @State private var ground = 0.0
+
+    // The loop's clock is Android's (`readableFrame`, on LONG_LOOP_MS), so
+    // the two phones tell it alike: the press at 0.5 s, the tint at 0.82,
+    // the bare line at 1.0, the ground at 2.3, everything going back at
+    // 4.6, and again at 6.2.
+
+    /// The page at rest as each loop opens; and from the press to the line.
+    private static let opening: Double = 0.5
+    /// The bare line, held after it arrives so the eye sees the tangle.
+    private static let tangled: Double = 0.9
+    /// The line on its ground, held after it arrives: the still frame.
+    private static let held: Double = 1.82
+    /// After everything has settled back, before the next loop opens.
+    private static let after: Double = 1.2
+
+    var body: some View {
+        // The two lines as one block, centred in the well, as Android
+        // draws them.
+        Vignette.songOfTheSea
+            .font(RibbonType.scripture(Vignette.textSize))
+            .foregroundStyle(Palette.text)
+            .lineSpacing(Vignette.pageLeading)
+            .lineLimit(2)
+            // The widest line of any picture: at 320 points (Display Zoom,
+            // or an iPad's narrowest column) the upper line needs about
+            // 0.7 to stay whole, and at 0.8 it would wrap and cut the held
+            // word off the lower one. It only goes as small as it must.
+            .minimumScaleFactor(0.66)
+            .textRenderer(SelectedWord(press: press, shown: selected))
+            // Centred over the middle of the upper line — the widest, so
+            // the block's middle is its middle — as the real one sits over
+            // the page above the toolbar.
+            .overlay(alignment: Alignment(horizontal: .center, vertical: .firstTextBaseline)) {
+                ReadableLine(ground: ground)
+                    .opacity(line)
+                    .alignmentGuide(.firstTextBaseline) { d in d.height / 2 + Vignette.lineMiddle }
+            }
+            .padding(.horizontal, 20)
+            .task(id: reduceMotion) { await play() }
+    }
+
+    private func play() async {
+        guard !reduceMotion else {
+            // The still frame is how it ends: the word held and selected,
+            // and its line on its own ground over the verse, the Hebrew
+            // large and at full strength.
+            press = 1
+            selected = 1
+            line = 1
+            ground = 1
+            return
+        }
+        press = 0
+        selected = 0
+        line = 0
+        ground = 0
+        guard await beat(startsAfter) else { return }
+        while true {
+            guard await beat(Self.opening) else { return }
+            // A press settles on the word, and the phone takes it.
+            withAnimation(RibbonMotion.arrive) { press = 1 }
+            guard await beat(RibbonMotion.arriveDuration) else { return }
+            withAnimation(RibbonMotion.arrive) { selected = 1 }
+            guard await beat(Self.opening - RibbonMotion.arriveDuration) else { return }
+            // The line comes as it was: bare on the page, muted, the
+            // Hebrew at 17 in among the verse's letters.
+            withAnimation(RibbonMotion.settle) { line = 1 }
+            guard await beat(RibbonMotion.settleDuration + Self.tangled) else { return }
+            // The bar's ground comes under it, and the Hebrew grows and
+            // comes up to full strength on it: one beat, because it was
+            // one change.
+            withAnimation(RibbonMotion.open) { ground = 1 }
+            guard await beat(RibbonMotion.openDuration + Self.held) else { return }
+            withAnimation(RibbonMotion.settle) {
+                press = 0
+                selected = 0
+                line = 0
+                ground = 0
+            }
+            guard await beat(RibbonMotion.settleDuration + Self.after) else { return }
+        }
+    }
+}
+
+/// The line over the toolbar saying "majestic", from how it was to how it
+/// is: at 0, bare — muted all through, the Hebrew at 17, nothing under it;
+/// at 1, on the bar's ground, hugging what it says, the Hebrew at 21 and at
+/// full strength. One number, so the ground, the size and the strength move
+/// as one.
+private struct ReadableLine: View, Animatable {
+    var ground: Double
+
+    var animatableData: Double {
+        get { ground }
+        set { ground = newValue }
+    }
+
+    private var hebrewSize: CGFloat {
+        Vignette.bareHebrew + (Vignette.readableHebrew - Vignette.bareHebrew) * CGFloat(ground)
+    }
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 0) {
+            // The word muted, and over it the same word at full strength
+            // coming up as the ground comes: one word, brightening.
+            Text(verbatim: Vignette.hebrew)
+                .foregroundStyle(Palette.muted)
+                .overlay {
+                    Text(verbatim: Vignette.hebrew)
+                        .foregroundStyle(Palette.text)
+                        .opacity(ground)
+                }
+                .font(RibbonType.original(hebrewSize, hebrew: true))
+            Vignette.hebrewSaid
+        }
+        .lineLimit(1)
+        .fixedSize()
+        .padding(Vignette.barPadding)
+        .background {
+            Capsule()
+                .fill(Palette.ground.opacity(Vignette.barGround))
+                .overlay(Capsule().strokeBorder(Palette.rule, lineWidth: 1))
+                .opacity(ground)
+        }
+    }
+}
+
+/// Draws a word the phone has just taken: a fingertip's press on it, and
+/// the page's selection tint under it — the words over the tint, never
+/// under it.
+private struct SelectedWord: TextRenderer, Animatable {
+    var press: Double
+    var shown: Double
+
+    var animatableData: AnimatablePair<Double, Double> {
+        get { AnimatablePair(press, shown) }
+        set {
+            press = newValue.first
+            shown = newValue.second
+        }
+    }
+
+    /// The press reaches past the word, above and below.
+    var displayPadding: EdgeInsets {
+        EdgeInsets(top: 14, leading: 8, bottom: 14, trailing: 8)
+    }
+
+    func draw(layout: Text.Layout, in context: inout GraphicsContext) {
+        if let held = layout.boxes(of: .held).first {
+            Vignette.fingertip(on: held.rect, press: press, radius: 17, in: &context)
+            if shown > 0 {
+                var tint = context
+                tint.opacity = shown
+                tint.fill(Path(held.rect), with: .color(Palette.chartreuse.opacity(Vignette.selectionTint)))
+            }
+        }
+        for line in layout {
+            context.draw(line)
+        }
+    }
+}
+
+// MARK: 9. Your name in the front of the book
 
 /// The top of You as it opens now (A67), a flyleaf: Ruth's face and her
 /// name, the binding under them, and from it her rooms' ribbons laid in
@@ -1535,7 +1755,7 @@ private struct VignetteRibbon: View {
     }
 }
 
-// MARK: 9. Every book you have finished, on one shelf
+// MARK: 10. Every book you have finished, on one shelf
 
 /// Three embers on one baseline, a small book's, a middling one's and a
 /// long one's, each over its book and who it was read with. They rise
@@ -1636,7 +1856,7 @@ private struct VignetteEmber: View {
     }
 }
 
-// MARK: 10. Choose a version by reading it
+// MARK: 11. Choose a version by reading it
 
 /// Two versions as the Text screen now sets them, each a name over its own
 /// words for the verse. The ribbon that marks yours lifts out of the first
@@ -1711,7 +1931,7 @@ private struct VersionsByReadingVignette: View {
     }
 }
 
-// MARK: 11. The page, the way you read it
+// MARK: 12. The page, the way you read it
 
 /// A small page of John 1:1–3, set the ways Text now offers (A68). One
 /// paragraph at Book, its numbers quiet; then the page is set again a
@@ -1814,7 +2034,7 @@ private struct VignettePage: View, Animatable {
     }
 }
 
-// MARK: 12. Notifications say who
+// MARK: 13. Notifications say who
 
 /// The first switch of a room of two: "Notes left for you", and under it
 /// the sentence the phone will say, with Ruth's face. The switch turns on
@@ -1957,7 +2177,7 @@ private struct WritesIn: TextRenderer, Animatable {
     }
 }
 
-// MARK: 13. Quiet hours, drawn as the night
+// MARK: 14. Quiet hours, drawn as the night
 
 /// The quiet hours' band (A67), noon to noon, with its three hours under
 /// it. The night draws itself from ten in the evening to six in the

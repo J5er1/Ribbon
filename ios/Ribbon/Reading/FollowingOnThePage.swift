@@ -89,11 +89,13 @@ enum PagePoint {
     }
 }
 
-/// The follow's mark: a point in a chapter for the scroll view to aim at,
-/// as the landing has its own. Placed so that putting it at the top of the
-/// screen moves the page exactly as far as the step asks — or, for the
-/// rubber band, brings it back exactly where it rested, which can be
-/// outside the chapter's own lines (`y` below its foot, or above its head).
+/// The follow's mark: a point in a chapter, as the landing has its own.
+/// Placed so that putting it at the top of the screen moves the page exactly
+/// as far as the step asks — or, for the rubber band, brings it back exactly
+/// where it rested, which can be outside the chapter's own lines (`y` below
+/// its foot, or above its head). Not a view: the page is moved by the
+/// distance from it to the top of the screen, measured when the move is
+/// made (I40).
 struct FollowPlace: Equatable {
     var chapter: Int
     var y: CGFloat

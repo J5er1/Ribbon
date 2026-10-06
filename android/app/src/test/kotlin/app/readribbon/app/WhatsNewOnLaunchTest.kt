@@ -23,6 +23,7 @@ import app.readribbon.screens.nightFrame
 import app.readribbon.screens.notificationsFrame
 import app.readribbon.screens.originalFrame
 import app.readribbon.screens.ownVersionFrame
+import app.readribbon.screens.readableFrame
 import app.readribbon.screens.pageFrame
 import app.readribbon.screens.roomGroupsFrame
 import app.readribbon.screens.selectionFrame
@@ -250,6 +251,52 @@ class WhatsNewOnLaunchTest {
         for (t in listOf(0, WhatsNewItem.lordReadsLord.timeline.loopMs - 1)) {
             assertEquals(0f, lordFrame(t).name, 0.001f)
         }
+        for (t in listOf(0, WhatsNewItem.originalReadable.timeline.loopMs - 1)) {
+            val readable = readableFrame(t)
+            assertEquals(0f, readable.press + readable.wash + readable.bare + readable.ground + readable.grow, 0.001f)
+        }
+    }
+
+    // The release's fifth (A66): the held word's line, readable over the page.
+
+    @Test fun theHeldLineRestsThenEndsOnItsGround() {
+        assertEquals(
+            "told with the release it came in, not the newest",
+            "2026-10-following",
+            WhatsNew.releases.single { WhatsNewItem.originalReadable in it.items }.id,
+        )
+        val timeline = WhatsNewItem.originalReadable.timeline
+        assertEquals("a press, a bare line, a mend: the longer loop", LONG_LOOP_MS, timeline.loopMs)
+
+        val rest = readableFrame(0)
+        assertEquals("nothing moved at rest", 0f, rest.press + rest.wash + rest.bare + rest.ground + rest.grow, 0f)
+
+        val still = readableFrame(timeline.stillAt)
+        assertEquals("the word held and selected", 1f, still.press * still.wash, 0f)
+        assertEquals("its line there, on its ground", 1f, still.bare * still.ground, 0f)
+        assertEquals("the Hebrew grown and at full strength", 1f, still.grow, 0f)
+
+        assertEquals("settled back before it wraps", rest, readableFrame(timeline.loopMs - 1))
+    }
+
+    /**
+     * The trouble is seen before it is mended: the line arrives bare over
+     * the verse above, with the Hebrew small and muted, and is left there for
+     * most of a second; then its ground and the larger, fuller Hebrew come
+     * together, on one beat.
+     */
+    @Test fun theHeldLineIsSeenBareBeforeItsGroundComes() {
+        val frames = (0 until LONG_LOOP_MS).map(::readableFrame)
+        val selected = frames.indexOfFirst { it.wash == 1f }
+        val bare = frames.indexOfFirst { it.bare == 1f }
+        val mending = frames.indexOfFirst { it.ground > 0f }
+        val mended = frames.indexOfFirst { it.ground == 1f }
+        assertTrue("the word is taken before its line comes", selected <= bare)
+        assertEquals("bare: no ground under it", 0f, frames[bare].ground, 0f)
+        assertEquals("and the Hebrew at its old size, muted", 0f, frames[bare].grow, 0f)
+        assertTrue("held bare for most of a second (${mending - bare} ms)", mending - bare in 800..1100)
+        assertTrue("mended on one beat (${mended - mending} ms)", mended - mending + 1 in 320..480)
+        assertTrue("the ground and the word together", frames.all { it.ground == it.grow })
     }
 
     /**
@@ -392,6 +439,7 @@ class WhatsNewOnLaunchTest {
             WhatsNewItem.nativeSelection to ::selectionFrame,
             WhatsNewItem.roomGroups to ::roomGroupsFrame,
             WhatsNewItem.lordReadsLord to ::lordFrame,
+            WhatsNewItem.originalReadable to ::readableFrame,
             WhatsNewItem.flyleaf to ::flyleafFrame,
             WhatsNewItem.yourShelf to ::shelfFrame,
             WhatsNewItem.versionsByReading to ::versionsFrame,

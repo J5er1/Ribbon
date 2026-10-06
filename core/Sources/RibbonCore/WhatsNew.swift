@@ -35,6 +35,9 @@ public enum WhatsNewItem: String, Codable, Hashable, Sendable, CaseIterable {
     case roomGroups
     /// The New King James as printed: LORD, and its copyright line (A64).
     case lordReadsLord
+    /// The held word's line, readable over the page: on glass of its own,
+    /// the Hebrew larger and at full strength (A66).
+    case originalReadable
     /// You opens like the front of a Bible: your name, your face, a ribbon
     /// for every room you read in, and a colophon at the foot (A67).
     case flyleaf
@@ -78,7 +81,7 @@ public enum WhatsNew {
             items: [.flyleaf, .yourShelf, .versionsByReading, .yourPage, .notificationsByName, .quietHoursNight]),
         WhatsNewRelease(
             id: "2026-10-following", released: "2026-10-06",
-            items: [.followingStays, .nativeSelection, .roomGroups, .lordReadsLord]),
+            items: [.followingStays, .nativeSelection, .roomGroups, .lordReadsLord, .originalReadable]),
         WhatsNewRelease(
             id: "2026-10-original", released: "2026-10-04",
             items: [.original, .ownVersion, .followingWords]),

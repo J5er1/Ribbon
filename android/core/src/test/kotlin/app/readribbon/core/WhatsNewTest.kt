@@ -35,6 +35,18 @@ class WhatsNewTest {
             ),
             WhatsNew.releases.firstOrNull()?.items,
         )
+        // The Hebrew made easy to read (A66) belongs to the release before.
+        assertEquals("2026-10-following", WhatsNew.releases.getOrNull(1)?.id)
+        assertEquals(
+            listOf(
+                WhatsNewItem.followingStays,
+                WhatsNewItem.nativeSelection,
+                WhatsNewItem.roomGroups,
+                WhatsNewItem.lordReadsLord,
+                WhatsNewItem.originalReadable,
+            ),
+            WhatsNew.releases.getOrNull(1)?.items,
+        )
     }
 
     // Read again from You (A65): every release, newest first, each dated,
@@ -80,6 +92,7 @@ class WhatsNewTest {
         assertEquals("nativeSelection", WhatsNewItem.nativeSelection.name)
         assertEquals("roomGroups", WhatsNewItem.roomGroups.name)
         assertEquals("lordReadsLord", WhatsNewItem.lordReadsLord.name)
+        assertEquals("originalReadable", WhatsNewItem.originalReadable.name)
         assertEquals("flyleaf", WhatsNewItem.flyleaf.name)
         assertEquals("yourShelf", WhatsNewItem.yourShelf.name)
         assertEquals("versionsByReading", WhatsNewItem.versionsByReading.name)

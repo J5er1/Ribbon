@@ -1465,10 +1465,14 @@ object Copy {
     /** What's new (A65): following stays with them (A64). */
     const val WHATS_NEW_FOLLOWING_STAYS_TITLE = "Following stays with them"
 
-    /** What's new (A65): the screen kept on, and a follow that is not lost. */
+    /**
+     * What's new (A65, I40): the page on their verse, the screen kept on,
+     * and a follow that is not lost.
+     */
     const val WHATS_NEW_FOLLOWING_STAYS_BODY =
-        "While you follow someone who is reading, your screen stays on. " +
-            "A dropped connection or a second phone no longer loses them."
+        "Your page goes to the verse they are reading and moves on with them. " +
+            "While you follow, your screen stays on, " +
+            "and a dropped connection or a second phone no longer loses them."
 
     /** What's new (A65): selecting is the phone's own (A62). */
     const val WHATS_NEW_NATIVE_SELECTION_TITLE = "Selecting, the way your phone does"
@@ -1491,6 +1495,16 @@ object Copy {
     /** What's new (A65): LORD, and the copyright line. */
     const val WHATS_NEW_LORD_BODY =
         "LORD reads LORD where the Hebrew has the divine name, and each chapter carries its copyright line."
+
+    /** What's new (A66): the held word's line, readable over the page. */
+    const val WHATS_NEW_READABLE_TITLE = "The Hebrew, easy to read"
+
+    /**
+     * What's new (A66): what changed about it — its own ground, a larger
+     * word, and no verse running through it.
+     */
+    const val WHATS_NEW_READABLE_BODY =
+        "The word you hold, in Hebrew or Greek, sits on its own ground above the toolbar, set larger, with no verse running through it."
 
     /** What's new, read again (A65): the row in You, under This phone. */
     const val WHATS_NEW_ROW = "What’s new"

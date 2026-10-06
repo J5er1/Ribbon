@@ -105,9 +105,10 @@ struct ReadingScreen: View {
     /// Every follow gets its own number, so that following someone else —
     /// or the same person again — starts the loop afresh.
     @State private var followEpoch = 0
-    /// Where the follow's mark sits, in its chapter's own space.
+    /// Where the follow's mark sits, in its chapter's own space: the point
+    /// a step puts at the top of the screen.
     @State private var followMark: FollowPlace?
-    /// The follow's next move, for the ScrollViewReader to make.
+    /// The follow's next move, for the page to make.
     @State private var followStep: FollowStep?
     /// The text, faded out for the length of a step under reduce motion.
     @State private var pageOpacity: Double = 1
@@ -118,10 +119,14 @@ struct ReadingScreen: View {
     /// The verse the page has been sent to, and how far it has got.
     @State private var landing: Landing?
     /// Where the landing's mark sits in its chapter, in the chapter's own
-    /// space: the point the scroll view is asked to put at its top.
+    /// space: the point its second move puts at the top of the screen.
     @State private var landingMark: (chapter: Int, y: CGFloat)?
     /// The landing's next move, for the ScrollViewReader to make.
     @State private var landingMove: LandingMove?
+    /// Makes the moves inside a chapter — a landing's second half, a
+    /// follow's step, the rubber band's return — on the scroll view itself,
+    /// by the distance measured from the chapter's frame (I40).
+    @State private var pageScroller = PageScroller()
     /// Where a scroll to `.top` really puts a view, in the `.scrollView`
     /// space the page measures itself in: the safe area, give or take. Read
     /// off the first landing, which always starts from a known place.
@@ -188,6 +193,10 @@ struct ReadingScreen: View {
         var speaks = false
         /// Where the page was when it was sent.
         var from: VerseAddress?
+        /// Its chapter's words had not come when the page set off: it
+        /// travelled to a placeholder a tenth of the chapter's height, so
+        /// where it arrived says nothing about which way the verse is.
+        var streamed = false
 
         /// The page moved for it: a chapter's travel, or the move to the
         /// line.
@@ -209,10 +218,6 @@ struct ReadingScreen: View {
         var animated: Bool
     }
 
-    /// The landing's mark, as the ScrollViewReader knows it.
-    private struct LandingMark: Hashable {}
-    /// The follow's mark — the landing's, for a page that follows.
-    private struct FollowMark: Hashable {}
     /// A chapter's passage end, as the ScrollViewReader knows it.
     private struct PassageEndMark: Hashable { var chapter: Int }
 
@@ -321,6 +326,7 @@ struct ReadingScreen: View {
                                 onContinue: {
                                     endFollow()
                                     endLanding()
+                                    pageScroller.stop()
                                     withAnimation(RibbonMotion.settle(still: reduceMotion)) { proxy.scrollTo(n + 1, anchor: .top) }
                                 },
                                 onClose: close)
@@ -330,6 +336,14 @@ struct ReadingScreen: View {
                     finishingSection
                 }
                 .padding(.top, Self.pageTop)
+                // Behind the stack, where it can find the scroll view that
+                // backs the page: the moves inside a chapter are made on it
+                // (I40).
+                .background {
+                    PageScrollerProbe(scroller: pageScroller)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
                 // The measure: Scripture holds a readable line length on
                 // any canvas — the reading surface is the product, and a
                 // 150-character line is not reading.
@@ -471,6 +485,7 @@ struct ReadingScreen: View {
                     // A chapter chosen: it is somewhere else now, and a
                     // landing lets go.
                     endLanding()
+                    pageScroller.stop()
                     withAnimation(RibbonMotion.settle(still: reduceMotion)) {
                         proxy.scrollTo(command, anchor: .top)
                     }
@@ -481,12 +496,26 @@ struct ReadingScreen: View {
                 guard let move else { return }
                 landingMove = nil
                 followState.movingUntil = Date().addingTimeInterval(3)
+                if case .mark = move.target {
+                    // The verse's own move, inside its chapter: by the
+                    // distance the page measures, on the scroll view itself
+                    // (I40) — the proxy never found a mark inside a row.
+                    let duration = move.animated && !reduceMotion ? RibbonMotion.settleDuration : 0
+                    pageScroller.move(by: landingDistance(landingMark) ?? 0, duration: duration) {
+                        followState.movingUntil = Date().addingTimeInterval(0.15)
+                        landingMoved(move)
+                    }
+                    return
+                }
+                // A move of ours still under way would set the page back on
+                // its next frame, from wherever the proxy puts it.
+                pageScroller.stop()
                 withAnimation(move.animated ? RibbonMotion.settle(still: reduceMotion) : nil) {
                     switch move.target {
                     case .chapter(let n, let anchor):
                         proxy.scrollTo(n, anchor: anchor)
                     case .mark:
-                        proxy.scrollTo(LandingMark(), anchor: .top)
+                        break
                     case .passageEnd(let n):
                         proxy.scrollTo(PassageEndMark(chapter: n), anchor: .top)
                     }
@@ -498,7 +527,7 @@ struct ReadingScreen: View {
                 }
             }
             .onChange(of: followStep) { _, step in
-                if let step { take(step, with: proxy) }
+                if let step { take(step) }
             }
             .onChange(of: openAt) { _, target in
                 // A named place asked for while the book is already open — a
@@ -667,30 +696,6 @@ struct ReadingScreen: View {
 
                 gutterMarks(chapter: n)
                 openNoteCard(chapter: n)
-                if let mark = landingMark, mark.chapter == n {
-                    // Nothing to see: a point in the chapter for the scroll
-                    // view to aim at, set so that the verse's line comes to
-                    // rest on the reading line (I30).
-                    Color.clear
-                        .frame(width: 1, height: 1)
-                        .id(LandingMark())
-                        .position(x: 0.5, y: mark.y + 0.5)
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
-                }
-                if let mark = followMark, mark.chapter == n {
-                    // The follow's point to aim at: put at the top of the
-                    // screen, it leaves the page as far on as the step asks.
-                    // A rubber band's rest can be outside the chapter's own
-                    // lines, below them or above its head; a point there is
-                    // found all the same.
-                    Color.clear
-                        .frame(width: 1, height: 1)
-                        .id(FollowMark())
-                        .position(x: 0.5, y: mark.y + 0.5)
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
-                }
             }
             .coordinateSpace(name: "chapter")
             .onGeometryChange(for: CGRect.self) { geometry in
@@ -1731,7 +1736,15 @@ struct ReadingScreen: View {
             if let flying = run.flying,
                now.timeIntervalSince(flying.since) > 3 || now.timeIntervalSince(flying.began) > 15 {
                 endLanding()
-                run.noFlyTo = flying.chapter
+                // Barred only when the chapter would not come, or the page
+                // reached it and still could not land. A streamed chapter
+                // pushed off the page by the one above it getting its words
+                // was never reached: it is flown to again, now that the
+                // page around it has its real height (I40).
+                if chapterFailed.contains(flying.chapter)
+                    || (chaptersOnPage.contains(flying.chapter) && chapterLayouts[flying.chapter] != nil) {
+                    run.noFlyTo = flying.chapter
+                }
                 run.flying = nil
                 // It left the page at the head of that chapter, which is no
                 // place to hold: once the chapter is set, the first move
@@ -1764,9 +1777,9 @@ struct ReadingScreen: View {
     }
 
     /// A step: the whole page moved on by `distance`, the way they move
-    /// their own. The mark is set first and aimed at on the next turn of
-    /// the main queue, as a landing's is — it has to be on the page before
-    /// the scroll view can find it.
+    /// their own. The mark is a point in a chapter, not a view: the move is
+    /// made on the next turn of the main queue by the distance the page then
+    /// measures from it to the top of the screen (I40).
     private func stepPage(by distance: CGFloat, guessAt y: CGFloat?, run: FollowRun, calm: Bool) {
         // Put at the top of the screen — where `.top` really puts a view,
         // as the landing does — the mark leaves the page exactly `distance`
@@ -1783,13 +1796,12 @@ struct ReadingScreen: View {
         DispatchQueue.main.async { followStep = step }
     }
 
-    /// The follow's move, made by the ScrollViewReader.
-    private func take(_ step: FollowStep, with proxy: ScrollViewProxy) {
+    /// The follow's move, made on the scroll view itself by the distance
+    /// its mark is from the top of the screen (I40).
+    private func take(_ step: FollowStep) {
         switch step.way {
         case .ease:
-            withAnimation(RibbonMotion.settle) {
-                proxy.scrollTo(FollowMark(), anchor: .top)
-            } completion: {
+            pageScroller.move(by: distanceToTop(of: followMark) ?? 0, duration: RibbonMotion.settleDuration) {
                 followStepped()
             }
         case .fade:
@@ -1807,7 +1819,7 @@ struct ReadingScreen: View {
             } completion: {
                 let still = model.followingPersonID != nil && followState.phase == .idle
                     && !followState.bandInPlay && !fingerDown && !closing
-                if still { proxy.scrollTo(FollowMark(), anchor: .top) }
+                if still { pageScroller.move(by: distanceToTop(of: followMark) ?? 0, duration: 0) {} }
                 withAnimation(RibbonMotion.arrive) {
                     pageOpacity = 1
                 } completion: {
@@ -1819,9 +1831,8 @@ struct ReadingScreen: View {
             // doing, the page goes back where it was resting, on `release`
             // — a gesture let go of halfway, back where it was — and under
             // reduce motion it is simply back.
-            withAnimation(RibbonMotion.release(still: reduceMotion)) {
-                proxy.scrollTo(FollowMark(), anchor: .top)
-            } completion: {
+            let duration = reduceMotion ? 0 : RibbonMotion.releaseDuration
+            pageScroller.move(by: distanceToTop(of: followMark) ?? 0, duration: duration) {
                 bandReturned()
             }
         }
@@ -1847,9 +1858,33 @@ struct ReadingScreen: View {
     /// going somewhere. Under reduce motion it is simply there (I22).
     private func flyTo(_ point: ReadingPoint, run: FollowRun, now: Date, speaking: Bool) {
         run.flying = (chapter: point.chapter, since: now, began: now)
+        fetchAhead(of: point.chapter)
         land(
             at: VerseAddress(bookID: reading.bookID, chapter: point.chapter, verse: point.verse),
             animated: true, keepingYourPlace: false, speaking: speaking)
+    }
+
+    /// A streamed version's chapter a flight is going to, and the one above
+    /// it, fetched by the flight rather than by their placeholders (I40). A
+    /// placeholder's fetch is cancelled when the lazy stack lets it go — and
+    /// the chapter above a landing getting its words pushes the landing's
+    /// own off the page, and its fetch with it. Fetched here, both arrive
+    /// whatever the stack does, and the page around the verse has its real
+    /// height before the flight's second move.
+    private func fetchAhead(of chapter: Int) {
+        guard let licensed = TranslationRegistry.translation(for: translation), !licensed.isBundled else { return }
+        for n in [chapter, chapter - 1] where n >= 1 && chapterContent(n) == nil && !chapterFailed.contains(n) {
+            Task {
+                let address = VerseAddress(bookID: reading.bookID, chapter: n, verse: 1)
+                guard let fetched = await model.scripture.ensureRemoteChapter(address, translation: licensed) else { return }
+                withAnimation(RibbonMotion.arrive) {
+                    remoteChapters[RemoteChapter(translation: licensed.id, chapter: n)] = fetched
+                    // Its placeholder's own fetch may have failed first:
+                    // the chapter came, and is not one that would not.
+                    chapterFailed.remove(n)
+                }
+            }
+        }
     }
 
     // MARK: The rubber band
@@ -1921,6 +1956,19 @@ struct ReadingScreen: View {
             if frame.minY > top { break }
         }
         return rest
+    }
+
+    /// How far the page has to move to put a point of a chapter — a mark's
+    /// place, in the chapter's own space — where `.top` puts a view: the
+    /// distance the scroll view is moved by (I40). Nil when that chapter is
+    /// not on the page, and there is nothing to measure it against.
+    private func distanceToTop(of place: FollowPlace?) -> CGFloat? {
+        guard let place, let frame = chapterFrames[place.chapter] else { return nil }
+        return frame.minY + place.y - (scrollTop ?? topInset)
+    }
+
+    private func landingDistance(_ mark: (chapter: Int, y: CGFloat)?) -> CGFloat? {
+        distanceToTop(of: mark.map { FollowPlace(chapter: $0.chapter, y: $0.y) })
     }
 
     /// A scroll nobody accounts for — not a finger's, not its momentum,
@@ -2142,7 +2190,8 @@ struct ReadingScreen: View {
             let down = address >= from
             landing = Landing(
                 address: address, animated: animated,
-                approach: .travelling(down: down, done: false), speaks: speaking, from: from)
+                approach: .travelling(down: down, done: false), speaks: speaking, from: from,
+                streamed: chapterContent(chapter) == nil)
             landingMove = LandingMove(target: .chapter(chapter, down ? .top : .bottom), animated: animated)
         }
     }
@@ -2194,7 +2243,7 @@ struct ReadingScreen: View {
             // Opened at the very top of the book, margin and all: it moves
             // only for a verse below the line.
             goes = frame.minY + verseY - line > 1
-        case .travelling(let down, _) where landing.animated && !reduceMotion:
+        case .travelling(let down, _) where landing.animated && !reduceMotion && !landing.streamed:
             goes = down ? distance > 1 : distance < -1
         default:
             goes = abs(distance) > 1
@@ -2207,7 +2256,8 @@ struct ReadingScreen: View {
         landing.placed = true
         self.landing = landing
         let animated = landing.animated
-        // The mark has to be on the page before it can be aimed at.
+        // Measured again when it is made, on the next turn of the main
+        // queue, against wherever the chapter is by then (I40).
         DispatchQueue.main.async {
             landingMove = LandingMove(target: .mark, animated: animated)
         }

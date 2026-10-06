@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
@@ -60,6 +61,7 @@ import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import android.content.Context
@@ -480,8 +482,15 @@ private fun isolated(text: String): String = "\u2068$text\u2069"
 
 /**
  * The original line, directly above the inks (§7.5): `λόγος · logos · Word`.
- * Muted, one line, truncating; a button that opens the panel for the current
+ * One line, truncating; a button that opens the panel for the current
  * selection, labelled with what it says and what it does.
+ *
+ * It sits on the toolbar's own material, hugging what it says, because it
+ * is drawn over the page: bare, the verses ran straight through it, and a
+ * muted Hebrew word with its points under a line of Literata could not be
+ * read (A66). The original word is set larger than the words around it and
+ * at full strength — Hebrew a step larger again, for its points; how to say
+ * it and what your version says stay muted beside it.
  */
 @Composable
 fun OriginalLineView(
@@ -489,12 +498,13 @@ fun OriginalLineView(
     onOpen: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val originalSize = if (line.isHebrew) LINE_HEBREW_SIZE else LINE_GREEK_SIZE
     val originalFamily = remember(line.isHebrew) {
-        if (line.isHebrew) RibbonFonts.hebrew else RibbonFonts.literata(FontWeight.Normal, 17f)
+        if (line.isHebrew) RibbonFonts.hebrew else RibbonFonts.literata(FontWeight.Normal, originalSize)
     }
     val italicFamily = remember { RibbonFonts.literata(FontWeight.Normal, 14f, italic = true) }
     val text: AnnotatedString = buildAnnotatedString {
-        withStyle(SpanStyle(fontFamily = originalFamily, fontSize = 17.sp)) {
+        withStyle(SpanStyle(fontFamily = originalFamily, fontSize = originalSize.sp, color = Palette.text)) {
             append(isolated(line.text))
         }
         append("  ·  ")
@@ -508,20 +518,25 @@ fun OriginalLineView(
     }
     Box(
         modifier = modifier
-            .readableColumn()
-            .padding(horizontal = 28.dp)
-            .sizeIn(minHeight = 40.dp)
+            .padding(horizontal = 16.dp)
+            .widthIn(max = 420.dp)
+            .ribbonGlass(CircleShape)
             .clickable(role = Role.Button, onClickLabel = Copy.ORIGINAL_LINE_ACTION, onClick = onOpen)
             .clearAndSetSemantics {
                 contentDescription = line.spoken
                 role = Role.Button
                 onClick(label = Copy.ORIGINAL_LINE_ACTION) { onOpen(); true }
-            },
+            }
+            // Small to read, a finger's height to take (§11).
+            .sizeIn(minHeight = 44.dp)
+            .padding(horizontal = 18.dp, vertical = 2.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = text,
-            style = RibbonType.ui(14f).copy(textDirection = TextDirection.Ltr),
+            // The line's height is the faces' own, not the interface's: a
+            // Hebrew word's points reach past a 14 sp line.
+            style = RibbonType.ui(14f).copy(lineHeight = TextUnit.Unspecified, textDirection = TextDirection.Ltr),
             color = Palette.muted,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -529,6 +544,10 @@ fun OriginalLineView(
         )
     }
 }
+
+/** The held word in the line: Greek in Literata, Hebrew a step larger for its points. */
+internal const val LINE_GREEK_SIZE = 18f
+internal const val LINE_HEBREW_SIZE = 21f
 
 // MARK: - The panel
 

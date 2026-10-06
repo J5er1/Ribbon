@@ -18,7 +18,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.scrollBy
@@ -68,8 +67,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -3796,31 +3793,6 @@ private fun Modifier.trackedIn(
         ),
     )
 }
-
-/**
- * Ribbon's floating chrome material (§12.1), as NoteComposer draws it: the
- * raised surface under a 0.72 tint of the unlit ground, with a hairline edge
- * that catches a little more light along the top. Android has no backdrop
- * material to make real glass out of — the reasoning is written out in full
- * over NoteComposer's copy, and in docs/deviations.md.
- *
- * It is written twice because Kotlin's `private` is file scope and the
- * material is one file over; neither file owns the other.
- *
- * Where glass never appears, on either platform: over Scripture, on the
- * fire, the shelf, embers, or as a screen background.
- */
-@Composable
-private fun Modifier.ribbonGlass(shape: Shape): Modifier = this
-    .background(Palette.raised.copy(alpha = 0.55f), shape)
-    .background(Palette.ground.copy(alpha = 0.72f), shape)
-    .border(
-        width = 1.dp,
-        brush = Brush.verticalGradient(
-            listOf(Palette.text.copy(alpha = 0.14f), Palette.rule),
-        ),
-        shape = shape,
-    )
 
 /**
  * "Tell you when Ruth leaves a note?" — §6.1's exact question, asked once.
