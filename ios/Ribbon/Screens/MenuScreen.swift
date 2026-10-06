@@ -178,16 +178,19 @@ struct MenuScreen: View {
                 // was read in, not to you (A66). A quoted verse opens the
                 // book over its own room, the way a tapped notification
                 // does — the menu goes, the room comes, the page opens.
+                // A room you have left keeps its books on your shelf
+                // (§6.8), but there is no room any more to open them in,
+                // and a page opened over another room would be read and
+                // written as that room's: its verses are quoted, not
+                // offered.
+                let opensVerses = model.room(reading.roomID) != nil
                 EmberRecordScreen(
                     reading: reading,
-                    onOpenVerse: { verse in
-                        // A room you have left keeps its books on your
-                        // shelf (§6.8), but there is no room any more to
-                        // open them in, and a page opened over another
-                        // room would be read and written as that room's.
-                        guard model.room(reading.roomID) != nil else { return }
-                        model.pendingDestination = .verse(roomID: reading.roomID, readingID: reading.id, verse: verse)
-                    })
+                    onOpenVerse: opensVerses
+                        ? { verse in
+                            model.pendingDestination = .verse(roomID: reading.roomID, readingID: reading.id, verse: verse)
+                        }
+                        : nil)
             }
         }
     }
