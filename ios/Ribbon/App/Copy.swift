@@ -634,9 +634,10 @@ enum Copy {
         "Follow someone reading another version and you arrive at the words they are reading, not just the verse."
     /// What's new (A65): following stays with the person you follow (A64).
     static let whatsNewFollowingStaysTitle = "Following stays with them"
-    /// What's new (A65): the screen kept on, and a follow that is not lost.
+    /// What's new (A65, I40): the page on their verse, the screen kept on,
+    /// and a follow that is not lost.
     static let whatsNewFollowingStaysBody =
-        "While you follow someone who is reading, your screen stays on. A dropped connection or a second phone no longer loses them."
+        "Your page goes to the verse they are reading and moves on with them. While you follow, your screen stays on, and a dropped connection or a second phone no longer loses them."
     /// What's new (A65): the phone's own selection (A62).
     static let whatsNewSelectionTitle = "Selecting, the way your phone does"
     /// What's new (A65): how to take a whole verse — the number, or the

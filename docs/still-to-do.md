@@ -158,6 +158,21 @@ shows "Staying on the same page" with its four pictures moving. Then You →
 What's new: both releases, newest first, each under its day; Done, back and
 Esc go back to You, and the next launch does not show it again.
 
+The page going to the verse (I40), on an iPhone — on each of the owner's
+two, since one is on iOS 27:
+
+- Open a book where you left off partway through a chapter: it opens on
+  your verse, not the chapter's head. The same from a named place (a note,
+  a shared verse) in another chapter, above and below where you are.
+- Two iPhones on the New King James, the follower in a chapter the leader
+  is not in, nothing streamed yet in either: within a few seconds the
+  follower's page is on the leader's verse, and steps after them as they
+  read — never left at a chapter's head.
+- While following, drag the page once: it goes back where it was (the
+  rubber band); drag again: the follow ends.
+- With Reduce Motion on: the steps fade rather than glide, and land in the
+  same place.
+
 A mark following its words (A60, I37) — compiled on both platforms by CI,
 never yet run on a phone:
 
