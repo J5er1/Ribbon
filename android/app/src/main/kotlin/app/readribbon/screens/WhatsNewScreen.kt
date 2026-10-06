@@ -1,5 +1,6 @@
 package app.readribbon.screens
 
+import android.graphics.BitmapFactory
 import androidx.compose.animation.core.withInfiniteAnimationFrameNanos
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.lazy.LazyColumn
@@ -35,21 +36,35 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageShader
 import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.TileMode
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.drawscope.inset
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.lerp as lerpColor
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.paneTitle
@@ -66,34 +81,43 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.BaselineShift
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import app.readribbon.app.Copy
+import app.readribbon.core.FireScale
 import app.readribbon.core.Ink
+import app.readribbon.core.QuietHoursBand
 import app.readribbon.core.TranslationID
 import app.readribbon.core.WhatsNew
 import app.readribbon.core.WhatsNewItem
 import app.readribbon.core.WhatsNewRelease
 import app.readribbon.core.displayName
+import app.readribbon.design.LocalRoomColours
 import app.readribbon.design.Palette
 import app.readribbon.design.RibbonFonts
 import app.readribbon.design.RibbonMotion
 import app.readribbon.design.RibbonShape
 import app.readribbon.design.RibbonType
 import app.readribbon.design.ScreenMargin
+import app.readribbon.design.Seam
 import app.readribbon.design.SmallCaps
 import app.readribbon.design.WayInButton
 import app.readribbon.design.color
+import app.readribbon.design.drawRibbonTail
 import app.readribbon.design.paper
 import app.readribbon.design.peeled
 import app.readribbon.design.readableColumn
 import app.readribbon.design.rememberBackPeel
 import app.readribbon.design.rememberReduceMotion
 import app.readribbon.design.room
+import app.readribbon.fire.drawEmber
 import app.readribbon.reading.SELECTION_TINT
 
 // What's new (A61, §12.3): one screen, once per release, between the launch
@@ -450,6 +474,11 @@ internal val WhatsNewItem.title: String
         WhatsNewItem.nativeSelection -> Copy.WHATS_NEW_NATIVE_SELECTION_TITLE
         WhatsNewItem.roomGroups -> Copy.WHATS_NEW_ROOM_GROUPS_TITLE
         WhatsNewItem.lordReadsLord -> Copy.WHATS_NEW_LORD_TITLE
+        WhatsNewItem.flyleaf -> Copy.WHATS_NEW_FLYLEAF_TITLE
+        WhatsNewItem.yourShelf -> Copy.WHATS_NEW_SHELF_TITLE
+        WhatsNewItem.versionsByReading -> Copy.WHATS_NEW_VERSIONS_TITLE
+        WhatsNewItem.notificationsByName -> Copy.WHATS_NEW_NOTIFICATIONS_TITLE
+        WhatsNewItem.quietHoursNight -> Copy.WHATS_NEW_QUIET_HOURS_TITLE
     }
 
 internal val WhatsNewItem.body: String
@@ -461,6 +490,11 @@ internal val WhatsNewItem.body: String
         WhatsNewItem.nativeSelection -> Copy.WHATS_NEW_NATIVE_SELECTION_BODY
         WhatsNewItem.roomGroups -> Copy.WHATS_NEW_ROOM_GROUPS_BODY
         WhatsNewItem.lordReadsLord -> Copy.WHATS_NEW_LORD_BODY
+        WhatsNewItem.flyleaf -> Copy.WHATS_NEW_FLYLEAF_BODY
+        WhatsNewItem.yourShelf -> Copy.WHATS_NEW_SHELF_BODY
+        WhatsNewItem.versionsByReading -> Copy.WHATS_NEW_VERSIONS_BODY
+        WhatsNewItem.notificationsByName -> Copy.WHATS_NEW_NOTIFICATIONS_BODY
+        WhatsNewItem.quietHoursNight -> Copy.WHATS_NEW_QUIET_HOURS_BODY
     }
 
 // MARK: - The clock
@@ -499,7 +533,10 @@ internal const val LONG_LOOP_MS = 6200
 /** How long one picture's loop is, and the moment reduce motion holds it at. */
 internal data class Timeline(val loopMs: Int, val stillAt: Int)
 
-/** Each picture's loop: the first release's three, and the short new ones, on the one clock. */
+/**
+ * Each picture's loop: the first release's three, and the short ones since,
+ * on the one clock; the pictures with more beats on the longer one.
+ */
 internal val WhatsNewItem.timeline: Timeline
     get() = when (this) {
         WhatsNewItem.original,
@@ -507,9 +544,14 @@ internal val WhatsNewItem.timeline: Timeline
         WhatsNewItem.followingWords,
         WhatsNewItem.roomGroups,
         WhatsNewItem.lordReadsLord,
+        WhatsNewItem.flyleaf,
+        WhatsNewItem.yourShelf,
+        WhatsNewItem.versionsByReading,
+        WhatsNewItem.notificationsByName,
         -> Timeline(LOOP_MS, STILL_AT)
         WhatsNewItem.followingStays -> Timeline(LONG_LOOP_MS, STAYS_STILL_AT)
         WhatsNewItem.nativeSelection -> Timeline(LONG_LOOP_MS, SELECTION_STILL_AT)
+        WhatsNewItem.quietHoursNight -> Timeline(LONG_LOOP_MS, NIGHT_STILL_AT)
     }
 
 /** Where a loop of [loopMs] is, [elapsedMs] after the screen appeared and [startAfter] late. */
@@ -661,6 +703,94 @@ internal data class LordFrame(val name: Float)
 internal fun lordFrame(t: Int): LordFrame =
     LordFrame(name = beat(t, at = 900, ms = 480) * (1f - beat(t, at = 3300, ms = 400)))
 
+// The third release's five (A66).
+
+/**
+ * Your name in the front of the book: from the binding under Ruth's name her
+ * rooms' ribbons are laid in, left to right, each grown down from the binding
+ * with its room and its place coming with it ([ribbons]). Then they all fade
+ * off together ([shown]) rather than lifting out one by one.
+ */
+internal data class FlyleafFrame(val ribbons: List<Float>, val shown: Float)
+
+internal fun flyleafFrame(t: Int): FlyleafFrame = FlyleafFrame(
+    // Each on the open curve, an arrival's length behind the one before.
+    ribbons = listOf(
+        beat(t, at = 400, ms = 480),
+        beat(t, at = 720, ms = 480),
+        beat(t, at = 1040, ms = 480),
+    ),
+    shown = 1f - beat(t, at = 3360, ms = 400),
+)
+
+/**
+ * Every book you have finished, on one shelf: the embers rise onto it in
+ * turn, a small book's, a middling one's and a long one's, each with its
+ * words ([embers]); then the shelf fades as a whole ([shown]) rather than the
+ * embers sinking back.
+ */
+internal data class ShelfFrame(val embers: List<Float>, val shown: Float)
+
+internal fun shelfFrame(t: Int): ShelfFrame = ShelfFrame(
+    embers = listOf(
+        beat(t, at = 400, ms = 320),
+        beat(t, at = 720, ms = 320),
+        beat(t, at = 1040, ms = 320),
+    ),
+    shown = 1f - beat(t, at = 3200, ms = 400),
+)
+
+/**
+ * Choose a version by reading it: how far the ribbon is laid into each row,
+ * 1 for all the way. It lifts out of the first and is laid into the second
+ * — one ribbon, so never in both at once — and after a while goes back. At
+ * rest it is in the first, where the loop begins and ends.
+ */
+internal data class VersionsFrame(val first: Float, val second: Float)
+
+internal fun versionsFrame(t: Int): VersionsFrame = VersionsFrame(
+    // Lifted on settle, laid on open, as the row's own ribbon is.
+    first = 1f - beat(t, at = 400, ms = 400) + beat(t, at = 3520, ms = 480),
+    second = beat(t, at = 800, ms = 480) * (1f - beat(t, at = 3120, ms = 400)),
+)
+
+/**
+ * Notifications say who: the switch turns on ([on]), then the sentence the
+ * phone will say writes itself in ([written]); after a while the sentence
+ * fades ([said]) as the switch turns off — faded, not unwritten.
+ */
+internal data class NotificationsFrame(val on: Float, val written: Float, val said: Float)
+
+internal fun notificationsFrame(t: Int): NotificationsFrame {
+    val off = beat(t, at = 3200, ms = 400)
+    return NotificationsFrame(
+        on = beat(t, at = 400, ms = 480) * (1f - off),
+        written = beat(t, at = 880, ms = 480),
+        said = 1f - off,
+    )
+}
+
+/** Quiet hours: ten in the evening to six in the morning, drawn, its start at ten. */
+internal const val NIGHT_STILL_AT = 4800
+
+/**
+ * Quiet hours, drawn as the night: the dark stretch draws itself out from
+ * ten in the evening to six in the morning ([drawn]); its start is moved on
+ * to eleven and the night follows, rests there, and is moved back ([later],
+ * 1 at eleven); then the night fades ([shown]).
+ *
+ * The rest at eleven is the iPhone's; the rest after the start is back at
+ * ten is this phone's own, so that reduce motion's frame — the night as it
+ * was set — is inside a held pause as every other picture's is.
+ */
+internal data class NightFrame(val drawn: Float, val later: Float, val shown: Float)
+
+internal fun nightFrame(t: Int): NightFrame = NightFrame(
+    drawn = beat(t, at = 400, ms = 480),
+    later = beat(t, at = 1280, ms = 480) - beat(t, at = 3400, ms = 480),
+    shown = 1f - beat(t, at = 5560, ms = 400),
+)
+
 /**
  * The loop's clock for one vignette, as state read only while drawing — so
  * the picture moves and nothing recomposes.
@@ -771,14 +901,22 @@ private fun Vignette(item: WhatsNewItem, startAfter: Long, frozenAt: Long?, modi
         accent = Palette.accent,
         wash = Ink.ochre.color.copy(alpha = Palette.HIGHLIGHT_WASH),
         surface = Palette.surface,
+        ground = Palette.ground,
+        raised = Palette.raised,
+        rule = Palette.rule,
+        onAccent = Palette.onAccent,
+        sheetsNeedEdges = LocalRoomColours.current.tileNeedsEdge,
     )
     val faces = remember {
         VignetteFaces(
             scripture = RibbonFonts.literata(FontWeight.Normal, 19f),
             medium = RibbonFonts.literata(FontWeight.Medium, 19f),
             italic = RibbonFonts.literata(FontWeight.Normal, 14f, italic = true),
+            display = RibbonFonts.literata(FontWeight.Medium, FLYLEAF_NAME_SIZE),
+            specimen = RibbonFonts.literata(FontWeight.Normal, SPECIMEN_SIZE),
         )
     }
+    val grain = rememberGrain()
     val smallCaps = RibbonType.smallCaps(11f)
     val ui = RibbonType.ui(15f)
     val drawing = when (item) {
@@ -814,6 +952,29 @@ private fun Vignette(item: WhatsNewItem, startAfter: Long, frozenAt: Long?, modi
             val page = layOutTheName(measurer, inks, faces)
             onDrawBehind { drawTheName(page, inks, lordFrame(clock.longValue.toInt())) }
         }
+        WhatsNewItem.flyleaf -> Modifier.drawWithCache {
+            val page = layOutTheFlyleaf(measurer, inks, faces, smallCaps)
+            onDrawBehind { drawFlyleaf(page, inks, flyleafFrame(clock.longValue.toInt())) }
+        }
+        WhatsNewItem.yourShelf -> Modifier.drawWithCache {
+            val page = layOutTheShelf(measurer, inks, smallCaps)
+            onDrawBehind {
+                val t = clock.longValue.toInt()
+                drawShelf(page, shelfFrame(t), t)
+            }
+        }
+        WhatsNewItem.versionsByReading -> Modifier.drawWithCache {
+            val page = layOutTheChoice(measurer, inks, faces, smallCaps)
+            onDrawBehind { drawVersions(page, inks, grain, versionsFrame(clock.longValue.toInt())) }
+        }
+        WhatsNewItem.notificationsByName -> Modifier.drawWithCache {
+            val page = layOutTheSwitch(measurer, inks, ui)
+            onDrawBehind { drawNotifications(page, inks, grain, notificationsFrame(clock.longValue.toInt())) }
+        }
+        WhatsNewItem.quietHoursNight -> Modifier.drawWithCache {
+            val page = layOutTheNight(measurer, inks)
+            onDrawBehind { drawNight(page, inks, grain, nightFrame(clock.longValue.toInt())) }
+        }
     }
     Box(modifier.then(drawing))
 }
@@ -825,9 +986,37 @@ private class VignetteInks(
     val accent: Color,
     val wash: Color,
     val surface: Color,
+    val ground: Color,
+    val raised: Color,
+    val rule: Color,
+    val onAccent: Color,
+    /** Whether a sheet drawn in a picture takes the rule as its edge, as a tile does (RoomColours.tileNeedsEdge). */
+    val sheetsNeedEdges: Boolean,
 )
 
-private class VignetteFaces(val scripture: FontFamily, val medium: FontFamily, val italic: FontFamily)
+private class VignetteFaces(
+    val scripture: FontFamily,
+    val medium: FontFamily,
+    val italic: FontFamily,
+    val display: FontFamily,
+    val specimen: FontFamily,
+)
+
+/**
+ * The paper's grain as a brush, for the sheets a picture draws for itself —
+ * a row, a well, the night — which would otherwise be the one smooth thing
+ * on a grained page. The same tile and the same repeat as `Modifier.grain`,
+ * laid in the picture's own coordinates, so it lines up with the grain of
+ * the paper under it rather than sliding against it.
+ */
+@Composable
+private fun rememberGrain(): Brush {
+    val context = LocalContext.current
+    return remember(context) {
+        val tile = context.assets.open(GRAIN_TILE).use { BitmapFactory.decodeStream(it).asImageBitmap() }
+        ShaderBrush(ImageShader(tile, TileMode.Repeated, TileMode.Repeated))
+    }
+}
 
 /** The marks every picture makes, in pixels: the wash, the reading line, the press. */
 private class Pen(
@@ -1514,4 +1703,745 @@ private fun DrawScope.drawTheName(page: TheName, inks: VignetteInks, frame: Lord
     drawText(page.line, topLeft = page.lineAt)
     faded(1f - frame.name) { drawText(page.plain, topLeft = page.plainAt) }
     faded(frame.name) { drawText(page.printed, topLeft = page.printedAt) }
+}
+
+// MARK: - The third release's pictures (A66)
+//
+// These five are of things that are not the page — You, a shelf, a row with
+// a ribbon in it, a switch, the night's band — so they are drawn from what
+// those are drawn from: the ribbon's own tail (`drawRibbonTail`), the ember's
+// own hand (`drawEmber`), the room's paper and well and grain. Rows are
+// raised off the picture's paper as a chip is, since the picture is itself a
+// sheet of paper and a row in the paper's own colour would be no row at all.
+
+/** The other person in every picture, as in the second release's. */
+private const val READER = "Ruth"
+
+/** The grain's tile and its strength, as `Modifier.grain` lays it. */
+private const val GRAIN_TILE = "paper_grain.png"
+private const val GRAIN_ALPHA = 0.035f
+
+/** A sheet's edge inside a picture, where the fill alone cannot carry it: the tile's own hairline. */
+private val SHEET_EDGE = 1.dp
+
+/**
+ * A room's ribbon on the flyleaf: its ink — none for a room where no ink is
+ * yours, which hangs in the accent as You hangs it — how far it hangs, and
+ * the room and the place it lies.
+ */
+private class PicturedRoom(val ink: Ink?, val length: Dp, val room: String, val place: String)
+
+/**
+ * Three rooms, no two ribbons the same length — "two ribbons of slightly
+ * different length read as two people" (brief §5).
+ */
+private val FLYLEAF = listOf(
+    PicturedRoom(null, 34.dp, "us", "mark 4"),
+    PicturedRoom(Ink.teal, 28.dp, "thursday", "ruth 2"),
+    PicturedRoom(Ink.plum, 38.dp, "family", "john 1"),
+)
+private val FLYLEAF_FACE = 30.dp
+private const val FLYLEAF_NAME_SIZE = 24f
+private val FLYLEAF_RIBBON = 12.dp
+
+/** A finished book on the shelf: the size its fire was, its name, and who it was read with. */
+private class PicturedBook(val scale: FireScale, val book: String, val company: String)
+
+/** Philemon small, Mark medium, Isaiah large — each the size its fire was, so Isaiah still looks like Isaiah. */
+private val SHELF = listOf(
+    PicturedBook(FireScale.small, "philemon", "with jo"),
+    PicturedBook(FireScale.medium, "mark", "with ruth"),
+    PicturedBook(FireScale.large, "isaiah", "with thursday study"),
+)
+
+/** The embers at a little over half the size You sets them, in the same proportion to each other. */
+private const val EMBER_SHRINK = 0.6
+
+/** The ember breathes at a quarter of the fire's clock, as `EmberView`'s does. */
+private const val EMBER_PACE = 0.25
+private val EMBER_RISE = 6.dp
+private val SHELF_GAP = 18.dp
+
+/**
+ * A version's own words under its name, smaller than the page's: a specimen
+ * as the Text screen sets one, small enough that the longer line fits a row.
+ */
+private const val SPECIMEN_SIZE = 14f
+
+/** Where words start inside a pictured row, and how far in from its trailing edge the ribbon hangs. */
+private val ROW_INSET = 14.dp
+
+/** The chosen marker at the picture's size: `ChoiceRibbon`'s 10 × 22, a little shorter. */
+private val CHOICE_RIBBON_WIDTH = 10.dp
+private val CHOICE_RIBBON_LENGTH = 20.dp
+
+/** Two rows as a group sets them, made small: round where they stand alone, small at the seam. */
+private val ROW_CORNER = RibbonShape.row
+private val SEAM_CORNER = 6.dp
+
+/** Where Ruth's note was left, in the sentence the phone will say. */
+private const val NOTED_AT = "Mark 4:12"
+private val NOTE_FACE = 14.dp
+
+/**
+ * The row's switch at the picture's size: Material's 52 × 32, which the row
+ * keeps (A18/A29), made 40 × 24, its thumb small and muted when off and
+ * grown and on the accent when on, as Material's is.
+ */
+private val SWITCH_WIDTH = 40.dp
+private val SWITCH_HEIGHT = 24.dp
+private val THUMB_OFF = 12.dp
+private val THUMB_ON = 18.dp
+private val SWITCH_EDGE = 1.5.dp
+
+/** How far behind the pen a letter takes to come up whole, so a line is written in rather than wiped on. */
+private val NIB = 18.dp
+
+/**
+ * The picture's night, ten in the evening to six in the morning, and the
+ * later start it is moved to — placed on the band from noon to noon by the
+ * core's arithmetic, as the setting's band is.
+ */
+private val NIGHT_FROM = QuietHoursBand.position(22 * 60).toFloat()
+private val LATER_FROM = QuietHoursBand.position(23 * 60).toFloat()
+private val NIGHT_TO = QuietHoursBand.position(6 * 60).toFloat()
+
+/**
+ * The hours under the band, in the order `QuietHoursBand.marks` sets them:
+ * words in a picture rather than this phone's clock, so both phones' pictures
+ * say the same.
+ */
+private val NIGHT_MARKS = listOf("6 pm", "midnight", "6 am")
+
+/** The setting's band at the picture's size: 44 high made 28, its corner and its handles in proportion. */
+private val NIGHT_BAND = 28.dp
+private val NIGHT_CORNER = 8.dp
+private val NIGHT_HANDLE = 4.dp
+private val NIGHT_HANDLE_HEIGHT = 18.dp
+private val NIGHT_TICK = 4.dp
+
+/** A face with no photograph, as `PortraitView` sets one: its initial, in the person's ink. */
+private fun monogram(size: Dp): TextStyle = RibbonType.ui(size.value * 0.42f, FontWeight.Medium)
+
+private fun rounded(rect: Rect, corner: Float): Path =
+    Path().apply { addRoundRect(RoundRect(rect, CornerRadius(corner))) }
+
+/**
+ * A sheet drawn inside a picture: its fill, the paper's grain on it, and —
+ * where the room's tiles take one — its hairline edge, inside the shape as a
+ * tile's border is.
+ */
+private fun DrawScope.sheet(shape: Path, fill: Color, grain: Brush, edge: Color?, edgeWidth: Float) {
+    drawPath(shape, fill)
+    drawPath(shape, grain, alpha = GRAIN_ALPHA)
+    if (edge != null) {
+        // Stroked twice as wide and cut to the shape, so the edge is all
+        // inside it.
+        clipPath(shape) { drawPath(shape, edge, style = Stroke(edgeWidth * 2f)) }
+    }
+}
+
+/** A ribbon [laid] of the way into whatever it hangs from: grown down from its top edge, as one is laid into a book. */
+private fun DrawScope.laidRibbon(color: Color, at: Offset, width: Float, length: Float, laid: Float) {
+    if (laid <= 0f) return
+    scale(scaleX = 1f, scaleY = laid, pivot = at) {
+        drawRibbonTail(color, at, width, length)
+    }
+}
+
+// MARK: Your name in the front of the book
+
+/**
+ * The top of You as it opens now: Ruth's face and her name in the display
+ * face, the binding under them, and from it three rooms' ribbons, each at the
+ * left of its third with the room and where it lies beside it.
+ */
+private class TheFlyleaf(
+    val face: Offset,
+    val faceRadius: Float,
+    val initial: TextLayoutResult,
+    val initialAt: Offset,
+    val name: TextLayoutResult,
+    val nameAt: Offset,
+    val binding: Rect,
+    val ribbons: List<PicturedRibbon>,
+)
+
+private class PicturedRibbon(
+    val color: Color,
+    val at: Offset,
+    val width: Float,
+    val length: Float,
+    val room: TextLayoutResult,
+    val roomAt: Offset,
+    val place: TextLayoutResult,
+    val placeAt: Offset,
+)
+
+private fun CacheDrawScope.layOutTheFlyleaf(
+    measurer: TextMeasurer,
+    inks: VignetteInks,
+    faces: VignetteFaces,
+    smallCaps: TextStyle,
+): TheFlyleaf {
+    val inset = INSET.toPx()
+    val room = size.width - inset * 2
+    val face = FLYLEAF_FACE.toPx()
+    val beside = 10.dp.toPx()
+
+    val initial = measurer.measure(
+        AnnotatedString(READER.take(1)),
+        monogram(FLYLEAF_FACE).copy(color = Ink.teal.color),
+        softWrap = false,
+        maxLines = 1,
+        density = this,
+    )
+    val name = fitted(
+        measurer,
+        AnnotatedString(READER),
+        TextStyle(fontFamily = faces.display, fontSize = FLYLEAF_NAME_SIZE.sp, color = inks.text),
+        (room - face - beside).coerceAtLeast(1f),
+    )
+
+    // Beside each ribbon its room, a step back from the page's text, and
+    // under that where it lies, muted — as You sets them under its own.
+    val ribbonWidth = FLYLEAF_RIBBON.toPx()
+    val third = room / FLYLEAF.size
+    val wordsGap = 8.dp.toPx()
+    val wordsRoom = (third - ribbonWidth - wordsGap * 1.5f).coerceAtLeast(1f)
+    val roomStyle = smallCaps.copy(color = inks.text.copy(alpha = 0.8f))
+    val placeStyle = smallCaps.copy(color = inks.muted)
+    val words = FLYLEAF.map {
+        fitted(measurer, AnnotatedString(it.room), roomStyle, wordsRoom) to
+            fitted(measurer, AnnotatedString(it.place), placeStyle, wordsRoom)
+    }
+    val wordsDrop = 4.dp.toPx()
+    val lineGap = 2.dp.toPx()
+    val hanging = maxOf(
+        FLYLEAF.maxOf { it.length.toPx() },
+        words.maxOf { (roomLine, placeLine) -> wordsDrop + roomLine.size.height + lineGap + placeLine.size.height },
+    )
+
+    val head = maxOf(face, name.size.height.toFloat())
+    val below = 12.dp.toPx()
+    val hair = 1.dp.toPx()
+    val top = ((size.height - (head + below + hair + hanging)) / 2f).coerceAtLeast(0f)
+    val faceAt = Offset(inset + face / 2f, top + head / 2f)
+    val bindingTop = top + head + below
+    val ribbonTop = bindingTop + hair
+
+    return TheFlyleaf(
+        face = faceAt,
+        faceRadius = face / 2f,
+        initial = initial,
+        initialAt = faceAt - Offset(initial.size.width / 2f, initial.size.height / 2f),
+        name = name,
+        nameAt = Offset(inset + face + beside, faceAt.y - name.size.height / 2f),
+        binding = Rect(inset, bindingTop, size.width - inset, ribbonTop),
+        ribbons = FLYLEAF.mapIndexed { i, pictured ->
+            val x = inset + third * i
+            val (roomLine, placeLine) = words[i]
+            val wordsX = x + ribbonWidth + wordsGap
+            PicturedRibbon(
+                color = pictured.ink?.color ?: inks.accent,
+                at = Offset(x, ribbonTop),
+                width = ribbonWidth,
+                length = pictured.length.toPx(),
+                room = roomLine,
+                roomAt = Offset(wordsX, ribbonTop + wordsDrop),
+                place = placeLine,
+                placeAt = Offset(wordsX, ribbonTop + wordsDrop + roomLine.size.height + lineGap),
+            )
+        },
+    )
+}
+
+private fun DrawScope.drawFlyleaf(page: TheFlyleaf, inks: VignetteInks, frame: FlyleafFrame) {
+    drawCircle(inks.raised, radius = page.faceRadius, center = page.face)
+    drawText(page.initial, topLeft = page.initialAt)
+    drawText(page.name, topLeft = page.nameAt)
+    drawRect(inks.rule, topLeft = page.binding.topLeft, size = page.binding.size)
+
+    page.ribbons.forEachIndexed { i, ribbon ->
+        val laid = frame.ribbons[i]
+        laidRibbon(ribbon.color.copy(alpha = ribbon.color.alpha * frame.shown), ribbon.at, ribbon.width, ribbon.length, laid)
+        // The words come with their ribbon.
+        faded(laid * frame.shown) {
+            drawText(ribbon.room, topLeft = ribbon.roomAt)
+            drawText(ribbon.place, topLeft = ribbon.placeAt)
+        }
+    }
+}
+
+// MARK: Every book you have finished, on one shelf
+
+/**
+ * Three embers standing on one line — no shelf drawn (S10), the line is
+ * where they stand — each over its book and who it was read with.
+ */
+private class TheShelf(val books: List<ShelvedEmber>, val rise: Float)
+
+private class ShelvedEmber(
+    val ember: Rect,
+    val seed: Double,
+    val book: TextLayoutResult,
+    val bookAt: Offset,
+    val company: TextLayoutResult,
+    val companyAt: Offset,
+)
+
+private fun CacheDrawScope.layOutTheShelf(
+    measurer: TextMeasurer,
+    inks: VignetteInks,
+    smallCaps: TextStyle,
+): TheShelf {
+    val inset = INSET.toPx()
+    val room = size.width - inset * 2
+    val gap = SHELF_GAP.toPx()
+    val column = ((room - gap * (SHELF.size - 1)) / SHELF.size).coerceAtLeast(1f)
+    val bookStyle = RibbonType.smallCaps(12f).copy(color = inks.text.copy(alpha = 0.8f), textAlign = TextAlign.Center)
+    val companyStyle = smallCaps.copy(color = inks.muted, textAlign = TextAlign.Center)
+    // Up to two lines under an ember, centred, as the shelf sets a long
+    // company line — never cut.
+    fun lay(text: String, style: TextStyle) = measurer.measure(
+        AnnotatedString(text),
+        style,
+        maxLines = 2,
+        constraints = Constraints(maxWidth = column.toInt()),
+        density = this,
+    )
+
+    // `EmberView`'s own proportions: the size the fire was, a third of it,
+    // in a box half as wide again as it is tall.
+    val embers = SHELF.map {
+        val across = (it.scale.frameHeight * 0.30 * EMBER_SHRINK).dp.toPx()
+        Size(across * 1.7f, across * 1.35f)
+    }
+    val books = SHELF.map { lay(it.book, bookStyle) }
+    val companies = SHELF.map { lay(it.company, companyStyle) }
+    val widths = SHELF.indices.map {
+        maxOf(embers[it].width, books[it].size.width.toFloat(), companies[it].size.width.toFloat())
+    }
+
+    val tallest = embers.maxOf { it.height }
+    val under = 6.dp.toPx()
+    val lineGap = 2.dp.toPx()
+    val words = SHELF.indices.maxOf { (books[it].size.height + companies[it].size.height).toFloat() } + lineGap
+    val top = ((size.height - (tallest + under + words)) / 2f).coerceAtLeast(0f)
+    val standing = top + tallest
+
+    var x = (size.width - (widths.sum() + gap * (SHELF.size - 1))) / 2f
+    val shelved = SHELF.indices.map { i ->
+        val centre = x + widths[i] / 2f
+        x += widths[i] + gap
+        val ember = embers[i]
+        val book = books[i]
+        val company = companies[i]
+        val bookAt = Offset(centre - book.size.width / 2f, standing + under)
+        ShelvedEmber(
+            ember = Rect(Offset(centre - ember.width / 2f, standing - ember.height), ember),
+            seed = 0.4 + i * 1.7,
+            book = book,
+            bookAt = bookAt,
+            company = company,
+            companyAt = Offset(centre - company.size.width / 2f, bookAt.y + book.size.height + lineGap),
+        )
+    }
+    return TheShelf(books = shelved, rise = EMBER_RISE.toPx())
+}
+
+/**
+ * The shelf at [frame], its embers breathing at [t] — each at its own time,
+ * on the picture's clock, so that a held picture holds them too. The clock
+ * wraps only while the shelf has faded, so a breath is never seen to jump.
+ */
+private fun DrawScope.drawShelf(page: TheShelf, frame: ShelfFrame, t: Int) {
+    val time = t / 1000.0 * EMBER_PACE
+    page.books.forEachIndexed { i, shelved ->
+        val risen = frame.embers[i]
+        faded(risen * frame.shown) {
+            translate(top = page.rise * (1f - risen)) {
+                val ember = shelved.ember
+                inset(
+                    left = ember.left,
+                    top = ember.top,
+                    right = size.width - ember.right,
+                    bottom = size.height - ember.bottom,
+                ) {
+                    drawEmber(time + shelved.seed)
+                }
+                drawText(shelved.book, topLeft = shelved.bookAt)
+                drawText(shelved.company, topLeft = shelved.companyAt)
+            }
+        }
+    }
+}
+
+// MARK: Choose a version by reading it
+
+/**
+ * Two versions as the Text screen now sets them: two rows of a group, each a
+ * name over its own words for the verse, and the ribbon that marks yours
+ * hanging from a row's top edge at its trailing side, where `SettingChoice`
+ * hangs it.
+ */
+private class TheChoice(val rows: List<PicturedChoice>, val ribbonWidth: Float, val ribbonLength: Float, val edge: Float)
+
+private class PicturedChoice(
+    val shape: Path,
+    val label: TextLayoutResult,
+    val labelAt: Offset,
+    val line: TextLayoutResult,
+    val lineAt: Offset,
+    val ribbonAt: Offset,
+)
+
+private fun CacheDrawScope.layOutTheChoice(
+    measurer: TextMeasurer,
+    inks: VignetteInks,
+    faces: VignetteFaces,
+    smallCaps: TextStyle,
+): TheChoice {
+    val inset = INSET.toPx()
+    val left = inset
+    val right = size.width - inset
+    val pad = ROW_INSET.toPx()
+    val ribbonWidth = CHOICE_RIBBON_WIDTH.toPx()
+    // The words stop short of the ribbon's room on both rows, as the row
+    // keeps it clear whether or not the ribbon is in it.
+    val room = (right - left - pad * 2 - ribbonWidth - 8.dp.toPx()).coerceAtLeast(1f)
+    val specimen = TextStyle(
+        fontFamily = faces.specimen,
+        fontSize = SPECIMEN_SIZE.sp,
+        color = inks.text.copy(alpha = 0.86f),
+    )
+    val versions = listOf(
+        TranslationID.bsb.displayName to BEREAN_LINE,
+        TranslationID.web.displayName to WORLD_LINE,
+    )
+    // Both at one size, whichever fits the narrower, as the two-row
+    // pictures set theirs.
+    val fits = versions.minOf { (_, line) ->
+        fitted(measurer, AnnotatedString(line), specimen, room).layoutInput.style.fontSize.value
+    }
+    val set = specimen.copy(fontSize = fits.sp)
+    val label = smallCaps.copy(color = inks.muted)
+    val laid = versions.map { (name, line) ->
+        measurer.measure(AnnotatedString(name), label, softWrap = false, maxLines = 1, density = this) to
+            measurer.measure(AnnotatedString(line), set, softWrap = false, maxLines = 1, density = this)
+    }
+
+    val gap = 2.dp.toPx()
+    val padY = 7.dp.toPx()
+    val seam = Seam.toPx()
+    val heights = laid.map { (name, line) -> padY * 2 + name.size.height + gap + line.size.height }
+    var top = ((size.height - heights.sum() - seam * (laid.size - 1)) / 2f).coerceAtLeast(0f)
+    val outer = CornerRadius(ROW_CORNER.toPx())
+    val inner = CornerRadius(SEAM_CORNER.toPx())
+    val rows = laid.mapIndexed { i, (name, line) ->
+        val upper = if (i == 0) outer else inner
+        val lower = if (i == laid.size - 1) outer else inner
+        val bottom = top + heights[i]
+        val row = PicturedChoice(
+            shape = Path().apply {
+                addRoundRect(
+                    RoundRect(
+                        left = left,
+                        top = top,
+                        right = right,
+                        bottom = bottom,
+                        topLeftCornerRadius = upper,
+                        topRightCornerRadius = upper,
+                        bottomRightCornerRadius = lower,
+                        bottomLeftCornerRadius = lower,
+                    ),
+                )
+            },
+            label = name,
+            labelAt = Offset(left + pad, top + padY),
+            line = line,
+            lineAt = Offset(left + pad, top + padY + name.size.height + gap),
+            ribbonAt = Offset(right - pad - ribbonWidth, top),
+        )
+        top = bottom + seam
+        row
+    }
+    return TheChoice(
+        rows = rows,
+        ribbonWidth = ribbonWidth,
+        ribbonLength = CHOICE_RIBBON_LENGTH.toPx(),
+        edge = SHEET_EDGE.toPx(),
+    )
+}
+
+private fun DrawScope.drawVersions(page: TheChoice, inks: VignetteInks, grain: Brush, frame: VersionsFrame) {
+    val edge = if (inks.sheetsNeedEdges) inks.rule else null
+    val laid = listOf(frame.first, frame.second)
+    page.rows.forEachIndexed { i, row ->
+        sheet(row.shape, inks.raised, grain, edge, page.edge)
+        drawText(row.label, topLeft = row.labelAt)
+        drawText(row.line, topLeft = row.lineAt)
+        // Inside the row's own corners, as the row's ribbon is inside its tile.
+        clipPath(row.shape) {
+            laidRibbon(inks.accent, row.ribbonAt, page.ribbonWidth, page.ribbonLength, laid[i])
+        }
+    }
+}
+
+// MARK: Notifications say who
+
+/**
+ * The first switch of a room of two: "Notes left for you", and under it, in
+ * a small well, Ruth's face and the sentence the phone will say — the
+ * example as the row draws it (`SettingExampleView`) — and the switch at the
+ * row's trailing end.
+ */
+private class TheSwitch(
+    val shape: Path,
+    val title: TextLayoutResult,
+    val titleAt: Offset,
+    val well: Path,
+    val face: Offset,
+    val faceRadius: Float,
+    val initial: TextLayoutResult,
+    val initialAt: Offset,
+    val sentence: TextLayoutResult,
+    val sentenceAt: Offset,
+    val track: Rect,
+    val thumbOff: Float,
+    val thumbOn: Float,
+    val trackEdge: Float,
+    val edge: Float,
+    val nib: Float,
+)
+
+private fun CacheDrawScope.layOutTheSwitch(
+    measurer: TextMeasurer,
+    inks: VignetteInks,
+    ui: TextStyle,
+): TheSwitch {
+    val inset = INSET.toPx()
+    val left = inset
+    val right = size.width - inset
+    val padX = ROW_INSET.toPx()
+    val padY = 12.dp.toPx()
+    val trackWidth = SWITCH_WIDTH.toPx()
+    val trackHeight = SWITCH_HEIGHT.toPx()
+    val wordsLeft = left + padX
+    val wordsRoom = (right - padX - trackWidth - 10.dp.toPx() - wordsLeft).coerceAtLeast(1f)
+
+    val title = fitted(measurer, AnnotatedString(Copy.NOTES_LEFT_FOR_YOU), ui.copy(color = inks.text), wordsRoom)
+
+    val wellX = 8.dp.toPx()
+    val wellY = 6.dp.toPx()
+    val face = NOTE_FACE.toPx()
+    val faceGap = 6.dp.toPx()
+    val sentence = fitted(
+        measurer,
+        AnnotatedString(Copy.notifNoteLeft(READER, NOTED_AT)),
+        RibbonType.ui(13f).copy(color = inks.text.copy(alpha = 0.8f)),
+        (wordsRoom - wellX * 2 - face - faceGap).coerceAtLeast(1f),
+    )
+    val wellHeight = wellY * 2 + maxOf(face, sentence.size.height.toFloat())
+    val wellWidth = wellX * 2 + face + faceGap + sentence.size.width
+
+    val under = 8.dp.toPx()
+    val height = padY * 2 + title.size.height + under + wellHeight
+    val top = ((size.height - height) / 2f).coerceAtLeast(0f)
+    val wellTop = top + padY + title.size.height + under
+    val faceAt = Offset(wordsLeft + wellX + face / 2f, wellTop + wellHeight / 2f)
+    val initial = measurer.measure(
+        AnnotatedString(READER.take(1)),
+        monogram(NOTE_FACE).copy(color = Ink.teal.color),
+        softWrap = false,
+        maxLines = 1,
+        density = this,
+    )
+    val trackTop = top + (height - trackHeight) / 2f
+
+    return TheSwitch(
+        shape = rounded(Rect(left, top, right, top + height), RibbonShape.row.toPx()),
+        title = title,
+        titleAt = Offset(wordsLeft, top + padY),
+        well = rounded(Rect(wordsLeft, wellTop, wordsLeft + wellWidth, wellTop + wellHeight), RibbonShape.small.toPx()),
+        face = faceAt,
+        faceRadius = face / 2f,
+        initial = initial,
+        initialAt = faceAt - Offset(initial.size.width / 2f, initial.size.height / 2f),
+        sentence = sentence,
+        sentenceAt = Offset(faceAt.x + face / 2f + faceGap, wellTop + (wellHeight - sentence.size.height) / 2f),
+        track = Rect(right - padX - trackWidth, trackTop, right - padX, trackTop + trackHeight),
+        thumbOff = THUMB_OFF.toPx(),
+        thumbOn = THUMB_ON.toPx(),
+        trackEdge = SWITCH_EDGE.toPx(),
+        edge = SHEET_EDGE.toPx(),
+        nib = NIB.toPx(),
+    )
+}
+
+private fun DrawScope.drawNotifications(page: TheSwitch, inks: VignetteInks, grain: Brush, frame: NotificationsFrame) {
+    val edge = if (inks.sheetsNeedEdges) inks.rule else null
+    sheet(page.shape, inks.raised, grain, edge, page.edge)
+    drawText(page.title, topLeft = page.titleAt)
+
+    // The well and the face are there throughout; only the words come and go.
+    sheet(page.well, inks.ground, grain, edge, page.edge)
+    drawCircle(inks.raised, radius = page.faceRadius, center = page.face)
+    drawText(page.initial, topLeft = page.initialAt)
+    writtenIn(page.sentence, page.sentenceAt, written = frame.written, nib = page.nib, alpha = frame.said)
+
+    drawSwitch(page, inks, frame.on)
+}
+
+/**
+ * The row's switch, drawn as Material draws it in Ribbon's paint (A18/A29):
+ * off, a recess with the rule round it and a small muted thumb at the
+ * leading end; on, the accent filling it and the thumb grown, on the accent's
+ * own contrast, at the trailing end. One value, [on], so the whole of it
+ * moves on the picture's beat.
+ */
+private fun DrawScope.drawSwitch(page: TheSwitch, inks: VignetteInks, on: Float) {
+    val track = page.track
+    val round = track.height / 2f
+    val edge = page.trackEdge
+    drawRoundRect(inks.ground, topLeft = track.topLeft, size = track.size, cornerRadius = CornerRadius(round))
+    drawRoundRect(
+        inks.rule,
+        topLeft = track.topLeft + Offset(edge / 2f, edge / 2f),
+        size = Size(track.width - edge, track.height - edge),
+        cornerRadius = CornerRadius(round - edge / 2f),
+        style = Stroke(edge),
+    )
+    if (on > 0f) {
+        drawRoundRect(
+            inks.accent.copy(alpha = inks.accent.alpha * on),
+            topLeft = track.topLeft,
+            size = track.size,
+            cornerRadius = CornerRadius(round),
+        )
+    }
+    drawCircle(
+        lerpColor(inks.muted, inks.onAccent, on),
+        radius = lerp(page.thumbOff, page.thumbOn, on) / 2f,
+        center = Offset(lerp(track.left + round, track.right - round, on), track.center.y),
+    )
+}
+
+/**
+ * A line written in as a pen writes it: left to right, each letter coming
+ * up out of nothing over the [nib]'s width behind the pen, rather than a
+ * hard edge wiping across the words. [written] is how far along, 0 to 1;
+ * the pen runs on past the last letter by the nib, so that it too is whole
+ * when the pen stops.
+ */
+private fun DrawScope.writtenIn(line: TextLayoutResult, at: Offset, written: Float, nib: Float, alpha: Float) {
+    if (written <= 0f || alpha <= 0f) return
+    if (written >= 1f) {
+        faded(alpha) { drawText(line, topLeft = at) }
+        return
+    }
+    val bounds = Rect(at, Size(line.size.width.toFloat(), line.size.height.toFloat()))
+    val pen = at.x + (bounds.width + nib) * written
+    drawIntoCanvas { canvas ->
+        canvas.saveLayer(bounds, Paint().apply { this.alpha = alpha })
+        drawText(line, topLeft = at)
+        drawRect(
+            brush = Brush.horizontalGradient(listOf(Color.Black, Color.Transparent), startX = pen - nib, endX = pen),
+            topLeft = bounds.topLeft,
+            size = bounds.size,
+            blendMode = BlendMode.DstIn,
+        )
+        canvas.restore()
+    }
+}
+
+// MARK: Quiet hours, drawn as the night
+
+/**
+ * The quiet hours' band, smaller (`QuietHoursBandControl`): noon to noon,
+ * the waking hours raised, the night banked into the ground with its grain,
+ * a rule round the whole, a handle at each end of the night, and the three
+ * hours a person already knows a night by under it.
+ */
+private class TheNight(
+    val band: Rect,
+    val shape: Path,
+    val hours: List<PicturedHour>,
+    val handle: Size,
+    val edge: Float,
+)
+
+private class PicturedHour(val tick: Rect, val hour: TextLayoutResult, val hourAt: Offset)
+
+private fun CacheDrawScope.layOutTheNight(measurer: TextMeasurer, inks: VignetteInks): TheNight {
+    val inset = INSET.toPx()
+    val height = NIGHT_BAND.toPx()
+    val tick = NIGHT_TICK.toPx()
+    val tickWidth = 1.dp.toPx()
+    val gap = 3.dp.toPx()
+    val style = RibbonType.smallCaps(9f).copy(color = inks.muted)
+    val hours = NIGHT_MARKS.map {
+        measurer.measure(AnnotatedString(it), style, softWrap = false, maxLines = 1, density = this)
+    }
+    val total = height + tick + gap + hours.maxOf { it.size.height }
+    val top = ((size.height - total) / 2f).coerceAtLeast(0f)
+    val band = Rect(inset, top, size.width - inset, top + height)
+    return TheNight(
+        band = band,
+        shape = rounded(band, NIGHT_CORNER.toPx()),
+        hours = QuietHoursBand.marks.mapIndexed { i, minute ->
+            val x = band.left + QuietHoursBand.position(minute).toFloat() * band.width
+            val hour = hours[i]
+            PicturedHour(
+                tick = Rect(x - tickWidth / 2f, band.bottom, x + tickWidth / 2f, band.bottom + tick),
+                hour = hour,
+                hourAt = Offset(
+                    x = (x - hour.size.width / 2f)
+                        .coerceIn(band.left, (band.right - hour.size.width).coerceAtLeast(band.left)),
+                    y = band.bottom + tick + gap,
+                ),
+            )
+        },
+        handle = Size(NIGHT_HANDLE.toPx(), NIGHT_HANDLE_HEIGHT.toPx()),
+        edge = SHEET_EDGE.toPx(),
+    )
+}
+
+private fun DrawScope.drawNight(page: TheNight, inks: VignetteInks, grain: Brush, frame: NightFrame) {
+    val band = page.band
+    fun along(position: Float) = band.left + position * band.width
+
+    drawPath(page.shape, inks.raised)
+
+    // The night draws out from its start, and follows the start when it is
+    // moved; the handles come with the night they hold, rather than
+    // standing on an empty band.
+    val from = lerp(NIGHT_FROM, LATER_FROM, frame.later)
+    val reach = lerp(from, NIGHT_TO, frame.drawn)
+    if (frame.shown > 0f && reach > from) {
+        clipPath(page.shape) {
+            val topLeft = Offset(along(from), band.top)
+            val stretch = Size(along(reach) - along(from), band.height)
+            drawRect(inks.ground.copy(alpha = inks.ground.alpha * frame.shown), topLeft = topLeft, size = stretch)
+            drawRect(grain, topLeft = topLeft, size = stretch, alpha = GRAIN_ALPHA * frame.shown)
+        }
+    }
+    clipPath(page.shape) { drawPath(page.shape, inks.rule, style = Stroke(page.edge * 2f)) }
+
+    val held = frame.drawn * frame.shown
+    if (held > 0f) {
+        for (end in listOf(from, reach)) {
+            drawRoundRect(
+                inks.text.copy(alpha = inks.text.alpha * held),
+                topLeft = Offset(along(end) - page.handle.width / 2f, band.center.y - page.handle.height / 2f),
+                size = page.handle,
+                cornerRadius = CornerRadius(page.handle.width / 2f),
+            )
+        }
+    }
+
+    for (hour in page.hours) {
+        drawRect(inks.rule, topLeft = hour.tick.topLeft, size = hour.tick.size)
+        drawText(hour.hour, topLeft = hour.hourAt)
+    }
 }
