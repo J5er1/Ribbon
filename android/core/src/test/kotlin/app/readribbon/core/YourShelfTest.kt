@@ -8,8 +8,8 @@ import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 import org.junit.Test
 
-// Your shelf (A66): every book you have finished, in the rooms you are in,
-// and who each was read with — never as a count.
+// Your shelf (A66): every book you have finished, in every room you have
+// read in, and who each was read with — never as a count.
 // A port of core/Tests/RibbonCoreTests/YourShelfTests.swift, case for case.
 class YourShelfTest {
     val me = Uuid.parse("00000000-0000-0000-0000-000000000001")
@@ -37,31 +37,41 @@ class YourShelfTest {
     // The embers
 
     @Test
-    fun testOnlyFinishedBooksInRoomsYouAreInTheFirstFinishedFirst() {
-        val rooms = listOf(Room(id = couple, createdAt = day(0)), Room(id = study, name = "Thursday study", createdAt = day(0)))
+    fun testEveryFinishedBookTheFirstFinishedFirst() {
         val readings = listOf(
             reading(1, couple, "MRK", finished = 30),
             reading(2, study, "PHM", finished = 10),
             reading(3, couple, "RUT", finished = null),
-            reading(4, left, "JON", finished = 5),
             reading(5, study, "PHP", finished = 20),
         )
-        val embers = YourShelf.embers(readings, rooms)
-        assertEquals(listOf("PHM", "PHP", "MRK"), embers.map { it.bookID })
+        assertEquals(listOf("PHM", "PHP", "MRK"), YourShelf.embers(readings).map { it.bookID })
+    }
+
+    // Leaving says "You'll keep the books on your shelf" (§6.8).
+    @Test
+    fun testARoomYouHaveLeftKeepsItsBooksOnYourShelf() {
+        val readings = listOf(reading(1, couple, "MRK", finished = 30), reading(4, left, "JON", finished = 5))
+        assertEquals(listOf("JON", "MRK"), YourShelf.embers(readings).map { it.bookID })
+        val rooms = listOf(Room(id = couple, createdAt = day(0)))
+        val members = listOf(member(me, couple, 0), member(ruth, couple, 1))
+        assertEquals(
+            ShelfCompany.Alone,
+            YourShelf.company(reading(4, left, "JON", finished = 5), rooms, members, me),
+        )
     }
 
     @Test
     fun testTwoFinishedTheSameMomentKeepOneOrder() {
-        val rooms = listOf(Room(id = couple, createdAt = day(0)))
         val a = reading(7, couple, "JON", finished = 3)
         val b = reading(6, couple, "OBA", finished = 3)
-        assertEquals(listOf("OBA", "JON"), YourShelf.embers(listOf(a, b), rooms).map { it.bookID })
-        assertEquals(listOf("OBA", "JON"), YourShelf.embers(listOf(b, a), rooms).map { it.bookID })
+        assertEquals(listOf("OBA", "JON"), YourShelf.embers(listOf(a, b)).map { it.bookID })
+        assertEquals(listOf("OBA", "JON"), YourShelf.embers(listOf(b, a)).map { it.bookID })
     }
 
     @Test
-    fun testNoRoomsIsAnEmptyShelf() {
-        assertEquals(emptyList(), YourShelf.embers(listOf(reading(1, couple, "MRK", finished = 3)), emptyList()))
+    fun testNothingFinishedIsAnEmptyShelf() {
+        assertEquals(emptyList(), YourShelf.embers(listOf(reading(1, couple, "MRK", finished = null))))
+        assertEquals(emptyList(), YourShelf.embers(emptyList()))
     }
 
     // Who it was read with

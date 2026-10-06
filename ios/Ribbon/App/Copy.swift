@@ -537,6 +537,67 @@ enum Copy {
     /// as quietly.
     static let originalCredit =
         "Hebrew and Greek: the Berean Standard Bible translation tables and the Westminster Leningrad Codex, public domain. Definitions: Strong’s Exhaustive Concordance (1890), public domain. Hebrew set in Noto Serif Hebrew (SIL Open Font License)."
+
+    // MARK: The front of the book (A66) — You opens the way a Bible does:
+    // the name on the flyleaf, a ribbon for each room, the shelf, and a
+    // colophon at the end. Nothing here is a count.
+
+    /// The flyleaf (A66): the section of ribbons under your name.
+    static let yourRibbons = "Your ribbons"
+    /// The flyleaf (A66): what the ribbons are, said once under them.
+    static let yourRibbonsFootnote = "One for each room you read in, left where that room left it."
+    /// The flyleaf (A66): a room's ribbon with no book open in that room.
+    static let betweenBooks = "between books"
+    /// The flyleaf (A66): one ribbon, spoken — the room, where its ribbon
+    /// lies, and your ink there when ink is who you are in it.
+    static func ribbonSpoken(_ room: String, _ place: String, ink: String?) -> String {
+        guard let ink else { return "\(room). \(place)." }
+        return "\(room). \(place). Your ink there is \(ink)."
+    }
+    /// The flyleaf (A66): what touching a ribbon does.
+    static let goesToThatRoom = "Goes to that room"
+    /// Your shelf (A66): every book you have finished, in every room.
+    static let yourShelf = "Your shelf"
+    /// Your shelf (A66): who a book was read with, by first name, the rest
+    /// as "others" — never a number.
+    static func shelfWith(_ names: [String], andOthers: Bool) -> String {
+        "with " + listed(andOthers ? names + ["others"] : names)
+    }
+    /// Your shelf (A66): a room of three or more, said by its own name.
+    static func shelfWithRoom(_ name: String) -> String { "with \(name)" }
+    /// Your shelf (A66): one ember, spoken.
+    static func emberSpoken(_ book: String, _ company: String?) -> String {
+        guard let company else { return book }
+        return "\(book), \(company)"
+    }
+    /// The colophon (A66): what the book is set in, the way a book's last
+    /// page says it.
+    static let colophonSetIn = "Set in Literata and Alegreya Sans."
+    /// Text (A66): the verse every version is shown at.
+    static func specimenAt(_ reference: String) -> String { "Each one shows \(reference) in its own words." }
+    /// Text (A66): the size, spoken — a measure of type, not of a person.
+    static func textSizeValue(_ size: Double) -> String {
+        let whole = size.rounded() == size
+        return (whole ? String(Int(size)) : String(format: "%.1f", size)) + " point"
+    }
+    /// Notifications (A66): the words a switch's notification will use,
+    /// spoken.
+    static func notificationExampleSpoken(_ sentence: String) -> String { "It reads: \(sentence)" }
+    /// Notifications (A66): the cards, in a room of two.
+    static func cardsOpenSubNamed(_ name: String) -> String { "When you and \(name) have both answered." }
+    /// Notifications (A66): the book opened, in a room of two.
+    static func whenNameOpensTheBook(_ name: String) -> String { "When \(name) opens the book" }
+    /// Notifications (A66): thinking of you, in a room of two.
+    static func thinkingOfYouSubNamed(_ name: String) -> String { "A touch on the shoulder from \(name). No words." }
+    /// Quiet hours (A66): the band's two ends, said as one line.
+    static func quietHoursFromUntil(_ from: String, _ until: String) -> String { "From \(from) until \(until)" }
+    /// Quiet hours (A66): both ends on the same minute.
+    static let noQuietHours = "No quiet hours"
+    /// Quiet hours (A66): what the band is for.
+    static let quietHoursBandSub = "Drag either end of the night."
+    /// Quiet hours (A66): the band's two handles, spoken.
+    static let quietHoursBegin = "Quiet hours begin"
+    static let quietHoursEnd = "Quiet hours end"
     /// Megabytes on this device (S21) — a count about a device, not about a
     /// person, which is the one honest exception to Law 2 and the same
     /// boundary `noRoomOnPhone` states.
@@ -597,6 +658,7 @@ enum Copy {
         switch releaseID {
         case "2026-10-original": return "The words under the words"
         case "2026-10-following": return "Staying on the same page"
+        case "2026-10-flyleaf": return "The front of the book"
         default: return whatsNewHeading
         }
     }
@@ -662,6 +724,31 @@ enum Copy {
     static let whatsNewRowSub = "What each update brought"
     /// What's new, read again (A65): the way back to You, at the foot.
     static let whatsNewHistoryDone = "Done"
+    /// What's new (A66): You opens like the front of a Bible.
+    static let whatsNewFlyleafTitle = "Your name in the front of the book"
+    /// What's new (A66): the flyleaf and its ribbons.
+    static let whatsNewFlyleafBody =
+        "Tap your face and the page opens the way a Bible does: your name, then a ribbon for each room you read in, left where that room left it."
+    /// What's new (A66): your shelf, across your rooms.
+    static let whatsNewShelfTitle = "Every book you have finished, on one shelf"
+    /// What's new (A66): what is on it.
+    static let whatsNewShelfBody =
+        "Under your ribbons, an ember for each book you finished in any of your rooms, and who you read it with."
+    /// What's new (A66): versions shown in their own words.
+    static let whatsNewVersionsTitle = "Choose a version by reading it"
+    /// What's new (A66): the specimens, the ribbon, and the page.
+    static let whatsNewVersionsBody =
+        "Each version shows your verse in its own words, and a ribbon marks the one you read. The size you choose is set on a real page."
+    /// What's new (A66): the switches say who.
+    static let whatsNewNotificationsTitle = "Notifications say who"
+    /// What's new (A66): in a room of two.
+    static let whatsNewNotificationsBody =
+        "In a room of two, each switch shows the words your phone will use, with their name and their face."
+    /// What's new (A66): quiet hours as one band.
+    static let whatsNewQuietHoursTitle = "Quiet hours, drawn as the night"
+    /// What's new (A66): how it is set.
+    static let whatsNewQuietHoursBody =
+        "One band from noon to noon. Drag either end of the dark stretch. Thinking of you still arrives, as a touch."
 }
 
 /// The first word of a name, for the places that say it in passing. Kept

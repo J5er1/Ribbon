@@ -1,7 +1,7 @@
 import Foundation
 
-// Your shelf (A66): every book you have finished, in every room you are
-// still in, as one row of embers under your name on You. A room's shelf
+// Your shelf (A66): every book you have finished, in every room you have
+// read in, as one row of embers under your name on You. A room's shelf
 // (S10) is that room's; this one is yours — what the printed keepsake
 // would be if it were made of a person rather than of a room.
 //
@@ -26,16 +26,15 @@ public enum YourShelf {
     /// The most people an ember names before "and others".
     public static let named = 2
 
-    /// Every finished reading in a room you are still in, the first finished
-    /// first — the order the embers were made in. A room you have left keeps
-    /// its readings in the phone's state (leaving takes the room and your
-    /// membership, not the books), and those are not on your shelf any more:
-    /// "You'll keep the books on your shelf" is said of the room's shelf,
-    /// which goes with it.
-    public static func embers(readings: [Reading], rooms: [Room]) -> [Reading] {
-        let rooms = Set(rooms.map(\.id))
-        return readings
-            .filter { $0.isFinished && rooms.contains($0.roomID) }
+    /// Every finished reading this phone holds, the first finished first —
+    /// the order the embers were made in. That includes the books of a room
+    /// you have since left: leaving says "You'll keep the books on your
+    /// shelf" (§6.8), and until there was a shelf of your own there was
+    /// nowhere for that to be true. Leaving takes the room and your
+    /// membership; its readings stay on the phone, and so on here.
+    public static func embers(readings: [Reading]) -> [Reading] {
+        readings
+            .filter(\.isFinished)
             .sorted { a, b in
                 let first = a.finishedAt ?? .distantPast
                 let second = b.finishedAt ?? .distantPast
@@ -47,7 +46,8 @@ public enum YourShelf {
     /// Who a reading was read with: everybody else in its room now, in the
     /// order they joined. A room of three or more with a name is said by its
     /// name; otherwise the first `named` people are named, and "and others"
-    /// carries the rest.
+    /// carries the rest. A room you have left has no members on this phone
+    /// any more, and its books are simply yours: `.alone`, said by nothing.
     public static func company(
         of reading: Reading, rooms: [Room], memberships: [Membership], me: UUID?
     ) -> ShelfCompany {

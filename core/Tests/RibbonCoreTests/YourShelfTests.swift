@@ -1,8 +1,8 @@
 import XCTest
 @testable import RibbonCore
 
-// Your shelf (A66): every book you have finished, in the rooms you are in,
-// and who each was read with — never as a count.
+// Your shelf (A66): every book you have finished, in every room you have
+// read in, and who each was read with — never as a count.
 // YourShelfTest.kt holds the Kotlin port to the same cases.
 final class YourShelfTests: XCTestCase {
     let me = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
@@ -30,29 +30,37 @@ final class YourShelfTests: XCTestCase {
 
     // MARK: The embers
 
-    func testOnlyFinishedBooksInRoomsYouAreInTheFirstFinishedFirst() {
-        let rooms = [Room(id: couple, createdAt: day(0)), Room(id: study, name: "Thursday study", createdAt: day(0))]
+    func testEveryFinishedBookTheFirstFinishedFirst() {
         let readings = [
             reading(1, in: couple, "MRK", finished: 30),
             reading(2, in: study, "PHM", finished: 10),
             reading(3, in: couple, "RUT", finished: nil),
-            reading(4, in: left, "JON", finished: 5),
             reading(5, in: study, "PHP", finished: 20),
         ]
-        let embers = YourShelf.embers(readings: readings, rooms: rooms)
-        XCTAssertEqual(embers.map(\.bookID), ["PHM", "PHP", "MRK"])
+        XCTAssertEqual(YourShelf.embers(readings: readings).map(\.bookID), ["PHM", "PHP", "MRK"])
+    }
+
+    // Leaving says "You'll keep the books on your shelf" (§6.8).
+    func testARoomYouHaveLeftKeepsItsBooksOnYourShelf() {
+        let readings = [reading(1, in: couple, "MRK", finished: 30), reading(4, in: left, "JON", finished: 5)]
+        XCTAssertEqual(YourShelf.embers(readings: readings).map(\.bookID), ["JON", "MRK"])
+        let rooms = [Room(id: couple, createdAt: day(0))]
+        let members = [member(me, of: couple, joined: 0), member(ruth, of: couple, joined: 1)]
+        XCTAssertEqual(
+            YourShelf.company(of: reading(4, in: left, "JON", finished: 5), rooms: rooms, memberships: members, me: me),
+            .alone)
     }
 
     func testTwoFinishedTheSameMomentKeepOneOrder() {
-        let rooms = [Room(id: couple, createdAt: day(0))]
         let a = reading(7, in: couple, "JON", finished: 3)
         let b = reading(6, in: couple, "OBA", finished: 3)
-        XCTAssertEqual(YourShelf.embers(readings: [a, b], rooms: rooms).map(\.bookID), ["OBA", "JON"])
-        XCTAssertEqual(YourShelf.embers(readings: [b, a], rooms: rooms).map(\.bookID), ["OBA", "JON"])
+        XCTAssertEqual(YourShelf.embers(readings: [a, b]).map(\.bookID), ["OBA", "JON"])
+        XCTAssertEqual(YourShelf.embers(readings: [b, a]).map(\.bookID), ["OBA", "JON"])
     }
 
-    func testNoRoomsIsAnEmptyShelf() {
-        XCTAssertEqual(YourShelf.embers(readings: [reading(1, in: couple, "MRK", finished: 3)], rooms: []), [])
+    func testNothingFinishedIsAnEmptyShelf() {
+        XCTAssertEqual(YourShelf.embers(readings: [reading(1, in: couple, "MRK", finished: nil)]), [])
+        XCTAssertEqual(YourShelf.embers(readings: []), [])
     }
 
     // MARK: Who it was read with
