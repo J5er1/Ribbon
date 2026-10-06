@@ -6,10 +6,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.res.AssetManager
 import android.provider.Settings
-import android.text.format.DateFormat
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -79,13 +78,13 @@ import app.readribbon.data.RoomNotificationPrefs
 import app.readribbon.design.Air
 import app.readribbon.design.ArrivingLate
 import app.readribbon.design.Flows
-import app.readribbon.design.RibbonScreen
 import app.readribbon.design.LocalAppearance
 import app.readribbon.design.Palette
 import app.readribbon.design.PortraitView
 import app.readribbon.design.QuietControl
 import app.readribbon.design.QuietHoursBandControl
 import app.readribbon.design.RibbonMotion
+import app.readribbon.design.RibbonScreen
 import app.readribbon.design.RibbonShape
 import app.readribbon.design.RibbonType
 import app.readribbon.design.SectionLabel
@@ -99,17 +98,16 @@ import app.readribbon.design.SettingValue
 import app.readribbon.design.SettingsGroup
 import app.readribbon.design.SmallCaps
 import app.readribbon.design.TextInset
+import app.readribbon.design.clockTime
 import app.readribbon.design.color
 import app.readribbon.design.flowsAsWords
 import app.readribbon.design.grain
+import app.readribbon.design.paper
 import app.readribbon.design.pressable
 import app.readribbon.design.rememberReduceMotion
-import app.readribbon.design.paper
 import app.readribbon.design.well
 import app.readribbon.services.Notifications
 import app.readribbon.services.cachedRemoteChapter
-import java.util.Date
-import java.util.TimeZone
 import kotlin.uuid.ExperimentalUuidApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -912,7 +910,7 @@ private fun QuietHoursGroup(model: AppModel) {
     val title = if (QuietHoursBand.wrapped(start) == QuietHoursBand.wrapped(end)) {
         Copy.NO_QUIET_HOURS
     } else {
-        Copy.quietHoursFromUntil(clock(context, start), clock(context, end))
+        Copy.quietHoursFromUntil(clockTime(context, start), clockTime(context, end))
     }
 
     SettingsGroup(
@@ -930,22 +928,6 @@ private fun QuietHoursGroup(model: AppModel) {
         }
     }
 }
-
-/**
- * A minute of the day as this phone tells the time, in its owner's 12- or
- * 24-hour convention — the clock design/Drawn.kt speaks the band's two ends
- * in, kept the same here so the sentence and the spoken ends never disagree.
- *
- * On the first of January 1970 in UTC rather than today here, so the morning
- * the clocks go forward cannot tell half past two as half past three.
- */
-private fun clock(context: Context, minute: Int): String {
-    val format = DateFormat.getTimeFormat(context)
-    format.timeZone = TimeZone.getTimeZone("UTC")
-    return format.format(Date(QuietHoursBand.wrapped(minute) * MINUTE_MS))
-}
-
-private const val MINUTE_MS = 60_000L
 
 // MARK: S26 — appearance
 

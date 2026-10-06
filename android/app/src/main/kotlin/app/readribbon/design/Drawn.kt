@@ -633,13 +633,14 @@ private fun HandleSpoken(
 
 /**
  * A minute of the day as the phone tells the time — 12 or 24 hours, as its
- * owner set it — the same words the row above the band uses.
+ * owner set it: what each end of the band says, and the quiet hours' title
+ * above it, from one place so the two never disagree.
  *
  * Formatted on the first of January 1970 in UTC rather than on today here,
  * so that a night that begins at half past two is never told as half past
  * three on the morning the clocks go forward.
  */
-private fun clockTime(context: Context, minute: Int): String {
+internal fun clockTime(context: Context, minute: Int): String {
     val format = DateFormat.getTimeFormat(context)
     format.timeZone = TimeZone.getTimeZone("UTC")
     return format.format(Date(QuietHoursBand.wrapped(minute) * MINUTE_MS))
