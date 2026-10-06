@@ -50,6 +50,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -397,22 +398,26 @@ private fun ShelfEmber(
  * source of the printed keepsake.
  *
  * @param onOpenVerse a quoted verse opens the reading at that verse — the
- *   finished book's own pages, not a copy.
+ *   finished book's own pages, not a copy. Null for a book whose room you
+ *   have left (A67): its embers stay on your shelf (§6.8), but there is no
+ *   room any more to open them in, so its verses are quoted rather than
+ *   offered — a control that does nothing is not drawn (§6.1).
  * @param onReadAgain starting the book again, in the room it was read in.
  *   Null where the record is opened from your own shelf on You (A67):
  *   reading a book again belongs to the room, not to you, so there it is not
  *   offered — and a control that is not offered is not drawn.
  * @param onOpenPerson a portrait goes to its person (S12). Swift pushes a
  *   `PersonRoute`; the route type lives with the root's NavHost, so the two
- *   halves of it are passed here instead.
+ *   halves of it are passed here instead. Null, for the same reason as a
+ *   verse, where the room is no longer yours: the faces are only faces.
  */
 @Composable
 fun EmberRecordScreen(
     model: AppModel,
     reading: Reading,
-    onOpenVerse: (VerseAddress) -> Unit,
+    onOpenVerse: ((VerseAddress) -> Unit)?,
     onReadAgain: ((String) -> Unit)? = null,
-    onOpenPerson: (personID: Uuid, roomID: Uuid) -> Unit,
+    onOpenPerson: ((personID: Uuid, roomID: Uuid) -> Unit)?,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -520,9 +525,15 @@ fun EmberRecordScreen(
                                 modifier = Modifier
                                     .size(PORTRAIT_TOUCH)
                                     .clip(CircleShape)
-                                    .clickable(role = Role.Button) {
-                                        onOpenPerson(membership.personID, reading.roomID)
-                                    },
+                                    .then(
+                                        if (onOpenPerson != null) {
+                                            Modifier.clickable(role = Role.Button) {
+                                                onOpenPerson(membership.personID, reading.roomID)
+                                            }
+                                        } else {
+                                            Modifier
+                                        },
+                                    ),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 PortraitView(
@@ -607,7 +618,7 @@ private fun EmberNoteRow(
     model: AppModel,
     note: Note,
     roomID: Uuid,
-    onOpenVerse: (VerseAddress) -> Unit,
+    onOpenVerse: ((VerseAddress) -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -694,7 +705,7 @@ private fun QuotedHighlight(
     model: AppModel,
     highlight: Highlight,
     translation: TranslationID,
-    onOpenVerse: (VerseAddress) -> Unit,
+    onOpenVerse: ((VerseAddress) -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     // In your own version (A60). A42 held a finished book to the room's
@@ -707,7 +718,15 @@ private fun QuotedHighlight(
         modifier = modifier
             .fillMaxWidth()
             .sizeIn(minHeight = 44.dp)
-            .clickable(role = Role.Button) { onOpenVerse(highlight.range.start) },
+            .then(
+                if (onOpenVerse != null) {
+                    Modifier.clickable(role = Role.Button) { onOpenVerse(highlight.range.start) }
+                } else {
+                    // A quotation, read as one: the verse's words and where
+                    // they are, with nothing to press.
+                    Modifier.semantics(mergeDescendants = true) {}
+                },
+            ),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         if (text != null) {

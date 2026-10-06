@@ -53,7 +53,12 @@ class YourShelfTest {
         val readings = listOf(reading(1, couple, "MRK", finished = 30), reading(4, left, "JON", finished = 5))
         assertEquals(listOf("JON", "MRK"), YourShelf.embers(readings).map { it.bookID })
         val rooms = listOf(Room(id = couple, createdAt = day(0)))
-        val members = listOf(member(me, couple, 0), member(ruth, couple, 1))
+        // Leaving takes only your own membership; the others' may linger on
+        // the phone, and still nobody is named.
+        val members = listOf(
+            member(me, couple, 0), member(ruth, couple, 1),
+            member(caleb, left, 1),
+        )
         assertEquals(
             ShelfCompany.Alone,
             YourShelf.company(reading(4, left, "JON", finished = 5), rooms, members, me),

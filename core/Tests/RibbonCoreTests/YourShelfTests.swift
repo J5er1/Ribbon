@@ -45,7 +45,12 @@ final class YourShelfTests: XCTestCase {
         let readings = [reading(1, in: couple, "MRK", finished: 30), reading(4, in: left, "JON", finished: 5)]
         XCTAssertEqual(YourShelf.embers(readings: readings).map(\.bookID), ["JON", "MRK"])
         let rooms = [Room(id: couple, createdAt: day(0))]
-        let members = [member(me, of: couple, joined: 0), member(ruth, of: couple, joined: 1)]
+        // Leaving takes only your own membership; the others' may linger on
+        // the phone, and still nobody is named.
+        let members = [
+            member(me, of: couple, joined: 0), member(ruth, of: couple, joined: 1),
+            member(caleb, of: left, joined: 1),
+        ]
         XCTAssertEqual(
             YourShelf.company(of: reading(4, in: left, "JON", finished: 5), rooms: rooms, memberships: members, me: me),
             .alone)

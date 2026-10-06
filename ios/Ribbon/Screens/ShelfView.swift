@@ -187,16 +187,24 @@ struct EmberRecordScreen: View {
                         size: 13)
                     HStack(spacing: -6) {
                         // Who read it, as portraits — and a portrait goes
-                        // to its person (S12).
+                        // to its person (S12), while the room is still
+                        // yours. A room you have left has no person screen
+                        // to go to (A67), so there the faces are only faces.
+                        let linked = model.room(reading.roomID) != nil
                         ForEach(model.members(of: Room(id: reading.roomID, createdAt: .now))) { membership in
-                            NavigationLink(value: PersonRoute(personID: membership.personID, roomID: reading.roomID)) {
-                                PortraitView(
-                                    person: model.person(membership.personID),
-                                    ink: membership.ink,
-                                    size: 30,
-                                    image: model.portrait(membership.personID))
+                            let face = PortraitView(
+                                person: model.person(membership.personID),
+                                ink: membership.ink,
+                                size: 30,
+                                image: model.portrait(membership.personID))
+                            if linked {
+                                NavigationLink(value: PersonRoute(personID: membership.personID, roomID: reading.roomID)) {
+                                    face
+                                }
+                                .buttonStyle(.pressable)
+                            } else {
+                                face
                             }
-                            .buttonStyle(.pressable)
                         }
                     }
                     .padding(.top, 6)

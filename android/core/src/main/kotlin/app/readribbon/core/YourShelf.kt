@@ -58,9 +58,10 @@ object YourShelf {
      * Who a reading was read with: everybody else in its room now, in the
      * order they joined. A room of three or more with a name is said by its
      * name; otherwise the first [named] people are named, and "and others"
-     * carries the rest. A room you have left has no members on this phone any
-     * more, and its books are simply yours: [ShelfCompany.Alone], said by
-     * nothing.
+     * carries the rest. A book of a room you have left is simply yours:
+     * [ShelfCompany.Alone], said by nothing — whatever memberships of that
+     * room the phone still holds (leaving takes only your own), because the
+     * people of a room you have walked out of are not named on your page.
      */
     fun company(
         reading: Reading,
@@ -68,6 +69,7 @@ object YourShelf {
         memberships: List<Membership>,
         me: Uuid?,
     ): ShelfCompany {
+        val room = rooms.firstOrNull { it.id == reading.roomID } ?: return ShelfCompany.Alone
         val others = memberships
             .filter { it.roomID == reading.roomID && it.personID != me }
             .sortedWith(
@@ -76,7 +78,7 @@ object YourShelf {
             )
             .map { it.personID }
         if (others.isEmpty()) return ShelfCompany.Alone
-        val name = rooms.firstOrNull { it.id == reading.roomID }?.name?.trim().orEmpty()
+        val name = room.name?.trim().orEmpty()
         if (others.size >= 2 && name.isNotEmpty()) return ShelfCompany.Room(name)
         return ShelfCompany.People(others.take(named), andOthers = others.size > named)
     }

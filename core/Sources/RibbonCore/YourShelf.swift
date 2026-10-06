@@ -46,11 +46,14 @@ public enum YourShelf {
     /// Who a reading was read with: everybody else in its room now, in the
     /// order they joined. A room of three or more with a name is said by its
     /// name; otherwise the first `named` people are named, and "and others"
-    /// carries the rest. A room you have left has no members on this phone
-    /// any more, and its books are simply yours: `.alone`, said by nothing.
+    /// carries the rest. A book of a room you have left is simply yours:
+    /// `.alone`, said by nothing — whatever memberships of that room the
+    /// phone still holds (leaving takes only your own), because the people
+    /// of a room you have walked out of are not named on your page.
     public static func company(
         of reading: Reading, rooms: [Room], memberships: [Membership], me: UUID?
     ) -> ShelfCompany {
+        guard let room = rooms.first(where: { $0.id == reading.roomID }) else { return .alone }
         let others = memberships
             .filter { $0.roomID == reading.roomID && $0.personID != me }
             .sorted { a, b in
@@ -59,8 +62,7 @@ public enum YourShelf {
             }
             .map(\.personID)
         if others.isEmpty { return .alone }
-        let name = rooms.first { $0.id == reading.roomID }?.name?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let name = room.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if others.count >= 2, !name.isEmpty { return .room(name) }
         return .people(Array(others.prefix(named)), andOthers: others.count > named)
     }

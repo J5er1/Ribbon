@@ -580,18 +580,22 @@ fun MenuScreen(
                         // The record the room's shelf opens (S11), with one
                         // thing left off: reading the book again belongs to
                         // the room it was read in, not to you (A67).
+                        // A room you have left keeps its books on your
+                        // shelf (§6.8) but has no page to open them on, and
+                        // one opened over another room would be read and
+                        // written as that room's — nor a person screen for
+                        // its faces. There the record quotes and shows,
+                        // and offers nothing it cannot do.
+                        val stillYours = model.room(reading.roomID) != null
                         EmberRecordScreen(
                             model = model,
                             reading = reading,
-                            onOpenVerse = { verse ->
-                                // By the road a tapped notification takes:
-                                // the room it was read in, the book open at
-                                // that verse, and the menu out of the way. A
-                                // room you have left keeps its books on your
-                                // shelf (§6.8) but has no page to open them on,
-                                // and one opened over another room would be
-                                // read and written as that room's.
-                                if (model.room(reading.roomID) != null) {
+                            onOpenVerse = if (stillYours) {
+                                { verse ->
+                                    // By the road a tapped notification
+                                    // takes: the room it was read in, the
+                                    // book open at that verse, and the menu
+                                    // out of the way.
                                     model.pendingDestination = Destination.Verse(
                                         roomID = reading.roomID,
                                         readingID = reading.id,
@@ -599,13 +603,15 @@ fun MenuScreen(
                                     )
                                     close()
                                 }
+                            } else {
+                                null
                             },
-                            onOpenPerson = { personID, roomID ->
-                                // A face goes to its person while there is
-                                // still a room for them to be a person in.
-                                if (model.room(roomID) != null) {
+                            onOpenPerson = if (stillYours) {
+                                { personID, roomID ->
                                     navController.navigate(MenuRoute.person(personID, roomID))
                                 }
+                            } else {
+                                null
                             },
                             onBack = { navController.popBackStack() },
                         )
