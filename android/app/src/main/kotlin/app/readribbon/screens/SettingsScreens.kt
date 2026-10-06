@@ -14,26 +14,18 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.sizeIn
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
@@ -85,6 +77,7 @@ import app.readribbon.core.TranslationID
 import app.readribbon.core.VerseAddress
 import app.readribbon.data.RoomNotificationPrefs
 import app.readribbon.design.Air
+import app.readribbon.design.ArrivingLate
 import app.readribbon.design.Flows
 import app.readribbon.design.RibbonScreen
 import app.readribbon.design.LocalAppearance
@@ -110,7 +103,6 @@ import app.readribbon.design.color
 import app.readribbon.design.flowsAsWords
 import app.readribbon.design.grain
 import app.readribbon.design.pressable
-import app.readribbon.design.readableColumn
 import app.readribbon.design.rememberReduceMotion
 import app.readribbon.design.paper
 import app.readribbon.design.well
@@ -251,7 +243,9 @@ fun TextSettingsScreen(
     val held = rememberHeldChapters(model, place, translations)
     // Quoted the way a note quotes a verse: the words of it, run together.
     val specimens = translations
-        .mapNotNull { translation -> held[translation.id]?.text(place.verse)?.let { translation.id to it } }
+        .mapNotNull { translation ->
+            held.chapters[translation.id]?.text(place.verse)?.let { translation.id to it }
+        }
         .toMap()
 
     SettingsScaffold(
@@ -267,8 +261,10 @@ fun TextSettingsScreen(
             detail = Copy.TRANSLATION_IS_YOURS,
             // Which verse the rows are showing, and only when one of them is
             // showing it: a line about a verse nobody can see is a line
-            // about nothing.
-            footnote = if (specimens.isEmpty()) null else Copy.specimenAt(place.formatted),
+            // about nothing. While the rows are still being read it is
+            // there already, so the verses arriving under it do not also
+            // bring a line of their own and move the page group down twice.
+            footnote = if (specimens.isEmpty() && held.read) null else Copy.specimenAt(place.formatted),
         ) {
             translations.forEach { translation ->
                 SettingChoice(
@@ -290,7 +286,7 @@ fun TextSettingsScreen(
         SettingsGroup(count = 3, title = Copy.THE_PAGE, detail = Copy.THE_PAGE_IS_YOURS) {
             SettingControl(title = Copy.TEXT_SIZE, detail = Copy.TEXT_SIZE_SUB) {
                 ScriptureSizeWell(model)
-                ScripturePreview(model, place, held[model.words(model.currentRoom)])
+                ScripturePreview(model, place, held.chapters[model.words(model.currentRoom)])
             }
             SettingControl(title = Copy.LINE_SPACING, detail = Copy.LINE_SPACING_SUB) {
                 Segments(
@@ -335,18 +331,31 @@ private fun readingPlace(model: AppModel): VerseAddress =
  *
  * Read off the main thread, as the original panel reads the room's versions
  * (reading/RoomSection.kt): a bundled book is a JSON file to parse and a
- * licensed chapter is a file on disk. Until they are read the rows are as
- * they always were, and what was read stays up while a new place is.
+ * licensed chapter is a file on disk. The first frame does not wait for them
+ * and does not start empty either: whatever book is already parsed — the one
+ * being read, almost always — is there from the start, so the version you
+ * read, its verse and the page under the size are drawn with the screen and
+ * only the others arrive after it (and arrive, rather than appear, in
+ * SettingChoice and ScripturePreview). What was read stays up while a new
+ * place is.
  */
 @Composable
 private fun rememberHeldChapters(
     model: AppModel,
     place: VerseAddress,
     translations: List<Translation>,
-): Map<TranslationID, ScriptureChapter> {
+): HeldChapters {
     val context = LocalContext.current
-    val held by produceState(emptyMap<TranslationID, ScriptureChapter>(), model, place, translations) {
-        value = withContext(Dispatchers.IO) {
+    val parsed = remember(model, place, translations) {
+        buildMap<TranslationID, ScriptureChapter> {
+            for (translation in translations) {
+                if (!translation.isBundled) continue
+                model.scripture.parsedChapter(place, translation.id)?.let { put(translation.id, it) }
+            }
+        }
+    }
+    val held by produceState(HeldChapters(parsed, read = false), model, place, translations) {
+        val chapters = withContext(Dispatchers.IO) {
             buildMap<TranslationID, ScriptureChapter> {
                 for (translation in translations) {
                     val chapter = if (translation.isBundled) {
@@ -358,9 +367,20 @@ private fun rememberHeldChapters(
                 }
             }
         }
+        value = HeldChapters(chapters, read = true)
     }
     return held
 }
+
+/**
+ * What [rememberHeldChapters] holds: each version's chapter it has, and
+ * whether the reading for the place has finished — until it has, a version
+ * missing from [chapters] may yet arrive.
+ */
+private data class HeldChapters(
+    val chapters: Map<TranslationID, ScriptureChapter>,
+    val read: Boolean,
+)
 
 /**
  * The size slider, in its well, between a small A and a large one.
@@ -437,16 +457,27 @@ private fun ScaleEnd(size: Float) {
  */
 @Composable
 private fun ScripturePreview(model: AppModel, place: VerseAddress, chapter: ScriptureChapter?) {
-    if (chapter == null) return
     val size = model.settings.scriptureSize.toFloat()
     val redLetter = model.settings.redLetter
     // Read here, in composition, and handed to the typesetter: the room's
     // ink follows the wallpaper (A18), and the page is set from it.
     val ivory = Palette.text
     val page = remember(chapter, place.verse, size, redLetter, ivory) {
-        pageOf(chapter, place.verse, size, redLetter, ivory)
-    } ?: return
+        chapter?.let { pageOf(it, place.verse, size, redLetter, ivory) }
+    }
+    // A page read after the screen was drawn opens under the size rather
+    // than landing on one frame and pushing everything below it down.
+    ArrivingLate(page) { shown -> PreviewPage(model, place, shown, size, ivory) }
+}
 
+@Composable
+private fun PreviewPage(
+    model: AppModel,
+    place: VerseAddress,
+    page: AnnotatedString,
+    size: Float,
+    ivory: Color,
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()

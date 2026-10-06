@@ -28,6 +28,18 @@ struct TextSettingsScreen: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
 
+    /// The licensed versions' chapters at the verse you are at, as this
+    /// phone holds them. Each is a file to read and decode, and the body
+    /// runs again on every step of the size, so they are read once for a
+    /// place, off the main thread, and kept here with the place they were
+    /// read for.
+    @State private var streamed = Streamed()
+
+    private struct Streamed {
+        var key = ""
+        var chapters: [TranslationID: ScriptureChapter] = [:]
+    }
+
     var body: some View {
         let place = readingPlace
         let specimens = versionSpecimens(at: place)
@@ -84,6 +96,7 @@ struct TextSettingsScreen: View {
                 }
             }
         }
+        .task(id: streamedKey(at: place)) { await readStreamed(at: place) }
     }
 
     /// The verse the rows and the preview are shown at: where you are in
@@ -100,11 +113,53 @@ struct TextSettingsScreen: View {
     /// a licensed one only once that chapter has streamed here for the
     /// book being read. Nothing is fetched to fill a settings screen —
     /// a version without the words here simply shows none (A67).
+    ///
+    /// A bundled book is decoded once and kept by the store, so it is
+    /// asked for here, in the body. A licensed chapter is read by
+    /// `readStreamed` and only looked up here.
     private func heldChapter(_ address: VerseAddress, in version: TranslationID) -> ScriptureChapter? {
         guard let licensed = TranslationRegistry.translation(for: version), !licensed.isBundled else {
             return model.scripture.chapter(address, translation: version)
         }
-        return model.scripture.cachedRemoteChapter(address, translation: licensed)
+        guard streamed.key == streamedKey(at: address) else { return nil }
+        return streamed.chapters[licensed.id]
+    }
+
+    /// Which licensed chapters `streamed` holds: the versions, the book and
+    /// the chapter. The verse is not part of it — moving within a chapter
+    /// reads nothing again.
+    private func streamedKey(at place: VerseAddress) -> String {
+        let licensed = model.availableTranslations.filter { !$0.isBundled }.map(\.id.rawValue)
+        return licensed.joined(separator: ",") + "/\(place.bookID)/\(place.chapter)"
+    }
+
+    /// The licensed chapters at a place, read off the main thread. They
+    /// come after the screen is drawn, so they arrive rather than appear,
+    /// the way the original words' panel brings in a licensed version: the
+    /// rows open to their verse and the preview to its page, on `arrive`.
+    /// It is the plain token, kept under reduce motion, because what it
+    /// carries is words fading in, and held still a fade is a cut.
+    private func readStreamed(at place: VerseAddress) async {
+        let key = streamedKey(at: place)
+        let licensed = model.availableTranslations.filter { !$0.isBundled }
+        let store = model.scripture
+        let chapters = await Task.detached(priority: .userInitiated) {
+            var held: [TranslationID: ScriptureChapter] = [:]
+            for translation in licensed {
+                if let chapter = store.cachedRemoteChapter(place, translation: translation) {
+                    held[translation.id] = chapter
+                }
+            }
+            return held
+        }.value
+        guard !Task.isCancelled else { return }
+        if chapters.isEmpty {
+            streamed = Streamed(key: key, chapters: [:])
+            return
+        }
+        withAnimation(RibbonMotion.arrive) {
+            streamed = Streamed(key: key, chapters: chapters)
+        }
     }
 
     /// Each version's words for the verse you are at, quoted the way a note

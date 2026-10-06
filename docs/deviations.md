@@ -4369,8 +4369,10 @@ A67. **The front of the book: You and the settings, made by hand
     two of you draw from every ink. Their lengths differ, because "two
     ribbons of slightly different length read as two people" (brief §5).
     Under each, the room and where its ribbon lies (A30): the chapter
-    ("Mark 4"), else the open book, else *between books*. A30's rules
-    still hold. It is an address, never a measure, so it is a chapter rather
+    ("Mark 4"), else the open book, else *between books* — in a column that
+    widens with the reader's type, so a name wraps at the largest sizes
+    rather than ending in an ellipsis, as the words under each ember on the
+    shelf do. A30's rules still hold. It is an address, never a measure, so it is a chapter rather
     than a verse or a fraction. It is offered, never applied, so touching it
     goes to the room and does not open the book at the ribbon.
 
@@ -4412,7 +4414,11 @@ A67. **The front of the book: You and the settings, made by hand
     size became a page: that verse and the next, numbered the way the page
     numbers them, with the words of Jesus in red when the switch is on. So
     all three of the page's settings now show on it, where only the size
-    did.
+    did. What the phone has to read from a file comes after the screen is
+    drawn, and arrives rather than appears: its row opens to it and its
+    words fade in, and under reduce motion only the fade is left. What it
+    already holds — the book being read, almost always — is there with the
+    screen, so on most openings nothing arrives at all.
 
     **Notifications say who.** Each room's switches sit under its faces. In a
     room of two, each switch is said with their name ("When Ruth opens the
@@ -4423,8 +4429,19 @@ A67. **The front of the book: You and the settings, made by hand
     **Quiet hours, drawn as the night.** One band, the day laid out noon to
     noon so a night sits whole in its middle, the quiet stretch banked dark,
     a handle at each end, moved a quarter hour at a time by a finger or a
-    screen reader. `QuietHoursBand` is the band's arithmetic, in both cores,
-    so a time is in the same place on both phones.
+    screen reader — and on Android by a keyboard's arrows, since the rows it
+    replaced were tiles a keyboard could reach — and stopping at the band's
+    ends for each of them alike: a step past noon does not jump to the
+    other side. `QuietHoursBand` is the band's arithmetic, in both cores, so a
+    time is in the same place on both phones.
+
+    **Nothing moves on a touch alone.** The band, and on iOS the size (I40),
+    sit in pages that scroll, and a thumb that lands on one on its way up
+    the page was changing when the phone stays quiet, and keeping the page
+    from scrolling besides — written on touch-down, as the first build had
+    them. Now a tap sets where the finger lifts; a drag takes the control
+    once it is plainly sideways; a drag that goes up or down is the page's,
+    and changes nothing.
 
     **What did not change, and why.** No theme, accent or icon picker (S18's
     "not here"). No haptics for any of the new controls: §9.3 names
@@ -5237,14 +5254,29 @@ I40. **The front of the book, on iOS (A67): the last of the system's
     - **The size slider is drawn**: a well with a small A and a large one,
       the accent up to a paper thumb, which follows the finger with nothing
       easing it. To VoiceOver it is one adjustable element, said as a size
-      ("19 point") and moved by half a point.
+      ("19 point") and moved by half a point. Its drag, and the band's, run
+      alongside the page's scroll (`simultaneousGesture`) and act only once
+      a finger has gone 10 points and gone sideways; a tap is a separate
+      gesture, which a scroll cancels (A67). If a phone shows a scroll that
+      starts on either still held, the next step is a pan recognizer that
+      begins only on sideways velocity.
     - **Quiet hours lost their wheels.** The two `DatePicker` wheels that
       opened under their rows are the band (`QuietHoursBandView`), and
       `SettingRow` lost `active`, which only ever lit the row whose wheel
       was open. Each handle is its own adjustable element, the beginning
       read first. The times are formatted on a fixed day rather than today,
       so a time inside an hour the clocks skip is not read as the hour
-      after.
+      after. The three hours under the band grow with Dynamic Type up to
+      AX3 and stop there, where three still fit side by side on the
+      narrowest phone; past it they would run into one another.
+    - **The Text screen reads a licensed chapter once.** It was read and
+      decoded from disk on every pass of the body — twice for your own
+      version — and the body runs on every step of the size. It is read
+      once for a book and chapter, off the main thread, and kept on the
+      screen with the place it was read for; a bundled book is the store's
+      and decoded once, as before. The rows that gain a verse that way
+      take it on `arrive`, as the original words' panel takes a licensed
+      version.
     - **No haptics** on any of them (I25).
     - **An ember opened from You** is pushed inside You's own stack, and a
       portrait in it opens its person there too (the stack gained
@@ -5254,7 +5286,7 @@ I40. **The front of the book, on iOS (A67): the last of the system's
       are quotations and not buttons.
     - **Written without Xcode, compiled by CI on the first push.** Every
       file passes `swiftc -parse` here, and the band's and the shelf's
-      rules (23 tests) run on Linux. The app has not run. What to look at
+      rules (24 tests) run on Linux. The app has not run. What to look at
       on a phone: a custom-styled `Toggle` should still read as a switch
       and toggle once on a double-tap; whether a drag that starts on the
       band or the slider still lets the page scroll; the ribbon under the

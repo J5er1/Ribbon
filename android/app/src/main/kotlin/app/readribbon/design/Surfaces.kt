@@ -1,6 +1,10 @@
 package app.readribbon.design
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -37,9 +41,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -62,6 +69,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.readribbon.app.Copy
+import kotlinx.coroutines.withContext
 
 // The furniture: cards, groups, rows.
 //
@@ -632,6 +640,49 @@ fun GroupScope.SettingControl(
     }
 }
 
+/**
+ * Something read after its screen was drawn, arriving rather than appearing
+ * (A67): the space under it opens to it on `settle` and its words fade in,
+ * so nothing lands on one frame and pushes everything below it down. Under
+ * reduce motion the space is simply there and only the fade is left, on the
+ * clock that keeps a fade a fade (I22). Whatever is there on the first frame
+ * is simply there, and whatever leaves keeps its last words to leave with.
+ *
+ * Nothing at all is drawn while [value] is null — not even the space a
+ * column's spacing would put round it.
+ */
+@Composable
+fun <T : Any> ArrivingLate(
+    value: T?,
+    modifier: Modifier = Modifier,
+    content: @Composable (T) -> Unit,
+) {
+    val still = rememberReduceMotion()
+    val present = value != null
+    var last by remember { mutableStateOf(value) }
+    LaunchedEffect(value) { if (value != null) last = value }
+    val alpha = remember { Animatable(if (present) 1f else 0f) }
+    LaunchedEffect(present) {
+        withContext(FadesUnderReduceMotion) {
+            alpha.animateTo(if (present) 1f else 0f, RibbonMotion.settle())
+        }
+    }
+    // `visible` rather than a transition state: what is there on the first
+    // frame starts there, and only a change afterwards is animated.
+    AnimatedVisibility(
+        visible = present,
+        modifier = modifier,
+        enter = expandVertically(RibbonMotion.settle(still), expandFrom = Alignment.Top),
+        exit = shrinkVertically(RibbonMotion.settle(still), shrinkTowards = Alignment.Top),
+        label = "arriving-late",
+    ) {
+        val words = value ?: last ?: return@AnimatedVisibility
+        Box(Modifier.graphicsLayer { this.alpha = alpha.value }) {
+            content(words)
+        }
+    }
+}
+
 /** The ribbon laid into a chosen row (A67), and the clear slot kept for it. */
 private val ChosenRibbonWidth = 10.dp
 private val ChosenRibbonLength = 22.dp
@@ -686,9 +737,11 @@ fun GroupScope.SettingChoice(
                 verticalArrangement = Arrangement.spacedBy(3.dp),
             ) {
                 Text(text = title, style = RibbonType.ui(17f), color = Palette.text)
-                if (specimen != null) {
+                // A specimen is read off the main thread, so one can come
+                // after its row is drawn.
+                ArrivingLate(specimen) { words ->
                     Text(
-                        text = specimen,
+                        text = words,
                         style = RibbonType.scripture(16f),
                         color = Palette.text.copy(alpha = 0.86f),
                         maxLines = 3,

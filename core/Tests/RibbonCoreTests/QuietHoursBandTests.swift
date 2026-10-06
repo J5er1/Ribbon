@@ -55,7 +55,7 @@ final class QuietHoursBandTests: XCTestCase {
 
     // MARK: A step at a time
 
-    func testAStepIsAQuarterOfAnHourRoundTheClock() {
+    func testAStepIsAQuarterOfAnHourThroughTheNight() {
         XCTAssertEqual(QuietHoursBand.stepped(h(22), by: 1), h(22, 15))
         XCTAssertEqual(QuietHoursBand.stepped(h(22), by: -1), h(21, 45))
         XCTAssertEqual(QuietHoursBand.stepped(h(23, 45), by: 1), h(0))
@@ -67,6 +67,17 @@ final class QuietHoursBandTests: XCTestCase {
         XCTAssertEqual(QuietHoursBand.stepped(h(22, 7), by: 1), h(22, 15))
         XCTAssertEqual(QuietHoursBand.stepped(h(22, 8), by: 1), h(22, 30))
         XCTAssertEqual(QuietHoursBand.stepped(h(23, 58), by: 0), h(0))
+        // Between steps at the band's far end: the last step, not noon.
+        XCTAssertEqual(QuietHoursBand.stepped(h(11, 53), by: 0), h(11, 45))
+    }
+
+    func testAStepStopsAtTheBandsEnds() {
+        XCTAssertEqual(QuietHoursBand.stepped(h(11, 45), by: 1), h(11, 45))
+        XCTAssertEqual(QuietHoursBand.stepped(h(12), by: -1), h(12))
+        XCTAssertEqual(QuietHoursBand.stepped(h(11, 30), by: 4), h(11, 45))
+        XCTAssertEqual(QuietHoursBand.stepped(h(12, 30), by: -4), h(12))
+        XCTAssertEqual(QuietHoursBand.stepped(h(12), by: 1), h(12, 15))
+        XCTAssertEqual(QuietHoursBand.stepped(h(11, 45), by: -1), h(11, 30))
     }
 
     // MARK: What is drawn quiet

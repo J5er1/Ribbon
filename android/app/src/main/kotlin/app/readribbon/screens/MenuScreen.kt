@@ -85,6 +85,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -1563,9 +1564,14 @@ private fun RoomRibbon(
         withContext(FadesUnderReduceMotion) { words.animateTo(1f, RibbonMotion.arrive()) }
     }
 
+    // The words' column grows with the reader's type, so that at the largest
+    // sizes a room's name wraps rather than ending in an ellipsis; the row
+    // scrolls, so a wider column only scrolls further. The ribbon is drawing,
+    // not type, and stays as it is.
+    val fontScale = LocalDensity.current.fontScale
     Column(
         modifier = Modifier
-            .width(RibbonColumnWidth)
+            .width(RibbonColumnWidth * fontScale)
             .sizeIn(minHeight = MinTarget)
             .pressable(role = Role.Button, onClickLabel = Copy.GOES_TO_THAT_ROOM, onClick = onGo)
             .clearAndSetSemantics {
@@ -1692,8 +1698,9 @@ private fun ShelfEmberOnYou(
         // menu, and the room's own shelf — composed under the menu — already
         // holds this ember's key; see the record's route in [MenuScreen].
         EmberView(scale = reading.handiwork.scale)
+        // Grows with the reader's type, as the ribbons' words do.
         Column(
-            modifier = Modifier.width(ShelfWords),
+            modifier = Modifier.width(ShelfWords * LocalDensity.current.fontScale),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             Text(
@@ -1760,7 +1767,6 @@ private fun Colophon(model: AppModel, version: String, reduceMotion: Boolean) {
             .fillMaxWidth()
             .padding(start = TextInset, end = TextInset, top = ColophonAir),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         // Faded as a whole rather than drawn in a faded ink: the Wave's
         // knockout is the ground stroked over the back ribbon, and in a
@@ -1781,9 +1787,15 @@ private fun Colophon(model: AppModel, version: String, reduceMotion: Boolean) {
         // over in well under a second, and a line that flicked to "checking"
         // and back would read as a glitch rather than as an answer. The
         // control is the box around them, so the target does not move as they
-        // change.
+        // change — a whole target tall, so a finger and TalkBack's focus have
+        // more than the small capitals to land on. Its own height is the air
+        // either side of it, which is why the column has no spacing of its
+        // own here.
         Box(
-            modifier = Modifier.clickable(role = Role.Button) { model.checkForUpdates() },
+            modifier = Modifier
+                .sizeIn(minWidth = MinTarget, minHeight = MinTarget)
+                .clickable(role = Role.Button) { model.checkForUpdates() },
+            contentAlignment = Alignment.Center,
         ) {
             AnimatedContent(
                 targetState = if (model.updateState is UpdateState.Checking) {
@@ -1813,6 +1825,7 @@ private fun Colophon(model: AppModel, version: String, reduceMotion: Boolean) {
             color = quiet,
             textAlign = TextAlign.Center,
         )
+        Spacer(Modifier.height(10.dp))
         Text(
             text = Copy.ORIGINAL_CREDIT,
             style = RibbonType.ui(12f),

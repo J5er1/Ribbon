@@ -1510,7 +1510,7 @@ object Copy {
 
     /** What's new (A67): in a room of two. */
     const val WHATS_NEW_NOTIFICATIONS_BODY =
-        "In a room of two, each switch shows the words your phone will use, with their name and their face."
+        "In a room of two, the switches use their name, and while a book is open, two of them show what your phone will say, with their face."
 
     /** What's new (A67): quiet hours as one band. */
     const val WHATS_NEW_QUIET_HOURS_TITLE = "Quiet hours, drawn as the night"

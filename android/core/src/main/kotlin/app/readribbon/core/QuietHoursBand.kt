@@ -62,13 +62,17 @@ object QuietHoursBand {
     }
 
     /**
-     * A minute moved by whole steps, round the clock: a screen reader's
+     * A minute moved by whole steps along the band: a screen reader's
      * increment and decrement. A time between steps lands on the nearest
-     * one first, so every move after it is a whole step.
+     * one first, so every move after it is a whole step. Like a finger, a
+     * step stops at the band's ends — noon on the left, a quarter to twelve
+     * on the right — rather than jumping from one to the other.
      */
     fun stepped(minute: Int, steps: Int, step: Int = QuietHoursBand.step): Int {
-        val snapped = (wrapped(minute).toDouble() / step.toDouble()).roundToInt() * step
-        return wrapped(snapped + steps * step)
+        val last = day / step - 1
+        val along = (wrapped(minute - origin).toDouble() / step.toDouble()).roundToInt()
+        val moved = min(max(along + steps, 0), last)
+        return wrapped(origin + moved * step)
     }
 
     /**

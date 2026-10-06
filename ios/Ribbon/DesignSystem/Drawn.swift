@@ -198,6 +198,20 @@ struct RibbonToggleStyle: ToggleStyle {
     }
 }
 
+// MARK: - A drag on a page that scrolls (I40)
+
+/// What the drawn slider and the band share about a drag: how far a finger
+/// moves before it is a drag at all — the app's own drags wait 8 to 12
+/// points — and which way it went. Sideways is the control's; up or down
+/// is the page's.
+private enum PageDrag {
+    static let slop: CGFloat = 10
+
+    static func isSideways(_ translation: CGSize) -> Bool {
+        abs(translation.width) > abs(translation.height)
+    }
+}
+
 // MARK: - The slider (I40)
 
 /// A slider drawn on the page (I40), for Text's size: a well with a small A
@@ -210,6 +224,12 @@ struct RibbonToggleStyle: ToggleStyle {
 /// leaves nothing to settle. It lands on the nearest step and stops at
 /// either end.
 ///
+/// Nothing moves on a touch alone. The well sits in a page that scrolls,
+/// and a thumb that lands on it on its way up the page is the page's: a
+/// tap sets the size where the finger lifts, a drag takes the thumb once it
+/// is plainly sideways, and a drag that is plainly up or down is left to
+/// the scroll.
+///
 /// To a screen reader it is one adjustable element: its label, its value
 /// said the caller's way ("19 point"), and a swipe up or down moves one
 /// step.
@@ -219,6 +239,10 @@ struct RibbonSlider: View {
     var step: Double
     var label: String
     var spoken: (Double) -> String
+
+    /// Whether the drag under way is the slider's — decided once, on its
+    /// first movement, and nil between drags.
+    @GestureState private var sideways: Bool? = nil
 
     private static let thumb: CGFloat = 24
 
@@ -287,13 +311,27 @@ struct RibbonSlider: View {
         }
         .frame(width: width, height: height)
         .contentShape(Rectangle())
-        .gesture(
-            DragGesture(minimumDistance: 0)
+        .onTapGesture(coordinateSpace: .local) { location in
+            follow(location.x, travel: travel)
+        }
+        // Alongside the page's scroll rather than in place of it, so that a
+        // drag up or down still moves the page.
+        .simultaneousGesture(
+            DragGesture(minimumDistance: PageDrag.slop)
+                .updating($sideways) { drag, sideways, _ in
+                    if sideways == nil { sideways = PageDrag.isSideways(drag.translation) }
+                }
                 .onChanged { drag in
-                    let along = min(max((drag.location.x - thumb / 2) / travel, 0), 1)
-                    set(range.lowerBound + Double(along) * (range.upperBound - range.lowerBound))
+                    guard sideways ?? PageDrag.isSideways(drag.translation) else { return }
+                    follow(drag.location.x, travel: travel)
                 }
         )
+    }
+
+    /// The step under a point on the track.
+    private func follow(_ x: CGFloat, travel: CGFloat) {
+        let along = min(max((x - Self.thumb / 2) / travel, 0), 1)
+        set(range.lowerBound + Double(along) * (range.upperBound - range.lowerBound))
     }
 
     /// Where the value sits along the scale, 0 to 1.
@@ -329,15 +367,22 @@ struct RibbonSlider: View {
 ///
 /// A finger anywhere on the band takes the nearer handle (the end handle
 /// when they are level, as they are when there are no quiet hours) and
-/// moves it to the quarter hour under it, with nothing easing it. A screen
-/// reader finds the two handles as two adjustable elements, the beginning
-/// first, each moving by a quarter of an hour.
+/// moves it to the quarter hour under it, with nothing easing it — on a
+/// tap, where the finger lifts, and on a drag once it is plainly sideways.
+/// A touch alone moves nothing, and a drag up or down is the page's: the
+/// band is in a page that scrolls, and a scroll that happened to start on
+/// it must not change when the phone stays quiet. A screen reader finds
+/// the two handles as two adjustable elements, the beginning first, each
+/// moving by a quarter of an hour and stopping at the band's ends.
 struct QuietHoursBandView: View {
     @Binding var start: Int
     @Binding var end: Int
     /// The handle a finger took when it came down; nil between drags. Gesture
     /// state, so a drag the scroll view takes away leaves nothing held.
     @GestureState private var held: Handle? = nil
+    /// Whether the drag under way is the band's — decided once, on its
+    /// first movement, and nil between drags.
+    @GestureState private var sideways: Bool? = nil
 
     private enum Handle { case start, end }
 
@@ -382,7 +427,13 @@ struct QuietHoursBandView: View {
         }
         .frame(width: width, height: Self.height)
         .contentShape(Rectangle())
-        .gesture(drag(width: width))
+        .onTapGesture(coordinateSpace: .local) { location in
+            guard width > 0 else { return }
+            set(nearer(to: location.x, width: width), to: QuietHoursBand.minute(at: Double(location.x / width)))
+        }
+        // Alongside the page's scroll rather than in place of it, so that a
+        // drag up or down still moves the page.
+        .simultaneousGesture(drag(width: width))
         .accessibilityElement(children: .contain)
     }
 
@@ -424,6 +475,11 @@ struct QuietHoursBandView: View {
                 }
             }
         }
+        // They grow with the reader's type up to a size at which three of
+        // them still fit side by side on the narrowest phone, and stop
+        // there rather than running into one another: they are a picture
+        // of the day, and the handles and the title above say the times.
+        .dynamicTypeSize(...DynamicTypeSize.accessibility3)
         .accessibilityHidden(true)
     }
 
@@ -431,12 +487,15 @@ struct QuietHoursBandView: View {
     /// the whole drag — chosen afresh each time, the start handle dragged
     /// past the end one would hand the drag over to it halfway.
     private func drag(width: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: 0)
+        DragGesture(minimumDistance: PageDrag.slop)
             .updating($held) { drag, held, _ in
                 if held == nil { held = nearer(to: drag.startLocation.x, width: width) }
             }
+            .updating($sideways) { drag, sideways, _ in
+                if sideways == nil { sideways = PageDrag.isSideways(drag.translation) }
+            }
             .onChanged { drag in
-                guard width > 0 else { return }
+                guard width > 0, sideways ?? PageDrag.isSideways(drag.translation) else { return }
                 let which = held ?? nearer(to: drag.startLocation.x, width: width)
                 set(which, to: QuietHoursBand.minute(at: Double(drag.location.x / width)))
             }
@@ -486,7 +545,8 @@ struct QuietHoursBandView: View {
 /// Subviews set along a width, each centred over its fraction of it and
 /// hung from the top: marks under a band, wherever the band says they go.
 /// As tall as the tallest, so the hours under the quiet-hours band grow
-/// with Dynamic Type instead of spilling out of a fixed row.
+/// with Dynamic Type instead of spilling out of a fixed row. It does not
+/// stop them meeting side by side; the caller keeps them narrow enough.
 struct PlacedAcross: Layout {
     var fractions: [Double]
 

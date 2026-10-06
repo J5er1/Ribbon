@@ -1,6 +1,8 @@
 package app.readribbon.design
 
 import android.content.Context
+import android.icu.text.DateFormat as IcuDateFormat
+import android.icu.util.TimeZone as IcuTimeZone
 import android.text.format.DateFormat
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateDpAsState
@@ -8,6 +10,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.drag
@@ -36,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -46,6 +50,13 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalConfiguration
@@ -73,8 +84,6 @@ import kotlin.math.max
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
-import android.icu.text.DateFormat as IcuDateFormat
-import android.icu.util.TimeZone as IcuTimeZone
 
 // Things drawn in the room's own idiom (A67).
 //
@@ -124,28 +133,6 @@ fun DrawScope.drawRibbonTail(
         close()
     }
     drawPath(path = path, color = color)
-}
-
-/**
- * A ribbon's end, still: [width] by [length], hanging from its own top edge.
- *
- * Hidden from the screen reader. A ribbon is always the picture of something
- * the row or column it hangs in says in words.
- */
-@Composable
-fun RibbonTail(
-    color: Color,
-    width: Dp,
-    length: Dp,
-    modifier: Modifier = Modifier,
-) {
-    Canvas(
-        modifier = modifier
-            .size(width, length)
-            .clearAndSetSemantics {},
-    ) {
-        drawRibbonTail(color, Offset.Zero, size.width, size.height)
-    }
 }
 
 /**
@@ -337,14 +324,17 @@ private const val LAST_QUARTER = QUARTERS - 1
  * hours raised and the night banked into the ground under it, with a handle
  * at each end of the night.
  *
- * Drag anywhere on the band and the nearer end comes to the finger; from
- * there it follows it, a quarter of an hour at a time, and every step is
- * written through to the settings as it is made. No animation while it moves
- * — the finger is the animation — and no haptic (I25).
+ * Drag sideways anywhere on the band and the nearer end comes to the finger;
+ * from there it follows it, a quarter of an hour at a time, and every step is
+ * written through to the settings as it is made. A tap brings the nearer end
+ * to where it lifts. A touch alone moves nothing, and a drag up or down is
+ * the page's scroll. No animation while it moves — the finger is the
+ * animation — and no haptic (I25).
  *
  * For a screen reader the drawing is nothing and the two ends are
  * everything: each is its own adjustable control, named for which end it is
- * and saying its time, moved a quarter of an hour by each swipe.
+ * and saying its time, moved a quarter of an hour by each swipe and stopping
+ * at the band's ends.
  *
  * @param start the minute of the day the quiet hours begin.
  * @param end the minute they end. The same minute as [start] is no quiet
@@ -408,14 +398,44 @@ fun QuietHoursBandControl(
                             last = minute
                             if (takesStart) setStart(minute) else setEnd(minute)
                         }
-                        follow(x)
-                        down.consume()
-                        // Consumed as it goes, so a drag that wanders up or
-                        // down stays the band's rather than becoming the
-                        // page's scroll half way through a night.
-                        drag(down.id) { change ->
-                            follow(change.position.x)
-                            change.consume()
+                        // Nothing moves on the touch alone. The band is in a
+                        // page that scrolls, and a scroll that happens to
+                        // start on it must not change when the phone stays
+                        // quiet: a finger that goes up or down first is left
+                        // to the page, and one the page has taken is let go.
+                        val slop = viewConfiguration.touchSlop
+                        var sideways: PointerInputChange? = null
+                        var tapped: PointerInputChange? = null
+                        while (true) {
+                            val change = awaitPointerEvent().changes
+                                .firstOrNull { it.id == down.id } ?: break
+                            if (change.isConsumed) break
+                            if (change.changedToUp()) {
+                                tapped = change
+                                break
+                            }
+                            val moved = change.position - down.position
+                            if (abs(moved.x) > slop && abs(moved.x) > abs(moved.y)) {
+                                sideways = change
+                                change.consume()
+                                break
+                            }
+                            if (abs(moved.y) > slop) break
+                        }
+                        if (sideways != null) {
+                            follow(sideways.position.x)
+                            // Consumed as it goes, so a drag that wanders up
+                            // or down once it is the band's stays the band's
+                            // rather than becoming the page's scroll half way
+                            // through a night.
+                            drag(sideways.id) { change ->
+                                follow(change.position.x)
+                                change.consume()
+                            }
+                        } else if (tapped != null) {
+                            // A tap: the nearer end comes to where it lifted.
+                            follow(tapped.position.x)
+                            tapped.consume()
                         }
                     }
                 },
@@ -554,6 +574,21 @@ private fun HandleSpoken(
     val quarter = (QuietHoursBand.position(minute) * QUARTERS)
         .toFloat()
         .coerceIn(0f, LAST_QUARTER.toFloat())
+    // A keyboard reaches each end too: the two rows this band replaced were
+    // tiles a keyboard could tab to, and opened a clock it could type into.
+    // Tab comes to an end and the arrows move it a quarter of an hour, right
+    // and up later, left and down earlier — on the band's own left-to-right,
+    // which a right-to-left page does not turn round. The end that has the
+    // keyboard is ringed, because a key that moves something nobody can see
+    // has the focus is a key nobody will press twice.
+    var focused by remember { mutableStateOf(false) }
+    val ring = Palette.accent
+    // The minute the next key moves from: the one the last key moved to,
+    // until the band is drawn again with it. A held arrow repeats faster
+    // than the band redraws, and each press should be a quarter on from the
+    // last, not the same quarter again. Not state — nothing is drawn from it.
+    val keyedFrom = remember { intArrayOf(minute) }
+    keyedFrom[0] = minute
     Box(
         modifier = modifier
             .absoluteOffset {
@@ -562,6 +597,21 @@ private fun HandleSpoken(
                 IntOffset(left.roundToInt(), 0)
             }
             .size(HandleTarget, BandHeight)
+            .onFocusChanged { focused = it.isFocused }
+            .onKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                val steps = when (event.key) {
+                    Key.DirectionRight, Key.DirectionUp -> 1
+                    Key.DirectionLeft, Key.DirectionDown -> -1
+                    else -> return@onKeyEvent false
+                }
+                val next = QuietHoursBand.stepped(keyedFrom[0], steps)
+                keyedFrom[0] = next
+                onChange(next)
+                true
+            }
+            .focusable()
+            .then(if (focused) Modifier.border(2.dp, ring, BandShape) else Modifier)
             .semantics {
                 contentDescription = label
                 stateDescription = spoken

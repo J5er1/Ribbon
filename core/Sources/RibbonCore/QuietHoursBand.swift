@@ -54,12 +54,16 @@ public enum QuietHoursBand {
         return wrapped(origin + minutes)
     }
 
-    /// A minute moved by whole steps, round the clock: a screen reader's
+    /// A minute moved by whole steps along the band: a screen reader's
     /// increment and decrement. A time between steps lands on the nearest
-    /// one first, so every move after it is a whole step.
+    /// one first, so every move after it is a whole step. Like a finger, a
+    /// step stops at the band's ends — noon on the left, a quarter to
+    /// twelve on the right — rather than jumping from one to the other.
     public static func stepped(_ minute: Int, by steps: Int, step: Int = QuietHoursBand.step) -> Int {
-        let snapped = Int((Double(wrapped(minute)) / Double(step)).rounded()) * step
-        return wrapped(snapped + steps * step)
+        let last = day / step - 1
+        let along = Int((Double(wrapped(minute - origin)) / Double(step)).rounded())
+        let moved = min(max(along + steps, 0), last)
+        return wrapped(origin + moved * step)
     }
 
     /// The stretches of the band to draw as quiet, left to right in the

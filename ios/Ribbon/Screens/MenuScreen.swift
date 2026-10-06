@@ -524,7 +524,11 @@ private struct YourRibbonsSection: View {
     /// length read as two people (brief §5), and six as six rooms rather
     /// than as a fringe.
     private static let lengths: [CGFloat] = [56, 48, 62, 52, 58, 46]
-    private static let column: CGFloat = 92
+    /// The room's words under each ribbon. Grows with the reader's type, so
+    /// that at the largest sizes a name wraps rather than ending in an
+    /// ellipsis; the row scrolls, so a wider column only scrolls further.
+    /// The ribbons themselves are drawing, not type, and stay as they are.
+    @ScaledMetric(relativeTo: .footnote) private var column: CGFloat = 92
     private static let ribbonWidth: CGFloat = 14
     /// How far behind its left-hand neighbour each ribbon is laid in.
     private static let stagger: Double = 0.08
@@ -600,7 +604,7 @@ private struct YourRibbonsSection: View {
             // Air on the trailing side, so one room's words stop short of
             // the next room's ribbon.
             .padding(.trailing, 12)
-            .frame(width: Self.column, alignment: .topLeading)
+            .frame(width: column, alignment: .topLeading)
             .contentShape(Rectangle())
         }
         .buttonStyle(.pressable)
@@ -647,7 +651,8 @@ private struct YourShelfSection: View {
 
     /// Wide enough for "with the Thursday study" over two lines under the
     /// smallest ember; narrower than the largest, which it sits under.
-    private static let words: CGFloat = 104
+    /// Grows with the reader's type, as the ribbons' words do.
+    @ScaledMetric(relativeTo: .footnote) private var words: CGFloat = 104
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -685,7 +690,7 @@ private struct YourShelfSection: View {
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
-                .frame(width: Self.words)
+                .frame(width: words)
             }
             .contentShape(Rectangle())
         }

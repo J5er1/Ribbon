@@ -4,12 +4,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.test.performTouchInput
 import app.readribbon.app.Copy
 import app.readribbon.core.QuietHoursBand
@@ -32,7 +37,8 @@ import org.robolectric.annotation.Config
  * shot can show: each end is its own control, named for which end it is,
  * saying its time, and one swipe moves it one quarter of an hour — the same
  * step a finger takes. And, for the finger, that it is the nearer end that
- * comes to it.
+ * comes to it — on a sideways drag or a tap, and never on a drag up or down,
+ * which is the page's scroll and must not change when the phone stays quiet.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w411dp-h891dp-xhdpi")
@@ -143,5 +149,93 @@ class QuietHoursEndsAreAdjustableTest {
 
         assertEquals("the beginning stayed where it was", 22 * 60, start)
         assertEquals("the end was drawn out to six", 6 * 60, end)
+    }
+
+    @Test fun aDragUpOrDownMovesNothing() {
+        var start by mutableIntStateOf(22 * 60)
+        var end by mutableIntStateOf(6 * 60)
+        compose.setContent {
+            RibbonTheme {
+                QuietHoursBandControl(
+                    start = start,
+                    end = end,
+                    onStart = { start = it },
+                    onEnd = { end = it },
+                )
+            }
+        }
+
+        val width = compose.onRoot().fetchSemanticsNode().size.width.toFloat()
+        val y = compose.onNodeWithContentDescription(Copy.QUIET_HOURS_END)
+            .fetchSemanticsNode().boundsInRoot.center.y
+        // A thumb that lands on the band on its way up the page, nearer the
+        // end of the night than six, and lifts somewhere else altogether.
+        compose.onRoot().performTouchInput {
+            down(Offset(width * 0.70f, y))
+            moveTo(Offset(width * 0.70f, y - 160f))
+            moveTo(Offset(width * 0.55f, y - 320f))
+            up()
+        }
+        compose.waitForIdle()
+
+        assertEquals("the beginning did not move", 22 * 60, start)
+        assertEquals("nor did the end", 6 * 60, end)
+    }
+
+    @Test fun aTapBringsTheNearerEnd() {
+        var start by mutableIntStateOf(22 * 60)
+        var end by mutableIntStateOf(6 * 60)
+        compose.setContent {
+            RibbonTheme {
+                QuietHoursBandControl(
+                    start = start,
+                    end = end,
+                    onStart = { start = it },
+                    onEnd = { end = it },
+                )
+            }
+        }
+
+        val width = compose.onRoot().fetchSemanticsNode().size.width.toFloat()
+        val y = compose.onNodeWithContentDescription(Copy.QUIET_HOURS_END)
+            .fetchSemanticsNode().boundsInRoot.center.y
+        compose.onRoot().performTouchInput {
+            down(Offset(width * 0.70f, y))
+            up()
+        }
+        compose.waitForIdle()
+
+        assertEquals("the beginning was not the nearer end", 22 * 60, start)
+        assertEquals("the end came to the tap", QuietHoursBand.minute(0.70), end)
+    }
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test fun aKeyboardMovesAnEndAQuarterAtATime() {
+        var start by mutableIntStateOf(22 * 60)
+        var end by mutableIntStateOf(6 * 60)
+        compose.setContent {
+            RibbonTheme {
+                QuietHoursBandControl(
+                    start = start,
+                    end = end,
+                    onStart = { start = it },
+                    onEnd = { end = it },
+                )
+            }
+        }
+
+        val begins = compose.onNodeWithContentDescription(Copy.QUIET_HOURS_BEGIN)
+        begins.requestFocus()
+        begins.performKeyInput { pressKey(Key.DirectionRight) }
+        compose.waitForIdle()
+        assertEquals("right is a quarter later", 22 * 60 + 15, start)
+
+        compose.onNodeWithContentDescription(Copy.QUIET_HOURS_BEGIN).performKeyInput {
+            pressKey(Key.DirectionLeft)
+            pressKey(Key.DirectionDown)
+        }
+        compose.waitForIdle()
+        assertEquals("left and down are a quarter earlier each", 21 * 60 + 45, start)
+        assertEquals("and the end has not moved", 6 * 60, end)
     }
 }

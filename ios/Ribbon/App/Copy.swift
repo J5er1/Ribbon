@@ -739,7 +739,7 @@ enum Copy {
     static let whatsNewNotificationsTitle = "Notifications say who"
     /// What's new (A67): in a room of two.
     static let whatsNewNotificationsBody =
-        "In a room of two, each switch shows the words your phone will use, with their name and their face."
+        "In a room of two, the switches use their name, and while a book is open, two of them show what your phone will say, with their face."
     /// What's new (A67): quiet hours as one band.
     static let whatsNewQuietHoursTitle = "Quiet hours, drawn as the night"
     /// What's new (A67): how it is set.

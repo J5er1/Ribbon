@@ -182,8 +182,19 @@ yet run on a phone:
   ink picker's inks are ribbons, yours the longest.
 - Notifications in a room of two: their faces over the switches, "When
   Ruth opens the book", and the sentence the phone will say under "Notes
-  left for you". Quiet hours: drag either end of the band; set both ends
-  to the same time and it says "No quiet hours".
+  left for you". Quiet hours: drag either end of the band; tap the band
+  and the nearer end comes there; set both ends to the same time and it
+  says "No quiet hours".
+- A scroll that starts on the band, or on iPhone on the size, moves the
+  page and changes nothing. A drag sideways still moves them.
+- Text, opened with no book open on a phone just started: the versions'
+  verses fade in under their names, rather than jumping in; with reduce
+  motion on, they still fade.
+- At the largest text size: the room names under the ribbons and the
+  books under the embers wrap rather than ending in "…"; on iPhone the
+  three hours under the band do not run into each other.
+- Android with a keyboard: Tab reaches each end of the band, which is
+  ringed, and the arrows move it a quarter hour.
 - With VoiceOver and TalkBack: each end of the band moves a quarter hour
   at a time and says its time; each ribbon says its room, its place and
   your ink there; the chosen version is said as selected.

@@ -64,7 +64,7 @@ class QuietHoursBandTest {
     // A step at a time
 
     @Test
-    fun testAStepIsAQuarterOfAnHourRoundTheClock() {
+    fun testAStepIsAQuarterOfAnHourThroughTheNight() {
         assertEquals(h(22, 15), QuietHoursBand.stepped(h(22), 1))
         assertEquals(h(21, 45), QuietHoursBand.stepped(h(22), -1))
         assertEquals(h(0), QuietHoursBand.stepped(h(23, 45), 1))
@@ -77,6 +77,18 @@ class QuietHoursBandTest {
         assertEquals(h(22, 15), QuietHoursBand.stepped(h(22, 7), 1))
         assertEquals(h(22, 30), QuietHoursBand.stepped(h(22, 8), 1))
         assertEquals(h(0), QuietHoursBand.stepped(h(23, 58), 0))
+        // Between steps at the band's far end: the last step, not noon.
+        assertEquals(h(11, 45), QuietHoursBand.stepped(h(11, 53), 0))
+    }
+
+    @Test
+    fun testAStepStopsAtTheBandsEnds() {
+        assertEquals(h(11, 45), QuietHoursBand.stepped(h(11, 45), 1))
+        assertEquals(h(12), QuietHoursBand.stepped(h(12), -1))
+        assertEquals(h(11, 45), QuietHoursBand.stepped(h(11, 30), 4))
+        assertEquals(h(12), QuietHoursBand.stepped(h(12, 30), -4))
+        assertEquals(h(12, 15), QuietHoursBand.stepped(h(12), 1))
+        assertEquals(h(11, 30), QuietHoursBand.stepped(h(11, 45), -1))
     }
 
     // What is drawn quiet
