@@ -710,6 +710,26 @@ class LookBookTest {
     }
 
     /**
+     * Notifications in a room of two (A67): the switches say who — Ruth's
+     * name in their titles, and under the two that arrive as sentences, the
+     * sentence the phone will use, with her face. The shot above is a room
+     * of one, which says none of it.
+     */
+    @Test fun notificationSettingsInARoomOfTwo() {
+        val open = reading("MRK", FireScale.medium)
+        val state = AppState(
+            me = me,
+            people = mapOf(me.id to me, ruth.id to ruth),
+            rooms = listOf(room),
+            memberships = listOf(membership(me, Ink.teal), membership(ruth, Ink.crimson)),
+            readings = listOf(open),
+            currentRoomID = room.id,
+        )
+        val m = model(state)
+        shoot("settings-notifications-two") { NotificationSettingsScreen(model = m, onBack = {}) }
+    }
+
+    /**
      * The launch mark, drawn from the drawable the window actually uses.
      *
      * The splash is a system window, not a composition, so nothing else in
