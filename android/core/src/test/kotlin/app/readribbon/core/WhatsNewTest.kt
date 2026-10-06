@@ -30,6 +30,7 @@ class WhatsNewTest {
                 WhatsNewItem.nativeSelection,
                 WhatsNewItem.roomGroups,
                 WhatsNewItem.lordReadsLord,
+                WhatsNewItem.originalReadable,
             ),
             WhatsNew.releases.firstOrNull()?.items,
         )
@@ -73,6 +74,7 @@ class WhatsNewTest {
         assertEquals("nativeSelection", WhatsNewItem.nativeSelection.name)
         assertEquals("roomGroups", WhatsNewItem.roomGroups.name)
         assertEquals("lordReadsLord", WhatsNewItem.lordReadsLord.name)
+        assertEquals("originalReadable", WhatsNewItem.originalReadable.name)
         val json = Json.encodeToString(
             listOf(WhatsNewItem.original, WhatsNewItem.ownVersion, WhatsNewItem.followingWords),
         )

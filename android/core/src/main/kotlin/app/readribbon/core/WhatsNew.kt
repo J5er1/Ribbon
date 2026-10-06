@@ -50,6 +50,12 @@ enum class WhatsNewItem {
 
     /** The New King James as printed: LORD, and its copyright line (A64). */
     lordReadsLord,
+
+    /**
+     * The held word's line, readable over the page: on glass of its own,
+     * the Hebrew larger and at full strength (A66).
+     */
+    originalReadable,
 }
 
 /**
@@ -79,6 +85,7 @@ object WhatsNew {
                 WhatsNewItem.nativeSelection,
                 WhatsNewItem.roomGroups,
                 WhatsNewItem.lordReadsLord,
+                WhatsNewItem.originalReadable,
             ),
         ),
         WhatsNewRelease(
