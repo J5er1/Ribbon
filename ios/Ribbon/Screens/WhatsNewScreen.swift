@@ -435,7 +435,7 @@ private enum Vignette {
     /// The held word in the original, as the line over the toolbar says it:
     /// the Hebrew, then how to say it in italic and what the Berean says
     /// for it, between muted dots.
-    static let hebrew = "נֶאְדָּר"
+    static let hebrew = "נֶאְדָּר"
     static var hebrewSaid: Text {
         let translit = Text(verbatim: "ne’·dār").font(RibbonType.scriptureItalic(14))
         // Its first space set verbatim, so that nothing reading the line
@@ -1327,7 +1327,11 @@ private struct ReadableLineVignette: View {
             .foregroundStyle(Palette.text)
             .lineSpacing(Vignette.pageLeading)
             .lineLimit(2)
-            .minimumScaleFactor(0.8)
+            // The widest line of any picture: at 320 points (Display Zoom,
+            // or an iPad's narrowest column) the upper line needs about
+            // 0.7 to stay whole, and at 0.8 it would wrap and cut the held
+            // word off the lower one. It only goes as small as it must.
+            .minimumScaleFactor(0.66)
             .textRenderer(SelectedWord(press: press, shown: selected))
             // Centred over the middle of the upper line — the widest, so
             // the block's middle is its middle — as the real one sits over
