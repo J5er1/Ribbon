@@ -613,6 +613,9 @@ fun MenuScreen(
                             } else {
                                 null
                             },
+                            // Reading the book again belongs to the room
+                            // it was read in, not to you (A67).
+                            onReadAgain = null,
                             onBack = { navController.popBackStack() },
                         )
                     }

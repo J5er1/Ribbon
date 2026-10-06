@@ -416,7 +416,7 @@ fun EmberRecordScreen(
     model: AppModel,
     reading: Reading,
     onOpenVerse: ((VerseAddress) -> Unit)?,
-    onReadAgain: ((String) -> Unit)? = null,
+    onReadAgain: ((String) -> Unit)?,
     onOpenPerson: ((personID: Uuid, roomID: Uuid) -> Unit)?,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
