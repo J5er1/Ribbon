@@ -4380,11 +4380,16 @@ A67. **The front of the book: You and the settings, made by hand
     room you have left. Leaving has always said *"Leave this room? You'll
     keep the books on your shelf"* (§6.8), and until now there was no shelf
     of yours for that to be true of; leaving takes the room and your
-    membership, the readings stay on the phone, and so they stay here, said
-    by nothing because their company is gone. An ember opens its record,
-    inside You; a verse in it opens the book in its room, by the same path
-    a tapped notification takes. *Read it again* is not offered there:
-    starting a book belongs to the room. `YourShelf` is in both cores, with
+    membership, the readings stay on the phone, and so they stay here —
+    said by nothing, whatever memberships of that room the phone still
+    holds, because the people of a room you have walked out of are not
+    named on your page. An ember opens its record, inside You; a verse in
+    it opens the book in its room, by the same path a tapped notification
+    takes, and a face opens its person. For a room you have left there is
+    no room to open, so that record quotes its verses and shows its faces
+    and offers neither: nothing is drawn as a control that does nothing.
+    *Read it again* is not offered from You at all: starting a book belongs
+    to the room. `YourShelf` is in both cores, with
     the same tests on both. No count anywhere — not a number of books, not
     in a label.
 
