@@ -42,6 +42,9 @@ public enum WhatsNewItem: String, Codable, Hashable, Sendable, CaseIterable {
     case yourShelf
     /// Each version is shown in its own words, and a ribbon marks yours (A67).
     case versionsByReading
+    /// The page, the way you read it: a new line for every verse, a lighter
+    /// or heavier letter, clearer verse numbers, and a larger size (A68).
+    case yourPage
     /// The notification switches say who, in the words the phone will use (A67).
     case notificationsByName
     /// Quiet hours are one band, the night, rather than two wheels (A67).
@@ -72,7 +75,7 @@ public enum WhatsNew {
     public static let releases: [WhatsNewRelease] = [
         WhatsNewRelease(
             id: "2026-10-flyleaf", released: "2026-10-07",
-            items: [.flyleaf, .yourShelf, .versionsByReading, .notificationsByName, .quietHoursNight]),
+            items: [.flyleaf, .yourShelf, .versionsByReading, .yourPage, .notificationsByName, .quietHoursNight]),
         WhatsNewRelease(
             id: "2026-10-following", released: "2026-10-06",
             items: [.followingStays, .nativeSelection, .roomGroups, .lordReadsLord]),

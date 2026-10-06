@@ -5402,10 +5402,14 @@ I41. **The page, the way you read it, on iOS (A68), and settings that
       they use kotlinx-datetime, and its decoder already took defaults for
       missing keys (StateSurvivesAnUpdateTest).
     - **Weight on the axis.** The page asks Core Text for Literata with its
-      current variation and only the weight axis changed, then scales it
-      through `UIFontMetrics` as before. Book takes today's path, unchanged.
-      Literata's named instances have no PostScript names, so "Literata-
-      Medium" was never an option.
+      current variation, the weight axis changed and the optical size left
+      out, then scales it through `UIFontMetrics` as before. The optical
+      size is left out on purpose: copied, it would hold at the unscaled
+      size once Dynamic Type scales the font, and Lighter or Heavier would
+      then be cut for a different size than Book at any type size but the
+      default; left out, Core Text chooses it, as it does for Book. Book
+      takes today's path, unchanged. Literata's named instances have no
+      PostScript names, so "Literata-Medium" was never an option.
     - **A verse to a line** is a LINE SEPARATOR (U+2028) before the number,
       outside every verse's own text: one paragraph still, so the first
       line's indent and the paragraph's space are not repeated, and the

@@ -63,6 +63,12 @@ enum class WhatsNewItem {
     /** Each version is shown in its own words, and a ribbon marks yours (A67). */
     versionsByReading,
 
+    /**
+     * The page, the way you read it: a new line for every verse, a lighter
+     * or heavier letter, clearer verse numbers, and a larger size (A68).
+     */
+    yourPage,
+
     /** The notification switches say who, in the words the phone will use (A67). */
     notificationsByName,
 
@@ -96,6 +102,7 @@ object WhatsNew {
                 WhatsNewItem.flyleaf,
                 WhatsNewItem.yourShelf,
                 WhatsNewItem.versionsByReading,
+                WhatsNewItem.yourPage,
                 WhatsNewItem.notificationsByName,
                 WhatsNewItem.quietHoursNight,
             ),

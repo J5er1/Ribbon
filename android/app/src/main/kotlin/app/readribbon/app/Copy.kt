@@ -987,8 +987,11 @@ object Copy {
      * find out what it is; a row that says what is actually on the phone has
      * answered already. Each one states a fact about *your* copy of the app,
      * never a feature description.
+     *
+     * S20 (A68): Text's says what it is about, now that the page has more to
+     * set than a subtitle can list.
      */
-    const val TEXT_SUB = "Translation, size, spacing, red letter"
+    const val TEXT_SUB = "Translation, and how the page is set"
     const val NOTIFICATIONS_SUB = "Per room, and your quiet hours"
     /**
      * A function, not a constant, for the reason deviation A8 exists: the
@@ -1113,6 +1116,12 @@ object Copy {
     const val THINKING_OF_YOU_SUB = "A touch on the shoulder. No words."
     const val TEXT_SIZE_SUB = "Scripture only. Everything else stays where it is."
     const val LINE_SPACING_SUB = "How much air between the lines."
+    /** S20 (A68): Literata's own weight, drawn, never a bold laid on top. */
+    const val WEIGHT_SUB = "How much ink each letter carries."
+    /** S20 (A68): prose only; a poem is already set line by line. */
+    const val VERSE_LINES_SUB = "Easier to find your place. Poetry keeps its own lines."
+    /** S20 (A68): only the numbers' ink changes, so nothing on the page moves. */
+    const val CLEAR_NUMBERS_SUB = "Brighter, so a verse is quick to find."
     const val RED_LETTER_SUB = "Where the text marks them."
 
     /** What a translation is, told as a fact about this phone. */
@@ -1129,6 +1138,12 @@ object Copy {
     const val TRANSLATION = "Translation"
     const val TEXT_SIZE = "Text size"
     const val LINE_SPACING = "Line spacing"
+    /** S20 (A68): the weight control's title, and its name to a screen reader. */
+    const val WEIGHT = "Weight"
+    /** S20 (A68): says what happens, in the page's own terms. */
+    const val VERSE_LINES = "A new line for every verse"
+    /** S20 (A68): the numbers, not the verses, are what change. */
+    const val CLEAR_NUMBERS = "Clearer verse numbers"
     const val RED_LETTER = "Words of Jesus in red"
     const val NOTES_LEFT_FOR_YOU = "Notes left for you"
     const val CARDS_OPEN = "The cards open"
@@ -1149,6 +1164,14 @@ object Copy {
     const val LINE_SPACING_CLOSE = "Close"
     const val LINE_SPACING_BOOK = "Book"
     const val LINE_SPACING_OPEN = "Open"
+
+    /**
+     * S20 (A68): the three stops of the weight control, Book in the middle
+     * as it is for line spacing: the weight the page has always had.
+     */
+    const val WEIGHT_LIGHTER = "Lighter"
+    const val WEIGHT_BOOK = "Book"
+    const val WEIGHT_HEAVIER = "Heavier"
 
     /**
      * What quiet hours do not silence (S19): the one notification that is a
@@ -1504,6 +1527,14 @@ object Copy {
     const val WHATS_NEW_VERSIONS_BODY =
         "Each version shows your verse in its own words, and a ribbon marks the one you read. " +
             "The size you choose is set on a real page."
+
+    /** What's new (A68): the page, set the way you read it. */
+    const val WHATS_NEW_PAGE_TITLE = "The page, the way you read it"
+
+    /** What's new (A68): where it is, and what it does. */
+    const val WHATS_NEW_PAGE_BODY =
+        "In Text, each verse can start a line of its own, the letters can be lighter or heavier, " +
+            "the verse numbers clearer, and the size goes larger."
 
     /** What's new (A67): the switches say who. */
     const val WHATS_NEW_NOTIFICATIONS_TITLE = "Notifications say who"

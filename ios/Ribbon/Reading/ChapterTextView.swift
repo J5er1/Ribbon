@@ -15,6 +15,14 @@ struct ReadingTheme: Equatable {
     var fontSize: CGFloat
     var lineHeightMultiple: CGFloat
     var redLetter: Bool
+    /// A point on Literata's weight axis (A68): the reader's Lighter, Book
+    /// or Heavier, with the system's Bold Text folded in. 400 is Book, the
+    /// page as it always was.
+    var weight: Int = 400
+    /// In prose, each numbered verse starts its own line (A68).
+    var versePerLine: Bool = false
+    /// The verse numbers' ink: S02's quiet 45%, or clearer (A68).
+    var verseNumberAlpha: CGFloat = 0.45
     /// Carried so a system type-size change re-sets the page (the fonts
     /// themselves scale through UIFontMetrics).
     var dynamicTypeSize: DynamicTypeSize = .large
@@ -22,6 +30,24 @@ struct ReadingTheme: Equatable {
     /// its width at every type size (§08).
     var gutterWidth: CGFloat = 28
     var trailingMargin: CGFloat = 26
+}
+
+extension ReadingTheme {
+    /// The reader's page, from their settings (S20, A68). The book and the
+    /// Text screen's preview of it are both set from here, so the preview
+    /// cannot show a page the reader will not get. Bold Text is passed in
+    /// by whoever reads it from the environment, so that turning it on sets
+    /// the page again.
+    init(_ settings: AppSettings, boldText: Bool, dynamicTypeSize: DynamicTypeSize) {
+        self.init(
+            fontSize: settings.scriptureSize,
+            lineHeightMultiple: settings.lineHeightMultiple,
+            redLetter: settings.redLetter,
+            weight: settings.weight(boldText: boldText),
+            versePerLine: settings.versePerLine,
+            verseNumberAlpha: settings.verseNumberAlpha,
+            dynamicTypeSize: dynamicTypeSize)
+    }
 }
 
 /// A highlight, as the page needs it: which verse, which stretch of its own
@@ -1301,7 +1327,11 @@ struct ChapterTextView: UIViewRepresentable {
         let result = NSMutableAttributedString()
         var page = ChapterPage()
         let ivory = UIColor(Palette.text)
-        let bodyFont = RibbonType.uiScripture(theme.fontSize)
+        // The reader's weight is the page's: its words, a psalm's title and
+        // the newline that closes a block (A68). The numbers and the running
+        // head are Alegreya Sans's, and keep their own.
+        let bodyFont = RibbonType.uiScripture(theme.fontSize, weight: theme.weight)
+        let titleFont = RibbonType.uiScripture(theme.fontSize * 0.82, weight: theme.weight)
         let em = theme.fontSize
 
         func paragraphStyle(_ style: BlockStyle, isFirstBlock: Bool, afterBreak: Bool) -> NSParagraphStyle {
@@ -1367,27 +1397,38 @@ struct ChapterTextView: UIViewRepresentable {
 
             let blockText = NSMutableAttributedString()
             let blockStart = result.length
-            for span in block.x {
+            // A verse to a line (A68, I41): where the core says a verse in
+            // prose starts a line, a LINE SEPARATOR goes in ahead of its
+            // number. One paragraph still, so its first line keeps its
+            // indent and its space before; and never verse text, so it is
+            // not handed to `page.append`, and every mark, selection,
+            // number and landing counts in the verse's own text as before.
+            let lineStarts: Set<Int> = theme.versePerLine ? Set(block.verseLineStarts()) : []
+            for (index, span) in block.x.enumerated() {
                 if let verse = span.v { runningVerse = verse }
+                if lineStarts.contains(index) {
+                    blockText.append(NSAttributedString(
+                        string: "\u{2028}",
+                        attributes: [.paragraphStyle: style, .font: bodyFont]))
+                }
                 if let verse = span.v, verse != 1 {
-                    // The verse number: small caps superscript, ~45%. Where
-                    // it is set is kept, for a tap on it (A62).
+                    // The verse number: small caps superscript, ~45%, or
+                    // clearer (A68). Where it is set is kept, for a tap on
+                    // it (A62).
                     let number = "\(verse)\u{2009}"
                     page.number(verse, at: blockStart + blockText.length, length: (number as NSString).length)
                     blockText.append(NSAttributedString(
                         string: number,
                         attributes: [
                             .font: RibbonType.uiSmallCaps(theme.fontSize * 0.62),
-                            .foregroundColor: ivory.withAlphaComponent(0.45),
+                            .foregroundColor: ivory.withAlphaComponent(theme.verseNumberAlpha),
                             .baselineOffset: theme.fontSize * 0.3,
                             .ribbonVerse: verse,
                             .paragraphStyle: style,
                         ]))
                 }
                 var attributes: [NSAttributedString.Key: Any] = [
-                    .font: block.s == .d
-                        ? RibbonType.uiScripture(theme.fontSize * 0.82)
-                        : bodyFont,
+                    .font: block.s == .d ? titleFont : bodyFont,
                     .foregroundColor: block.s == .d
                         ? UIColor(Palette.muted)
                         : (span.isRedLetter && theme.redLetter

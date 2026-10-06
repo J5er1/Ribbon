@@ -453,7 +453,9 @@ enum Copy {
     // MARK: Settings (S18–S22)
 
     // What each settings door leads to, under its title (ledger A23).
-    static let textSub = "Translation, size, spacing, red letter"
+    /// S20 (A68): what Text is about, now that the page has more to set
+    /// than a subtitle can list.
+    static let textSub = "Translation, and how the page is set"
     static let notificationsSub = "Per room, and your quiet hours"
     @MainActor static var downloadsSub: String { "What Scripture is held on this \(deviceNoun)" }
     static let planSub = "What your room has"
@@ -474,6 +476,12 @@ enum Copy {
     static let thinkingOfYouSub = "A touch on the shoulder. No words."
     static let textSizeSub = "Scripture only. Everything else stays where it is."
     static let lineSpacingSub = "How much air between the lines."
+    /// S20 (A68): Literata's own weight, drawn, never a bold laid on top.
+    static let weightSub = "How much ink each letter carries."
+    /// S20 (A68): prose only; a poem is already set line by line.
+    static let verseLinesSub = "Easier to find your place. Poetry keeps its own lines."
+    /// S20 (A68): only the numbers' ink changes, so nothing on the page moves.
+    static let clearNumbersSub = "Brighter, so a verse is quick to find."
     static let redLetterSub = "Where the text marks them."
     @MainActor static var bundledSub: String { "On this \(deviceNoun) already, whole." }
     @MainActor static var streamsSub: String { "Streams. The book you are in stays on the \(deviceNoun)." }
@@ -491,6 +499,12 @@ enum Copy {
     static let translation = "Translation"
     static let textSize = "Text size"
     static let lineSpacing = "Line spacing"
+    /// S20 (A68): the weight control's title, and its name to a screen reader.
+    static let weight = "Weight"
+    /// S20 (A68): says what happens, in the page's own terms.
+    static let verseLines = "A new line for every verse"
+    /// S20 (A68): the numbers, not the verses, are what change.
+    static let clearNumbers = "Clearer verse numbers"
     static let redLetter = "Words of Jesus in red"
     static let notesLeftForYou = "Notes left for you"
     static let cardsOpen = "The cards open"
@@ -507,6 +521,11 @@ enum Copy {
     static let lineSpacingClose = "Close"
     static let lineSpacingBook = "Book"
     static let lineSpacingOpen = "Open"
+    /// S20 (A68): the three stops of the weight control, Book in the middle
+    /// as it is for line spacing: the weight the page has always had.
+    static let weightLighter = "Lighter"
+    static let weightBook = "Book"
+    static let weightHeavier = "Heavier"
     /// What quiet hours do not silence (S19): the one notification that is
     /// a touch rather than a sentence, said plainly so nobody is surprised
     /// by it.
@@ -735,6 +754,11 @@ enum Copy {
     /// What's new (A67): the specimens, the ribbon, and the page.
     static let whatsNewVersionsBody =
         "Each version shows your verse in its own words, and a ribbon marks the one you read. The size you choose is set on a real page."
+    /// What's new (A68): the page, set the way you read it.
+    static let whatsNewPageTitle = "The page, the way you read it"
+    /// What's new (A68): where it is, and what it does.
+    static let whatsNewPageBody =
+        "In Text, each verse can start a line of its own, the letters can be lighter or heavier, the verse numbers clearer, and the size goes larger."
     /// What's new (A67): the switches say who.
     static let whatsNewNotificationsTitle = "Notifications say who"
     /// What's new (A67): in a room of two.

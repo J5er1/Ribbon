@@ -18,6 +18,10 @@ enum ReadingPlace: Equatable {
 struct ReadingScreen: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    /// Bold Text, which adds weight to the page on Literata's own axis
+    /// (A68). Read here, where the page's theme is built, so that turning
+    /// it on or off sets the page again.
+    @Environment(\.legibilityWeight) private var legibilityWeight
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
     let room: Room
@@ -638,9 +642,7 @@ struct ReadingScreen: View {
                     translation: translation,
                     runningHead: book?.chapterHeading(n) ?? "\(reading.bookID) \(n)",
                     theme: ReadingTheme(
-                        fontSize: model.settings.scriptureSize,
-                        lineHeightMultiple: model.settings.lineHeightMultiple,
-                        redLetter: model.settings.redLetter,
+                        model.settings, boldText: legibilityWeight == .bold,
                         dynamicTypeSize: dynamicTypeSize),
                     marks: marks(chapter: n),
                     justMarked: justMarked,

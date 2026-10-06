@@ -87,12 +87,14 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import app.readribbon.app.Copy
 import app.readribbon.core.FireScale
 import app.readribbon.core.Ink
+import app.readribbon.core.PageType
 import app.readribbon.core.QuietHoursBand
 import app.readribbon.core.TranslationID
 import app.readribbon.core.WhatsNew
@@ -478,6 +480,7 @@ internal val WhatsNewItem.title: String
         WhatsNewItem.flyleaf -> Copy.WHATS_NEW_FLYLEAF_TITLE
         WhatsNewItem.yourShelf -> Copy.WHATS_NEW_SHELF_TITLE
         WhatsNewItem.versionsByReading -> Copy.WHATS_NEW_VERSIONS_TITLE
+        WhatsNewItem.yourPage -> Copy.WHATS_NEW_PAGE_TITLE
         WhatsNewItem.notificationsByName -> Copy.WHATS_NEW_NOTIFICATIONS_TITLE
         WhatsNewItem.quietHoursNight -> Copy.WHATS_NEW_QUIET_HOURS_TITLE
     }
@@ -494,6 +497,7 @@ internal val WhatsNewItem.body: String
         WhatsNewItem.flyleaf -> Copy.WHATS_NEW_FLYLEAF_BODY
         WhatsNewItem.yourShelf -> Copy.WHATS_NEW_SHELF_BODY
         WhatsNewItem.versionsByReading -> Copy.WHATS_NEW_VERSIONS_BODY
+        WhatsNewItem.yourPage -> Copy.WHATS_NEW_PAGE_BODY
         WhatsNewItem.notificationsByName -> Copy.WHATS_NEW_NOTIFICATIONS_BODY
         WhatsNewItem.quietHoursNight -> Copy.WHATS_NEW_QUIET_HOURS_BODY
     }
@@ -524,10 +528,10 @@ internal const val LOOP_MS = 4600
 internal const val STILL_AT = 3000
 
 /**
- * A picture with more to say — three steps and a screen dimming, or a press,
- * a drag and a second press — takes a longer loop rather than a shorter
- * breath: its movements are on the same 320–480 ms beats and the pause after
- * them is the same long one (A65).
+ * A picture with more to say — three steps and a screen dimming, a press, a
+ * drag and a second press, or a page set again three ways — takes a longer
+ * loop rather than a shorter breath: its movements are on the same 320–480 ms
+ * beats and the pause after them is the same long one (A65).
  */
 internal const val LONG_LOOP_MS = 6200
 
@@ -553,6 +557,7 @@ internal val WhatsNewItem.timeline: Timeline
         WhatsNewItem.followingStays -> Timeline(LONG_LOOP_MS, STAYS_STILL_AT)
         WhatsNewItem.nativeSelection -> Timeline(LONG_LOOP_MS, SELECTION_STILL_AT)
         WhatsNewItem.quietHoursNight -> Timeline(LONG_LOOP_MS, NIGHT_STILL_AT)
+        WhatsNewItem.yourPage -> Timeline(LONG_LOOP_MS, PAGE_STILL_AT)
     }
 
 /** Where a loop of [loopMs] is, [elapsedMs] after the screen appeared and [startAfter] late. */
@@ -792,6 +797,28 @@ internal fun nightFrame(t: Int): NightFrame = NightFrame(
     shown = 1f - beat(t, at = 5560, ms = 400),
 )
 
+/** The page as the reader set it: a verse to a line, the numbers clear, the letters heavier. */
+internal const val PAGE_STILL_AT = 3600
+
+/**
+ * The page, the way you read it (A68): John 1:1–3 set as one paragraph, as
+ * the page has always set it; then set again a verse to a line ([lines], the
+ * one setting giving way to the other where it lies — the words are set
+ * again, they do not travel); then the numbers brighten ([clear]); then the
+ * letters take more ink ([heavier]). Four beats, so the longer loop. After
+ * the held pause all three go back on one beat, to the page it began as.
+ */
+internal data class PageFrame(val lines: Float, val clear: Float, val heavier: Float)
+
+internal fun pageFrame(t: Int): PageFrame {
+    val back = 1f - beat(t, at = 4560, ms = 480)
+    return PageFrame(
+        lines = beat(t, at = 400, ms = 480) * back,
+        clear = beat(t, at = 1280, ms = 400) * back,
+        heavier = beat(t, at = 2080, ms = 480) * back,
+    )
+}
+
 /**
  * The loop's clock for one vignette, as state read only while drawing — so
  * the picture moves and nothing recomposes.
@@ -915,6 +942,8 @@ private fun Vignette(item: WhatsNewItem, startAfter: Long, frozenAt: Long?, modi
             italic = RibbonFonts.literata(FontWeight.Normal, 14f, italic = true),
             display = RibbonFonts.literata(FontWeight.Medium, FLYLEAF_NAME_SIZE),
             specimen = RibbonFonts.literata(FontWeight.Normal, SPECIMEN_SIZE),
+            page = RibbonFonts.literata(FontWeight(PAGE_BOOK), PAGE_SIZE),
+            pageHeavier = RibbonFonts.literata(FontWeight(PAGE_HEAVIER), PAGE_SIZE),
         )
     }
     val grain = rememberGrain()
@@ -968,6 +997,10 @@ private fun Vignette(item: WhatsNewItem, startAfter: Long, frozenAt: Long?, modi
             val page = layOutTheChoice(measurer, inks, faces, smallCaps)
             onDrawBehind { drawVersions(page, inks, grain, versionsFrame(clock.longValue.toInt())) }
         }
+        WhatsNewItem.yourPage -> Modifier.drawWithCache {
+            val page = layOutThePage(measurer, inks, faces, smallCaps)
+            onDrawBehind { drawThePage(page, pageFrame(clock.longValue.toInt())) }
+        }
         WhatsNewItem.notificationsByName -> Modifier.drawWithCache {
             val page = layOutTheSwitch(measurer, inks, ui)
             onDrawBehind { drawNotifications(page, inks, grain, notificationsFrame(clock.longValue.toInt())) }
@@ -1001,6 +1034,9 @@ private class VignetteFaces(
     val italic: FontFamily,
     val display: FontFamily,
     val specimen: FontFamily,
+    /** The small page's, at Book and at Heavier on Literata's own axis (A68). */
+    val page: FontFamily,
+    val pageHeavier: FontFamily,
 )
 
 /**
@@ -2445,4 +2481,205 @@ private fun DrawScope.drawNight(page: TheNight, inks: VignetteInks, grain: Brush
         drawRect(inks.rule, topLeft = hour.tick.topLeft, size = hour.tick.size)
         drawText(hour.hour, topLeft = hour.hourAt)
     }
+}
+
+// MARK: - The page, the way you read it (A68)
+//
+// The one picture in its release that is of the page itself, so it is drawn
+// from what the page is drawn from: Literata at Book and at Heavier on its
+// own weight axis, the numbers in the page's small caps, raised, a thin space
+// after each, at the page's quiet ink and its clearer one. Each line is set
+// on its own and broken where it is written here, at one size for all of
+// them, so the picture breaks alike on every phone and the heavier letters
+// never carry a word onto another line.
+
+/** The small page's size: John 1:1–3 in five lines at the width of a phone's picture. */
+private const val PAGE_SIZE = 13f
+
+/**
+ * Its leading, as a multiple of the size: a little closer than the page's
+ * own Book (S02's 1.72), so five lines keep the paper's margin round them.
+ */
+private const val PAGE_LEADING = 1.55f
+
+/** Book and Heavier, from the core's table: the page's own weights, not a picture's. */
+private val PAGE_BOOK = PageType.weights[PageType.defaultWeightStep]
+private val PAGE_HEAVIER = PageType.weights.last()
+
+/** A run of a pictured line: words, or a verse's number. */
+private class PageRun(val text: String, val number: Boolean = false)
+
+private fun words(text: String) = PageRun(text)
+
+/** A number as the page sets one: its digits and a thin space, never a word space. */
+private fun number(verse: Int) = PageRun("$verse\u2009", number = true)
+
+/**
+ * John 1:1–3 in the Berean Standard, as one paragraph: the page as it has
+ * always been set, the first verse unnumbered as a chapter's first is.
+ */
+private val AS_ONE_PARAGRAPH = listOf(
+    listOf(words("In the beginning was the Word, and the Word")),
+    listOf(words("was with God, and the Word was God. "), number(2), words("He was")),
+    listOf(words("with God in the beginning. "), number(3), words("Through Him all")),
+    listOf(words("things were made, and without Him nothing")),
+    listOf(words("was made that has been made.")),
+)
+
+/**
+ * The same three verses, a verse to a line; a verse longer than a line runs
+ * on to the next. Broken where the iPhone's picture breaks them
+ * (WhatsNewScreen.swift's `verseByVerse`), so both phones show one page.
+ */
+private val VERSE_BY_VERSE = listOf(
+    listOf(words("In the beginning was the Word, and the Word")),
+    listOf(words("was with God, and the Word was God.")),
+    listOf(number(2), words("He was with God in the beginning.")),
+    listOf(number(3), words("Through Him all things were made, and")),
+    listOf(words("without Him nothing was made that has")),
+    listOf(words("been made.")),
+)
+
+/**
+ * One line of the small page, set twice over: its words with the numbers
+ * left as space, and its numbers with the words left as space — so the
+ * numbers' ink can change without the words', and both lie exactly where the
+ * one line would.
+ */
+private class SetLine(val words: TextLayoutResult, val numbers: TextLayoutResult?, val at: Offset)
+
+/** The small page three ways: one paragraph, a verse to a line, and that again heavier. */
+private class ThePage(
+    val asOneParagraph: List<SetLine>,
+    val verseByVerse: List<SetLine>,
+    val heavier: List<SetLine>,
+)
+
+private fun CacheDrawScope.layOutThePage(
+    measurer: TextMeasurer,
+    inks: VignetteInks,
+    faces: VignetteFaces,
+    smallCaps: TextStyle,
+): ThePage {
+    val inset = INSET.toPx()
+    val room = size.width - inset * 2
+    // The number as the page sets it (ChapterText): small caps at 0.62 em,
+    // lifted, with no tracking — the ink is laid on when it is drawn.
+    val numberStyle = smallCaps.toSpanStyle().copy(
+        fontSize = 0.62.em,
+        color = inks.text,
+        baselineShift = BaselineShift(0.484f),
+        letterSpacing = 0.sp,
+    )
+    val unseen = SpanStyle(color = Color.Transparent)
+
+    fun styleOf(family: FontFamily, weight: Int, size: TextUnit) =
+        TextStyle(fontFamily = family, fontWeight = FontWeight(weight), fontSize = size, color = inks.text)
+
+    fun lay(line: List<PageRun>, style: TextStyle, numbers: Boolean): TextLayoutResult {
+        val set = buildAnnotatedString {
+            for (run in line) {
+                if (run.number) {
+                    withStyle(numberStyle) { withStyle(if (numbers) SpanStyle() else unseen) { append(run.text) } }
+                } else {
+                    withStyle(if (numbers) unseen else SpanStyle()) { append(run.text) }
+                }
+            }
+        }
+        return measurer.measure(set, style, softWrap = false, maxLines = 1, density = this)
+    }
+
+    // One size for every line of every setting: the picture's, or smaller if
+    // the widest of them — heavier letters are a little wider — would not
+    // fit the paper across, or the most lines of them — a verse to a line
+    // takes one more than the paragraph — would not fit it down.
+    val book = styleOf(faces.page, PAGE_BOOK, PAGE_SIZE.sp)
+    val heavy = styleOf(faces.pageHeavier, PAGE_HEAVIER, PAGE_SIZE.sp)
+    val widest = (AS_ONE_PARAGRAPH.map { lay(it, book, false) } +
+        VERSE_BY_VERSE.map { lay(it, book, false) } +
+        VERSE_BY_VERSE.map { lay(it, heavy, false) }).maxOf { it.size.width }.toFloat()
+    val lines = maxOf(AS_ONE_PARAGRAPH.size, VERSE_BY_VERSE.size)
+    val tallest = PAGE_SIZE.sp.toPx() * PAGE_LEADING * lines
+    val across = if (widest <= room || widest <= 0f) 1f else room / widest * 0.98f
+    // Down, half the inset above and below: a line's leading already carries
+    // air of its own, which the width's measure does not.
+    val down = (size.height - inset).let { if (tallest <= it || tallest <= 0f) 1f else it / tallest }
+    val scale = minOf(across, down)
+    val fontSize = (PAGE_SIZE * scale).sp
+    val bookStyle = book.copy(fontSize = fontSize)
+    val heavyStyle = heavy.copy(fontSize = fontSize)
+
+    // Every line on one leading, the longer setting's block centred on the
+    // paper and its lines flush left, as the page's are; the paragraph
+    // starts on the same first line, so changing the setting moves nothing
+    // above the first line that changes. Every line stands on its own
+    // baseline, so a raised number never lifts the line it opens.
+    val advance = fontSize.toPx() * PAGE_LEADING
+    val left = (size.width - widest * scale) / 2f
+    val top = (size.height - advance * lines) / 2f
+    val plain = lay(AS_ONE_PARAGRAPH.first(), bookStyle, false)
+    val firstBaseline = top + (advance - plain.size.height) / 2f + plain.getLineBaseline(0)
+
+    fun setAll(lines: List<List<PageRun>>, style: TextStyle, numbered: Boolean) = lines.mapIndexed { i, line ->
+        val words = lay(line, style, false)
+        val numbers = if (numbered && line.any { it.number }) lay(line, style, true) else null
+        SetLine(words, numbers, Offset(left, firstBaseline + advance * i - words.getLineBaseline(0)))
+    }
+    return ThePage(
+        asOneParagraph = setAll(AS_ONE_PARAGRAPH, bookStyle, numbered = true),
+        verseByVerse = setAll(VERSE_BY_VERSE, bookStyle, numbered = true),
+        // The numbers are small caps, which take no weight from the page,
+        // and open their lines: the heavier setting has only its words.
+        heavier = setAll(VERSE_BY_VERSE, heavyStyle, numbered = false),
+    )
+}
+
+/**
+ * [from] giving way to [to], [amount] of the way, the two added together in
+ * a layer of their own: where the same letters lie in both they stay whole
+ * through the middle instead of dimming as a cross-fade's do, so only what
+ * changes is seen to change — a line set again, a letter thickening.
+ */
+private inline fun DrawScope.dissolve(amount: Float, from: DrawScope.() -> Unit, to: DrawScope.() -> Unit) {
+    when {
+        amount <= 0f -> from()
+        amount >= 1f -> to()
+        else -> drawIntoCanvas { canvas ->
+            val whole = Rect(Offset.Zero, size)
+            canvas.saveLayer(whole, Paint())
+            canvas.saveLayer(whole, Paint().apply { alpha = 1f - amount })
+            from()
+            canvas.restore()
+            canvas.saveLayer(whole, Paint().apply { alpha = amount; blendMode = BlendMode.Plus })
+            to()
+            canvas.restore()
+            canvas.restore()
+        }
+    }
+}
+
+private fun DrawScope.drawWords(lines: List<SetLine>) {
+    for (line in lines) drawText(line.words, topLeft = line.at)
+}
+
+private fun DrawScope.drawNumbers(lines: List<SetLine>, alpha: Float) {
+    faded(alpha) {
+        for (line in lines) line.numbers?.let { drawText(it, topLeft = line.at) }
+    }
+}
+
+private fun DrawScope.drawThePage(page: ThePage, frame: PageFrame) {
+    val quiet = PageType.quietVerseNumberAlpha.toFloat()
+    val clear = PageType.clearVerseNumberAlpha.toFloat()
+    dissolve(
+        frame.lines,
+        from = {
+            drawWords(page.asOneParagraph)
+            drawNumbers(page.asOneParagraph, quiet)
+        },
+        to = {
+            dissolve(frame.heavier, from = { drawWords(page.verseByVerse) }, to = { drawWords(page.heavier) })
+            drawNumbers(page.verseByVerse, lerp(quiet, clear, frame.clear))
+        },
+    )
 }

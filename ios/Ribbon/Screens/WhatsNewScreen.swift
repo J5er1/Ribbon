@@ -1,3 +1,4 @@
+import CoreText
 import SwiftUI
 import RibbonCore
 
@@ -238,6 +239,7 @@ private struct WhatsNewItemView: View {
         case .flyleaf: FlyleafVignette(startsAfter: startsAfter)
         case .yourShelf: YourShelfVignette(startsAfter: startsAfter)
         case .versionsByReading: VersionsByReadingVignette(startsAfter: startsAfter)
+        case .yourPage: YourPageVignette(startsAfter: startsAfter)
         case .notificationsByName: NotificationsByNameVignette(startsAfter: startsAfter)
         case .quietHoursNight: QuietHoursNightVignette(startsAfter: startsAfter)
         }
@@ -255,6 +257,7 @@ private struct WhatsNewItemView: View {
         case .flyleaf: return Copy.whatsNewFlyleafTitle
         case .yourShelf: return Copy.whatsNewShelfTitle
         case .versionsByReading: return Copy.whatsNewVersionsTitle
+        case .yourPage: return Copy.whatsNewPageTitle
         case .notificationsByName: return Copy.whatsNewNotificationsTitle
         case .quietHoursNight: return Copy.whatsNewQuietHoursTitle
         }
@@ -272,6 +275,7 @@ private struct WhatsNewItemView: View {
         case .flyleaf: return Copy.whatsNewFlyleafBody
         case .yourShelf: return Copy.whatsNewShelfBody
         case .versionsByReading: return Copy.whatsNewVersionsBody
+        case .yourPage: return Copy.whatsNewPageBody
         case .notificationsByName: return Copy.whatsNewNotificationsBody
         case .quietHoursNight: return Copy.whatsNewQuietHoursBody
         }
@@ -504,6 +508,68 @@ private enum Vignette {
     /// a little shorter.
     static let choiceWidth: CGFloat = 10
     static let choiceLength: CGFloat = 20
+
+    // MARK: The page, the way you read it
+
+    /// Smaller than the other pictures' lines: three verses must fit the
+    /// well set a verse to a line, and six lines of Literata at 13 do.
+    static let pageSize: CGFloat = 13
+
+    /// A run of the picture's page: words, or a verse's number.
+    enum PageRun {
+        case words(String)
+        case number(Int)
+    }
+
+    /// John 1:1–3 as the Berean Standard has it, set as the page sets one
+    /// paragraph — the chapter's first verse without a number, the others
+    /// with theirs. Set by hand, line by line, so that the heavier letters
+    /// never send a word on to the next line, and the first line is the
+    /// same in both settings: the page is set again under it, in place.
+    static let asParagraph: [[PageRun]] = [
+        [.words("In the beginning was the Word, and the Word")],
+        [.words("was with God, and the Word was God. "), .number(2), .words("He was")],
+        [.words("with God in the beginning. "), .number(3), .words("Through Him all")],
+        [.words("things were made, and without Him nothing")],
+        [.words("was made that has been made.")],
+    ]
+
+    /// The same three verses a verse to a line (A68): each numbered verse
+    /// starts a line of its own, and the paragraph's first line is as it
+    /// was.
+    static let verseByVerse: [[PageRun]] = [
+        [.words("In the beginning was the Word, and the Word")],
+        [.words("was with God, and the Word was God.")],
+        [.number(2), .words("He was with God in the beginning.")],
+        [.number(3), .words("Through Him all things were made, and")],
+        [.words("without Him nothing was made that has")],
+        [.words("been made.")],
+    ]
+
+    /// The picture's page as one Text: the words in Literata at `weight`
+    /// on its own axis — the page's face, held at the picture's size — and
+    /// each number as the page sets one, small caps at 0.62 of the size,
+    /// raised by 0.3 of it, in ivory at `numbers`.
+    static func page(_ lines: [[PageRun]], weight: Int, numbers: Double) -> Text {
+        let face = Font(RibbonType.uiLiterata(pageSize, weight: weight) as CTFont)
+        var text = Text(verbatim: "")
+        for (index, line) in lines.enumerated() {
+            if index > 0 { text = Text("\(text)\n") }
+            for run in line {
+                switch run {
+                case .words(let words):
+                    text = Text("\(text)\(Text(verbatim: words).font(face))")
+                case .number(let verse):
+                    let number = Text(verbatim: "\(verse)\u{2009}")
+                        .font(RibbonType.smallCaps(pageSize * 0.62))
+                        .foregroundStyle(Palette.text.opacity(numbers))
+                        .baselineOffset(pageSize * 0.3)
+                    text = Text("\(text)\(number)")
+                }
+            }
+        }
+        return text
+    }
 
     // MARK: Notifications say who
 
@@ -1645,7 +1711,102 @@ private struct VersionsByReadingVignette: View {
     }
 }
 
-// MARK: 11. Notifications say who
+// MARK: 11. The page, the way you read it
+
+/// A small page of John 1:1–3, set the ways Text now offers (A68). One
+/// paragraph at Book, its numbers quiet; then the page is set again a
+/// verse to a line, as a cross-fade rather than words travelling; then the
+/// numbers come clear; then the letters thicken from Book to Heavier on
+/// Literata's own axis. Held, and then all of it settles back together.
+private struct YourPageVignette: View {
+    let startsAfter: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// How far the page has gone from one paragraph to a verse to a line.
+    @State private var lined = 0.0
+    /// How far the numbers have gone from quiet to clear.
+    @State private var clear = 0.0
+    /// How far the letters have gone from Book to Heavier.
+    @State private var heavier = 0.0
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            VignettePage(lines: Vignette.asParagraph, heavier: heavier, clear: clear)
+                .opacity(1 - lined)
+            VignettePage(lines: Vignette.verseByVerse, heavier: heavier, clear: clear)
+                .opacity(lined)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 20)
+        .task(id: reduceMotion) { await play() }
+    }
+
+    private func play() async {
+        guard !reduceMotion else {
+            // How it ends: a verse to a line, the numbers clear, the
+            // letters heavier.
+            lined = 1
+            clear = 1
+            heavier = 1
+            return
+        }
+        lined = 0
+        clear = 0
+        heavier = 0
+        guard await beat(startsAfter) else { return }
+        while true {
+            // The page as it was, looked at before anything changes.
+            guard await beat(Vignette.rest) else { return }
+            withAnimation(RibbonMotion.open) { lined = 1 }
+            guard await beat(RibbonMotion.openDuration + Vignette.rest) else { return }
+            withAnimation(RibbonMotion.open) { clear = 1 }
+            guard await beat(RibbonMotion.openDuration + Vignette.rest) else { return }
+            withAnimation(RibbonMotion.open) { heavier = 1 }
+            guard await beat(RibbonMotion.openDuration + Vignette.rest) else { return }
+            withAnimation(RibbonMotion.settle) {
+                lined = 0
+                clear = 0
+                heavier = 0
+            }
+            guard await beat(RibbonMotion.settleDuration) else { return }
+        }
+    }
+}
+
+/// The picture's page at a point between Book and Heavier and between
+/// quiet numbers and clear ones, from the page's own table (A68). It is
+/// set again at every step of the way, so the letters thicken along the
+/// axis, as the reader's page would be set at each weight, rather than one
+/// weight fading over another.
+private struct VignettePage: View, Animatable {
+    let lines: [[Vignette.PageRun]]
+    var heavier: Double
+    var clear: Double
+
+    var animatableData: AnimatablePair<Double, Double> {
+        get { AnimatablePair(heavier, clear) }
+        set {
+            heavier = newValue.first
+            clear = newValue.second
+        }
+    }
+
+    var body: some View {
+        // Book and Heavier: the middle and last of the table's three.
+        let book = Double(PageType.weights[1])
+        let heavy = Double(PageType.weights[2])
+        let quiet = PageType.quietVerseNumberAlpha
+        Vignette.page(
+            lines,
+            weight: Int((book + (heavy - book) * heavier).rounded()),
+            numbers: quiet + (PageType.clearVerseNumberAlpha - quiet) * clear)
+            .foregroundStyle(Palette.text)
+            .lineLimit(lines.count)
+            .minimumScaleFactor(0.8)
+    }
+}
+
+// MARK: 12. Notifications say who
 
 /// The first switch of a room of two: "Notes left for you", and under it
 /// the sentence the phone will say, with Ruth's face. The switch turns on
@@ -1788,7 +1949,7 @@ private struct WritesIn: TextRenderer, Animatable {
     }
 }
 
-// MARK: 12. Quiet hours, drawn as the night
+// MARK: 13. Quiet hours, drawn as the night
 
 /// The quiet hours' band (A67), noon to noon, with its three hours under
 /// it. The night draws itself from ten in the evening to six in the

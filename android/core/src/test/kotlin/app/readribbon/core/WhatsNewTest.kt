@@ -29,6 +29,7 @@ class WhatsNewTest {
                 WhatsNewItem.flyleaf,
                 WhatsNewItem.yourShelf,
                 WhatsNewItem.versionsByReading,
+                WhatsNewItem.yourPage,
                 WhatsNewItem.notificationsByName,
                 WhatsNewItem.quietHoursNight,
             ),
@@ -82,6 +83,7 @@ class WhatsNewTest {
         assertEquals("flyleaf", WhatsNewItem.flyleaf.name)
         assertEquals("yourShelf", WhatsNewItem.yourShelf.name)
         assertEquals("versionsByReading", WhatsNewItem.versionsByReading.name)
+        assertEquals("yourPage", WhatsNewItem.yourPage.name)
         assertEquals("notificationsByName", WhatsNewItem.notificationsByName.name)
         assertEquals("quietHoursNight", WhatsNewItem.quietHoursNight.name)
         val json = Json.encodeToString(

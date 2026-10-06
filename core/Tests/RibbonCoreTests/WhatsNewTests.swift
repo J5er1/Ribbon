@@ -14,7 +14,7 @@ final class WhatsNewTests: XCTestCase {
         XCTAssertEqual(WhatsNew.releases.first?.id, "2026-10-flyleaf")
         XCTAssertEqual(
             WhatsNew.releases.first?.items,
-            [.flyleaf, .yourShelf, .versionsByReading, .notificationsByName, .quietHoursNight])
+            [.flyleaf, .yourShelf, .versionsByReading, .yourPage, .notificationsByName, .quietHoursNight])
     }
 
     // Read again from You (A65): every release, newest first, each dated,
@@ -57,6 +57,7 @@ final class WhatsNewTests: XCTestCase {
         XCTAssertEqual(WhatsNewItem.flyleaf.rawValue, "flyleaf")
         XCTAssertEqual(WhatsNewItem.yourShelf.rawValue, "yourShelf")
         XCTAssertEqual(WhatsNewItem.versionsByReading.rawValue, "versionsByReading")
+        XCTAssertEqual(WhatsNewItem.yourPage.rawValue, "yourPage")
         XCTAssertEqual(WhatsNewItem.notificationsByName.rawValue, "notificationsByName")
         XCTAssertEqual(WhatsNewItem.quietHoursNight.rawValue, "quietHoursNight")
         let json = try JSONEncoder().encode([WhatsNewItem.original, .ownVersion, .followingWords])

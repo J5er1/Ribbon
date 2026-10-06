@@ -23,6 +23,7 @@ import app.readribbon.screens.nightFrame
 import app.readribbon.screens.notificationsFrame
 import app.readribbon.screens.originalFrame
 import app.readribbon.screens.ownVersionFrame
+import app.readribbon.screens.pageFrame
 import app.readribbon.screens.roomGroupsFrame
 import app.readribbon.screens.selectionFrame
 import app.readribbon.screens.shelfFrame
@@ -267,7 +268,7 @@ class WhatsNewOnLaunchTest {
         assertTrue("awake before the follower moves on", staysFrame(awakeAgain).follower <= 1f)
     }
 
-    // The third release's five (A67).
+    // The third release's six (A67, and A68's page).
 
     @Test fun reduceMotionHoldsTheFrontOfTheBookAtItsEnd() {
         val flyleaf = flyleafFrame(WhatsNewItem.flyleaf.timeline.stillAt)
@@ -289,6 +290,11 @@ class WhatsNewOnLaunchTest {
         val night = nightFrame(WhatsNewItem.quietHoursNight.timeline.stillAt)
         assertEquals("the night drawn", 1f, night.drawn * night.shown, 0f)
         assertEquals("from ten in the evening, as it was set", 0f, night.later, 0f)
+
+        val page = pageFrame(WhatsNewItem.yourPage.timeline.stillAt)
+        assertEquals("a verse to a line", 1f, page.lines, 0f)
+        assertEquals("the numbers clear", 1f, page.clear, 0f)
+        assertEquals("and the letters heavier", 1f, page.heavier, 0f)
     }
 
     @Test fun eachFrontOfTheBookLoopBeginsAndEndsAtRest() {
@@ -314,6 +320,12 @@ class WhatsNewOnLaunchTest {
             val night = nightFrame(t)
             assertEquals("no night on the band", 0f, night.drawn * night.shown, 0.001f)
         }
+        for (t in listOf(0, WhatsNewItem.yourPage.timeline.loopMs - 1)) {
+            val page = pageFrame(t)
+            assertEquals("one paragraph", 0f, page.lines, 0.001f)
+            assertEquals("its numbers quiet", 0f, page.clear, 0.001f)
+            assertEquals("at Book", 0f, page.heavier, 0.001f)
+        }
     }
 
     /** Your rooms' ribbons, and the embers on the shelf, come one after another — never a later one ahead. */
@@ -323,6 +335,19 @@ class WhatsNewOnLaunchTest {
             assertEquals("the ribbons at $t", ribbons.sortedDescending(), ribbons)
             val embers = shelfFrame(t).embers
             assertEquals("the embers at $t", embers.sortedDescending(), embers)
+        }
+    }
+
+    /**
+     * The page is set again one way at a time (A68): a verse to a line, then
+     * the numbers, then the weight — each arrived before the next begins, so
+     * the eye is never asked to follow two changes at once.
+     */
+    @Test fun thePageIsSetAgainOneWayAtATime() {
+        for (t in 0 until WhatsNewItem.yourPage.timeline.stillAt) {
+            val page = pageFrame(t)
+            if (page.clear > 0f) assertEquals("the lines are set before the numbers brighten, at $t", 1f, page.lines, 0f)
+            if (page.heavier > 0f) assertEquals("the numbers are clear before the weight comes, at $t", 1f, page.clear, 0f)
         }
     }
 
@@ -372,6 +397,7 @@ class WhatsNewOnLaunchTest {
             WhatsNewItem.versionsByReading to ::versionsFrame,
             WhatsNewItem.notificationsByName to ::notificationsFrame,
             WhatsNewItem.quietHoursNight to ::nightFrame,
+            WhatsNewItem.yourPage to ::pageFrame,
         )) {
             val timeline = item.timeline
             val breath = stillFor(timeline.loopMs, timeline.stillAt, frame)

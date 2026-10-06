@@ -2,8 +2,10 @@ package app.readribbon.design
 
 import android.content.Context
 import android.content.res.AssetManager
+import android.content.res.Configuration
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
@@ -110,12 +112,21 @@ object RibbonType {
      * Scripture body — sized by the reader (S20) and scaled by the system
      * font scale. Nothing in the reading surface uses a fixed point size
      * (§11), which is why this takes the size rather than owning it.
+     *
+     * [weight] is a point on Literata's own axis (A68): the reading page and
+     * the Text screen's preview pass the reader's, and everything else keeps
+     * 400 — the original panel says a word differs in Medium, and a page-wide
+     * weight there would take that signal away (A62). At 400 the style is the
+     * one this always returned, field for field; any other weight is named on
+     * the style as well as set on the face, so the style says what the face
+     * is. Bold Text is the caller's to fold in (see ReadingTheme.weight).
      */
     @Composable
-    fun scripture(size: Float): TextStyle {
-        val family = remember(size) { RibbonFonts.literata(FontWeight.Normal, size) }
+    fun scripture(size: Float, weight: Int = 400): TextStyle {
+        val family = remember(size, weight) { RibbonFonts.literata(FontWeight(weight), size) }
         return TextStyle(
             fontFamily = family,
+            fontWeight = if (weight == 400) null else FontWeight(weight),
             fontSize = size.sp,
             lineHeight = (size * 1.62f).sp,
         )
@@ -187,6 +198,21 @@ object RibbonType {
         fontSize = size.sp,
         letterSpacing = (size * 0.075f).sp,
     )
+}
+
+/**
+ * Whether the system's Bold Text is on (A68), read from the configuration so
+ * whatever asks is composed again when it changes.
+ *
+ * Only the reading page and the Text screen's preview ask. They fold it into
+ * the reader's weight and draw it on Literata's own axis; everything else
+ * takes the platform's adjustment as the platform makes it. Undefined is
+ * off, as the platform's own font resolver reads it.
+ */
+@Composable
+fun rememberBoldText(): Boolean {
+    val adjustment = LocalConfiguration.current.fontWeightAdjustment
+    return adjustment != Configuration.FONT_WEIGHT_ADJUSTMENT_UNDEFINED && adjustment > 0
 }
 
 /** Scales a design point size by the system font scale, for the places that

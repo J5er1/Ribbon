@@ -1,3 +1,4 @@
+import CoreText
 import SwiftUI
 import UIKit
 
@@ -19,6 +20,15 @@ enum RibbonType {
     /// Scripture body — sized by the reader (S20), scaled by Dynamic Type.
     static func scripture(_ size: CGFloat) -> Font {
         .custom(literata, size: size, relativeTo: .body)
+    }
+
+    /// Scripture at a point on Literata's weight axis, for the page's
+    /// preview in Text (A68): at Book, 400, the very face `scripture` gives,
+    /// so Book there is what it always was; at any other weight the page's
+    /// own face, scaled by Dynamic Type the way the page scales it.
+    /// SwiftUI's named weights have no 350 or 470; the axis has every one.
+    static func scripture(_ size: CGFloat, weight: Int) -> Font {
+        weight == regularWeight ? scripture(size) : Font(uiScripture(size, weight: weight) as CTFont)
     }
 
     /// Literata at Medium, for the words another version here says that
@@ -69,12 +79,43 @@ enum RibbonType {
     // UIKit faces for the reading surface (TextKit), scaled through
     // UIFontMetrics so the page follows Dynamic Type all the way through
     // AX5 — nothing in the reading surface uses a fixed point size (§11).
-    static func uiScripture(_ size: CGFloat) -> UIFont {
+    //
+    // The page alone takes the reader's weight (A68). Everything else that
+    // sets Scripture keeps Book, so the original words' Medium (A62) still
+    // stands out from every page.
+    static func uiScripture(_ size: CGFloat, weight: Int = 400) -> UIFont {
+        UIFontMetrics(forTextStyle: .body).scaledFont(for: uiLiterata(size, weight: weight))
+    }
+
+    /// Literata before Dynamic Type. At Book, 400, it is the face the page
+    /// has always been set in, found by the same names; the page with
+    /// nothing changed is the page it was.
+    ///
+    /// Any other weight is the same face moved along its own weight axis
+    /// (A68, I41): its variation is copied and only 'wght' is changed.
+    /// Literata's named instances have no PostScript names, so
+    /// "Literata-Medium" was never a face that could be asked for by name.
+    /// The optical size is left out of the copy, so that Core Text chooses
+    /// it for the size the face is finally made at, as it does for Book;
+    /// copied, it would stay at this size when Dynamic Type scales the face.
+    static func uiLiterata(_ size: CGFloat, weight: Int = 400) -> UIFont {
         let base = UIFont(name: "Literata", size: size)
             ?? UIFont(name: "Literata-Regular", size: size)
             ?? .systemFont(ofSize: size, weight: .regular)
-        return UIFontMetrics(forTextStyle: .body).scaledFont(for: base)
+        guard weight != regularWeight else { return base }
+        var axes = (CTFontCopyVariation(base as CTFont) as? [NSNumber: Any]) ?? [:]
+        axes[NSNumber(value: opticalSizeAxis)] = nil
+        axes[NSNumber(value: weightAxis)] = NSNumber(value: weight)
+        let variation = UIFontDescriptor.AttributeName(rawValue: kCTFontVariationAttribute as String)
+        return UIFont(descriptor: base.fontDescriptor.addingAttributes([variation: axes]), size: size)
     }
+
+    /// Where the face's regular sits on its weight axis: Book (A68).
+    private static let regularWeight = 400
+    /// The variation axes Core Text keys by their tags read as numbers:
+    /// 'wght' and 'opsz'.
+    private static let weightAxis = 0x7767_6874
+    private static let opticalSizeAxis = 0x6F70_737A
 
     static func uiSmallCaps(_ size: CGFloat) -> UIFont {
         let base = UIFont(name: "AlegreyaSansSC-Regular", size: size)

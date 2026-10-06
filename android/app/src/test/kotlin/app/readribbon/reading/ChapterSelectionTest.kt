@@ -106,7 +106,27 @@ class ChapterSelectionTest {
         ),
     )
 
-    private class Page {
+    /**
+     * The same three verses as one paragraph, which is how most of the
+     * Bible's prose comes: each verse's number wherever the one before it
+     * ended, in the middle of a line — or, with a line for every verse
+     * (A68), at the start of one.
+     */
+    private val paragraph = ScriptureChapter(
+        n = 1,
+        blocks = listOf(
+            ScriptureBlock(
+                s = BlockStyle.m,
+                x = listOf(
+                    ScriptureSpan(v = 1, t = one),
+                    ScriptureSpan(v = 2, t = two),
+                    ScriptureSpan(v = 3, t = three),
+                ),
+            ),
+        ),
+    )
+
+    private class Page(val chapter: ScriptureChapter, versePerLine: Boolean = false) {
         val selection = PageSelection()
         val reports = mutableListOf<PageRange?>()
         val taps = mutableListOf<Int>()
@@ -114,15 +134,22 @@ class ChapterSelectionTest {
         val wholeVerses = mutableListOf<Int>()
         val lifted = mutableStateOf<VerseRange?>(null)
         val held = mutableStateOf<VerseRange?>(null)
+        /** The page set a verse to a line (A68), or running on as it always has. */
+        val versePerLine = mutableStateOf(versePerLine)
         val last: PageRange? get() = reports.lastOrNull()
     }
 
     @Composable
     private fun PageOf(page: Page) {
         ChapterText(
-            chapter = chapter,
+            chapter = page.chapter,
             runningHead = "John 1",
-            theme = ReadingTheme(fontSize = 19f, lineHeightMultiple = 1.62f, redLetter = false),
+            theme = ReadingTheme(
+                fontSize = 19f,
+                lineHeightMultiple = 1.62f,
+                redLetter = false,
+                versePerLine = page.versePerLine.value,
+            ),
             marks = emptyList(),
             selection = page.selection,
             lifted = page.lifted.value,
@@ -142,8 +169,12 @@ class ChapterSelectionTest {
         )
     }
 
-    private fun setPage(around: @Composable (@Composable () -> Unit) -> Unit = { it() }): Page {
-        val page = Page()
+    private fun setPage(
+        chapter: ScriptureChapter = this.chapter,
+        versePerLine: Boolean = false,
+        around: @Composable (@Composable () -> Unit) -> Unit = { it() },
+    ): Page {
+        val page = Page(chapter, versePerLine)
         val appearance = Appearance(ApplicationProvider.getApplicationContext()).apply {
             wallpaperColour = false
         }
@@ -248,7 +279,7 @@ class ChapterSelectionTest {
     }
 
     @Test fun aSelectionAskedForBeforeThePageIsLaidOutLandsWhenItIs() {
-        val page = Page()
+        val page = Page(chapter)
         page.selection.select(VerseRange("JHN", 1, 3, 3))
         val appearance = Appearance(ApplicationProvider.getApplicationContext())
         compose.setContent { RibbonTheme(appearance = appearance) { PageOf(page) } }
@@ -454,6 +485,148 @@ class ChapterSelectionTest {
             .single { it.label == Copy.LEAVE_SOMETHING_HERE }
         compose.runOnIdle { leave.action() }
         assertEquals(listOf(2), page.wholeVerses)
+    }
+
+    // ── A new line for every verse (A68) ───────────────────────────────
+    //
+    // The number's tap, its hold, the handle over the gap and whole verses,
+    // again, on verses that share one paragraph: running on, where a number
+    // sits in the middle of a line, and set a verse to a line, where the
+    // line it opens is a paragraph of the page's own making.
+
+    /**
+     * Where verse [n]'s words begin, in the root's coordinates: the screen
+     * reader's start of a mark over the verse, which stands on its first
+     * letter halfway down its first line. Its number is just before it on the
+     * same line, wherever on the line the verse begins.
+     */
+    private fun wordsBegin(page: Page, n: Int): Offset {
+        compose.runOnIdle { page.lifted.value = VerseRange("JHN", 1, n, n) }
+        compose.waitForIdle()
+        val at = compose.onNode(hasContentDescription(Copy.WHERE_THE_MARK_STARTS))
+            .fetchSemanticsNode().boundsInRoot.center
+        compose.runOnIdle { page.lifted.value = null }
+        compose.waitForIdle()
+        return at
+    }
+
+    private fun aTapNearAVerseNumberTakesTheVerse(versePerLine: Boolean) {
+        val page = setPage(paragraph, versePerLine)
+        val words = wordsBegin(page, 2)
+        // On "He", beside the small superscript "2" and not on it: a
+        // thumb's width counts, mid-line as at the start of one.
+        compose.onNodeWithTag("page").performTouchInput {
+            click(inPage(Offset(words.x + px(2f), words.y)))
+        }
+        compose.waitForIdle()
+        assertEquals(listOf(2), page.numberTaps)
+        assertTrue(page.taps.isEmpty())
+    }
+
+    @Test fun aTapNearAVerseNumberTakesTheVerseWhereVersesRunOn() =
+        aTapNearAVerseNumberTakesTheVerse(versePerLine = false)
+
+    @Test fun aTapNearAVerseNumberTakesTheVerseOnALineOfItsOwn() =
+        aTapNearAVerseNumberTakesTheVerse(versePerLine = true)
+
+    private fun holdingAVerseNumberTakesTheWholeVerse(versePerLine: Boolean) {
+        val page = setPage(paragraph, versePerLine)
+        val words = wordsBegin(page, 2)
+        // On the digit itself, which ends a thin space before the words.
+        compose.onNodeWithTag("page").performTouchInput {
+            longClick(inPage(Offset(words.x - px(6f), words.y)))
+        }
+        compose.waitForIdle()
+        assertEquals(PageRange(2, null, 2, null), page.last)
+    }
+
+    @Test fun holdingAVerseNumberTakesTheWholeVerseWhereVersesRunOn() =
+        holdingAVerseNumberTakesTheWholeVerse(versePerLine = false)
+
+    @Test fun holdingAVerseNumberTakesTheWholeVerseOnALineOfItsOwn() =
+        holdingAVerseNumberTakesTheWholeVerse(versePerLine = true)
+
+    private fun aHandlePassingOverTheGapBetweenVersesKeepsTheWords(versePerLine: Boolean) {
+        val page = setPage(paragraph, versePerLine)
+        compose.runOnIdle { page.selection.select(VerseRange("JHN", 1, 1, 2)) }
+        compose.waitForIdle()
+        val before = page.last
+        assertEquals(PageRange(1, null, 2, null), before)
+
+        // Over "God. ²": the blank and the number between the two verses,
+        // which a line for every verse puts either side of a line's end.
+        val selected = page.selection.state.selectedTexts.joinToString("") { it.text }
+        val from = page.selection.toPage!!(VerseRange("JHN", 1, 1, 2))!!.start
+        val start = from + selected.indexOf("God.") + "God.".length
+        compose.runOnIdle { page.selection.state.select(TextRange(start, start + 3)) }
+        compose.waitForIdle()
+        assertTrue("still selecting", page.selection.isSelecting)
+        assertEquals("the words it had stand", before, page.last)
+    }
+
+    @Test fun aHandlePassingOverTheGapBetweenVersesKeepsTheWordsWhereVersesRunOn() =
+        aHandlePassingOverTheGapBetweenVersesKeepsTheWords(versePerLine = false)
+
+    @Test fun aHandlePassingOverTheGapBetweenVersesKeepsTheWordsOnALineOfItsOwn() =
+        aHandlePassingOverTheGapBetweenVersesKeepsTheWords(versePerLine = true)
+
+    private fun selectingWholeVersesStoresWholeVerses(versePerLine: Boolean) {
+        val page = setPage(paragraph, versePerLine)
+        compose.runOnIdle { page.selection.select(VerseRange("JHN", 1, 2, 3)) }
+        compose.waitForIdle()
+        assertEquals(PageRange(2, null, 3, null), page.last)
+
+        compose.runOnIdle { page.selection.clear() }
+        compose.waitForIdle()
+        assertNull("letting go reports nothing selected", page.last)
+        assertFalse(page.selection.isSelecting)
+    }
+
+    @Test fun selectingWholeVersesStoresWholeVersesWhereVersesRunOn() =
+        selectingWholeVersesStoresWholeVerses(versePerLine = false)
+
+    @Test fun selectingWholeVersesStoresWholeVersesOnALineOfItsOwn() =
+        selectingWholeVersesStoresWholeVerses(versePerLine = true)
+
+    /**
+     * A line for every verse moves where verses begin and nothing else: the
+     * page's text is the same text, every word carries the same place on the
+     * page, and every verse is found at the same offsets — which is what
+     * every mark, every phrase (A41g) and every selection is stored against.
+     */
+    @Test fun verseLinesAddNoCharacters() {
+        val page = setPage(paragraph)
+        val all = VerseRange("JHN", 1, 1, 3)
+
+        fun read(): Pair<List<Any>, List<TextRange?>> {
+            compose.runOnIdle { page.selection.select(all) }
+            compose.waitForIdle()
+            val selected = page.selection.state.selectedTexts
+            val at = (listOf(all) + (1..3).map { VerseRange("JHN", 1, it, it) })
+                .map { page.selection.toPage!!(it) }
+            compose.runOnIdle { page.selection.clear() }
+            compose.waitForIdle()
+            // The characters, and every annotation on them — each word's
+            // place on the page and each glyph's verse — but not the
+            // paragraphs, which are what the setting is.
+            val read = selected.flatMap { listOf(it.text, it.getStringAnnotations(0, it.length)) }
+            return read to at
+        }
+
+        val runningOn = read()
+        val oneRunningOn = bounds(1, one)
+        val twoRunningOn = bounds(2, two)
+        assertTrue("running on, verse two begins on verse one's last line", twoRunningOn.top < oneRunningOn.bottom)
+
+        compose.runOnIdle { page.versePerLine.value = true }
+        compose.waitForIdle()
+        val lineByLine = read()
+        val twoOnItsOwn = bounds(2, two)
+        assertTrue("a verse to a line, verse two begins below it", twoOnItsOwn.top >= bounds(1, one).bottom - 1f)
+        assertTrue("and at the start of its line", twoOnItsOwn.left <= oneRunningOn.left + 1f)
+
+        assertEquals("the same characters, and the same places for them", runningOn.first, lineByLine.first)
+        assertEquals("every verse at the same offsets", runningOn.second, lineByLine.second)
     }
 }
 

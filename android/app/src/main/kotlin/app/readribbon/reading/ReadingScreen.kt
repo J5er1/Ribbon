@@ -62,6 +62,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -150,6 +151,7 @@ import app.readribbon.design.grain
 import app.readribbon.design.peeled
 import app.readribbon.design.readableColumn
 import app.readribbon.design.rememberBackPeel
+import app.readribbon.design.rememberBoldText
 import app.readribbon.design.rememberReduceMotion
 import app.readribbon.design.room
 import app.readribbon.fire.FireBecomesEmber
@@ -478,6 +480,24 @@ fun ReadingScreen(
     // Layout & tracking
     val chapterLayouts = remember { mutableStateMapOf<Int, ChapterLayout>() }
     var closing by remember { mutableStateOf(false) }
+
+    /**
+     * The page as the reader has set it (S20, A68): one theme for every
+     * chapter, worked out here rather than in each, so the page standing by
+     * can tell when it has been set again (see `setOnStandby`). The system's
+     * Bold Text reaches it as weight, drawn on Literata's own axis.
+     */
+    val boldText = rememberBoldText()
+    val theme = model.settings.let { settings ->
+        ReadingTheme(
+            fontSize = settings.scriptureSize.toFloat(),
+            lineHeightMultiple = settings.lineHeightMultiple.toFloat(),
+            redLetter = settings.redLetter,
+            weight = settings.weight(boldText = boldText),
+            versePerLine = settings.versePerLine,
+            verseNumberAlpha = settings.verseNumberAlpha.toFloat(),
+        )
+    }
 
     /**
      * The live viewport height — "the upper third" must mean this screen's
@@ -1520,6 +1540,45 @@ fun ReadingScreen(
         return Placed.At(top + with(density) { height.toPx() }.toDouble())
     }
 
+    // **The page standing by keeps its verse when it is set again (A68).**
+    //
+    // The book stays composed beneath the room and the menu (A51), so a size,
+    // a spacing, a weight or a line for every verse chosen in Text sets every
+    // chapter again while nobody is looking at it. The list keeps its item
+    // and its pixel offset into it, and in a chapter set again that offset is
+    // another verse: raised, the page would show it on the reading line, and
+    // `trackReading` would save it as where you are. So once the chapter is
+    // set and measured again, the page is landed back on the verse it stood
+    // at — without a movement, nobody being there to see one — and held there
+    // as any landing is (I30).
+    //
+    // Only what moves the words is watched: red letter and the numbers' ink
+    // move nothing, and a page that has not moved is not landed again. Only
+    // on standby: an open page is the reader's to move, and nobody's follow
+    // runs while the book is down (it ends as the book goes). And never over
+    // a landing of the page's own — one still on its way, or one made while
+    // this waited, is going where the page is meant to be.
+    val wordsFallBy = listOf(theme.fontSize, theme.lineHeightMultiple, theme.weight, theme.versePerLine)
+    var setOnStandby by remember { mutableStateOf(wordsFallBy) }
+    LaunchedEffect(wordsFallBy, astir) {
+        if (astir || wordsFallBy == setOnStandby) {
+            setOnStandby = wordsFallBy
+            return@LaunchedEffect
+        }
+        setOnStandby = wordsFallBy
+        val here = latestAddress ?: model.myPosition(reading)
+        if (here.bookID != reading.bookID) return@LaunchedEffect
+        val point = ReadingPoint(chapter = here.chapter.coerceIn(1, chapterCount), verse = here.verse)
+        // The frame the chapters are set again in, and the one their new
+        // lines are reported in: until then the lines on hand are the old
+        // page's, and agree with the old page.
+        repeat(2) { withFrameNanos { } }
+        if (placeOnScreen(point) is Placed.Away) listState.scrollToItem(itemIndexOfChapter(point.chapter))
+        snapshotFlow { placeOnScreen(point) }.first { it is Placed.At }
+        if (landing?.arrived == false || (latestAddress ?: here) != here) return@LaunchedEffect
+        landOn(here, animated = false)
+    }
+
     /**
      * A move of the follow's was cut off by a scroll that was not the
      * follow's. A finger's is the band's, and the list's scroll connection
@@ -2210,6 +2269,7 @@ fun ReadingScreen(
                             n = n,
                             chapter = chapterContent(n),
                             translation = translation,
+                            theme = theme,
                             container = container,
                             layout = chapterLayouts[n] ?: ChapterLayout(),
                             openNoteVerse = openNoteVerse,
@@ -2677,6 +2737,8 @@ private fun FadingFollowThread(shown: Boolean, modifier: Modifier = Modifier) {
  * @param chapter null while a licensed translation's chapter is still on its
  *   way, or on the unreachable state where the text is neither local nor
  *   fetchable.
+ * @param theme the page as the reader has set it: the screen's, the same for
+ *   every chapter (A68).
  * @param onTakeBack the note, and how many were in its stack — a stack of
  *   one closes when its last note is taken back.
  */
@@ -2689,6 +2751,7 @@ private fun ChapterSection(
     n: Int,
     chapter: ScriptureChapter?,
     translation: TranslationID,
+    theme: ReadingTheme,
     container: LayoutCoordinates?,
     layout: ChapterLayout,
     openNoteVerse: VerseAddress?,
@@ -2766,11 +2829,7 @@ private fun ChapterSection(
             ChapterText(
                 chapter = chapter,
                 runningHead = runningHead,
-                theme = ReadingTheme(
-                    fontSize = model.settings.scriptureSize.toFloat(),
-                    lineHeightMultiple = model.settings.lineHeightMultiple.toFloat(),
-                    redLetter = model.settings.redLetter,
-                ),
+                theme = theme,
                 marks = marks,
                 selection = selection,
                 lifted = lifted,

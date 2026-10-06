@@ -57,7 +57,10 @@ class SettingsSurviveADamagedFileTest {
             "lineSpacingStep": 2,
             "redLetter": true,
             "quietHoursStart": 1320,
-            "quietHoursEnd": 480
+            "quietHoursEnd": 480,
+            "weightStep": 2,
+            "versePerLine": true,
+            "clearVerseNumbers": true
           },
           "hasSeenMarginHint": true,
           "hasPulledTheFire": true,
@@ -76,6 +79,10 @@ class SettingsSurviveADamagedFileTest {
         assertTrue("red letter", state.settings.redLetter)
         assertEquals("quiet hours start", 1320, state.settings.quietHoursStart)
         assertEquals("quiet hours end", 480, state.settings.quietHoursEnd)
+        // And the page's settings from A68 with them.
+        assertEquals("weight", 2, state.settings.weightStep)
+        assertTrue("a new line for every verse", state.settings.versePerLine)
+        assertTrue("clearer verse numbers", state.settings.clearVerseNumbers)
     }
 
     /**

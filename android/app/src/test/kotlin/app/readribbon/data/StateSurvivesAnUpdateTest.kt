@@ -2,6 +2,7 @@ package app.readribbon.data
 
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -112,6 +113,12 @@ class StateSurvivesAnUpdateTest {
         // A build from before what's new had never shown it, and null is how
         // that reads: with a person here, an update that is owed the screen.
         assertTrue("no release has been shown yet", state.whatsNewSeen == null)
+        // The page's settings from A68 start where the page already was.
+        assertEquals("the weight is Book", 1, state.settings.weightStep)
+        assertEquals("drawn at the weight it always was", 400, state.settings.weight(boldText = false))
+        assertFalse("verses run on in their paragraphs", state.settings.versePerLine)
+        assertFalse("the numbers stay quiet", state.settings.clearVerseNumbers)
+        assertEquals("at the page's own ink", 0.45, state.settings.verseNumberAlpha, 0.0001)
     }
 
     /**

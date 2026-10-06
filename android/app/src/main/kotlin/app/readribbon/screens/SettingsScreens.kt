@@ -50,6 +50,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontSynthesis
 import androidx.compose.ui.text.style.BaselineShift
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Constraints
@@ -67,6 +68,7 @@ import app.readribbon.app.firstName
 import app.readribbon.core.Bible
 import app.readribbon.core.BlockStyle
 import app.readribbon.core.Ink
+import app.readribbon.core.PageType
 import app.readribbon.core.Person
 import app.readribbon.core.QuietHoursBand
 import app.readribbon.core.Room
@@ -104,6 +106,7 @@ import app.readribbon.design.flowsAsWords
 import app.readribbon.design.grain
 import app.readribbon.design.paper
 import app.readribbon.design.pressable
+import app.readribbon.design.rememberBoldText
 import app.readribbon.design.rememberReduceMotion
 import app.readribbon.design.well
 import app.readribbon.services.Notifications
@@ -171,15 +174,18 @@ private val MinTarget: Dp = 44.dp
 /** Where a subscription is managed on this platform (§6.11). */
 private const val PLAY_SUBSCRIPTIONS = "https://play.google.com/store/account/subscriptions"
 
-/** Scripture size runs 16 → 24 in half-point steps (S20). */
-private const val SCRIPTURE_MIN = 16f
-private const val SCRIPTURE_MAX = 24f
-private const val SCRIPTURE_STEP = 0.5f
+/**
+ * Scripture size runs 16 → 28 in half-point steps (S20; 28 since A68): the
+ * core's numbers, so both phones' sliders end in the same place.
+ */
+private val SCRIPTURE_MIN = PageType.sizeMin.toFloat()
+private val SCRIPTURE_MAX = PageType.sizeMax.toFloat()
+private val SCRIPTURE_STEP = PageType.sizeStep.toFloat()
 
 /**
  * Compose counts the stops *between* the ends, where Swift's `step:` counts
- * the distance between them. 16 → 24 by halves is seventeen positions, so
- * fifteen of them are interior.
+ * the distance between them. 16 → 28 by halves is twenty-five positions, so
+ * twenty-three of them are interior.
  */
 private val SCRIPTURE_STEPS =
     ((SCRIPTURE_MAX - SCRIPTURE_MIN) / SCRIPTURE_STEP).toInt() - 1
@@ -226,6 +232,12 @@ private val LabelFoot = 10.dp
  * and the next, numbered and coloured the way the page sets them — so the
  * size, the spacing and the red letter all show on it. With no book open,
  * both are the first verses of John.
+ *
+ * The page took three more things to set (A68), and they show on the same
+ * piece of it: a weight, Literata's own from Lighter to Heavier with Book
+ * where the page has always been; a line for every verse, in prose, poetry
+ * keeping its own; and clearer verse numbers, which change only their ink.
+ * Set nothing and the page is the page it was.
  */
 @Composable
 fun TextSettingsScreen(
@@ -281,7 +293,7 @@ fun TextSettingsScreen(
 
         Air(GroupGap)
 
-        SettingsGroup(count = 3, title = Copy.THE_PAGE, detail = Copy.THE_PAGE_IS_YOURS) {
+        SettingsGroup(count = 6, title = Copy.THE_PAGE, detail = Copy.THE_PAGE_IS_YOURS) {
             SettingControl(title = Copy.TEXT_SIZE, detail = Copy.TEXT_SIZE_SUB) {
                 ScriptureSizeWell(model)
                 ScripturePreview(model, place, held.chapters[model.words(model.currentRoom)])
@@ -299,6 +311,35 @@ fun TextSettingsScreen(
                     },
                 )
             }
+            // Literata's own weight (A68), three stops as the spacing has,
+            // Book in the middle where the page has always been. A step a
+            // later build saved past the ends is shown where the page sets
+            // it, at the nearer end.
+            SettingControl(title = Copy.WEIGHT, detail = Copy.WEIGHT_SUB) {
+                Segments(
+                    labels = listOf(
+                        Copy.WEIGHT_LIGHTER,
+                        Copy.WEIGHT_BOOK,
+                        Copy.WEIGHT_HEAVIER,
+                    ),
+                    chosenIndex = model.settings.weightStep.coerceIn(0, PageType.weights.lastIndex),
+                    onSelect = { index ->
+                        model.updateSettings { it.copy(weightStep = index) }
+                    },
+                )
+            }
+            SettingSwitch(
+                title = Copy.VERSE_LINES,
+                subtitle = Copy.VERSE_LINES_SUB,
+                value = model.settings.versePerLine,
+                onChange = { on -> model.updateSettings { it.copy(versePerLine = on) } },
+            )
+            SettingSwitch(
+                title = Copy.CLEAR_NUMBERS,
+                subtitle = Copy.CLEAR_NUMBERS_SUB,
+                value = model.settings.clearVerseNumbers,
+                onChange = { on -> model.updateSettings { it.copy(clearVerseNumbers = on) } },
+            )
             SettingSwitch(
                 title = Copy.RED_LETTER,
                 subtitle = Copy.RED_LETTER_SUB,
@@ -383,7 +424,7 @@ private data class HeldChapters(
 /**
  * The size slider, in its well, between a small A and a large one.
  *
- * Material's own slider (A18/A29) with the ticks turned off: seventeen drawn
+ * Material's own slider (A18/A29) with the ticks turned off: twenty-five drawn
  * stops is an instrument panel, and this is a book. The two letters are the
  * ends of the scale set in the face the slider sizes, so the control says
  * what it does before it is touched (A67) — a picture, not a word, and
@@ -442,7 +483,8 @@ private fun ScaleEnd(size: Float) {
 
 /**
  * The live preview, as a page (A67): the verse you are at and the one after
- * it, in your version, at your size and spacing, with the reference under it.
+ * it, in your version, at your size, spacing and weight (A68), with the
+ * reference under it.
  *
  * On the page's own ground and grain, because it is a window onto the reading
  * surface and not a sample of it. Swift adds its leading with `.lineSpacing`,
@@ -455,17 +497,22 @@ private fun ScaleEnd(size: Float) {
  */
 @Composable
 private fun ScripturePreview(model: AppModel, place: VerseAddress, chapter: ScriptureChapter?) {
-    val size = model.settings.scriptureSize.toFloat()
-    val redLetter = model.settings.redLetter
+    val settings = model.settings
+    val size = settings.scriptureSize.toFloat()
+    val redLetter = settings.redLetter
+    val versePerLine = settings.versePerLine
+    val numberAlpha = settings.verseNumberAlpha.toFloat()
+    // The page's weight, Bold Text folded in as the page folds it (A68).
+    val weight = settings.weight(boldText = rememberBoldText())
     // Read here, in composition, and handed to the typesetter: the room's
     // ink follows the wallpaper (A18), and the page is set from it.
     val ivory = Palette.text
-    val page = remember(chapter, place.verse, size, redLetter, ivory) {
-        chapter?.let { pageOf(it, place.verse, size, redLetter, ivory) }
+    val page = remember(chapter, place.verse, size, redLetter, versePerLine, numberAlpha, ivory) {
+        chapter?.let { pageOf(it, place.verse, size, redLetter, versePerLine, numberAlpha, ivory) }
     }
     // A page read after the screen was drawn opens under the size rather
     // than landing on one frame and pushing everything below it down.
-    ArrivingLate(page) { shown -> PreviewPage(model, place, shown, size, ivory) }
+    ArrivingLate(page) { shown -> PreviewPage(model, place, shown, size, weight, ivory) }
 }
 
 @Composable
@@ -474,6 +521,7 @@ private fun PreviewPage(
     place: VerseAddress,
     page: AnnotatedString,
     size: Float,
+    weight: Int,
     ivory: Color,
 ) {
     Column(
@@ -485,8 +533,11 @@ private fun PreviewPage(
     ) {
         Text(
             text = page,
-            style = RibbonType.scripture(size).copy(
+            // Drawn at the weight, never synthesized over it, as the page is
+            // (A68): Bold Text is in the weight already.
+            style = RibbonType.scripture(size, weight).copy(
                 lineHeight = (size * model.settings.lineHeightMultiple.toFloat()).sp,
+                fontSynthesis = FontSynthesis.None,
             ),
             color = ivory,
         )
@@ -497,10 +548,11 @@ private fun PreviewPage(
 /**
  * Two verses set the way reading/ChapterText.kt sets them, so the preview is
  * the page and not a description of it: a number before each verse but a
- * chapter's first — small caps at 0.62 of the size, ivory at 45%, raised,
- * and a thin space after it — the words of Jesus in the crimson ink when the
- * switch is on, each block of the chapter on a line of its own, and a psalm's
- * title and a stanza break left out.
+ * chapter's first — small caps at 0.62 of the size, ivory at the page's 45%
+ * or its clearer ink, raised, and a thin space after it — the words of Jesus
+ * in the crimson ink when the switch is on, each block of the chapter on a
+ * line of its own (and, with a line for every verse, each verse the core
+ * starts one for: A68), and a psalm's title and a stanza break left out.
  *
  * The walk is the page's: a running verse moved by every number, a title's
  * included, so a verse that begins on a title still finds its words in the
@@ -514,10 +566,12 @@ private fun pageOf(
     first: Int,
     size: Float,
     redLetter: Boolean,
+    versePerLine: Boolean,
+    numberAlpha: Float,
     ivory: Color,
 ): AnnotatedString? {
     val number = RibbonType.smallCaps(size * 0.62f).toSpanStyle().copy(
-        color = ivory.copy(alpha = 0.45f),
+        color = ivory.copy(alpha = numberAlpha),
         // The page's own lift: 0.3 of the body size, which as a fraction of
         // the number's own 0.62 is 0.484.
         baselineShift = BaselineShift(0.484f),
@@ -532,13 +586,16 @@ private fun pageOf(
         for (block in chapter.blocks) {
             if (block.s == BlockStyle.b) continue
             var wrote = false
-            for (span in block.x) {
+            val lineStarts = if (versePerLine) block.verseLineStarts() else emptyList()
+            for ((index, span) in block.x.withIndex()) {
                 val v = span.v
                 if (v != null) running = v
                 val verse = running
                 if (block.s == BlockStyle.d || verse == null) continue
                 if (verse != first && verse != first + 1) continue
-                if (!wrote && length > 0) append('\n')
+                // A block's own line, and the line the page starts before a
+                // verse — never both, and never one before the first words.
+                if ((!wrote && length > 0) || (wrote && index in lineStarts)) append('\n')
                 wrote = true
                 if (verse != 1 && numbered.add(verse)) {
                     withStyle(number) { append("$verse ") }

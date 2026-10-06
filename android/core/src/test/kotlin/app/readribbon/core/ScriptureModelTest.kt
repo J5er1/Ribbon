@@ -5,6 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlinx.serialization.json.Json
 import org.junit.Assume.assumeTrue
 import org.junit.Test
@@ -112,6 +113,84 @@ class ScriptureModelTest {
     fun testOwnTextFollowsAVerseNumberOnATitle() {
         val chapter = Json.decodeFromString(ScriptureChapter.serializer(), burden)
         assertEquals(mapOf(1 to "Thus declares the LORD.", 2 to "Behold. "), chapter.ownTexts())
+    }
+
+    // A new line for every verse (A68)
+
+    @Test
+    fun testVerseLinesBreakBeforeEachVerseInProse() {
+        val block = ScriptureBlock(
+            s = BlockStyle.m,
+            x = listOf(
+                ScriptureSpan(v = 1, t = "The beginning of the Good News. "),
+                ScriptureSpan(v = 2, t = "As it is written. "),
+                ScriptureSpan(v = 3, t = "He said. "),
+            ),
+        )
+        assertEquals(listOf(1, 2), block.verseLineStarts())
+        // An indented paragraph breaks the same way.
+        assertEquals(listOf(1, 2), ScriptureBlock(s = BlockStyle.p, x = block.x).verseLineStarts())
+    }
+
+    @Test
+    fun testVerseLinesNeverBreakBeforeABlocksFirstSpan() {
+        // A paragraph that opens in the middle of a verse breaks only where
+        // the next verse begins: its first line is already a line.
+        val midVerse = ScriptureBlock(
+            s = BlockStyle.p,
+            x = listOf(
+                ScriptureSpan(t = "who will prepare your way. "),
+                ScriptureSpan(v = 5, t = "He said. "),
+            ),
+        )
+        assertEquals(listOf(1), midVerse.verseLineStarts())
+        // A span with no number continues its verse, red letter or not.
+        val words = ScriptureBlock(
+            s = BlockStyle.p,
+            x = listOf(
+                ScriptureSpan(v = 3, t = "He said,"),
+                ScriptureSpan(t = " ", w = false),
+                ScriptureSpan(v = 4, t = "“Come.”", w = true),
+            ),
+        )
+        assertEquals(listOf(2), words.verseLineStarts())
+        assertEquals(
+            emptyList(),
+            ScriptureBlock(s = BlockStyle.m, x = listOf(ScriptureSpan(v = 1, t = "One verse."))).verseLineStarts(),
+        )
+        assertEquals(emptyList(), ScriptureBlock(s = BlockStyle.m, x = emptyList()).verseLineStarts())
+    }
+
+    @Test
+    fun testVerseLinesLeavePoetryAndTitlesAlone() {
+        val spans = listOf(ScriptureSpan(v = 1, t = "O LORD, "), ScriptureSpan(v = 2, t = "how many rise up!"))
+        for (style in listOf(BlockStyle.q1, BlockStyle.q2, BlockStyle.d, BlockStyle.b)) {
+            assertEquals(emptyList(), ScriptureBlock(s = style, x = spans).verseLineStarts(), "$style")
+        }
+    }
+
+    @Test
+    fun testVerseLinesInBundledMark1() {
+        // The Berean Standard's Mark 1, as the page is given it: verses 1
+        // and 2 share a paragraph, Isaiah's words follow as poetry with
+        // verse 3 opening a line of it, and 6–8 share another paragraph.
+        val root = scriptureRoot()
+        assumeTrue("converted Scripture not present", root != null)
+        val file = File(File(root!!, "bsb"), "MRK.json")
+        val text = Json.decodeFromString(ScriptureBookText.serializer(), file.readText())
+        val blocks = assertNotNull(text.chapter(1)).blocks
+        fun numbersStartingLines(block: ScriptureBlock): List<Int?> =
+            block.verseLineStarts().map { block.x[it].v }
+
+        assertEquals(BlockStyle.m, blocks[0].s)
+        assertEquals(listOf<Int?>(2), numbersStartingLines(blocks[0]))
+        val baptist = assertNotNull(blocks.firstOrNull { it.x.firstOrNull()?.v == 6 })
+        assertEquals(listOf<Int?>(7, 8), numbersStartingLines(baptist))
+        // Poetry keeps its own lines, the one verse 3 opens among them.
+        assertTrue(blocks.any { it.s == BlockStyle.q1 && it.x.firstOrNull()?.v == 3 })
+        for (block in blocks.filter { it.s == BlockStyle.q1 || it.s == BlockStyle.q2 }) {
+            assertEquals(emptyList(), block.verseLineStarts())
+        }
     }
 
     @Test

@@ -8,6 +8,7 @@ import app.readribbon.core.Highlight
 import app.readribbon.core.Invite
 import app.readribbon.core.Membership
 import app.readribbon.core.Note
+import app.readribbon.core.PageType
 import app.readribbon.core.Person
 import app.readribbon.core.QuietDay
 import app.readribbon.core.Reading
@@ -53,20 +54,48 @@ data class RoomNotificationPrefs(
     val thinkingOfYou: Boolean = true,
 )
 
+/**
+ * The reader's own settings (S19, S20).
+ *
+ * The page's choices are kept as plain steps and switches, never as enums:
+ * the file is read without `coerceInputValues`, so a value a later build adds
+ * to an enum would make this whole object unreadable to the build before it,
+ * and salvage would hand back every default. A step out of range only sets
+ * the nearer end of its table ([PageType]).
+ */
 @Serializable
 data class AppSettings(
-    val scriptureSize: Double = 19.0,
-    /** 0, 1, 2 → line-height multiples 1.55, 1.72, 1.9 (S20's three steps). */
-    val lineSpacingStep: Int = 1,
+    /** Scripture's size in points, before font scale ([PageType.sizeRange]). */
+    val scriptureSize: Double = PageType.defaultSize,
+    /** 0, 1, 2 → Close, Book, Open (S20's three steps, [PageType.lineHeightMultiples]). */
+    val lineSpacingStep: Int = PageType.defaultLineSpacingStep,
     val redLetter: Boolean = false,
     /** One per person, applying to every room (S19). Minutes from midnight,
      *  local. Default 10 p.m. – 6 a.m. */
     val quietHoursStart: Int = 22 * 60,
     val quietHoursEnd: Int = 6 * 60,
     val roomNotifications: Map<Uuid, RoomNotificationPrefs> = emptyMap(),
+    /**
+     * 0, 1, 2 → Lighter, Book, Heavier (A68, [PageType.weights]). A step
+     * rather than a weight, so the table can be retuned under it.
+     */
+    val weightStep: Int = PageType.defaultWeightStep,
+    /**
+     * In prose, each numbered verse starts its own line (A68). Poetry,
+     * titles and stanza breaks are set as they always were.
+     */
+    val versePerLine: Boolean = false,
+    /** Verse numbers in a stronger ink, nothing moved (A68). */
+    val clearVerseNumbers: Boolean = false,
 ) {
     val lineHeightMultiple: Double
-        get() = listOf(1.55, 1.72, 1.9)[lineSpacingStep.coerceIn(0, 2)]
+        get() = PageType.lineHeightMultiple(lineSpacingStep)
+
+    /** The page's weight on Literata's axis, with the system's Bold Text folded in (A68). */
+    fun weight(boldText: Boolean): Int = PageType.weight(weightStep, boldText)
+
+    val verseNumberAlpha: Double
+        get() = PageType.verseNumberAlpha(clearVerseNumbers)
 
     /**
      * Whether the clock is inside quiet hours (S19).

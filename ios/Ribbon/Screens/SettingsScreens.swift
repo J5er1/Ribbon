@@ -17,16 +17,23 @@ import RibbonCore
 // MARK: - S20: Text
 
 /// The version is yours (A60, reversing A42), and so is the page: size,
-/// spacing and red letter move only your own page.
+/// spacing, weight, a new line for every verse, clearer verse numbers and
+/// red letter move only your own page (A68).
 ///
 /// A version is chosen by reading it (S20, A67): each row carries the verse
 /// you are at, in that version's own words. And the preview under the size
-/// is a piece of the page itself — that verse and the next, numbered and
-/// coloured the way the page sets them — so the size, the spacing and the
-/// red letter all show on it. With no book open, both are John 1.
+/// is a piece of the page itself — that verse and the next, numbered,
+/// weighted, broken into lines and coloured the way the page sets them —
+/// so every one of the page's settings shows on it. With no book open, both
+/// are John 1.
 struct TextSettingsScreen: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
+    /// The preview is set from the same theme as the page (A68), so it
+    /// reads what the page's theme reads: Bold Text, which adds weight, and
+    /// the type size, at which a face off Book is made.
+    @Environment(\.legibilityWeight) private var legibilityWeight
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     /// The licensed versions' chapters at the verse you are at, as this
     /// phone holds them. Each is a file to read and decode, and the body
@@ -75,7 +82,7 @@ struct TextSettingsScreen: View {
                                 value: Binding(
                                     get: { model.settings.scriptureSize },
                                     set: { size in model.updateSettings { $0.scriptureSize = size } }),
-                                in: 16...24, step: 0.5,
+                                in: PageType.sizeRange, step: PageType.sizeStep,
                                 label: Copy.textSize, spoken: Copy.textSizeValue)
                             preview(at: place)
                         }
@@ -88,6 +95,26 @@ struct TextSettingsScreen: View {
                                 set: { step in model.updateSettings { $0.lineSpacingStep = step } }))
                         .accessibilityLabel(Copy.lineSpacing)
                     }
+                    // The page's own letters, lighter or heavier on their
+                    // axis, and two ways to find a verse (A68).
+                    SettingControl(Copy.weight, subtitle: Copy.weightSub) {
+                        Segments(
+                            options: [Copy.weightLighter, Copy.weightBook, Copy.weightHeavier],
+                            selection: Binding(
+                                get: { model.settings.weightStep },
+                                set: { step in model.updateSettings { $0.weightStep = step } }))
+                        .accessibilityLabel(Copy.weight)
+                    }
+                    SettingSwitch(
+                        Copy.verseLines, subtitle: Copy.verseLinesSub,
+                        isOn: Binding(
+                            get: { model.settings.versePerLine },
+                            set: { on in model.updateSettings { $0.versePerLine = on } }))
+                    SettingSwitch(
+                        Copy.clearNumbers, subtitle: Copy.clearNumbersSub,
+                        isOn: Binding(
+                            get: { model.settings.clearVerseNumbers },
+                            set: { on in model.updateSettings { $0.clearVerseNumbers = on } }))
                     SettingSwitch(
                         Copy.redLetter, subtitle: Copy.redLetterSub,
                         isOn: Binding(
@@ -175,19 +202,21 @@ struct TextSettingsScreen: View {
     }
 
     /// The live preview, as a page (A67): the verse you are at and the one
-    /// after it, in your version, at your size and spacing, in a well of its
-    /// own, with the reference under it.
+    /// after it, in your version, set from the page's own theme (A68), in a
+    /// well of its own, with the reference under it.
     @ViewBuilder
     private func preview(at place: VerseAddress) -> some View {
-        let size = CGFloat(model.settings.scriptureSize)
+        let theme = ReadingTheme(
+            model.settings, boldText: legibilityWeight == .bold, dynamicTypeSize: dynamicTypeSize)
+        let size = theme.fontSize
         if let chapter = heldChapter(place, in: model.words(room: model.currentRoom)),
-           let page = pageText(chapter, from: place.verse, size: size, redLetter: model.settings.redLetter) {
+           let page = pageText(chapter, from: place.verse, theme: theme) {
             VStack(alignment: .leading, spacing: 8) {
                 // Every run carries its own face and colour; the face here
                 // is for the line breaks between blocks.
                 page
-                    .font(RibbonType.scripture(size))
-                    .lineSpacing(size * CGFloat(model.settings.lineHeightMultiple - 1))
+                    .font(RibbonType.scripture(size, weight: theme.weight))
+                    .lineSpacing(size * (theme.lineHeightMultiple - 1))
                     .fixedSize(horizontal: false, vertical: true)
                 SmallCaps(place.formatted, size: 11)
             }
@@ -199,27 +228,36 @@ struct TextSettingsScreen: View {
 
     /// Two verses set the way ChapterTextView sets them, so the preview is
     /// the page and not a description of it: a number before each verse but
-    /// a chapter's first, the words of Jesus in the crimson ink when the
-    /// switch is on, each block of the chapter on its own line, and a
-    /// psalm's title and a stanza break left out.
+    /// a chapter's first, in the page's ink for numbers, the words at the
+    /// page's weight and in the crimson ink where they are Jesus' and the
+    /// switch is on, each block of the chapter on its own line, a verse on
+    /// its own line where the page gives it one, and a psalm's title and a
+    /// stanza break left out.
     ///
     /// The walk is the page's — a running verse moved by every number, a
     /// title's included, as `ownTexts()` keeps it — so a verse that begins
     /// on a title still finds its words in the line after it. Nil when the
     /// chapter does not have the verse.
-    private func pageText(_ chapter: ScriptureChapter, from first: Int, size: CGFloat, redLetter: Bool) -> Text? {
+    private func pageText(_ chapter: ScriptureChapter, from first: Int, theme: ReadingTheme) -> Text? {
         var lines: [Text] = []
         var running: Int?
         var numbered: Set<Int> = []
         for block in chapter.blocks where block.s != .b {
+            // Where the page breaks a line before a verse (A68), the
+            // preview closes the line it is on.
+            let lineStarts: Set<Int> = theme.versePerLine ? Set(block.verseLineStarts()) : []
             var line: Text?
-            for span in block.x {
+            for (index, span) in block.x.enumerated() {
                 if let v = span.v { running = v }
                 guard block.s != .d, let verse = running, verse == first || verse == first + 1 else { continue }
-                var run = pageWords(span.t, size: size, red: redLetter && span.isRedLetter)
+                if lineStarts.contains(index), let sofar = line {
+                    lines.append(sofar)
+                    line = nil
+                }
+                var run = pageWords(span.t, theme: theme, red: theme.redLetter && span.isRedLetter)
                 if verse != 1 && !numbered.contains(verse) {
                     numbered.insert(verse)
-                    run = Text("\(verseNumber(verse, size: size))\(run)")
+                    run = Text("\(verseNumber(verse, theme: theme))\(run)")
                 }
                 if let sofar = line {
                     line = Text("\(sofar)\(run)")
@@ -237,19 +275,21 @@ struct TextSettingsScreen: View {
     }
 
     /// The page's verse number: small caps at 0.62 of the size, ivory at
-    /// 45%, raised by 0.3 of the size, and a thin space after it.
-    private func verseNumber(_ verse: Int, size: CGFloat) -> Text {
+    /// the page's alpha — 45%, or 70% when they are clearer (A68) — raised
+    /// by 0.3 of the size, and a thin space after it.
+    private func verseNumber(_ verse: Int, theme: ReadingTheme) -> Text {
         Text(verbatim: "\(verse)\u{2009}")
-            .font(RibbonType.smallCaps(size * 0.62))
-            .foregroundStyle(Palette.text.opacity(0.45))
-            .baselineOffset(size * 0.3)
+            .font(RibbonType.smallCaps(theme.fontSize * 0.62))
+            .foregroundStyle(Palette.text.opacity(theme.verseNumberAlpha))
+            .baselineOffset(theme.fontSize * 0.3)
     }
 
-    /// A run of the page's words: ivory, or the crimson ink where the
-    /// words are Jesus' and red letter is on — the page's own red.
-    private func pageWords(_ words: String, size: CGFloat, red: Bool) -> Text {
+    /// A run of the page's words at the page's weight: ivory, or the
+    /// crimson ink where the words are Jesus' and red letter is on — the
+    /// page's own red.
+    private func pageWords(_ words: String, theme: ReadingTheme, red: Bool) -> Text {
         Text(verbatim: words)
-            .font(RibbonType.scripture(size))
+            .font(RibbonType.scripture(theme.fontSize, weight: theme.weight))
             .foregroundStyle(red ? Ink.crimson.color : Palette.text)
     }
 }
