@@ -1,7 +1,7 @@
 import SwiftUI
 import RibbonCore
 
-// Things drawn in the room's own idiom (A67, I40).
+// Things drawn in the room's own idiom (A67, I41).
 //
 // The last platform defaults on You and the settings screens were Apple's
 // switch, slider and time wheel, and a circle with a check in it — the
@@ -108,9 +108,9 @@ struct ChoiceRibbon: View {
     }
 }
 
-// MARK: - The switch (I40)
+// MARK: - The switch (I41)
 
-/// A switch drawn on the page (I40): a 46 × 28 capsule. Off, it is a well
+/// A switch drawn on the page (I41): a 46 × 28 capsule. Off, it is a well
 /// with a paper knob at its leading end; on, the well fills with the
 /// accent and the knob — now the ground's own colour, as the way-in
 /// button's words are on the accent — sits at the trailing end. The knob
@@ -173,7 +173,7 @@ struct RibbonSwitch: View {
     }
 }
 
-/// The toggle style every switch in the app wears (I40): the label, air,
+/// The toggle style every switch in the app wears (I41): the label, air,
 /// and the drawn switch, and the whole row takes the tap — the row is the
 /// control, the switch only shows where it stands. The row's insets and
 /// height are the style's to draw, so the part a finger can take is the
@@ -198,7 +198,7 @@ struct RibbonToggleStyle: ToggleStyle {
     }
 }
 
-// MARK: - A drag on a page that scrolls (I40)
+// MARK: - A drag on a page that scrolls (I41)
 
 /// What the drawn slider and the band share about a drag: how far a finger
 /// moves before it is a drag at all — the app's own drags wait 8 to 12
@@ -212,9 +212,9 @@ private enum PageDrag {
     }
 }
 
-// MARK: - The slider (I40)
+// MARK: - The slider (I41)
 
-/// A slider drawn on the page (I40), for Text's size: a well with a small A
+/// A slider drawn on the page (I41), for Text's size: a well with a small A
 /// at one end and a large one at the other — the two ends of the scale,
 /// set in the Scripture face the slider sizes — and between them the
 /// rule, the accent up to the thumb, and a paper thumb.

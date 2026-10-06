@@ -158,7 +158,7 @@ shows "Staying on the same page" with its four pictures moving. Then You →
 What's new: both releases, newest first, each under its day; Done, back and
 Esc go back to You, and the next launch does not show it again.
 
-The front of the book (A67, I40), on both phones — compiled by CI, never
+The front of the book (A67, I41), on both phones — compiled by CI, never
 yet run on a phone:
 
 - Your face → You: under your name, a ribbon for each room you are in,
@@ -198,17 +198,17 @@ yet run on a phone:
 - With VoiceOver and TalkBack: each end of the band moves a quarter hour
   at a time and says its time; each ribbon says its room, its place and
   your ink there; the chosen version is said as selected.
-- iPhone only (I40): the switches, the size and the band are drawn. With
+- iPhone only (I41): the switches, the size and the band are drawn. With
   VoiceOver a switch is still a switch, on or off, and the size moves by
   half a point and says "19 point".
 - What's new: update over an older build and open the app — "The front of
   the book", six pictures moving; reduce motion holds each still.
 
-The page, the way you read it (A68, I41), on both phones:
+The page, the way you read it (A68, I42), on both phones:
 
 - Update from the build before this one, with a text size, quiet hours and
   one room's switches changed first: everything is kept, and the app opens
-  on the room, not on onboarding (I41's whole point on iPhone).
+  on the room, not on onboarding (I42's whole point on iPhone).
 - With Bold Text off, Text → Weight at Book: the page looks exactly as it
   did. With Bold Text on before the update, the page is heavier after it,
   cleanly and on purpose (Book is 550 then). Lighter and Heavier change the

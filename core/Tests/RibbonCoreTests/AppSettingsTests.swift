@@ -1,7 +1,7 @@
 import XCTest
 @testable import RibbonCore
 
-// The reader's settings in the state file (I41): what the last release
+// The reader's settings in the state file (I42): what the last release
 // wrote is read whole, a field this build cannot read costs only itself,
 // and the new ones come back as they went in. Android keeps its settings in
 // the app, where StateSurvivesAnUpdateTest and SettingsSurviveADamagedFileTest

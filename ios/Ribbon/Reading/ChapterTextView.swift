@@ -1407,7 +1407,7 @@ struct ChapterTextView: UIViewRepresentable {
 
             let blockText = NSMutableAttributedString()
             let blockStart = result.length
-            // A verse to a line (A68, I41): where the core says a verse in
+            // A verse to a line (A68, I42): where the core says a verse in
             // prose starts a line, a LINE SEPARATOR goes in ahead of its
             // number. One paragraph still, so its first line keeps its
             // indent and its space before; and never verse text, so it is

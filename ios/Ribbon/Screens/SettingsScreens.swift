@@ -7,7 +7,7 @@ import RibbonCore
 // lede, and under it groups of tiles with a section label over each and a
 // footnote under it where one is owed. Nothing here is a Settings app:
 // no icons, no grouped inset table, no disclosure triangles — and since
-// I40 none of its controls either: the switches, the size and the quiet
+// I41 none of its controls either: the switches, the size and the quiet
 // hours are drawn on the page (DesignSystem/Drawn.swift).
 //
 // What is still not here is what was never here: no theme picker (dark is
@@ -76,7 +76,7 @@ struct TextSettingsScreen: View {
                 SettingsGroup(title: Copy.thePage, detail: Copy.thePageIsYours) {
                     SettingControl(Copy.textSize, subtitle: Copy.textSizeSub) {
                         VStack(spacing: 12) {
-                            // Drawn, not the system's (I40); said as a size
+                            // Drawn, not the system's (I41); said as a size
                             // in points, a measure of type.
                             RibbonSlider(
                                 value: Binding(

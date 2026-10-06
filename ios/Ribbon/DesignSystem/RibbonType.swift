@@ -92,7 +92,7 @@ enum RibbonType {
     /// nothing changed is the page it was.
     ///
     /// Any other weight is the same face moved along its own weight axis
-    /// (A68, I41): its variation is copied and only 'wght' is changed.
+    /// (A68, I42): its variation is copied and only 'wght' is changed.
     /// Literata's named instances have no PostScript names, so
     /// "Literata-Medium" was never a face that could be asked for by name.
     /// The optical size is left out of the copy, so that Core Text chooses

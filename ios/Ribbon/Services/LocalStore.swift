@@ -9,7 +9,7 @@ import RibbonCore
 // by encoding this struct (§13).
 
 // The reader's settings, `AppSettings` and `RoomNotificationPrefs`, are
-// RibbonCore's (I41): there they decode a field at a time, so a field
+// RibbonCore's (I42): there they decode a field at a time, so a field
 // added in one build cannot make the last build's file unreadable.
 
 /// A write this phone still owes the backend (A36): the row is looked up

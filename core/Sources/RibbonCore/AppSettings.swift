@@ -9,7 +9,7 @@ import Foundation
 // They lived in the app and decoded with the synthesized decoder, which
 // rejects an object missing any key. A field added to them would have
 // turned every saved state from the build before into a file this build
-// cannot read (I41). They live here now, so a test can hold them to what
+// cannot read (I42). They live here now, so a test can hold them to what
 // the last release wrote, and they decode by hand: every field is read on
 // its own, and one that is missing or unreadable takes its default and
 // costs nothing else. The encoder is still the generated one.
@@ -115,7 +115,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
     }
 
     /// A field missing from an older file, or one this build cannot read,
-    /// takes its default and costs only itself (I41).
+    /// takes its default and costs only itself (I42).
     public init(from decoder: Decoder) throws {
         self.init()
         let c = try decoder.container(keyedBy: CodingKeys.self)

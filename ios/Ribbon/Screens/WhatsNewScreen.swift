@@ -1893,7 +1893,7 @@ private struct NotificationsByNameVignette: View {
 }
 
 /// The row's switch at the picture's size, drawn as the app draws its own
-/// (`RibbonSwitch`, I40): a well, the accent filling it as it turns on,
+/// (`RibbonSwitch`, I41): a well, the accent filling it as it turns on,
 /// and a paper knob crossing to the trailing end and taking the ground's
 /// colour. One value, `on`, from 0 to 1, so the whole of it moves on the
 /// picture's beat and nothing else's.

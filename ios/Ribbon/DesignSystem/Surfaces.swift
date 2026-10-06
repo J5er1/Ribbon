@@ -286,7 +286,7 @@ struct SettingRow: View {
     }
 }
 
-/// A row with a switch on it — the drawn one (I40), and the whole row
+/// A row with a switch on it — the drawn one (I41), and the whole row
 /// takes the tap. Under the title, where a room of two makes it possible,
 /// an example of the notification the switch lets through (A67).
 struct SettingSwitch: View {

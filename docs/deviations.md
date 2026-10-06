@@ -4435,7 +4435,7 @@ A67. **The front of the book: You and the settings, made by hand
     other side. `QuietHoursBand` is the band's arithmetic, in both cores, so a
     time is in the same place on both phones.
 
-    **Nothing moves on a touch alone.** The band, and on iOS the size (I40),
+    **Nothing moves on a touch alone.** The band, and on iOS the size (I41),
     sit in pages that scroll, and a thumb that lands on one on its way up
     the page was changing when the phone stays quiet, and keeping the page
     from scrolling besides — written on touch-down, as the first build had
@@ -4449,7 +4449,7 @@ A67. **The front of the book: You and the settings, made by hand
     person's page says who they are and what they kept, never how much.
     Android keeps Material's switch and slider (A18, A29: structure is
     Material's, paint is Ribbon's) and gains the slider's two A's and its
-    spoken size; iOS draws its switch and slider as well (I40).
+    spoken size; iOS draws its switch and slider as well (I41).
 
     **Two ideas left for the owner, on purpose.** A paper light mode — §16.1
     says "no light mode" is not shippable past phase two, and Text is where
@@ -5333,7 +5333,7 @@ I39. **Native selection, and a room of eleven, on iOS (A62).** The decisions
       in the panel, Literata's Medium, the overlapping faces and a block's
       fade inside the measured scroll view.
 
-I40. **The front of the book, on iOS (A67): the last of the system's
+I41. **The front of the book, on iOS (A67): the last of the system's
     controls, drawn.** The decisions are A67's; what is only iOS's:
 
     - **The switch is drawn, the Toggle kept.** `SettingSwitch` is still a
@@ -5388,7 +5388,7 @@ I40. **The front of the book, on iOS (A67): the last of the system's
       their buttons; the flyleaf's ribbons laying in while the menu's
       cover is still rising.
 
-I41. **The page, the way you read it, on iOS (A68), and settings that
+I42. **The page, the way you read it, on iOS (A68), and settings that
     survive the next update.**
 
     - **A new settings field no longer resets the app.** `AppSettings` used
