@@ -2,6 +2,7 @@ package app.readribbon.core
 
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.junit.Test
@@ -15,15 +16,52 @@ class WhatsNewTest {
         items = listOf(WhatsNewItem.original, WhatsNewItem.ownVersion, WhatsNewItem.followingWords),
     )
 
+    /** Whatever release is newest: the rules hold for every one of them. */
+    val latest = WhatsNew.releases[0]
+
     // Today's release
 
     @Test
     fun testTodaysRelease() {
-        assertEquals("2026-10-original", WhatsNew.releases.firstOrNull()?.id)
+        assertEquals("2026-10-following", WhatsNew.releases.firstOrNull()?.id)
         assertEquals(
-            listOf(WhatsNewItem.original, WhatsNewItem.ownVersion, WhatsNewItem.followingWords),
+            listOf(
+                WhatsNewItem.followingStays,
+                WhatsNewItem.nativeSelection,
+                WhatsNewItem.roomGroups,
+                WhatsNewItem.lordReadsLord,
+            ),
             WhatsNew.releases.firstOrNull()?.items,
         )
+    }
+
+    // Read again from You (A65): every release, newest first, each dated,
+    // and every thing new told in exactly one of them.
+    @Test
+    fun testTheListReadsNewestFirstAndTellsEachThingOnce() {
+        val ids = WhatsNew.releases.map { it.id }
+        assertEquals(listOf("2026-10-following", "2026-10-original"), ids)
+        assertEquals(ids.size, ids.toSet().size)
+        val days = WhatsNew.releases.map { it.released }
+        assertTrue(days.all { it.length == 10 })
+        assertEquals(days.sortedDescending(), days)
+        val told = WhatsNew.releases.flatMap { it.items }
+        assertEquals(WhatsNewItem.entries.toSet(), told.toSet())
+        assertEquals(WhatsNewItem.entries.size, told.size)
+    }
+
+    // Someone who saw the first release's screen sees this one's, once.
+    @Test
+    fun testAnUpdaterWhoSawTheFirstSeesTheSecond() {
+        assertEquals(
+            "2026-10-following",
+            WhatsNew.toShow(lastSeen = "2026-10-original", hasHistory = true, plainLaunch = true)?.id,
+        )
+        assertEquals(
+            "2026-10-following",
+            WhatsNew.seenAfter(lastSeen = "2026-10-original", hasHistory = true, plainLaunch = true, shown = true),
+        )
+        assertNull(WhatsNew.toShow(lastSeen = "2026-10-following", hasHistory = true, plainLaunch = true))
     }
 
     @Test
@@ -31,6 +69,10 @@ class WhatsNewTest {
         assertEquals("original", WhatsNewItem.original.name)
         assertEquals("ownVersion", WhatsNewItem.ownVersion.name)
         assertEquals("followingWords", WhatsNewItem.followingWords.name)
+        assertEquals("followingStays", WhatsNewItem.followingStays.name)
+        assertEquals("nativeSelection", WhatsNewItem.nativeSelection.name)
+        assertEquals("roomGroups", WhatsNewItem.roomGroups.name)
+        assertEquals("lordReadsLord", WhatsNewItem.lordReadsLord.name)
         val json = Json.encodeToString(
             listOf(WhatsNewItem.original, WhatsNewItem.ownVersion, WhatsNewItem.followingWords),
         )
@@ -59,24 +101,24 @@ class WhatsNewTest {
     fun testFreshInstallRecordsAndSkips() {
         assertNull(WhatsNew.toShow(lastSeen = null, hasHistory = false, plainLaunch = true))
         assertEquals(
-            "2026-10-original",
+            latest.id,
             WhatsNew.seenAfter(lastSeen = null, hasHistory = false, plainLaunch = true, shown = false),
         )
         // A fresh install opened from an invite is still a fresh install.
         assertNull(WhatsNew.toShow(lastSeen = null, hasHistory = false, plainLaunch = false))
         assertEquals(
-            "2026-10-original",
+            latest.id,
             WhatsNew.seenAfter(lastSeen = null, hasHistory = false, plainLaunch = false, shown = false),
         )
         // And the launch after onboarding has nothing to tell.
-        assertNull(WhatsNew.toShow(lastSeen = "2026-10-original", hasHistory = true, plainLaunch = true))
+        assertNull(WhatsNew.toShow(lastSeen = latest.id, hasHistory = true, plainLaunch = true))
     }
 
     @Test
     fun testUpdateFromPreFeatureBuildShows() {
-        assertEquals(older, WhatsNew.toShow(lastSeen = null, hasHistory = true, plainLaunch = true))
+        assertEquals(latest, WhatsNew.toShow(lastSeen = null, hasHistory = true, plainLaunch = true))
         assertEquals(
-            "2026-10-original",
+            latest.id,
             WhatsNew.seenAfter(lastSeen = null, hasHistory = true, plainLaunch = true, shown = true),
         )
     }
@@ -84,9 +126,9 @@ class WhatsNewTest {
     @Test
     fun testSameReleaseTwiceShowsOnce() {
         val first = WhatsNew.toShow(lastSeen = null, hasHistory = true, plainLaunch = true)
-        assertEquals(older, first)
+        assertEquals(latest, first)
         val recorded = WhatsNew.seenAfter(lastSeen = null, hasHistory = true, plainLaunch = true, shown = first != null)
-        assertEquals("2026-10-original", recorded)
+        assertEquals(latest.id, recorded)
         assertNull(WhatsNew.toShow(lastSeen = recorded, hasHistory = true, plainLaunch = true))
         assertNull(WhatsNew.seenAfter(lastSeen = recorded, hasHistory = true, plainLaunch = true, shown = false))
     }
@@ -95,9 +137,9 @@ class WhatsNewTest {
     fun testLinkLaunchSkipsAndRecordsNothingThenNextPlainLaunchShows() {
         assertNull(WhatsNew.toShow(lastSeen = null, hasHistory = true, plainLaunch = false))
         assertNull(WhatsNew.seenAfter(lastSeen = null, hasHistory = true, plainLaunch = false, shown = false))
-        assertEquals(older, WhatsNew.toShow(lastSeen = null, hasHistory = true, plainLaunch = true))
+        assertEquals(latest, WhatsNew.toShow(lastSeen = null, hasHistory = true, plainLaunch = true))
         assertEquals(
-            "2026-10-original",
+            latest.id,
             WhatsNew.seenAfter(lastSeen = null, hasHistory = true, plainLaunch = true, shown = true),
         )
     }
@@ -122,9 +164,9 @@ class WhatsNewTest {
 
     @Test
     fun testUnknownLastSeenShowsLatest() {
-        assertEquals(older, WhatsNew.toShow(lastSeen = "2025-01-withdrawn", hasHistory = true, plainLaunch = true))
+        assertEquals(latest, WhatsNew.toShow(lastSeen = "2025-01-withdrawn", hasHistory = true, plainLaunch = true))
         assertEquals(
-            "2026-10-original",
+            latest.id,
             WhatsNew.seenAfter(lastSeen = "2025-01-withdrawn", hasHistory = true, plainLaunch = true, shown = true),
         )
     }
