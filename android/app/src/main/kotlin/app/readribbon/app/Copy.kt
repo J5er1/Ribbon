@@ -1120,10 +1120,6 @@ object Copy {
     fun streamsSub(context: Context) =
         "Streams. The book you are in stays on the ${deviceNoun(context)}."
 
-    /** The two ends of quiet hours, as rows rather than as a sentence. */
-    const val QUIET_HOURS_FROM = "From"
-    const val QUIET_HOURS_UNTIL = "Until"
-
     const val TEXT_AND_TRANSLATION = "Text"
     const val NOTIFICATIONS = "Notifications"
     const val DOWNLOADS = "Downloads"
@@ -1153,9 +1149,6 @@ object Copy {
     const val LINE_SPACING_CLOSE = "Close"
     const val LINE_SPACING_BOOK = "Book"
     const val LINE_SPACING_OPEN = "Open"
-
-    /** Between the two ends of quiet hours (S19). Swift writes it inline. */
-    const val QUIET_HOURS_TO = "to"
 
     /**
      * What quiet hours do not silence (S19): the one notification that is a
