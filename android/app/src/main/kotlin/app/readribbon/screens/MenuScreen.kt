@@ -204,6 +204,9 @@ private object MenuRoute {
     const val NOTIFICATIONS = "notifications"
     const val APPEARANCE = "appearance"
     const val DOWNLOADS = "downloads"
+
+    /** Every release's What's new, read again (A65). */
+    const val WHATS_NEW = "whats-new"
     const val PLAN = "plan"
     const val JOIN_WITH_INVITE = "join-with-invite"
     const val JOIN_PATTERN = "join/{token}"
@@ -446,6 +449,13 @@ fun MenuScreen(
                 CompositionLocalProvider(LocalFlowLayer provides this) {
                     DownloadsScreen(model = model, onBack = { navController.popBackStack() })
                 }
+            }
+            composable(MenuRoute.WHATS_NEW) {
+                // The launch's page with every release on it. Leaving records
+                // nothing and decides nothing — `AppModel.whatsNew` is the
+                // launch's alone — and back is this stack's, to You, as it is
+                // for every page here.
+                WhatsNewHistoryScreen(onLeave = { navController.popBackStack() })
             }
             composable(MenuRoute.PLAN) {
                 CompositionLocalProvider(LocalFlowLayer provides this) {
@@ -713,12 +723,20 @@ private fun YouMenu(
         Air(SectionGap)
         SectionLabel(Copy.THIS_PHONE)
         Air(10.dp)
-        SettingsGroup(count = 1) {
+        SettingsGroup(count = 2) {
             Setting(
                 title = Copy.DOWNLOADS,
                 subtitle = Copy.downloadsSub(context),
                 onClick = { onOpen(MenuRoute.DOWNLOADS) },
                 modifier = Modifier.flowsAsWords(Flows.settingsTitle(Flows.DOWNLOADS)),
+            )
+            // What each update brought, read again (A65) — about this
+            // phone's build, as the launch's record of it is. No flow into
+            // a heading: the page it opens is headed by its releases.
+            Setting(
+                title = Copy.WHATS_NEW_ROW,
+                subtitle = Copy.WHATS_NEW_ROW_SUB,
+                onClick = { onOpen(MenuRoute.WHATS_NEW) },
             )
         }
 

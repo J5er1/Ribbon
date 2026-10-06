@@ -589,8 +589,33 @@ enum Copy {
 
     /// What's new (A61): the screen's heading, set in small caps.
     static let whatsNewHeading = "What’s new"
-    /// What's new (A61): the line under the heading, in Literata display.
-    static let whatsNewTitle = "The words under the words"
+    /// What's new (A61, A65): the line under the heading, in Literata
+    /// display — each release's own, found by its id. A release this build
+    /// has no line for is headed by the screen's own heading rather than
+    /// borrowing another release's words.
+    static func whatsNewTitle(_ releaseID: String) -> String {
+        switch releaseID {
+        case "2026-10-original": return "The words under the words"
+        case "2026-10-following": return "Staying on the same page"
+        default: return whatsNewHeading
+        }
+    }
+    /// What's new, read again (A65): the day a release came, over its
+    /// title — "6 October 2026", day month year, in small caps. Nil for a
+    /// day that is not `yyyy-MM-dd`, and then nothing is said. Set by hand
+    /// rather than by the phone's locale, so both phones say the same.
+    static func whatsNewReleased(_ day: String) -> String? {
+        let parts = day.split(separator: "-")
+        guard parts.count == 3, parts[0].count == 4,
+              let month = Int(parts[1]), (1...12).contains(month),
+              let date = Int(parts[2]), (1...31).contains(date)
+        else { return nil }
+        let months = [
+            "January", "February", "March", "April", "May", "June",
+            "July", "August", "September", "October", "November", "December",
+        ]
+        return "\(date) \(months[month - 1]) \(parts[0])"
+    }
     /// What's new (A61): the original under the page (A60).
     static let whatsNewOriginalTitle = "The Hebrew and Greek, under every verse"
     /// What's new (A61): how to reach it — the hold you already know, and
@@ -607,9 +632,36 @@ enum Copy {
     /// What's new (A61): what that means when you follow.
     static let whatsNewFollowingBody =
         "Follow someone reading another version and you arrive at the words they are reading, not just the verse."
+    /// What's new (A65): following stays with the person you follow (A64).
+    static let whatsNewFollowingStaysTitle = "Following stays with them"
+    /// What's new (A65): the screen kept on, and a follow that is not lost.
+    static let whatsNewFollowingStaysBody =
+        "While you follow someone who is reading, your screen stays on. A dropped connection or a second phone no longer loses them."
+    /// What's new (A65): the phone's own selection (A62).
+    static let whatsNewSelectionTitle = "Selecting, the way your phone does"
+    /// What's new (A65): how to take a whole verse — the number, or the
+    /// toolbar's verb by the name the toolbar gives it.
+    static let whatsNewSelectionBody =
+        "Hold a word and drag your phone’s own handles. Tap a verse’s number — or the verse, on the toolbar — to take all of it."
+    /// What's new (A65): "In this room", for a room of any size (A62).
+    static let whatsNewRoomGroupsTitle = "However many of you there are"
+    /// What's new (A65): what the section shows now.
+    static let whatsNewRoomGroupsBody =
+        "In this room shows each different reading once, yours first, with the words that differ brought forward."
+    /// What's new (A65): the New King James as it is printed (A64).
+    static let whatsNewLordTitle = "The New King James, as printed"
+    /// What's new (A65): the divine name, and the copyright line.
+    static let whatsNewLordBody =
+        "LORD reads LORD where the Hebrew has the divine name, and each chapter carries its copyright line."
     /// What's new (A61): the one way on, pinned at the foot. It says where
     /// it goes, because that is all it does.
     static let whatsNewDone = "To the room"
+    /// What's new, read again (A65): the row under This phone in You.
+    static let whatsNewRow = "What’s new"
+    /// What's new, read again (A65): what the row opens.
+    static let whatsNewRowSub = "What each update brought"
+    /// What's new, read again (A65): the way back to You, at the foot.
+    static let whatsNewHistoryDone = "Done"
 }
 
 /// The first word of a name, for the places that say it in passing. Kept

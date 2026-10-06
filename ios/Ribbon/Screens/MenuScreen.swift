@@ -32,6 +32,8 @@ private enum MenuRoute: Hashable {
     case notifications
     case downloads
     case plan
+    /// What's new, read again (A65): every release, newest first.
+    case whatsNew
     case joinWithInvite
     case join(UUID)
 }
@@ -83,7 +85,8 @@ struct MenuScreen: View {
                     YouScreen(
                         onClose: { dismiss() },
                         onText: { path.append(MenuRoute.text) },
-                        onDownloads: { path.append(MenuRoute.downloads) })
+                        onDownloads: { path.append(MenuRoute.downloads) },
+                        onWhatsNew: { path.append(MenuRoute.whatsNew) })
                 }
             }
             .navigationDestination(for: MenuRoute.self) { route in
@@ -126,6 +129,15 @@ struct MenuScreen: View {
             DownloadsScreen()
         case .plan:
             PlanScreen()
+        case .whatsNew:
+            // The launch's screen with every release on it (A65), pushed
+            // here rather than drawn over the room. Leaving goes back to
+            // You and records nothing: whether a launch shows the screen is
+            // the model's decision, and reading it again never touches it.
+            WhatsNewScreen(history: WhatsNew.releases) {
+                if !path.isEmpty { path.removeLast() }
+            }
+            .toolbar(.hidden, for: .navigationBar)
         case .joinWithInvite:
             JoinWithInviteScreen { token in
                 path.append(MenuRoute.join(token))
@@ -365,6 +377,7 @@ private struct YouScreen: View {
     var onClose: () -> Void
     var onText: () -> Void
     var onDownloads: () -> Void
+    var onWhatsNew: () -> Void
 
     @State private var deleting: ConfirmState?
 
@@ -386,6 +399,9 @@ private struct YouScreen: View {
 
                 SettingsGroup(title: Copy.thisPhone) {
                     SettingRow(Copy.downloads, subtitle: Copy.downloadsSub, action: onDownloads)
+                    // Every release's pictures and words, read again (A65):
+                    // about this phone's build, so with what it holds.
+                    SettingRow(Copy.whatsNewRow, subtitle: Copy.whatsNewRowSub, action: onWhatsNew)
                 }
 
                 AccountSection()

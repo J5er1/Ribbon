@@ -1313,8 +1313,28 @@ object Copy {
     /** What's new (A61): the screen's heading, set in small caps. */
     const val WHATS_NEW_HEADING = "What’s new"
 
-    /** What's new (A61): the line under the heading, in Literata display. */
-    const val WHATS_NEW_TITLE = "The words under the words"
+    /**
+     * What's new (A61, A65): the line under the heading, in Literata display
+     * — each release's own, found by its id. A release this build has no
+     * line for is headed by the screen's own heading rather than borrowing
+     * another release's words.
+     */
+    fun whatsNewTitle(releaseID: String): String = when (releaseID) {
+        "2026-10-original" -> "The words under the words"
+        "2026-10-following" -> "Staying on the same page"
+        else -> WHATS_NEW_HEADING
+    }
+
+    /**
+     * What's new, read again (A65): the day a release came out, over its
+     * title, in small caps — "6 October 2026". Null for a release with no
+     * day, or one that does not read as a day; it is then headed as the
+     * launch heads it.
+     */
+    fun whatsNewReleased(day: String): String? = runCatching {
+        java.time.LocalDate.parse(day)
+            .format(java.time.format.DateTimeFormatter.ofPattern("d MMMM yyyy", java.util.Locale.ENGLISH))
+    }.getOrNull()
 
     /** What's new (A61): the original under the page (A60). */
     const val WHATS_NEW_ORIGINAL_TITLE = "The Hebrew and Greek, under every verse"
@@ -1340,6 +1360,49 @@ object Copy {
 
     /** What's new (A61): the one way on, pinned at the foot. Says where it goes. */
     const val WHATS_NEW_DONE = "To the room"
+
+    /** What's new (A65): following stays with them (A64). */
+    const val WHATS_NEW_FOLLOWING_STAYS_TITLE = "Following stays with them"
+
+    /** What's new (A65): the screen kept on, and a follow that is not lost. */
+    const val WHATS_NEW_FOLLOWING_STAYS_BODY =
+        "While you follow someone who is reading, your screen stays on. " +
+            "A dropped connection or a second phone no longer loses them."
+
+    /** What's new (A65): selecting is the phone's own (A62). */
+    const val WHATS_NEW_NATIVE_SELECTION_TITLE = "Selecting, the way your phone does"
+
+    /** What's new (A65): the handles, and the two ways to the whole verse. */
+    const val WHATS_NEW_NATIVE_SELECTION_BODY =
+        "Hold a word and drag your phone’s own handles. " +
+            "Tap a verse’s number — or the verse, on the toolbar — to take all of it."
+
+    /** What's new (A65): "In this room" for a room of any size (A62). */
+    const val WHATS_NEW_ROOM_GROUPS_TITLE = "However many of you there are"
+
+    /** What's new (A65): one block per reading, yours first. */
+    const val WHATS_NEW_ROOM_GROUPS_BODY =
+        "In this room shows each different reading once, yours first, with the words that differ brought forward."
+
+    /** What's new (A65): the New King James as printed (A64). */
+    const val WHATS_NEW_LORD_TITLE = "The New King James, as printed"
+
+    /** What's new (A65): LORD, and the copyright line. */
+    const val WHATS_NEW_LORD_BODY =
+        "LORD reads LORD where the Hebrew has the divine name, and each chapter carries its copyright line."
+
+    /** What's new, read again (A65): the row in You, under This phone. */
+    const val WHATS_NEW_ROW = "What’s new"
+
+    /** What's new, read again (A65): the row's subtitle. */
+    const val WHATS_NEW_ROW_SUB = "What each update brought"
+
+    /**
+     * What's new, read again (A65): the way back to You, pinned at the foot
+     * where "To the room" is on a launch. It goes nowhere new, so it says
+     * only that this is finished.
+     */
+    const val WHATS_NEW_HISTORY_DONE = "Done"
 }
 
 /** First names only, everywhere a person is addressed in a line of copy. */

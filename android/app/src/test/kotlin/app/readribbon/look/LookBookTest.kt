@@ -11,7 +11,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -94,6 +96,7 @@ import app.readribbon.screens.PreviewStep
 import app.readribbon.screens.RoomScreen
 import app.readribbon.screens.ShelfView
 import app.readribbon.screens.TextSettingsScreen
+import app.readribbon.screens.WhatsNewHistoryScreen
 import app.readribbon.screens.WhatsNewScreen
 import app.readribbon.services.LocalPresenceService
 import app.readribbon.services.RemoteSync
@@ -1788,8 +1791,9 @@ class LookBookTest {
 
     /**
      * What's new (A61, §12.3), as it stands when the launch mark lifts off
-     * it: the heading, the first of the three, and the way on pinned at the
-     * foot. Then scrolled to the foot, so the third is in the picture too.
+     * it: the heading, the latest release's first pictures, and the way on
+     * pinned at the foot. Then scrolled to the foot, so the last is in the
+     * picture too.
      *
      * The vignettes loop on an infinite frame clock, which a test leaves
      * alone, so this is each picture at rest — the line before anything has
@@ -1820,6 +1824,56 @@ class LookBookTest {
 
     @Test fun theWhatsNewMovingOn() {
         shootWhatsNew("whats-new-at-1800", still = false, frozenAt = 1_800L)
+    }
+
+    /**
+     * The second release's later beats (A65): the follower's screen at its
+     * dimmest between Ruth's second step and her third, the selection held
+     * at "was the Word" with the number about to be tapped, and every face
+     * in the room arrived.
+     */
+    @Test fun theWhatsNewDimming() {
+        shootWhatsNew("whats-new-at-2900", still = false, frozenAt = 2_900L)
+    }
+
+    /** Then the number pressed and the whole verse being taken. */
+    @Test fun theWhatsNewTakingTheVerse() {
+        shootWhatsNew("whats-new-at-3200", still = false, frozenAt = 3_200L)
+    }
+
+    /**
+     * What's new, read again from You (A65): every release, newest first,
+     * each under its day and its own title, page by page to the foot — under
+     * reduce motion, so each picture is the frame it ends on, and once at
+     * rest on Ribbon's own paint.
+     */
+    @Test fun theWhatsNewReadAgain() {
+        val appearance = Appearance(ApplicationProvider.getApplicationContext())
+        appearance.wallpaperColour = true
+        var still by mutableStateOf(true)
+        compose.setContent {
+            RibbonTheme(appearance = appearance) {
+                CompositionLocalProvider(app.readribbon.design.LocalReduceMotion provides still) {
+                    Box(Modifier.fillMaxSize()) {
+                        WhatsNewHistoryScreen(onLeave = {})
+                    }
+                }
+            }
+        }
+        capture("whats-new-again")
+        appearance.wallpaperColour = false
+        capture("whats-new-again-ribbon")
+        appearance.wallpaperColour = true
+        // A page at a time, short of a full screen so each overlaps the last.
+        for (page in 1..5) {
+            compose.onNode(hasScrollAction()).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 1_300f) }
+            capture("whats-new-again-$page")
+        }
+        compose.onNode(hasScrollAction()).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 100_000f) }
+        capture("whats-new-again-foot")
+        still = false
+        appearance.wallpaperColour = false
+        capture("whats-new-again-foot-ribbon")
     }
 
     private fun shootWhatsNew(name: String, still: Boolean, frozenAt: Long?) {
