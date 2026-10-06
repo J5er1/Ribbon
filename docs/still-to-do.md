@@ -209,8 +209,10 @@ The page, the way you read it (A68, I41), on both phones:
 - Update from the build before this one, with a text size, quiet hours and
   one room's switches changed first: everything is kept, and the app opens
   on the room, not on onboarding (I41's whole point on iPhone).
-- Text → Weight at Book: the page looks exactly as it did. Lighter and
-  Heavier change the letters, and only on the page and the preview — the
+- With Bold Text off, Text → Weight at Book: the page looks exactly as it
+  did. With Bold Text on before the update, the page is heavier after it,
+  cleanly and on purpose (Book is 550 then). Lighter and Heavier change the
+  letters, and only on the page and the preview — the
   original words' panel, the room and the cards keep their weight. On
   iPhone check the optical size has not changed with the weight.
 - Bold Text on (iOS Accessibility → Display & Text Size; Android
@@ -221,6 +223,11 @@ The page, the way you read it (A68, I41), on both phones:
   indent, and poetry is unchanged. Mark a phrase, select across two verses,
   tap a number, open a note: all as before. Follow someone who has it off.
 - Clearer verse numbers: brighter, and nothing moves.
+- With a verse to a line, tap the blank beside the end of a verse's last
+  line: that verse opens, not the next one.
+- iPhone with VoiceOver: Line spacing and Weight read each stop by its own
+  word (Close, Book, Open; Lighter, Book, Heavier), the chosen one as
+  selected.
 - Size at 28 with the largest text the phone allows: Psalm 119's indented
   lines still wrap and nothing is clipped.
 - Android: with a book open behind You, change the size or a verse to a

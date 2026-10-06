@@ -601,7 +601,7 @@ fun ChapterText(
                                     currentTapNumber(number)
                                     return@awaitEachGesture
                                 }
-                                page.verseAt(result.getOffsetForPosition(up.position))
+                                page.verseAt(tappedOffset(result, up.position))
                                     ?.let(currentTap)
                             }
                         }
@@ -2003,4 +2003,23 @@ private fun paragraphStyle(
     BlockStyle.d -> ParagraphStyle(lineHeight = lineHeight)
 
     BlockStyle.b -> ParagraphStyle(lineHeight = lineHeight)
+}
+
+/**
+ * The offset a tap stands on, kept to the line it was on.
+ *
+ * A tap in the blank beside a line's end is given that line's end, and where
+ * the line ends a paragraph that offset is where the next paragraph begins —
+ * the next verse's number, since paragraphs on this page carry no character
+ * between them. Asked for its verse, the page would answer with the next
+ * one. With a line for every verse (A68) every verse ends a paragraph, so a
+ * tap beside any verse's last line would open the verse after it. Kept to its
+ * own line, a tap beside a line's end belongs to the verse whose words end
+ * there, as it does on iPhone.
+ */
+internal fun tappedOffset(result: TextLayoutResult, at: Offset): Int {
+    val offset = result.getOffsetForPosition(at)
+    val line = result.getLineForVerticalPosition(at.y)
+    val start = result.getLineStart(line)
+    return if (offset > start && offset >= result.getLineEnd(line)) offset - 1 else offset
 }

@@ -709,7 +709,7 @@ internal data class LordFrame(val name: Float)
 internal fun lordFrame(t: Int): LordFrame =
     LordFrame(name = beat(t, at = 900, ms = 480) * (1f - beat(t, at = 3300, ms = 400)))
 
-// The third release's five (A67).
+// The third release's six (A67, and A68's page).
 
 /**
  * Your name in the front of the book: from the binding under Ruth's name her
@@ -2493,12 +2493,16 @@ private fun DrawScope.drawNight(page: TheNight, inks: VignetteInks, grain: Brush
 // them, so the picture breaks alike on every phone and the heavier letters
 // never carry a word onto another line.
 
-/** The small page's size: John 1:1–3 in five lines at the width of a phone's picture. */
+/**
+ * The small page's size: John 1:1–3 in five lines as a paragraph and six a
+ * verse to a line, at the width of a phone's picture; set a little smaller
+ * where six lines would not fit the paper (`layOutThePage`).
+ */
 private const val PAGE_SIZE = 13f
 
 /**
  * Its leading, as a multiple of the size: a little closer than the page's
- * own Book (S02's 1.72), so five lines keep the paper's margin round them.
+ * own Book (S02's 1.72), so the lines keep the paper's margin round them.
  */
 private const val PAGE_LEADING = 1.55f
 

@@ -160,7 +160,7 @@ actor LocalStore {
         return salvage(data)
     }
 
-    /// A state file this build cannot read whole (ledger A43).
+    /// A state file this build cannot read whole (ledger A44, I17).
     ///
     /// The room's content is the backend's and comes back on the next pull;
     /// what would not come back is what only this phone knows — the

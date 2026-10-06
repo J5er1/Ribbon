@@ -1108,7 +1108,17 @@ struct ChapterTextView: UIViewRepresentable {
                 for: inContainer, in: view.textContainer,
                 fractionOfDistanceBetweenInsertionPoints: nil)
             guard index < text.length else { return nil }
-            return text.attribute(.ribbonVerse, at: index, effectiveRange: nil) as? Int
+            if let verse = text.attribute(.ribbonVerse, at: index, effectiveRange: nil) as? Int {
+                return verse
+            }
+            // A tap in the blank beside a line's end lands on what ends the
+            // line — a block's newline, or the separator a verse to a line
+            // puts there (A68) — which is no verse's own. It belongs to the
+            // verse whose words end there, as it does on Android; a title's
+            // or the running head's end stays nobody's.
+            let unit = (text.string as NSString).character(at: index)
+            guard index > 0, unit == 0x0A || unit == 0x2028 else { return nil }
+            return text.attribute(.ribbonVerse, at: index - 1, effectiveRange: nil) as? Int
         }
 
         // MARK: Layout

@@ -341,6 +341,12 @@ struct Segments: View {
             .animation(reduceMotion ? RibbonMotion.arrive : RibbonMotion.touched, value: selection)
         }
         .frame(height: 44)
+        // One group holding its stops, so the label a caller gives it
+        // ("Line spacing", "Weight") names the group. Left a plain container,
+        // the label is handed to every stop in it, and VoiceOver read each
+        // as the control's name — the words Close, Book and Open were gone,
+        // and only "selected" told the three apart.
+        .accessibilityElement(children: .contain)
     }
 
     private func pill(width: CGFloat, height: CGFloat) -> some View {

@@ -589,6 +589,30 @@ class ChapterSelectionTest {
         selectingWholeVersesStoresWholeVerses(versePerLine = true)
 
     /**
+     * A tap in the blank beside a verse's last line opens that verse — never
+     * the one after it, whose number starts where the line's paragraph ends.
+     * Running on, that was only at a block's end; a verse to a line (A68)
+     * makes every verse's last line one.
+     */
+    private fun aTapBesideAVersesLastLineOpensThatVerse(chapter: ScriptureChapter, versePerLine: Boolean) {
+        val page = setPage(chapter, versePerLine)
+        val first = bounds(1, one)
+        // Its last line is short, and the measure runs on past it: the blank
+        // at the measure's far end, halfway down that line.
+        compose.onNodeWithTag("page").performTouchInput {
+            click(inPage(Offset(first.right - px(4f), first.bottom - px(12f))))
+        }
+        compose.waitForIdle()
+        assertEquals(listOf(1), page.taps)
+    }
+
+    @Test fun aTapBesideABlocksLastLineOpensThatVerse() =
+        aTapBesideAVersesLastLineOpensThatVerse(chapter, versePerLine = false)
+
+    @Test fun aTapBesideAVersesLastLineOpensThatVerseOnALineOfItsOwn() =
+        aTapBesideAVersesLastLineOpensThatVerse(paragraph, versePerLine = true)
+
+    /**
      * A line for every verse moves where verses begin and nothing else: the
      * page's text is the same text, every word carries the same place on the
      * page, and every verse is found at the same offsets — which is what

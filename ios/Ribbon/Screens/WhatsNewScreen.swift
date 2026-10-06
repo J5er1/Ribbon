@@ -1730,12 +1730,20 @@ private struct YourPageVignette: View {
     @State private var heavier = 0.0
 
     var body: some View {
+        // The two settings added together rather than laid one over the
+        // other: where they set the same letters in the same place — the
+        // first line, and the words a line keeps — the ink stays whole
+        // through the middle instead of dipping as a plain cross-fade's
+        // does, so only what is set again is seen to change, as on Android.
+        // In a group of its own, so the adding stops at the page.
         ZStack(alignment: .topLeading) {
             VignettePage(lines: Vignette.asParagraph, heavier: heavier, clear: clear)
                 .opacity(1 - lined)
             VignettePage(lines: Vignette.verseByVerse, heavier: heavier, clear: clear)
                 .opacity(lined)
+                .blendMode(.plusLighter)
         }
+        .compositingGroup()
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 20)
         .task(id: reduceMotion) { await play() }

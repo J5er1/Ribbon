@@ -4471,7 +4471,8 @@ A68. **The page, the way you read it (2026-10-flyleaf).** Owner, after A67:
     S20's anatomy was four things: the version, the size, three steps of
     spacing, red letter. It gains three, in the same group, and one wider
     range. Every one of them is off, or at Book, until the reader moves it,
-    so the page is exactly the page it was:
+    so — with the system's Bold Text off — the page is exactly the page it
+    was. With Bold Text on, it is now heavier on its own, on purpose (below):
 
     - **Weight: Lighter, Book, Heavier.** Literata is a variable face, and
       its own weight axis carries the change, so no file is added: 350,
@@ -4494,7 +4495,11 @@ A68. **The page, the way you read it (2026-10-flyleaf).** Owner, after A67:
       (A62), the number's tap, landing and following all count in a verse's
       own text, and that text is the same in both settings. Two phones in
       one room can disagree about it, as they already disagree about size;
-      following counts words, not points.
+      following counts words, not points. A tap in the blank beside a
+      line's end now belongs, on both phones, to the verse whose words end
+      there: Android gave it to the next verse, whose number begins where a
+      paragraph ends, and the iPhone to nobody, and a verse to a line puts
+      that blank beside every verse.
     - **Clearer verse numbers.** The numbers sit at 45%, as S02 sets them,
       which is 4.1:1 on the ground: quiet, and a little under what small
       text should have. Clearer is 70%, 8.6:1. Nothing moves. Hiding them
@@ -4782,7 +4787,7 @@ I16. **Sign-in failures are told apart (A44).** A 4xx on the code is "That
     because sending someone back to retype a code into the same silence is
     the wrong instruction.
 
-I17. **State salvage (A43).** A `state.json` this build cannot decode whole
+I17. **State salvage (A44).** A `state.json` this build cannot decode whole
     is kept beside the new one as `state.json.unreadable`, and the settings,
     the three asked-once flags and the two invite sets are read out of it
     field by field. `notifiedThrough` is deliberately not salvaged: after a
@@ -5390,7 +5395,7 @@ I41. **The page, the way you read it, on iOS (A68), and settings that
       Swift's generated decoder, which ignores a property's default and
       throws when a key is missing. Any new field would have made every
       state file written by the build before it fail to decode. The
-      salvage that follows (A43) keeps only what nothing else knows, and
+      salvage that follows (A44, I17) keeps only what nothing else knows, and
       the settings would have failed there the same way; the person, their
       rooms, notes, highlights, positions and every write still owed to the
       server would have gone with them, and the update would have opened on
@@ -5417,6 +5422,11 @@ I41. **The page, the way you read it, on iOS (A68), and settings that
       holds.
     - **Bold Text** is read from `legibilityWeight` where the page's theme is
       built, so turning it on sets the page again.
+    - **The three-stop control is one group.** `Segments` was a plain
+      container, so the label its caller gave it was handed to each stop:
+      VoiceOver read Line spacing's three as "Line spacing", told apart only
+      by "selected", and Weight's would have been the same. It now contains
+      its stops, each saying its own word, under the control's name.
 
 ## Licensed translations (decided: API.Bible)
 
