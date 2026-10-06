@@ -102,6 +102,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import app.readribbon.app.AppModel
@@ -204,6 +205,9 @@ private object MenuRoute {
     const val NOTIFICATIONS = "notifications"
     const val APPEARANCE = "appearance"
     const val DOWNLOADS = "downloads"
+
+    /** Every release's What's new, read again (A65). */
+    const val WHATS_NEW = "whats-new"
     const val PLAN = "plan"
     const val JOIN_WITH_INVITE = "join-with-invite"
     const val JOIN_PATTERN = "join/{token}"
@@ -326,6 +330,14 @@ fun MenuScreen(
     // handler below is never visited and the shortcut can never fire.
     val keys = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { keys.requestFocus() } }
+    // And again whenever a page that moved focus (What's new read again puts
+    // it on its heading) has gone: its focused node goes with it, and focus
+    // is cleared rather than given back.
+    val top by navController.currentBackStackEntryAsState()
+    LaunchedEffect(top?.destination?.route) {
+        val route = top?.destination?.route
+        if (route == MenuRoute.YOU || route == MenuRoute.ROOM) runCatching { keys.requestFocus() }
+    }
 
     Box(
         modifier
@@ -338,7 +350,14 @@ fun MenuScreen(
             // predictive-back handler above catches it.
             .onPreviewKeyEvent { event ->
                 if (event.key == Key.Escape && event.type == KeyEventType.KeyUp) {
-                    close()
+                    // What's new read again goes back to You, as Done does
+                    // and as Esc does on the iPhone; anywhere else, the menu
+                    // closes.
+                    if (navController.currentDestination?.route == MenuRoute.WHATS_NEW) {
+                        navController.popBackStack()
+                    } else {
+                        close()
+                    }
                     true
                 } else {
                     false
@@ -446,6 +465,13 @@ fun MenuScreen(
                 CompositionLocalProvider(LocalFlowLayer provides this) {
                     DownloadsScreen(model = model, onBack = { navController.popBackStack() })
                 }
+            }
+            composable(MenuRoute.WHATS_NEW) {
+                // The launch's page with every release on it. Leaving records
+                // nothing and decides nothing — `AppModel.whatsNew` is the
+                // launch's alone — and back is this stack's, to You, as it is
+                // for every page here.
+                WhatsNewHistoryScreen(onLeave = { navController.popBackStack() })
             }
             composable(MenuRoute.PLAN) {
                 CompositionLocalProvider(LocalFlowLayer provides this) {
@@ -713,12 +739,20 @@ private fun YouMenu(
         Air(SectionGap)
         SectionLabel(Copy.THIS_PHONE)
         Air(10.dp)
-        SettingsGroup(count = 1) {
+        SettingsGroup(count = 2) {
             Setting(
                 title = Copy.DOWNLOADS,
                 subtitle = Copy.downloadsSub(context),
                 onClick = { onOpen(MenuRoute.DOWNLOADS) },
                 modifier = Modifier.flowsAsWords(Flows.settingsTitle(Flows.DOWNLOADS)),
+            )
+            // What each update brought, read again (A65) — about this
+            // phone's build, as the launch's record of it is. No flow into
+            // a heading: the page it opens is headed by its releases.
+            Setting(
+                title = Copy.WHATS_NEW_ROW,
+                subtitle = Copy.WHATS_NEW_ROW_SUB,
+                onClick = { onOpen(MenuRoute.WHATS_NEW) },
             )
         }
 

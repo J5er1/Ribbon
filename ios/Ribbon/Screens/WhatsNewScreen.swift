@@ -25,6 +25,12 @@ import RibbonCore
 // records it as seen. Nothing here waits on a timer: the button is live
 // from the first frame, and the screen stays exactly as long as the person
 // wants it to.
+//
+// Read again (A65): the same screen, pushed from You, with every release
+// on it, newest first, each under the day it came and its own title. It is
+// lazy, so only the pictures on screen move. Its way out says "Done" and
+// goes back to You, and it records nothing — the launch's decision is the
+// model's, and this never reaches it.
 
 /// Where the screen sits in the window: over the room, under the launch
 /// mark. It is drawn in-tree rather than as a presented cover so that the
@@ -60,8 +66,29 @@ struct WhatsNewCover: View {
 }
 
 struct WhatsNewScreen: View {
-    let release: WhatsNewRelease
+    /// What the screen tells: on a launch, the latest release alone; read
+    /// again from You, every release, newest first.
+    let releases: [WhatsNewRelease]
+    /// Read again from You (A65): each release under the day it came, and
+    /// the way out goes back to You rather than to the room. It decides
+    /// nothing and records nothing — whether a launch shows the screen is
+    /// the model's alone.
+    let isHistory: Bool
     var onLeave: () -> Void
+
+    /// The launch's screen: one release, under its own title.
+    init(release: WhatsNewRelease, onLeave: @escaping () -> Void) {
+        self.releases = [release]
+        self.isHistory = false
+        self.onLeave = onLeave
+    }
+
+    /// Every release, read again from You (A65).
+    init(history releases: [WhatsNewRelease], onLeave: @escaping () -> Void) {
+        self.releases = releases
+        self.isHistory = true
+        self.onLeave = onLeave
+    }
 
     /// A finger is on the page — the only pull that leaves. A momentum
     /// bounce past the top is not somebody asking to go.
@@ -70,7 +97,7 @@ struct WhatsNewScreen: View {
     /// Under VoiceOver the screen hands the listener its heading first.
     @AccessibilityFocusState private var headingFocused: Bool
 
-    /// How far apart the three pictures start, so they breathe in turn
+    /// How far apart a release's pictures start, so they breathe in turn
     /// rather than in step.
     private static let stagger: Double = 0.6
     /// How far past the top the page has to be pulled to leave: the same
@@ -80,21 +107,20 @@ struct WhatsNewScreen: View {
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
+                // Lazy, so that read again — every release, one under the
+                // other — only the pictures on screen are drawn and moving;
+                // each starts when it arrives and stops when it goes.
+                LazyVStack(alignment: .leading, spacing: 0) {
                     SmallCaps(Copy.whatsNewHeading, size: 13)
                         .accessibilityAddTraits(.isHeader)
                         .accessibilityFocused($headingFocused)
-                    Text(Copy.whatsNewTitle)
-                        .font(RibbonType.display(30))
-                        .foregroundStyle(Palette.text)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.top, 6)
-                    VStack(alignment: .leading, spacing: 40) {
+                    ForEach(Array(releases.enumerated()), id: \.element.id) { place, release in
+                        heading(of: release, first: place == 0)
                         ForEach(Array(release.items.enumerated()), id: \.element) { index, item in
                             WhatsNewItemView(item: item, startsAfter: Double(index) * Self.stagger)
+                                .padding(.top, index == 0 ? 32 : 40)
                         }
                     }
-                    .padding(.top, 32)
                 }
                 .padding(.horizontal, RibbonShape.screenMargin)
                 .padding(.top, 44)
@@ -116,7 +142,7 @@ struct WhatsNewScreen: View {
 
             // Pinned at the foot, outside the scroll, so it is never
             // somewhere to be found.
-            WayInButton(title: Copy.whatsNewDone, action: leave)
+            WayInButton(title: isHistory ? Copy.whatsNewHistoryDone : Copy.whatsNewDone, action: leave)
                 // Esc on a hardware keyboard leaves, as it closes the book.
                 .keyboardShortcut(.cancelAction)
                 .padding(.horizontal, 40)
@@ -134,6 +160,25 @@ struct WhatsNewScreen: View {
             try? await Task.sleep(for: .seconds(RibbonMotion.settleDuration))
             if UIAccessibility.isVoiceOverRunning { headingFocused = true }
         }
+    }
+
+    /// A release's own title, in Literata display. Read again, the day it
+    /// came is over it in small caps, like the screen's heading, and the
+    /// two are one heading to a screen reader — the way from one release
+    /// to the next.
+    private func heading(of release: WhatsNewRelease, first: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if isHistory, let day = Copy.whatsNewReleased(release.released) {
+                SmallCaps(day, size: 13)
+            }
+            Text(Copy.whatsNewTitle(release.id))
+                .font(RibbonType.display(30))
+                .foregroundStyle(Palette.text)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.top, isHistory ? (first ? 28 : 64) : 6)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(isHistory ? [.isHeader] : [])
     }
 
     /// Once, however many ways out are taken at the same moment — a pull
@@ -186,6 +231,10 @@ private struct WhatsNewItemView: View {
         case .original: HeldWordVignette(startsAfter: startsAfter)
         case .ownVersion: SameWordsVignette(startsAfter: startsAfter)
         case .followingWords: FollowingWordsVignette(startsAfter: startsAfter)
+        case .followingStays: FollowingStaysVignette(startsAfter: startsAfter)
+        case .nativeSelection: NativeSelectionVignette(startsAfter: startsAfter)
+        case .roomGroups: RoomGroupsVignette(startsAfter: startsAfter)
+        case .lordReadsLord: DivineNameVignette(startsAfter: startsAfter)
         }
     }
 
@@ -194,6 +243,10 @@ private struct WhatsNewItemView: View {
         case .original: return Copy.whatsNewOriginalTitle
         case .ownVersion: return Copy.whatsNewOwnVersionTitle
         case .followingWords: return Copy.whatsNewFollowingTitle
+        case .followingStays: return Copy.whatsNewFollowingStaysTitle
+        case .nativeSelection: return Copy.whatsNewSelectionTitle
+        case .roomGroups: return Copy.whatsNewRoomGroupsTitle
+        case .lordReadsLord: return Copy.whatsNewLordTitle
         }
     }
 
@@ -202,14 +255,18 @@ private struct WhatsNewItemView: View {
         case .original: return Copy.whatsNewOriginalBody
         case .ownVersion: return Copy.whatsNewOwnVersionBody
         case .followingWords: return Copy.whatsNewFollowingBody
+        case .followingStays: return Copy.whatsNewFollowingStaysBody
+        case .nativeSelection: return Copy.whatsNewSelectionBody
+        case .roomGroups: return Copy.whatsNewRoomGroupsBody
+        case .lordReadsLord: return Copy.whatsNewLordBody
         }
     }
 }
 
 // MARK: - The pictures
 
-/// What the three pictures share: their size, their lines, and the page's
-/// own measurements for a wash.
+/// What the pictures share: their size, their lines, and the page's own
+/// measurements for a wash.
 private enum Vignette {
     /// Within the 120–160 the screen allows: room for two labelled lines
     /// and their marks without crowding the well's edge.
@@ -255,11 +312,109 @@ private enum Vignette {
     /// One version's line under its name in small caps, as the panel's
     /// "In this room" names them.
     static func labelled(_ version: TranslationID, _ line: some View) -> some View {
+        labelled(version.displayName, line)
+    }
+
+    /// A line under a name in small caps: a version's, or a person's.
+    static func labelled(_ name: String, _ line: some View) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            SmallCaps(version.displayName, size: 11)
+            SmallCaps(name, size: 11)
             line
         }
     }
+
+    // MARK: Following stays with them
+
+    /// The two people in the follow: the one reading, and you. Names in a
+    /// picture, not things the app says, so they are set here with the
+    /// picture's other words.
+    static let reader = "Ruth"
+    static let you = "You"
+
+    /// John 1:5 as the World English begins it, in the three steps a
+    /// reading line takes along it.
+    static var light: Text {
+        Text("\(words("The light", .step(0))) \(words("shines in", .step(1))) \(words("the darkness", .step(2)))")
+    }
+    static let lightSteps: [VignetteWords.Role] = [.step(0), .step(1), .step(2)]
+
+    /// How far your row goes towards dark as a screen about to sleep:
+    /// never all the way — it comes back first.
+    static let sleepDim: Double = 0.7
+    /// How long the dimming runs before the screen is kept on and it comes
+    /// back, part of the way through `become`.
+    static let dimming: Double = 1.4
+
+    // MARK: Selecting, the way your phone does
+
+    /// John 1:1 as it opens, after its number the way the page sets one:
+    /// small caps, raised, at 45% (ChapterTextView), with a thin space.
+    static var beginning: Text {
+        let number = Text(verbatim: "1\u{2009}")
+            .font(RibbonType.smallCaps(textSize * 0.62))
+            .foregroundStyle(Palette.text.opacity(0.45))
+            .baselineOffset(textSize * 0.3)
+            .customAttribute(VignetteWords(role: .number))
+        return Text("\(number)\(words("In the beginning", .step(0))) \(words("was the", .step(1))) \(words("Word", .held))")
+    }
+
+    /// The page's own selection: the accent the page's text view is tinted
+    /// with (A62), at the strength the system lays a selection down.
+    static let selectionTint: Double = 0.3
+    /// The system's handles: a thin bar the height of the line, with a
+    /// small round end — above the start, below the end.
+    static let handleWidth: CGFloat = 2
+    static let handleKnob: CGFloat = 8
+
+    /// A fingertip, settling onto what it presses rather than landing on
+    /// it: it arrives a little large and comes to rest.
+    static func fingertip(on box: CGRect, press: Double, radius: CGFloat, in context: inout GraphicsContext) {
+        guard press > 0 else { return }
+        let size = radius * CGFloat(1.25 - 0.25 * press)
+        let disc = CGRect(x: box.midX - size, y: box.midY - size, width: size * 2, height: size * 2)
+        context.fill(Path(ellipseIn: disc), with: .color(Palette.text.opacity(0.1 * press)))
+    }
+
+    // MARK: However many of you there are
+
+    /// John 1:3 in the World English as "In this room" sets another
+    /// version's words against yours: the words yours shares a step back,
+    /// the words that differ at full strength and Medium — and marked, for
+    /// the wash that brings them forward.
+    static var worldEnglishAgainstYours: Text {
+        let shared = Text(verbatim: "All things were made")
+            .foregroundStyle(Palette.text.opacity(0.7))
+        let differs = words("through him", .from)
+            .font(RibbonType.scriptureMedium(textSize))
+            .foregroundStyle(Palette.text)
+        return Text("\(shared) \(differs)")
+    }
+
+    /// Three of the room's inks, for three faces.
+    static let faceInks: [Ink] = [.teal, .plum, .clay]
+    static let face: CGFloat = 13
+    static let faceStep: CGFloat = 9
+
+    // MARK: The New King James, as printed
+
+    /// Psalm 23:1, with the word the New King James prints as the divine
+    /// name.
+    static var shepherd: Text {
+        Text("The \(words("Lord", .held)) is my shepherd")
+    }
+
+    /// The divine name as a printed page sets it: a capital, then capitals
+    /// the height of the small letters. The page has no small capitals of
+    /// its own (A64), so they are capitals set smaller, a little open.
+    static var divineName: Text {
+        let rest = Text(verbatim: "ORD")
+            .font(RibbonType.scripture(textSize * smallCapital))
+            .kerning(textSize * 0.04)
+        return Text("\(Text(verbatim: "L"))\(rest)")
+            .font(RibbonType.scripture(textSize))
+            .foregroundStyle(Palette.text)
+    }
+    static let smallCapital: CGFloat = 0.78
 
     // The page's wash (ChapterTextView's layout manager), in the page's
     // numbers: a band at the height of the letters, bled a little, round
@@ -320,6 +475,11 @@ private struct VignetteWords: TextAttribute {
         case from
         /// Where the reading lines go next.
         case to
+        /// One of a line's steps, in order: where a reading line goes in
+        /// turn, or where a selection's start can stand.
+        case step(Int)
+        /// A verse's number, which a tap takes the verse by.
+        case number
     }
     var role: Role
 }
@@ -444,16 +604,7 @@ private struct HeldWord: TextRenderer, Animatable {
                     continue
                 }
                 let box = run.typographicBounds.rect
-                if press > 0 {
-                    // A fingertip, settling onto the word rather than
-                    // landing on it: it arrives a little large and comes to
-                    // rest.
-                    let radius = CGFloat(17 * (1.25 - 0.25 * press))
-                    let disc = CGRect(
-                        x: box.midX - radius, y: box.midY - radius,
-                        width: radius * 2, height: radius * 2)
-                    context.fill(Path(ellipseIn: disc), with: .color(Palette.text.opacity(0.1 * press)))
-                }
+                Vignette.fingertip(on: box, press: press, radius: 17, in: &context)
                 var raised = context
                 if lift > 0 {
                     raised.addFilter(.shadow(color: .black.opacity(0.7 * lift), radius: 8, x: 0, y: 3))
@@ -623,10 +774,13 @@ private struct FollowingWordsVignette: View {
 
 /// A line's reading line: a hairline under the words, in the follow
 /// thread's chartreuse (the brief's lamp, on this palette), carried from
-/// the `.from` words to the `.to` words — position and width both, so it
-/// always sits under words and never under a fraction of the line.
+/// one stop's words to the next — the `.from` words to the `.to` words
+/// unless it is given others — position and width both, so it always sits
+/// under words and never under a fraction of the line. `travelled` counts
+/// stops: 1 is the second, 1.5 halfway from it to the third.
 private struct ReadingLine: TextRenderer, Animatable {
     var travelled: Double
+    var stops: [VignetteWords.Role] = [.from, .to]
 
     var animatableData: Double {
         get { travelled }
@@ -641,8 +795,13 @@ private struct ReadingLine: TextRenderer, Animatable {
         for line in layout {
             context.draw(line)
         }
-        guard let from = layout.boxes(of: .from).first, let to = layout.boxes(of: .to).first else { return }
-        let t = CGFloat(travelled)
+        let boxes = stops.compactMap { layout.boxes(of: $0).first }
+        guard boxes.count == stops.count, boxes.count > 1 else { return }
+        let at = min(max(travelled, 0), Double(boxes.count - 1))
+        let lower = min(Int(at.rounded(.down)), boxes.count - 2)
+        let from = boxes[lower]
+        let to = boxes[lower + 1]
+        let t = CGFloat(at - Double(lower))
         func mix(_ a: CGFloat, _ b: CGFloat) -> CGFloat { a + (b - a) * t }
         let rule = CGRect(
             x: mix(from.rect.minX, to.rect.minX),
@@ -653,7 +812,446 @@ private struct ReadingLine: TextRenderer, Animatable {
     }
 }
 
+// MARK: 4. Following stays with them
+
+/// Ruth's line and yours, the same words. Her reading line steps along it a
+/// few words at a time and yours follows a beat behind, onto the same
+/// words. Between the steps your row begins to dim, as a screen about to
+/// sleep, and comes back before it is dark — the screen kept on.
+private struct FollowingStaysVignette: View {
+    let startsAfter: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    @State private var leader = 0.0
+    @State private var follower = 0.0
+    @State private var dim = 0.0
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Vignette.labelled(Vignette.reader, line(travelled: leader))
+            Vignette.labelled(Vignette.you, line(travelled: follower))
+                .opacity(1 - Vignette.sleepDim * dim)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 22)
+        .task(id: reduceMotion) { await play() }
+    }
+
+    private func line(travelled: Double) -> some View {
+        Vignette.light
+            .font(RibbonType.scripture(Vignette.textSize))
+            .foregroundStyle(Palette.text)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .textRenderer(ReadingLine(travelled: travelled, stops: Vignette.lightSteps))
+    }
+
+    private func play() async {
+        guard !reduceMotion else {
+            // How it ends: both lines under "the darkness", your screen on.
+            leader = 2
+            follower = 2
+            dim = 0
+            return
+        }
+        leader = 0
+        follower = 0
+        dim = 0
+        guard await beat(startsAfter) else { return }
+        while true {
+            for step in 1...2 {
+                withAnimation(RibbonMotion.open) { leader = Double(step) }
+                // A beat behind: the follower's line goes where the
+                // reader's went.
+                guard await beat(RibbonMotion.arriveDuration) else { return }
+                withAnimation(RibbonMotion.open) { follower = Double(step) }
+                guard await beat(RibbonMotion.openDuration + Vignette.rest) else { return }
+                if step == 1 {
+                    // Going down slowly, the way a screen about to sleep
+                    // does, and brought back before it gets there.
+                    withAnimation(RibbonMotion.become) { dim = 1 }
+                    guard await beat(Vignette.dimming) else { return }
+                    withAnimation(RibbonMotion.arrive) { dim = 0 }
+                    guard await beat(RibbonMotion.arriveDuration + Vignette.breath) else { return }
+                }
+            }
+            withAnimation(RibbonMotion.settle) {
+                leader = 0
+                follower = 0
+            }
+            guard await beat(RibbonMotion.settleDuration + Vignette.breath) else { return }
+        }
+    }
+}
+
+// MARK: 5. Selecting, the way your phone does
+
+/// "In the beginning was the Word", after its number: a soft press on
+/// "Word", the phone's own selection over it with its two handles, the
+/// start handle carried back to "was the Word"; then a press on the verse's
+/// number and the selection takes the whole verse. Then it lets go.
+private struct NativeSelectionVignette: View {
+    let startsAfter: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    @State private var press = 0.0
+    @State private var number = 0.0
+    @State private var shown = 0.0
+    @State private var reach = 0.0
+
+    var body: some View {
+        Vignette.beginning
+            .font(RibbonType.scripture(Vignette.textSize))
+            .foregroundStyle(Palette.text)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .textRenderer(NativeSelection(press: press, number: number, shown: shown, reach: reach))
+            .padding(.horizontal, 20)
+            .task(id: reduceMotion) { await play() }
+    }
+
+    private func play() async {
+        guard !reduceMotion else {
+            // How it ends: the whole verse selected.
+            press = 0
+            number = 0
+            shown = 1
+            reach = 2
+            return
+        }
+        press = 0
+        number = 0
+        shown = 0
+        reach = 0
+        guard await beat(startsAfter) else { return }
+        while true {
+            withAnimation(RibbonMotion.arrive) { press = 1 }
+            guard await beat(RibbonMotion.arriveDuration) else { return }
+            // The press gives way to the selection.
+            withAnimation(RibbonMotion.arrive) {
+                press = 0
+                shown = 1
+            }
+            guard await beat(RibbonMotion.arriveDuration + Vignette.breath) else { return }
+            withAnimation(RibbonMotion.open) { reach = 1 }
+            guard await beat(RibbonMotion.openDuration + Vignette.rest) else { return }
+            withAnimation(RibbonMotion.arrive) { number = 1 }
+            guard await beat(RibbonMotion.arriveDuration) else { return }
+            withAnimation(RibbonMotion.open) {
+                number = 0
+                reach = 2
+            }
+            guard await beat(RibbonMotion.openDuration + Vignette.rest) else { return }
+            // Let go of: the selection fades off rather than shrinking back.
+            withAnimation(RibbonMotion.settle) { shown = 0 }
+            guard await beat(RibbonMotion.settleDuration) else { return }
+            reach = 0
+            guard await beat(Vignette.breath) else { return }
+        }
+    }
+}
+
+/// Draws the phone's own selection on the line: the tint under the words
+/// from wherever its start stands to the end of "Word", the two handles
+/// over them, and a fingertip's press on the word or on the number.
+private struct NativeSelection: TextRenderer, Animatable {
+    var press: Double
+    var number: Double
+    var shown: Double
+    /// Where the selection starts: 0 at "Word", 1 at "was the Word", 2 at
+    /// the start of the verse.
+    var reach: Double
+
+    var animatableData: AnimatablePair<AnimatablePair<Double, Double>, AnimatablePair<Double, Double>> {
+        get { AnimatablePair(AnimatablePair(press, number), AnimatablePair(shown, reach)) }
+        set {
+            press = newValue.first.first
+            number = newValue.first.second
+            shown = newValue.second.first
+            reach = newValue.second.second
+        }
+    }
+
+    /// The presses and the handles' round ends reach past the words.
+    var displayPadding: EdgeInsets {
+        EdgeInsets(top: 20, leading: 24, bottom: 20, trailing: 24)
+    }
+
+    func draw(layout: Text.Layout, in context: inout GraphicsContext) {
+        let held = layout.boxes(of: .held).first
+        if let held {
+            Vignette.fingertip(on: held.rect, press: press, radius: 17, in: &context)
+        }
+        if let numeral = layout.boxes(of: .number).first {
+            Vignette.fingertip(on: numeral.rect, press: number, radius: 12, in: &context)
+        }
+
+        var selected: CGRect?
+        if shown > 0, let held,
+           let was = layout.boxes(of: .step(1)).first,
+           let start = layout.boxes(of: .step(0)).first {
+            let starts = [held.rect.minX, was.rect.minX, start.rect.minX]
+            let at = min(max(reach, 0), 2)
+            let lower = min(Int(at.rounded(.down)), 1)
+            let t = CGFloat(at - Double(lower))
+            let left = starts[lower] + (starts[lower + 1] - starts[lower]) * t
+            let rect = CGRect(x: left, y: held.rect.minY, width: held.rect.maxX - left, height: held.rect.height)
+            var tint = context
+            tint.opacity = shown
+            tint.fill(Path(rect), with: .color(Palette.chartreuse.opacity(Vignette.selectionTint)))
+            selected = rect
+        }
+
+        // The words over the tint, never under it.
+        for line in layout {
+            context.draw(line)
+        }
+
+        guard let rect = selected else { return }
+        var handles = context
+        handles.opacity = shown
+        let ink = GraphicsContext.Shading.color(Palette.chartreuse)
+        let bar = Vignette.handleWidth
+        let knob = Vignette.handleKnob
+        // The start: a bar at the left edge, its round end above.
+        handles.fill(Path(CGRect(x: rect.minX - bar / 2, y: rect.minY, width: bar, height: rect.height)), with: ink)
+        handles.fill(Path(ellipseIn: CGRect(
+            x: rect.minX - knob / 2, y: rect.minY - knob, width: knob, height: knob)), with: ink)
+        // The end: a bar at the right edge, its round end below.
+        handles.fill(Path(CGRect(x: rect.maxX - bar / 2, y: rect.minY, width: bar, height: rect.height)), with: ink)
+        handles.fill(Path(ellipseIn: CGRect(
+            x: rect.maxX - knob / 2, y: rect.maxY, width: knob, height: knob)), with: ink)
+    }
+}
+
+// MARK: 6. However many of you there are
+
+/// Two blocks as "In this room" draws them: yours, labelled as yours; then
+/// the World English's, its readers' faces arriving one by one beside its
+/// name and then "and others", and the words it says differently brought
+/// forward by the wash.
+private struct RoomGroupsVignette: View {
+    let startsAfter: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// How many have arrived: the three faces, then "and others".
+    @State private var gathered = 0
+    @State private var drawn = 0.0
+    /// The wash as a whole, which fades off at the end rather than
+    /// undrawing.
+    @State private var washed = 1.0
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Vignette.labelled(
+                Copy.roomYours([TranslationID.bsb.displayName]),
+                Vignette.berean
+                    .font(RibbonType.scripture(Vignette.textSize))
+                    .foregroundStyle(Palette.text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8))
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .center, spacing: 8) {
+                    SmallCaps(TranslationID.web.displayName, size: 11)
+                    faces
+                    SmallCaps(Copy.roomAndOthers, size: 11)
+                        .opacity(gathered > Vignette.faceInks.count ? 1 : 0)
+                }
+                Vignette.worldEnglishAgainstYours
+                    .font(RibbonType.scripture(Vignette.textSize))
+                    .foregroundStyle(Palette.text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .textRenderer(WashAlong(drawn: drawn, alpha: washed, ink: Ink.ochre.color))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 22)
+        .task(id: reduceMotion) { await play() }
+    }
+
+    /// Three faces, overlapping, first on top, each cut from the one under
+    /// it by a ring of the well's ground — the room's faces, small, in its
+    /// inks.
+    private var faces: some View {
+        ZStack(alignment: .leading) {
+            ForEach(Array(Vignette.faceInks.enumerated()), id: \.offset) { index, ink in
+                Circle()
+                    .fill(ink.color)
+                    .frame(width: Vignette.face - 3, height: Vignette.face - 3)
+                    .padding(1.5)
+                    .background(Circle().fill(Palette.ground))
+                    .offset(x: Vignette.faceStep * CGFloat(index))
+                    .zIndex(Double(Vignette.faceInks.count - index))
+                    .opacity(index < gathered ? 1 : 0)
+            }
+        }
+        .frame(
+            width: Vignette.face + Vignette.faceStep * CGFloat(Vignette.faceInks.count - 1),
+            height: Vignette.face,
+            alignment: .leading)
+    }
+
+    private func play() async {
+        washed = 1
+        guard !reduceMotion else {
+            // How it ends: everyone here, and the difference brought out.
+            gathered = Vignette.faceInks.count + 1
+            drawn = 1
+            return
+        }
+        gathered = 0
+        drawn = 0
+        guard await beat(startsAfter) else { return }
+        while true {
+            for count in 1...(Vignette.faceInks.count + 1) {
+                withAnimation(RibbonMotion.arrive) { gathered = count }
+                guard await beat(RibbonMotion.arriveDuration) else { return }
+            }
+            guard await beat(Vignette.breath) else { return }
+            withAnimation(RibbonMotion.open) { drawn = 1 }
+            guard await beat(RibbonMotion.openDuration + Vignette.rest) else { return }
+            withAnimation(RibbonMotion.settle) {
+                washed = 0
+                gathered = 0
+            }
+            guard await beat(RibbonMotion.settleDuration) else { return }
+            drawn = 0
+            washed = 1
+            guard await beat(Vignette.breath) else { return }
+        }
+    }
+}
+
+// MARK: 7. The New King James, as printed
+
+/// "The Lord is my shepherd": "Lord" gives way, in its place, to LORD in
+/// small capitals, with the soft wash under it; then it settles back.
+private struct DivineNameVignette: View {
+    let startsAfter: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    @State private var printed = 0.0
+    @State private var drawn = 0.0
+    @State private var washed = 1.0
+
+    var body: some View {
+        Vignette.shepherd
+            .font(RibbonType.scripture(Vignette.textSize))
+            .foregroundStyle(Palette.text)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .textRenderer(DivineName(printed: printed, drawn: drawn, alpha: washed))
+            .padding(.horizontal, 20)
+            .task(id: reduceMotion) { await play() }
+    }
+
+    private func play() async {
+        washed = 1
+        guard !reduceMotion else {
+            // How it ends: LORD, as printed, on its wash.
+            printed = 1
+            drawn = 1
+            return
+        }
+        printed = 0
+        drawn = 0
+        guard await beat(startsAfter) else { return }
+        while true {
+            withAnimation(RibbonMotion.open) {
+                printed = 1
+                drawn = 1
+            }
+            guard await beat(RibbonMotion.openDuration + Vignette.rest) else { return }
+            withAnimation(RibbonMotion.settle) {
+                printed = 0
+                washed = 0
+            }
+            guard await beat(RibbonMotion.settleDuration) else { return }
+            drawn = 0
+            washed = 1
+            guard await beat(Vignette.rest) else { return }
+        }
+    }
+}
+
+/// Draws the held word crossfading into the divine name as printed. The
+/// name is wider than the word, so the words either side make room for it
+/// as it comes — half each way, so the line stays where it was — and the
+/// wash is laid along the room it takes.
+private struct DivineName: TextRenderer, Animatable {
+    var printed: Double
+    var drawn: Double
+    var alpha: Double
+
+    var animatableData: AnimatablePair<Double, AnimatablePair<Double, Double>> {
+        get { AnimatablePair(printed, AnimatablePair(drawn, alpha)) }
+        set {
+            printed = newValue.first
+            drawn = newValue.second.first
+            alpha = newValue.second.second
+        }
+    }
+
+    var displayPadding: EdgeInsets {
+        EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12)
+    }
+
+    func draw(layout: Text.Layout, in context: inout GraphicsContext) {
+        guard let held = layout.boxes(of: .held).first else {
+            for line in layout {
+                context.draw(line)
+            }
+            return
+        }
+        let name = context.resolve(Vignette.divineName)
+        let size = name.measure(in: CGSize(width: 1000, height: 200))
+        let grow = max(0, size.width - held.rect.width) * CGFloat(printed)
+
+        if drawn > 0, alpha > 0 {
+            var wash = context
+            wash.opacity = alpha
+            let room = WordsBox(
+                rect: CGRect(
+                    x: held.rect.minX - grow / 2, y: held.rect.minY,
+                    width: held.rect.width + grow, height: held.rect.height),
+                baseline: held.baseline)
+            Vignette.paint([Vignette.band(room)], drawn: drawn, ink: Ink.ochre.color, in: &wash)
+        }
+
+        var past = false
+        for line in layout {
+            for run in line {
+                if run[VignetteWords.self]?.role == .held {
+                    past = true
+                    var word = context
+                    word.opacity = 1 - printed
+                    word.draw(run)
+                    continue
+                }
+                var aside = context
+                aside.translateBy(x: (past ? grow : -grow) / 2, y: 0)
+                aside.draw(run)
+            }
+        }
+
+        if printed > 0 {
+            var caps = context
+            caps.opacity = printed
+            let baseline = name.firstBaseline(in: size)
+            caps.draw(name, in: CGRect(
+                x: held.rect.midX - size.width / 2, y: held.baseline - baseline,
+                width: size.width, height: size.height))
+        }
+    }
+}
+
 #Preview("What's new") {
     WhatsNewScreen(release: WhatsNew.releases[0], onLeave: {})
+        .preferredColorScheme(.dark)
+}
+
+#Preview("What's new, read again") {
+    WhatsNewScreen(history: WhatsNew.releases, onLeave: {})
         .preferredColorScheme(.dark)
 }

@@ -203,7 +203,7 @@ private val END_TARGET = 44.dp
  * the app's furniture rather than anybody's ink, at a strength that cannot be
  * mistaken for one of the eight washes (24%).
  */
-private const val SELECTION_TINT = 0.22f
+internal const val SELECTION_TINT = 0.22f
 
 /**
  * One chapter's native selection (A62), as the reading screen drives it.

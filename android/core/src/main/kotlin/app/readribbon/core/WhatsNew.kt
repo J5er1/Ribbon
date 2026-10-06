@@ -7,7 +7,9 @@
 // as small as it can be and still be true to what was asked. Everything else
 // the rule protects stays: one screen, the latest release only and never a
 // backlog, one tap from the room, and never in the way of a launch that came
-// from something the person tapped.
+// from something the person tapped. Every release a reader can notice adds
+// its entry here, with its pictures and its words on both phones; and the
+// whole list can be read again, newest first, from You (A65).
 //
 // This file only decides. Whether this phone has seen a release is kept on
 // the phone, beside the other things it has been told once: it is about this
@@ -33,6 +35,21 @@ enum class WhatsNewItem {
 
     /** Following lands on the same words. */
     followingWords,
+
+    /**
+     * Following stays with them: the screen stays on, and a dropped
+     * connection or a second phone no longer loses them (A64).
+     */
+    followingStays,
+
+    /** Selecting is the phone's own; a verse number takes the verse (A62). */
+    nativeSelection,
+
+    /** "In this room" gathers the room's readings, however many (A62). */
+    roomGroups,
+
+    /** The New King James as printed: LORD, and its copyright line (A64). */
+    lordReadsLord,
 }
 
 /**
@@ -43,17 +60,30 @@ enum class WhatsNewItem {
 data class WhatsNewRelease(
     val id: String,
     val items: List<WhatsNewItem>,
+    /** The day it was released, `yyyy-MM-dd`: its heading when the list is read again. */
+    val released: String = "",
 )
 
 object WhatsNew {
     /**
-     * Newest first. Only the first is ever shown: someone who skipped three
-     * releases hears about the one they are on, and the rest are simply how
-     * the app is now.
+     * Newest first. Only the first is ever shown on a launch: someone who
+     * skipped three releases hears about the one they are on, and the rest
+     * are simply how the app is now — there for the reading, from You.
      */
     val releases: List<WhatsNewRelease> = listOf(
         WhatsNewRelease(
+            id = "2026-10-following",
+            released = "2026-10-06",
+            items = listOf(
+                WhatsNewItem.followingStays,
+                WhatsNewItem.nativeSelection,
+                WhatsNewItem.roomGroups,
+                WhatsNewItem.lordReadsLord,
+            ),
+        ),
+        WhatsNewRelease(
             id = "2026-10-original",
+            released = "2026-10-04",
             items = listOf(WhatsNewItem.original, WhatsNewItem.ownVersion, WhatsNewItem.followingWords),
         ),
     )

@@ -10,12 +10,21 @@ import app.readribbon.core.Room
 import app.readribbon.core.WhatsNew
 import app.readribbon.data.AppState
 import app.readribbon.data.LocalStore
+import app.readribbon.core.WhatsNewItem
+import app.readribbon.screens.LONG_LOOP_MS
 import app.readribbon.screens.LOOP_MS
 import app.readribbon.screens.STILL_AT
+import app.readribbon.screens.body
 import app.readribbon.screens.followingFrame
 import app.readribbon.screens.loopTime
+import app.readribbon.screens.lordFrame
 import app.readribbon.screens.originalFrame
 import app.readribbon.screens.ownVersionFrame
+import app.readribbon.screens.roomGroupsFrame
+import app.readribbon.screens.selectionFrame
+import app.readribbon.screens.staysFrame
+import app.readribbon.screens.timeline
+import app.readribbon.screens.title
 import app.readribbon.services.Notifications
 import app.readribbon.services.LocalPresenceService
 import kotlin.time.Clock
@@ -197,10 +206,112 @@ class WhatsNewOnLaunchTest {
         }
     }
 
+    // The second release's four (A65).
+
+    @Test fun reduceMotionHoldsTheNewPicturesAtTheirEndStates() {
+        val stays = staysFrame(WhatsNewItem.followingStays.timeline.stillAt)
+        assertEquals("Ruth's line on the last words", 2f, stays.leader, 0f)
+        assertEquals("and yours on the same ones", 2f, stays.follower, 0f)
+        assertEquals(1f, stays.leaderShown * stays.followerShown * stays.shown, 0f)
+        assertEquals("and the screen still awake", 1f, stays.awake, 0f)
+
+        val selection = selectionFrame(WhatsNewItem.nativeSelection.timeline.stillAt)
+        assertEquals("the whole verse taken", 1f, selection.verse, 0f)
+        assertEquals(1f, selection.selected * selection.reach * selection.shown, 0f)
+        assertEquals("no finger left on it", 0f, selection.wordPress + selection.numberPress, 0f)
+
+        val room = roomGroupsFrame(WhatsNewItem.roomGroups.timeline.stillAt)
+        assertEquals(1f, room.wash * room.others * room.shown, 0f)
+        assertTrue("all three faces", room.faces.all { it == 1f })
+
+        assertEquals("LORD as printed", 1f, lordFrame(WhatsNewItem.lordReadsLord.timeline.stillAt).name, 0f)
+    }
+
+    @Test fun eachNewLoopBeginsAndEndsAtRest() {
+        for (t in listOf(0, WhatsNewItem.followingStays.timeline.loopMs - 1)) {
+            val stays = staysFrame(t)
+            assertEquals(0f, stays.shown * (stays.leaderShown + stays.followerShown), 0.001f)
+            assertEquals("awake at rest", 1f, stays.awake, 0.001f)
+        }
+        for (t in listOf(0, WhatsNewItem.nativeSelection.timeline.loopMs - 1)) {
+            val selection = selectionFrame(t)
+            assertEquals(0f, selection.shown * selection.selected + selection.wordPress + selection.numberPress, 0.001f)
+        }
+        for (t in listOf(0, WhatsNewItem.roomGroups.timeline.loopMs - 1)) {
+            val room = roomGroupsFrame(t)
+            assertEquals(0f, room.shown * (room.wash + room.others + room.faces.sum()), 0.001f)
+        }
+        for (t in listOf(0, WhatsNewItem.lordReadsLord.timeline.loopMs - 1)) {
+            assertEquals(0f, lordFrame(t).name, 0.001f)
+        }
+    }
+
+    /**
+     * The follower's screen begins to dim between Ruth's second step and her
+     * third, and is full again before she has finished it — kept on, not
+     * woken.
+     */
+    @Test fun theFollowersScreenDimsAndIsKeptOn() {
+        val dimmest = (0 until LONG_LOOP_MS step 20).minBy { staysFrame(it).awake }
+        val frame = staysFrame(dimmest)
+        assertTrue("it dims", frame.awake < 0.6f)
+        assertTrue("never dark", frame.awake > 0.3f)
+        assertTrue("after the second step", frame.leader >= 1f && frame.follower >= 1f)
+        assertTrue("before the third", frame.leader < 1.5f)
+        val awakeAgain = (dimmest until LONG_LOOP_MS step 20).first { staysFrame(it).awake == 1f }
+        assertTrue("awake before the follower moves on", staysFrame(awakeAgain).follower <= 1f)
+    }
+
+    /**
+     * The new pictures breathe as the first release's do: once everything
+     * has arrived, nearly two seconds of nothing moving before the loop lets
+     * go — and they are at rest again before it wraps.
+     */
+    @Test fun theNewPicturesBreatheAsLongAsTheFirst() {
+        fun stillFor(loop: Int, stillAt: Int, frame: (Int) -> Any): Int {
+            val end = frame(stillAt)
+            val from = (stillAt downTo 1).first { frame(it - 1) != end }
+            val to = (stillAt until loop).first { frame(it) != end }
+            return to - from
+        }
+        for ((item, frame) in listOf<Pair<WhatsNewItem, (Int) -> Any>>(
+            WhatsNewItem.followingStays to ::staysFrame,
+            WhatsNewItem.nativeSelection to ::selectionFrame,
+            WhatsNewItem.roomGroups to ::roomGroupsFrame,
+            WhatsNewItem.lordReadsLord to ::lordFrame,
+        )) {
+            val timeline = item.timeline
+            val breath = stillFor(timeline.loopMs, timeline.stillAt, frame)
+            assertTrue("$item holds still for $breath ms", breath in 1600..2400)
+            assertEquals("$item is at rest before it wraps", frame(timeline.loopMs - 50), frame(timeline.loopMs - 1))
+        }
+    }
+
+    @Test fun everyItemHasItsWordsAndALoop() {
+        for (item in WhatsNewItem.entries) {
+            assertTrue(item.title.isNotBlank())
+            assertTrue(item.body.isNotBlank())
+            assertTrue(item.timeline.stillAt in 1 until item.timeline.loopMs)
+        }
+    }
+
+    @Test fun everyReleaseHasItsOwnTitleAndDay() {
+        for (release in WhatsNew.releases) {
+            assertFalse("${release.id} has its own title", Copy.whatsNewTitle(release.id) == Copy.WHATS_NEW_HEADING)
+            assertTrue("${release.id} has a day", Copy.whatsNewReleased(release.released) != null)
+        }
+        assertEquals("6 October 2026", Copy.whatsNewReleased("2026-10-06"))
+        assertEquals("Staying on the same page", Copy.whatsNewTitle("2026-10-following"))
+        assertEquals("The words under the words", Copy.whatsNewTitle("2026-10-original"))
+        assertEquals("an unknown release is headed by the screen", Copy.WHATS_NEW_HEADING, Copy.whatsNewTitle("gone"))
+        assertNull(Copy.whatsNewReleased(""))
+    }
+
     @Test fun theLoopIsAboutFourAndAHalfSecondsAndStaggered() {
         assertTrue(LOOP_MS in 4000..5000)
         assertEquals("a late vignette waits at rest", 0, loopTime(elapsedMs = 400, startAfter = 600))
         assertEquals(100, loopTime(elapsedMs = 700, startAfter = 600))
         assertEquals("and wraps", 100, loopTime(elapsedMs = 600L + LOOP_MS + 100, startAfter = 600))
+        assertEquals("a longer loop wraps at its own length", 100, loopTime(600L + LONG_LOOP_MS + 100, 600, LONG_LOOP_MS))
     }
 }

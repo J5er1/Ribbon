@@ -3940,7 +3940,8 @@ A61. **What's new, on launch (reverses §6.2's "no what's new").** Owner's
       on both phones and in both cores. A release that adds nothing shows
       nothing. The first entry, `2026-10-original`, is this change's own.
     - **No way back to it.** Once left it is gone; there is no row for it in
-      the menu. A second look is the next release's.
+      the menu. A second look is the next release's. *(Reversed by A65: every
+      release can be read again from You.)*
     - **A background pull can lose it.** A pull that read the state file
       before this launch recorded the release, and writes it after, puts
       the old value back, and the screen shows once more on a later plain
@@ -4308,6 +4309,45 @@ A64. **Following, measured and mended; and the New King James as it is
 
     Nothing here has run on a phone. Android and both cores are built and
     tested here; the iPhone is compiled by CI.
+
+A65. **Every release says what it brought, and all of them can be read again
+    (amends A61).** Owner: *"you forgot the rule on every release needs the
+    animations or patch notes and it would be nice to have a way to see them
+    again in settings"*. A61's rule was that a release a reader can notice
+    adds its entry; A62 to A64 went out without one.
+
+    **This release's entry**, `2026-10-following`, under its own title,
+    "Staying on the same page", and four pictures made the way A61's are —
+    the page's own type and inks, moving on the house curves with a long
+    breath between beats, one still frame under reduce motion:
+    - *Following stays with them* (A64): two rows, Ruth's and yours, the
+      same line; your reading line follows hers onto the same words, and
+      your row begins to dim as a screen about to sleep and comes back.
+    - *Selecting, the way your phone does* (A62): a held word takes the
+      phone's own tint and handles, the handle carries the selection back
+      along the line, and the verse number takes all of it.
+    - *However many of you there are* (A62): two blocks as "In this room"
+      draws them, yours first, the other with the words that differ brought
+      forward and three faces, then "and others".
+    - *The New King James, as printed* (A64): "Lord" becomes LORD in small
+      capitals.
+
+    **Read again from You.** "What's new" under This phone opens the same
+    screen with every release, newest first, under the screen's own heading
+    and each under its day and its own title — pushed in You's stack on both
+    phones, so back, Done, Esc and (on the iPhone) the pull past the top all
+    go back to You. Leaving it records nothing: the launch's decision is
+    untouched, and the launch still shows only the latest. The list is lazy,
+    so only the pictures on the screen move. Each release now carries the
+    day it was released, and its title is its own rather than the screen's.
+
+    **The rule, kept where it will be read.** The core's rule tests were
+    pinned to the first release's id, so the next entry would have broken
+    them; they now read whichever release is newest, and a test holds that
+    every thing new is told in exactly one release, newest first, each
+    dated. `CLAUDE.md` says it for whoever changes the app next: a release a
+    reader can notice adds its entry, its words and its pictures, on both
+    phones.
 
 ## iOS (phase four): the second pass
 
