@@ -36,6 +36,9 @@ private enum MenuRoute: Hashable {
     case whatsNew
     case joinWithInvite
     case join(UUID)
+    /// One ember on your shelf (A66), by its reading: the book's record,
+    /// inside You rather than over the room.
+    case ember(UUID)
 }
 
 /// A room whose invite is being handed out.
@@ -86,11 +89,26 @@ struct MenuScreen: View {
                         onClose: { dismiss() },
                         onText: { path.append(MenuRoute.text) },
                         onDownloads: { path.append(MenuRoute.downloads) },
-                        onWhatsNew: { path.append(MenuRoute.whatsNew) })
+                        onWhatsNew: { path.append(MenuRoute.whatsNew) },
+                        onEmber: { readingID in path.append(MenuRoute.ember(readingID)) })
                 }
             }
             .navigationDestination(for: MenuRoute.self) { route in
                 destination(route)
+            }
+            .navigationDestination(for: PersonRoute.self) { route in
+                // An ember's record names who read it, as portraits, and a
+                // portrait goes to its person (S12) — here too, now that a
+                // record can be opened from your shelf (A66). Without this
+                // the faces in it would be links that go nowhere.
+                if let personRoom = model.room(route.roomID) {
+                    PersonScreen(
+                        personID: route.personID,
+                        room: personRoom,
+                        onOpenVerse: { verse, readingID in
+                            model.pendingDestination = .verse(roomID: personRoom.id, readingID: readingID, verse: verse)
+                        })
+                }
             }
         }
         .sheet(isPresented: $showNewRoom, onDismiss: {
@@ -153,6 +171,24 @@ struct MenuScreen: View {
                 wayOut: Copy.back)
             .id(token)
             .toolbar(.hidden, for: .navigationBar)
+        case .ember(let readingID):
+            if let reading = model.state.readings.first(where: { $0.id == readingID }) {
+                // The record the room's shelf opens (S11), with one thing
+                // left off: reading the book again belongs to the room it
+                // was read in, not to you (A66). A quoted verse opens the
+                // book over its own room, the way a tapped notification
+                // does — the menu goes, the room comes, the page opens.
+                EmberRecordScreen(
+                    reading: reading,
+                    onOpenVerse: { verse in
+                        // A room you have left keeps its books on your
+                        // shelf (§6.8), but there is no room any more to
+                        // open them in, and a page opened over another
+                        // room would be read and written as that room's.
+                        guard model.room(reading.roomID) != nil else { return }
+                        model.pendingDestination = .verse(roomID: reading.roomID, readingID: reading.id, verse: verse)
+                    })
+            }
         }
     }
 }
@@ -220,8 +256,10 @@ private struct RoomMenuScreen: View {
 }
 
 /// One room: its name, who is in it, what it is reading, and its fire. The
-/// current one is marked with a chartreuse hairline — and, because colour is
-/// never the only signal (§11), said as selected too.
+/// current one has a ribbon laid into it from the tile's top edge, as the
+/// chosen version has (A66) — a shape, where it was a 2-point line of the
+/// accent — and, because colour is never the only signal (§11), it is said
+/// as selected too.
 private struct RoomTile: View {
     @Environment(AppModel.self) private var model
     let room: Room
@@ -232,8 +270,9 @@ private struct RoomTile: View {
         let reading = model.openReading(in: room)
         Button(action: action) {
             HStack(spacing: 12) {
-                Rectangle()
-                    .fill(isCurrent ? Palette.chartreuse : .clear)
+                // Where the hairline was, kept as clear space, so the
+                // room's name has not moved from where it was read.
+                Color.clear
                     .frame(width: 2, height: 34)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(model.displayName(of: room))
@@ -269,6 +308,12 @@ private struct RoomTile: View {
             .padding(.horizontal, RibbonShape.textInset - 6)
             .padding(.vertical, 12)
             .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
+            // Hung at the leading side, clear of the name: twelve in from
+            // the tile's edge, over the space the hairline left.
+            .overlay(alignment: .topLeading) {
+                ChoiceRibbon(laid: isCurrent, width: 8, length: 20)
+                    .padding(.leading, 12)
+            }
             .contentShape(Rectangle())
             .paper(.row)
         }
@@ -372,12 +417,18 @@ private struct RoomControls: View {
 
 // MARK: - You (S18)
 
+/// You, set as the front of a Bible (A66): your name on the flyleaf, a
+/// ribbon for each room you read in, the books you have finished, then the
+/// settings, and at the very end a colophon — what the book is, what it is
+/// set in, and where its words come from.
 private struct YouScreen: View {
     @Environment(AppModel.self) private var model
     var onClose: () -> Void
     var onText: () -> Void
     var onDownloads: () -> Void
     var onWhatsNew: () -> Void
+    /// An ember on your shelf, by its reading.
+    var onEmber: (UUID) -> Void
 
     @State private var deleting: ConfirmState?
 
@@ -393,6 +444,16 @@ private struct YouScreen: View {
             VStack(alignment: .leading, spacing: 28) {
                 YouIdentity()
 
+                YourRibbonsSection()
+
+                // The shelf is there once there is something on it: an
+                // empty shelf on the front page would be a space waiting
+                // to be filled, and nothing here asks for anything.
+                let embers = YourShelf.embers(readings: model.state.readings)
+                if !embers.isEmpty {
+                    YourShelfSection(embers: embers, onEmber: onEmber)
+                }
+
                 SettingsGroup(title: Copy.howYouRead) {
                     SettingRow(Copy.textAndTranslation, subtitle: Copy.textSub, action: onText)
                 }
@@ -406,35 +467,27 @@ private struct YouScreen: View {
 
                 AccountSection()
 
-                VStack(alignment: .leading, spacing: 18) {
-                    if model.remote != nil {
-                        QuietControl(title: Copy.deleteAccount) {
-                            // §6.8: the "leave your notes behind?" question,
-                            // asked once, at deletion. Neither answer is the
-                            // quiet one.
-                            deleting = ConfirmState(question: Copy.leaveNotesQuestion, choices: [
-                                ConfirmChoice(Copy.deleteAndLeaveThem, destructive: true) {
-                                    onClose()
-                                    model.deleteAccount(keepNotesBehind: true)
-                                },
-                                ConfirmChoice(Copy.deleteAndTakeThemBack, destructive: true) {
-                                    onClose()
-                                    model.deleteAccount(keepNotesBehind: false)
-                                },
-                            ])
-                        }
+                if model.remote != nil {
+                    QuietControl(title: Copy.deleteAccount) {
+                        // §6.8: the "leave your notes behind?" question,
+                        // asked once, at deletion. Neither answer is the
+                        // quiet one.
+                        deleting = ConfirmState(question: Copy.leaveNotesQuestion, choices: [
+                            ConfirmChoice(Copy.deleteAndLeaveThem, destructive: true) {
+                                onClose()
+                                model.deleteAccount(keepNotesBehind: true)
+                            },
+                            ConfirmChoice(Copy.deleteAndTakeThemBack, destructive: true) {
+                                onClose()
+                                model.deleteAccount(keepNotesBehind: false)
+                            },
+                        ])
                     }
-                    SmallCaps(appVersion, size: 11, color: Palette.muted.opacity(0.7))
-                    // Where the original words come from (A60): a credit
-                    // owed, said as quietly as the version above it. A
-                    // sentence, so set as one rather than in small caps.
-                    Text(Copy.originalCredit)
-                        .font(RibbonType.ui(12))
-                        .foregroundStyle(Palette.muted.opacity(0.7))
-                        .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, RibbonShape.textInset)
+                    .padding(.top, 8)
                 }
-                .padding(.horizontal, RibbonShape.textInset)
-                .padding(.top, 8)
+
+                Colophon(version: appVersion)
             }
         }
         .confirm($deleting, dismissTitle: Copy.neverMind)
@@ -448,6 +501,246 @@ private struct YouScreen: View {
         let version = info?["CFBundleShortVersionString"] as? String ?? ""
         let build = info?["CFBundleVersion"] as? String ?? ""
         return Copy.versionLine(build.isEmpty ? version : "\(version) (\(build))")
+    }
+}
+
+/// Your ribbons (A66): one for each room you read in, hanging from a
+/// hairline across the page the way a Bible's ribbons hang from its
+/// binding, each left where that room left it. A ribbon is a place, never a
+/// measure (A30): it says which chapter, not how far.
+///
+/// Touching one goes to that room by the road a tapped notification takes,
+/// which closes the menu and closes any book open over another room.
+private struct YourRibbonsSection: View {
+    @Environment(AppModel.self) private var model
+    /// Whether the ribbons have been laid in. Once each time You is opened —
+    /// not again on the way back from a page it pushed, which it never left.
+    @State private var laid = false
+
+    /// No two neighbours the same length: two ribbons of slightly different
+    /// length read as two people (brief §5), and six as six rooms rather
+    /// than as a fringe.
+    private static let lengths: [CGFloat] = [56, 48, 62, 52, 58, 46]
+    private static let column: CGFloat = 92
+    private static let ribbonWidth: CGFloat = 14
+    /// How far behind its left-hand neighbour each ribbon is laid in.
+    private static let stagger: Double = 0.08
+
+    var body: some View {
+        let rooms = model.state.rooms
+        VStack(alignment: .leading, spacing: 10) {
+            SectionLabel(Copy.yourRibbons)
+                .padding(.horizontal, RibbonShape.textInset)
+            ScrollView(.horizontal) {
+                HStack(alignment: .top, spacing: 0) {
+                    ForEach(Array(rooms.enumerated()), id: \.element.id) { index, room in
+                        ribbon(room, index: index)
+                    }
+                }
+                .padding(.horizontal, RibbonShape.textInset)
+            }
+            .scrollIndicators(.hidden)
+            // The binding: the full width of the row, still while the
+            // ribbons scroll under it, and drawn over their top edges so
+            // each reads as tucked into it.
+            .overlay(alignment: .top) {
+                HairlineRule()
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+            Text(Copy.yourRibbonsFootnote)
+                .font(RibbonType.ui(14))
+                .foregroundStyle(Palette.muted)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, RibbonShape.textInset)
+        }
+        .onAppear { laid = true }
+    }
+
+    /// One room's ribbon, and under it the room and where its ribbon lies.
+    /// In your ink there when ink is who you are in it, and in the accent
+    /// where it is not — a room of two, where nobody's ink is theirs.
+    private func ribbon(_ room: Room, index: Int) -> some View {
+        let name = model.displayName(of: room)
+        let lies = place(of: room)
+        let ink = model.myMembership(in: room)?.ink
+        let delay = Double(index) * Self.stagger
+        return Button {
+            model.pendingDestination = .room(roomID: room.id)
+        } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                // Laid in from the binding one after another, on the curve
+                // a note unfurls on; under reduce motion each only fades in
+                // where it hangs (`HangingRibbon`).
+                HangingRibbon(
+                    color: ink?.color ?? Palette.chartreuse,
+                    width: Self.ribbonWidth,
+                    length: Self.lengths[index % Self.lengths.count],
+                    laid: laid,
+                    delay: delay,
+                    motion: RibbonMotion.settle)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(name)
+                        .font(RibbonType.ui(14))
+                        .foregroundStyle(Palette.text)
+                        .lineLimit(2)
+                    SmallCaps(lies, size: 11)
+                        .lineLimit(2)
+                }
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                // The words come with their ribbon. A change of light, so
+                // it keeps its curve under reduce motion as well.
+                .opacity(laid ? 1 : 0)
+                .animation(RibbonMotion.arrive.delay(laid ? delay : 0), value: laid)
+            }
+            // Air on the trailing side, so one room's words stop short of
+            // the next room's ribbon.
+            .padding(.trailing, 12)
+            .frame(width: Self.column, alignment: .topLeading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.pressable)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Copy.ribbonSpoken(name, lies, ink: ink?.displayName))
+        .accessibilityHint(Copy.goesToThatRoom)
+        .accessibilityAddTraits(.isButton)
+    }
+
+    /// Where the room's ribbon lies (A30) as a chapter — "Mark 4" — or,
+    /// before anyone has closed the book having moved, the book; and with no
+    /// book open, between books.
+    private func place(of room: Room) -> String {
+        guard let reading = model.openReading(in: room) else { return Copy.betweenBooks }
+        if let left = model.ribbon(in: reading) {
+            return VerseAddress(bookID: reading.bookID, chapter: left.chapter, verse: left.verse).chapterFormatted
+        }
+        return Bible.book(id: reading.bookID)?.name ?? reading.bookID
+    }
+}
+
+/// The line every ember on your shelf sits on: the foot of the ember
+/// itself, not of the words under it, so a book read alone (no second line)
+/// sits level with one read in company (S10's shared baseline).
+private enum EmberFloor: AlignmentID {
+    static func defaultValue(in context: ViewDimensions) -> CGFloat {
+        context[VerticalAlignment.bottom]
+    }
+}
+
+private extension VerticalAlignment {
+    static let emberFloor = VerticalAlignment(EmberFloor.self)
+}
+
+/// Your shelf (A66): every book you have finished, in every room you have
+/// read in — the books of a room you have left among them, as leaving
+/// promises (§6.8) — first finished first. Embers on one baseline with no
+/// shelf drawn (S10), each with its book and who it was read with. Never a
+/// count: a row of objects, not a tally.
+private struct YourShelfSection: View {
+    @Environment(AppModel.self) private var model
+    var embers: [Reading]
+    var onEmber: (UUID) -> Void
+
+    /// Wide enough for "with the Thursday study" over two lines under the
+    /// smallest ember; narrower than the largest, which it sits under.
+    private static let words: CGFloat = 104
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionLabel(Copy.yourShelf)
+                .padding(.horizontal, RibbonShape.textInset)
+            ScrollView(.horizontal) {
+                HStack(alignment: .emberFloor, spacing: 18) {
+                    ForEach(embers) { reading in
+                        ember(reading)
+                    }
+                }
+                .padding(.horizontal, RibbonShape.textInset)
+            }
+            .scrollIndicators(.hidden)
+        }
+    }
+
+    private func ember(_ reading: Reading) -> some View {
+        let book = Bible.book(id: reading.bookID)?.name ?? reading.bookID
+        let company = companyLine(of: reading)
+        return Button {
+            onEmber(reading.id)
+        } label: {
+            VStack(spacing: 6) {
+                EmberView(scale: reading.handiwork.scale)
+                    .alignmentGuide(.emberFloor) { dimensions in
+                        dimensions[VerticalAlignment.bottom]
+                    }
+                VStack(spacing: 2) {
+                    SmallCaps(book, size: 12, color: Palette.text.opacity(0.8))
+                    if let company {
+                        SmallCaps(company, size: 11)
+                    }
+                }
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(width: Self.words)
+            }
+            .contentShape(Rectangle())
+        }
+        // An ember takes a press the way a tile does, as on the room's
+        // shelf.
+        .buttonStyle(.pressable)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Copy.emberSpoken(book, company))
+        .accessibilityAddTraits(.isButton)
+    }
+
+    /// Who the book was read with: first names, "and others" for the rest,
+    /// or a named room of three or more by its name. A book read alone, or
+    /// in a room you have since left, is said by nothing.
+    private func companyLine(of reading: Reading) -> String? {
+        let company = YourShelf.company(
+            of: reading,
+            rooms: model.state.rooms,
+            memberships: model.state.memberships,
+            me: model.me?.id)
+        switch company {
+        case .alone:
+            return nil
+        case .people(let ids, let andOthers):
+            let names = ids.compactMap { model.person($0)?.name }.map { firstName($0) }
+            if names.isEmpty && !andOthers { return nil }
+            return Copy.shelfWith(names, andOthers: andOthers)
+        case .room(let name):
+            return Copy.shelfWithRoom(name)
+        }
+    }
+}
+
+/// The colophon (A66): the book's last page, where a book says what it is,
+/// what it is set in, and whose words it borrows — the Wave, the version,
+/// the typefaces, and the credit owed for the original words (A60). Set
+/// small and centred, as a colophon is, after the last thing that can be
+/// done here.
+private struct Colophon: View {
+    var version: String
+
+    var body: some View {
+        VStack(spacing: 10) {
+            WaveMark(color: Palette.muted.opacity(0.6))
+                .frame(width: 22, height: 22)
+            SmallCaps(version, size: 11, color: Palette.muted.opacity(0.7))
+            // Sentences, so set as sentences rather than in small caps.
+            Group {
+                Text(Copy.colophonSetIn)
+                Text(Copy.originalCredit)
+            }
+            .font(RibbonType.ui(12))
+            .foregroundStyle(Palette.muted.opacity(0.7))
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, RibbonShape.textInset)
     }
 }
 

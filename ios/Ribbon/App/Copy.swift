@@ -477,8 +477,6 @@ enum Copy {
     static let redLetterSub = "Where the text marks them."
     @MainActor static var bundledSub: String { "On this \(deviceNoun) already, whole." }
     @MainActor static var streamsSub: String { "Streams. The book you are in stays on the \(deviceNoun)." }
-    static let quietHoursFrom = "From"
-    static let quietHoursUntil = "Until"
     /// iOS isn't passing these on (S19): the switch lives in Settings, and
     /// the app can only point at it.
     static let iOSIsNotPassingTheseOn = "iOS isn't passing these on."
@@ -509,8 +507,6 @@ enum Copy {
     static let lineSpacingClose = "Close"
     static let lineSpacingBook = "Book"
     static let lineSpacingOpen = "Open"
-    /// Between the two ends of quiet hours (S19).
-    static let quietHoursTo = "to"
     /// What quiet hours do not silence (S19): the one notification that is
     /// a touch rather than a sentence, said plainly so nobody is surprised
     /// by it.

@@ -6,7 +6,9 @@ import RibbonCore
 // downloads, the plan (ledger A23/A42). Each is a page with a title and a
 // lede, and under it groups of tiles with a section label over each and a
 // footnote under it where one is owed. Nothing here is a Settings app:
-// no icons, no grouped inset table, no disclosure triangles.
+// no icons, no grouped inset table, no disclosure triangles — and since
+// I40 none of its controls either: the switches, the size and the quiet
+// hours are drawn on the page (DesignSystem/Drawn.swift).
 //
 // What is still not here is what was never here: no theme picker (dark is
 // the product), no accent picker (chartreuse is the brand's, not the
@@ -15,16 +17,28 @@ import RibbonCore
 // MARK: - S20: Text
 
 /// The version is yours (A60, reversing A42), and so is the page: size,
-/// spacing and red letter move only your own page. The size slider previews
-/// live over real Scripture — the verse you were last reading.
+/// spacing and red letter move only your own page.
+///
+/// A version is chosen by reading it (S20, A66): each row carries the verse
+/// you are at, in that version's own words. And the preview under the size
+/// is a piece of the page itself — that verse and the next, numbered and
+/// coloured the way the page sets them — so the size, the spacing and the
+/// red letter all show on it. With no book open, both are John 1.
 struct TextSettingsScreen: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
+        let place = readingPlace
+        let specimens = versionSpecimens(at: place)
         RibbonScreen(title: Copy.textAndTranslation, lede: Copy.textLede, onBack: { dismiss() }) {
             VStack(alignment: .leading, spacing: 28) {
-                SettingsGroup(title: Copy.translation, detail: Copy.translationIsYours) {
+                // The footnote says which verse the rows are showing, and
+                // only when one of them is showing it.
+                SettingsGroup(
+                    title: Copy.translation, detail: Copy.translationIsYours,
+                    footnote: specimens.isEmpty ? nil : Copy.specimenAt(place.formatted)
+                ) {
                     // Bundled translations always; licensed ones appear the
                     // day their edition is configured on the proxy — never
                     // as a dead row.
@@ -32,6 +46,7 @@ struct TextSettingsScreen: View {
                         SettingChoice(
                             translation.displayName,
                             subtitle: translation.isBundled ? Copy.bundledSub : Copy.streamsSub,
+                            specimen: specimens[translation.id],
                             chosen: model.words(room: model.currentRoom) == translation.id
                         ) {
                             model.setTranslation(translation.id)
@@ -42,17 +57,15 @@ struct TextSettingsScreen: View {
                 SettingsGroup(title: Copy.thePage, detail: Copy.thePageIsYours) {
                     SettingControl(Copy.textSize, subtitle: Copy.textSizeSub) {
                         VStack(spacing: 12) {
-                            Slider(
+                            // Drawn, not the system's (I40); said as a size
+                            // in points, a measure of type.
+                            RibbonSlider(
                                 value: Binding(
                                     get: { model.settings.scriptureSize },
                                     set: { size in model.updateSettings { $0.scriptureSize = size } }),
-                                in: 16...24, step: 0.5)
-                            .tint(Palette.chartreuse)
-                            .accessibilityLabel(Copy.textSize)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 10)
-                            .well(.small)
-                            preview
+                                in: 16...24, step: 0.5,
+                                label: Copy.textSize, spoken: Copy.textSizeValue)
+                            preview(at: place)
                         }
                     }
                     SettingControl(Copy.lineSpacing, subtitle: Copy.lineSpacingSub) {
@@ -73,27 +86,116 @@ struct TextSettingsScreen: View {
         }
     }
 
-    /// The live preview: the verse you were last reading, in your version,
-    /// at your size, in a well of its own.
-    @ViewBuilder
-    private var preview: some View {
-        if let room = model.currentRoom,
-           let reading = model.openReading(in: room) {
-            let position = model.myPosition(in: reading)
-            if let text = model.scripture.verseText(position, translation: model.words(room: room)) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(text)
-                        .font(RibbonType.scripture(model.settings.scriptureSize))
-                        .foregroundStyle(Palette.text)
-                        .lineSpacing(model.settings.scriptureSize * (model.settings.lineHeightMultiple - 1))
-                        .fixedSize(horizontal: false, vertical: true)
-                    SmallCaps(position.formatted, size: 11)
-                }
-                .padding(16)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .well(.small)
+    /// The verse the rows and the preview are shown at: where you are in
+    /// the current room's open book, or — with none open — the first verse
+    /// of John, the beginning the app's own pictures use.
+    private var readingPlace: VerseAddress {
+        if let room = model.currentRoom, let reading = model.openReading(in: room) {
+            return model.myPosition(in: reading)
+        }
+        return VerseAddress(bookID: "JHN", chapter: 1, verse: 1)
+    }
+
+    /// A chapter as this phone already holds it: a bundled version always,
+    /// a licensed one only once that chapter has streamed here for the
+    /// book being read. Nothing is fetched to fill a settings screen —
+    /// a version without the words here simply shows none (A66).
+    private func heldChapter(_ address: VerseAddress, in version: TranslationID) -> ScriptureChapter? {
+        guard let licensed = TranslationRegistry.translation(for: version), !licensed.isBundled else {
+            return model.scripture.chapter(address, translation: version)
+        }
+        return model.scripture.cachedRemoteChapter(address, translation: licensed)
+    }
+
+    /// Each version's words for the verse you are at, quoted the way a note
+    /// quotes one (`text(forVerse:)`), for the versions that hold it.
+    private func versionSpecimens(at place: VerseAddress) -> [TranslationID: String] {
+        var specimens: [TranslationID: String] = [:]
+        for translation in model.availableTranslations {
+            if let text = heldChapter(place, in: translation.id)?.text(forVerse: place.verse) {
+                specimens[translation.id] = text
             }
         }
+        return specimens
+    }
+
+    /// The live preview, as a page (A66): the verse you are at and the one
+    /// after it, in your version, at your size and spacing, in a well of its
+    /// own, with the reference under it.
+    @ViewBuilder
+    private func preview(at place: VerseAddress) -> some View {
+        let size = CGFloat(model.settings.scriptureSize)
+        if let chapter = heldChapter(place, in: model.words(room: model.currentRoom)),
+           let page = pageText(chapter, from: place.verse, size: size, redLetter: model.settings.redLetter) {
+            VStack(alignment: .leading, spacing: 8) {
+                // Every run carries its own face and colour; the face here
+                // is for the line breaks between blocks.
+                page
+                    .font(RibbonType.scripture(size))
+                    .lineSpacing(size * CGFloat(model.settings.lineHeightMultiple - 1))
+                    .fixedSize(horizontal: false, vertical: true)
+                SmallCaps(place.formatted, size: 11)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .well(.small)
+        }
+    }
+
+    /// Two verses set the way ChapterTextView sets them, so the preview is
+    /// the page and not a description of it: a number before each verse but
+    /// a chapter's first, the words of Jesus in the crimson ink when the
+    /// switch is on, each block of the chapter on its own line, and a
+    /// psalm's title and a stanza break left out.
+    ///
+    /// The walk is the page's — a running verse moved by every number, a
+    /// title's included, as `ownTexts()` keeps it — so a verse that begins
+    /// on a title still finds its words in the line after it. Nil when the
+    /// chapter does not have the verse.
+    private func pageText(_ chapter: ScriptureChapter, from first: Int, size: CGFloat, redLetter: Bool) -> Text? {
+        var lines: [Text] = []
+        var running: Int?
+        var numbered: Set<Int> = []
+        for block in chapter.blocks where block.s != .b {
+            var line: Text?
+            for span in block.x {
+                if let v = span.v { running = v }
+                guard block.s != .d, let verse = running, verse == first || verse == first + 1 else { continue }
+                var run = pageWords(span.t, size: size, red: redLetter && span.isRedLetter)
+                if verse != 1 && !numbered.contains(verse) {
+                    numbered.insert(verse)
+                    run = Text("\(verseNumber(verse, size: size))\(run)")
+                }
+                if let sofar = line {
+                    line = Text("\(sofar)\(run)")
+                } else {
+                    line = run
+                }
+            }
+            if let line { lines.append(line) }
+        }
+        guard var page = lines.first else { return nil }
+        for line in lines.dropFirst() {
+            page = Text("\(page)\n\(line)")
+        }
+        return page
+    }
+
+    /// The page's verse number: small caps at 0.62 of the size, ivory at
+    /// 45%, raised by 0.3 of the size, and a thin space after it.
+    private func verseNumber(_ verse: Int, size: CGFloat) -> Text {
+        Text(verbatim: "\(verse)\u{2009}")
+            .font(RibbonType.smallCaps(size * 0.62))
+            .foregroundStyle(Palette.text.opacity(0.45))
+            .baselineOffset(size * 0.3)
+    }
+
+    /// A run of the page's words: ivory, or the crimson ink where the
+    /// words are Jesus' and red letter is on — the page's own red.
+    private func pageWords(_ words: String, size: CGFloat, red: Bool) -> Text {
+        Text(verbatim: words)
+            .font(RibbonType.scripture(size))
+            .foregroundStyle(red ? Ink.crimson.color : Palette.text)
     }
 }
 
@@ -160,14 +262,17 @@ struct Segments: View {
 /// it fires a handful of times a year and is an invitation back. Nothing
 /// here is about absence, lapses, streaks, or reminders to read, because
 /// those notifications don't exist.
+///
+/// They say who (A66). Each room's switches sit under its faces, and in a
+/// room of two — where "they" is one person — the switches name them and
+/// show the notification itself, their face beside the words that will
+/// arrive. A room of three or more, or one you are alone in, reads as it
+/// always did.
 struct NotificationSettingsScreen: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private enum Edge { case from, until }
-    @State private var editing: Edge?
     @State private var allowed = true
 
     var body: some View {
@@ -198,27 +303,21 @@ struct NotificationSettingsScreen: View {
                 }
 
                 SettingsGroup(title: Copy.quietHours, footnote: Copy.thinkingOfYouStillArrives) {
-                    // The wheel opens under the row it sets, and that row's
-                    // time lights while it is open: with two times and one
-                    // wheel, the wheel has to say whose it is.
-                    SettingRow(Copy.quietHoursFrom, value: clock(model.settings.quietHoursStart), chevron: false, active: editing == .from) {
-                        editing = editing == .from ? nil : .from
-                    }
-                    if editing == .from {
-                        minutePicker(minutes: Binding(
-                            get: { model.settings.quietHoursStart },
-                            set: { m in model.updateSettings { $0.quietHoursStart = m } }))
-                    }
-                    SettingRow(Copy.quietHoursUntil, value: clock(model.settings.quietHoursEnd), chevron: false, active: editing == .until) {
-                        editing = editing == .until ? nil : .until
-                    }
-                    if editing == .until {
-                        minutePicker(minutes: Binding(
-                            get: { model.settings.quietHoursEnd },
-                            set: { m in model.updateSettings { $0.quietHoursEnd = m } }))
+                    // One tile, where there were two rows and a wheel under
+                    // each (A66): the night drawn as a band, and over it the
+                    // two times in a sentence — in the same clock the
+                    // handles are spoken in, so what is read and what is
+                    // heard agree.
+                    SettingControl(quietHoursTitle, subtitle: Copy.quietHoursBandSub) {
+                        QuietHoursBandView(
+                            start: Binding(
+                                get: { model.settings.quietHoursStart },
+                                set: { m in model.updateSettings { $0.quietHoursStart = m } }),
+                            end: Binding(
+                                get: { model.settings.quietHoursEnd },
+                                set: { m in model.updateSettings { $0.quietHoursEnd = m } }))
                     }
                 }
-                .animation(RibbonMotion.settle(still: reduceMotion), value: editing)
             }
         }
         .task { await Notifications.refreshAllowed(); allowed = Notifications.allowed }
@@ -231,49 +330,101 @@ struct NotificationSettingsScreen: View {
 
     private func roomGroup(_ room: Room) -> some View {
         let prefs = model.notificationPrefs(for: room)
-        let book = model.openReading(in: room).flatMap { Bible.book(id: $0.bookID)?.name }
-        return SettingsGroup(title: model.displayName(of: room), detail: book) {
-            SettingSwitch(Copy.notesLeftForYou, subtitle: Copy.notesLeftForYouSub, isOn: Binding(
-                get: { prefs.notesLeft },
-                set: { on in var p = prefs; p.notesLeft = on; model.setNotificationPrefs(p, for: room) }))
-            SettingSwitch(Copy.cardsOpen, subtitle: Copy.cardsOpenSub, isOn: Binding(
-                get: { prefs.cardsOpen },
-                set: { on in var p = prefs; p.cardsOpen = on; model.setNotificationPrefs(p, for: room) }))
-            SettingSwitch(Copy.whenTheyOpenTheBook, subtitle: Copy.whenTheyOpenTheBookSub, isOn: Binding(
-                get: { prefs.whenTheyOpenTheBook },
-                set: { on in var p = prefs; p.whenTheyOpenTheBook = on; model.setNotificationPrefs(p, for: room) }))
-            SettingSwitch(Copy.thinkingOfYou, subtitle: Copy.thinkingOfYouSub, isOn: Binding(
-                get: { prefs.thinkingOfYou },
-                set: { on in var p = prefs; p.thinkingOfYou = on; model.setNotificationPrefs(p, for: room) }))
+        let reading = model.openReading(in: room)
+        let book = reading.flatMap { Bible.book(id: $0.bookID)?.name }
+
+        // A room of two names the other person, in the words their
+        // notifications will use. A notification that names a verse or a
+        // book is shown, not described — and where there is no verse or
+        // book to put in it yet, the switch says what it always said.
+        let other = theOther(in: room)
+        var notesExample: SettingExample?
+        var bookExample: SettingExample?
+        if let other, let reading {
+            notesExample = example(from: other, Copy.notifNoteLeft(other.name, model.myPosition(in: reading).formatted))
+        }
+        if let other, let book {
+            bookExample = example(from: other, Copy.notifReading(other.name, book))
+        }
+        let notesSub: String? = notesExample == nil ? Copy.notesLeftForYouSub : nil
+        let cardsSub = other.map { Copy.cardsOpenSubNamed($0.name) } ?? Copy.cardsOpenSub
+        let bookTitle = other.map { Copy.whenNameOpensTheBook($0.name) } ?? Copy.whenTheyOpenTheBook
+        let bookSub: String? = bookExample == nil ? Copy.whenTheyOpenTheBookSub : nil
+        let thinkingSub = other.map { Copy.thinkingOfYouSubNamed($0.name) } ?? Copy.thinkingOfYouSub
+
+        return VStack(alignment: .leading, spacing: 10) {
+            roomHeader(room, book: book)
+            SettingsGroup {
+                SettingSwitch(Copy.notesLeftForYou, subtitle: notesSub, example: notesExample, isOn: Binding(
+                    get: { prefs.notesLeft },
+                    set: { on in var p = prefs; p.notesLeft = on; model.setNotificationPrefs(p, for: room) }))
+                SettingSwitch(Copy.cardsOpen, subtitle: cardsSub, isOn: Binding(
+                    get: { prefs.cardsOpen },
+                    set: { on in var p = prefs; p.cardsOpen = on; model.setNotificationPrefs(p, for: room) }))
+                SettingSwitch(bookTitle, subtitle: bookSub, example: bookExample, isOn: Binding(
+                    get: { prefs.whenTheyOpenTheBook },
+                    set: { on in var p = prefs; p.whenTheyOpenTheBook = on; model.setNotificationPrefs(p, for: room) }))
+                SettingSwitch(Copy.thinkingOfYou, subtitle: thinkingSub, isOn: Binding(
+                    get: { prefs.thinkingOfYou },
+                    set: { on in var p = prefs; p.thinkingOfYou = on; model.setNotificationPrefs(p, for: room) }))
+            }
         }
     }
 
-    private func clock(_ minutes: Int) -> String {
-        let date = Calendar.current.date(bySettingHour: minutes / 60, minute: minutes % 60, second: 0, of: Date()) ?? Date()
-        return date.formatted(date: .omitted, time: .shortened)
+    /// A room's section label with its faces before it (A66) — the same
+    /// overlapping faces its tile in Your rooms draws, so the room is known
+    /// by who is in it as well as by its name. The label stays the heading
+    /// a screen reader stops at; the faces are a picture, and say nothing,
+    /// so nobody is counted aloud.
+    private func roomHeader(_ room: Room, book: String?) -> some View {
+        HStack(spacing: 8) {
+            HStack(spacing: -5) {
+                ForEach(model.members(of: room)) { membership in
+                    PortraitView(
+                        person: model.person(membership.personID),
+                        ink: membership.ink,
+                        size: 18,
+                        image: model.portrait(membership.personID))
+                }
+            }
+            .accessibilityHidden(true)
+            SectionLabel(model.displayName(of: room), detail: book)
+        }
+        .padding(.horizontal, RibbonShape.textInset)
     }
 
-    private func minutePicker(minutes: Binding<Int>) -> some View {
-        DatePicker(
-            "",
-            selection: Binding(
-                get: {
-                    Calendar.current.date(
-                        bySettingHour: minutes.wrappedValue / 60,
-                        minute: minutes.wrappedValue % 60, second: 0, of: Date()) ?? Date()
-                },
-                set: { date in
-                    let c = Calendar.current.dateComponents([.hour, .minute], from: date)
-                    minutes.wrappedValue = (c.hour ?? 0) * 60 + (c.minute ?? 0)
-                }),
-            displayedComponents: .hourAndMinute)
-        .datePickerStyle(.wheel)
-        .labelsHidden()
-        .colorScheme(.dark)
-        .frame(maxWidth: .infinity)
-        .frame(height: 160)
-        .clipped()
-        .well()
+    /// The one other person in a room of two, called what their
+    /// notifications call them: the first word of their name.
+    private struct TheOther {
+        var person: Person
+        var ink: Ink?
+        var name: String { firstName(person.name) }
+    }
+
+    /// Nil alone, at three or more, and for someone this phone does not
+    /// know by name yet — a switch never names a blank.
+    private func theOther(in room: Room) -> TheOther? {
+        let others = model.members(of: room).filter { $0.personID != model.me?.id }
+        guard others.count == 1, let membership = others.first,
+              let person = model.person(membership.personID),
+              !person.name.trimmingCharacters(in: .whitespaces).isEmpty
+        else { return nil }
+        return TheOther(person: person, ink: membership.ink)
+    }
+
+    private func example(from other: TheOther, _ sentence: String) -> SettingExample {
+        SettingExample(
+            person: other.person, ink: other.ink,
+            image: model.portrait(other.person.id), sentence: sentence)
+    }
+
+    /// The quiet hours as a sentence, or none at all when both ends are on
+    /// the same minute — the core's test, the one the band draws by.
+    private var quietHoursTitle: String {
+        let start = model.settings.quietHoursStart
+        let end = model.settings.quietHoursEnd
+        guard QuietHoursBand.wrapped(start) != QuietHoursBand.wrapped(end) else { return Copy.noQuietHours }
+        return Copy.quietHoursFromUntil(QuietHoursBandView.clock(start), QuietHoursBandView.clock(end))
     }
 }
 

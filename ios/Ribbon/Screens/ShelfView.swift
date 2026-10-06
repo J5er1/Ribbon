@@ -138,7 +138,10 @@ struct EmberRecordScreen: View {
     @Environment(\.dismiss) private var dismiss
     let reading: Reading
     var onOpenVerse: (VerseAddress) -> Void
-    var onReadAgain: (String) -> Void
+    /// Starting the book again, in the room it was read in. Nil where the
+    /// record is opened from your own shelf on You (A66): reading a book
+    /// again belongs to the room, not to you, so there it is not offered.
+    var onReadAgain: ((String) -> Void)? = nil
 
     private var book: BibleBook? { Bible.book(id: reading.bookID) }
     private var notes: [Note] { model.notes(in: reading) }
@@ -224,8 +227,10 @@ struct EmberRecordScreen: View {
                 }
 
                 VStack(spacing: 14) {
-                    QuietControl(title: Copy.readItAgain) {
-                        onReadAgain(reading.bookID)
+                    if let onReadAgain {
+                        QuietControl(title: Copy.readItAgain) {
+                            onReadAgain(reading.bookID)
+                        }
                     }
                     // "Make this a book" arrives with the printed keepsake
                     // (§15 horizon).

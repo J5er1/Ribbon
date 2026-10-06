@@ -1,0 +1,546 @@
+import SwiftUI
+import RibbonCore
+
+// Things drawn in the room's own idiom (A66, I40).
+//
+// The last platform defaults on You and the settings screens were Apple's
+// switch, slider and time wheel, and a circle with a check in it — the
+// parts of the app that looked assembled rather than made (§17's last
+// question). They are drawn here instead, out of the same few things the
+// rest of the room is made of: paper, wells, the rule, ivory, chartreuse,
+// and one new shape — the end of a ribbon.
+//
+// None of them plays a haptic. §9.3 and I25 keep the haptic list closed,
+// and the selection tick a drawn control would reach for is the first
+// thing it names as left off.
+
+// MARK: - The ribbon's end (A66)
+
+/// A straight ribbon end: a band as wide as its rect, ending in a
+/// swallowtail. The Wave's own tails made straight — "straight reads calm
+/// and bookish" (brief §5) — with the notch the same depth the Wave's are,
+/// a little under half the ribbon's width (≈0.43 there; 0.45 here, where
+/// there is no curve to soften it). Hard edges: no stroke, no gradient, no
+/// shadow. Android draws the same five points (`Drawn.kt`).
+struct RibbonTail: Shape {
+    /// The notch's depth, as a fraction of the ribbon's width.
+    var notch: CGFloat = 0.45
+
+    func path(in rect: CGRect) -> Path {
+        let depth = min(notch * rect.width, rect.height)
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY - depth))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.closeSubpath()
+        return path
+    }
+}
+
+/// A ribbon hanging from an edge — a tile's top, the hairline across You's
+/// flyleaf, the rule over the ink picker. It lays in by growing down from
+/// that edge and lifts out the same way back up, so it reads as a ribbon
+/// laid into a page rather than a mark switched on. Under reduce motion it
+/// is drawn at full length and only fades (§11).
+///
+/// The caller says whether it is down (`laid`), how long after that turns
+/// true it begins (a stagger across a row), and on which curve. A change of
+/// length runs on the same curve; under reduce motion one length
+/// cross-fades into the other rather than the ribbon growing.
+///
+/// Decoration: hidden from the screen reader and from the finger. The row
+/// it marks says its state itself — `.isSelected`, a label.
+struct HangingRibbon: View {
+    var color: Color
+    var width: CGFloat
+    var length: CGFloat
+    var laid = true
+    var delay: Double = 0
+    var motion: Animation = RibbonMotion.handled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            if reduceMotion {
+                // Each length is its own ribbon, so a new length fades in
+                // over the old one instead of the ribbon being pulled.
+                tail(length)
+                    .id(length)
+                    .transition(.opacity)
+            } else {
+                tail(length)
+            }
+        }
+        .frame(width: width, height: length, alignment: .top)
+        // Not quite nothing: a scale of zero is a matrix with no inverse,
+        // and the progress bar's fill makes the same choice.
+        .scaleEffect(x: 1, y: laid || reduceMotion ? 1 : 0.001, anchor: .top)
+        .opacity(laid ? 1 : 0)
+        .animation((reduceMotion ? RibbonMotion.arrive : motion).delay(laid ? delay : 0), value: laid)
+        .animation(reduceMotion ? RibbonMotion.arrive : motion, value: length)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    private func tail(_ length: CGFloat) -> some View {
+        RibbonTail()
+            .fill(color)
+            .frame(width: width, height: length)
+    }
+}
+
+/// The chosen one of several (A66): a ribbon laid into the tile from its
+/// top edge, where the circle and check used to be. A row becoming chosen
+/// has its ribbon laid in, on the hand's spring — a thing the size of a
+/// hand, settling into place; the row losing the choice has its ribbon
+/// lifted out the same way. `SettingChoice` hangs it at the trailing side,
+/// the current room in Your rooms at the leading.
+struct ChoiceRibbon: View {
+    var laid: Bool
+    var color: Color = Palette.chartreuse
+    var width: CGFloat = 10
+    var length: CGFloat = 22
+
+    var body: some View {
+        HangingRibbon(color: color, width: width, length: length, laid: laid, motion: RibbonMotion.handled)
+    }
+}
+
+// MARK: - The switch (I40)
+
+/// A switch drawn on the page (I40): a 46 × 28 capsule. Off, it is a well
+/// with a paper knob at its leading end; on, the well fills with the
+/// accent and the knob — now the ground's own colour, as the way-in
+/// button's words are on the accent — sits at the trailing end. The knob
+/// travels on the fingertip's spring; the fill comes up on `arrive`. Under
+/// reduce motion the knob does not travel: it fades out of one end and
+/// into the other, as the Segments pill does.
+///
+/// A picture of a state, hidden from the screen reader: the `Toggle` it
+/// is drawn for says on or off itself.
+struct RibbonSwitch: View {
+    var isOn: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    static let width: CGFloat = 46
+    static let height: CGFloat = 28
+    private static let knobSize: CGFloat = 22
+    private static let inset: CGFloat = 3
+    private static var far: CGFloat { width - knobSize - inset }
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            Color.clear
+                .frame(width: Self.width, height: Self.height)
+                .well(TileShape(Self.height / 2))
+            Capsule()
+                .fill(Palette.chartreuse)
+                .frame(width: Self.width, height: Self.height)
+                .opacity(isOn ? 1 : 0)
+                .animation(RibbonMotion.arrive, value: isOn)
+            if reduceMotion {
+                knob(on: false)
+                    .offset(x: Self.inset)
+                    .opacity(isOn ? 0 : 1)
+                knob(on: true)
+                    .offset(x: Self.far)
+                    .opacity(isOn ? 1 : 0)
+            } else {
+                knob(on: isOn)
+                    .offset(x: isOn ? Self.far : Self.inset)
+            }
+        }
+        .frame(width: Self.width, height: Self.height)
+        .animation(reduceMotion ? RibbonMotion.arrive : RibbonMotion.touched, value: isOn)
+        .accessibilityHidden(true)
+    }
+
+    private func knob(on: Bool) -> some View {
+        Circle()
+            .fill(Palette.surface)
+            .overlay { Circle().strokeBorder(Palette.rule, lineWidth: 1) }
+            .overlay {
+                // The knob's colour is a change of light, not of place: it
+                // keeps its curve wherever the knob is.
+                Circle()
+                    .fill(Palette.ground)
+                    .opacity(on ? 1 : 0)
+                    .animation(RibbonMotion.arrive, value: on)
+            }
+            .frame(width: Self.knobSize, height: Self.knobSize)
+    }
+}
+
+/// The toggle style every switch in the app wears (I40): the label, air,
+/// and the drawn switch, and the whole row takes the tap — the row is the
+/// control, the switch only shows where it stands. The row's insets and
+/// height are the style's to draw, so the part a finger can take is the
+/// whole tile and not the text inside its margins.
+///
+/// The `Toggle` is kept underneath, so what a screen reader is told — a
+/// switch, its label, on or off — is the system's own and not a copy of it.
+struct RibbonToggleStyle: ToggleStyle {
+    var insets = EdgeInsets()
+    var minHeight: CGFloat = 0
+
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 12) {
+            configuration.label
+            Spacer(minLength: 8)
+            RibbonSwitch(isOn: configuration.isOn)
+        }
+        .padding(insets)
+        .frame(maxWidth: .infinity, minHeight: minHeight, alignment: .leading)
+        .contentShape(Rectangle())
+        .onTapGesture { configuration.isOn.toggle() }
+    }
+}
+
+// MARK: - The slider (I40)
+
+/// A slider drawn on the page (I40), for Text's size: a well with a small A
+/// at one end and a large one at the other — the two ends of the scale,
+/// set in the Scripture face the slider sizes — and between them the
+/// rule, the accent up to the thumb, and a paper thumb.
+///
+/// The thumb follows the finger exactly, with nothing easing it: while it
+/// is held it is where the finger is, and a finger lifting off a step
+/// leaves nothing to settle. It lands on the nearest step and stops at
+/// either end.
+///
+/// To a screen reader it is one adjustable element: its label, its value
+/// said the caller's way ("19 point"), and a swipe up or down moves one
+/// step.
+struct RibbonSlider: View {
+    @Binding var value: Double
+    var range: ClosedRange<Double>
+    var step: Double
+    var label: String
+    var spoken: (Double) -> String
+
+    private static let thumb: CGFloat = 24
+
+    init(
+        value: Binding<Double>, in range: ClosedRange<Double>, step: Double,
+        label: String, spoken: @escaping (Double) -> String
+    ) {
+        self._value = value
+        self.range = range
+        self.step = step
+        self.label = label
+        self.spoken = spoken
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            end(13)
+            GeometryReader { proxy in
+                track(width: proxy.size.width, height: proxy.size.height)
+            }
+            end(21)
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 44)
+        .well(.small)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
+        .accessibilityValue(spoken(value))
+        .accessibilityAdjustableAction { direction in
+            if direction == .increment {
+                set(value + step)
+            } else if direction == .decrement {
+                set(value - step)
+            }
+        }
+    }
+
+    /// One end of the scale: a letter as a picture of a size, not a word,
+    /// so it is not in Copy and nobody hears it. Held at one type size,
+    /// as What's New holds its pictures: it is a drawing of the scale,
+    /// and a drawing that grew with Dynamic Type would leave the well.
+    private func end(_ size: CGFloat) -> some View {
+        Text(verbatim: "A")
+            .font(RibbonType.scripture(size))
+            .foregroundStyle(Palette.muted)
+            .dynamicTypeSize(.large)
+            .accessibilityHidden(true)
+    }
+
+    private func track(width: CGFloat, height: CGFloat) -> some View {
+        let thumb = Self.thumb
+        let travel = max(1, width - thumb)
+        let centre = thumb / 2 + travel * CGFloat(fraction)
+        return ZStack(alignment: .leading) {
+            Rectangle()
+                .fill(Palette.rule)
+                .frame(height: 1)
+            Rectangle()
+                .fill(Palette.chartreuse)
+                .frame(width: centre, height: 2)
+            Circle()
+                .fill(Palette.surface)
+                .overlay { Circle().strokeBorder(Palette.rule, lineWidth: 1) }
+                .frame(width: thumb, height: thumb)
+                .offset(x: centre - thumb / 2)
+        }
+        .frame(width: width, height: height)
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { drag in
+                    let along = min(max((drag.location.x - thumb / 2) / travel, 0), 1)
+                    set(range.lowerBound + Double(along) * (range.upperBound - range.lowerBound))
+                }
+        )
+    }
+
+    /// Where the value sits along the scale, 0 to 1.
+    private var fraction: Double {
+        let span = range.upperBound - range.lowerBound
+        guard span > 0 else { return 0 }
+        return min(max((value - range.lowerBound) / span, 0), 1)
+    }
+
+    /// The nearest step to a proposed value, held to the range, written
+    /// only when it is a different step — the binding persists, and a
+    /// finger resting on the track sends a change every frame.
+    private func set(_ proposed: Double) {
+        let stepped = step > 0
+            ? range.lowerBound + ((proposed - range.lowerBound) / step).rounded() * step
+            : proposed
+        let held = min(max(stepped, range.lowerBound), range.upperBound)
+        guard held != value else { return }
+        var still = Transaction()
+        still.disablesAnimations = true
+        withTransaction(still) { value = held }
+    }
+}
+
+// MARK: - Quiet hours, drawn as the night (A66)
+
+/// The quiet hours as one band (A66), where there were two rows and a
+/// wheel under each: a day laid out from noon to noon, the waking hours
+/// raised, the quiet stretch banked — the ground with the paper's grain,
+/// the dark part of the day — and a handle at each end of it. The
+/// arithmetic is the core's (`QuietHoursBand`), so a handle sits on the
+/// same place for the same time on both phones.
+///
+/// A finger anywhere on the band takes the nearer handle (the end handle
+/// when they are level, as they are when there are no quiet hours) and
+/// moves it to the quarter hour under it, with nothing easing it. A screen
+/// reader finds the two handles as two adjustable elements, the beginning
+/// first, each moving by a quarter of an hour.
+struct QuietHoursBandView: View {
+    @Binding var start: Int
+    @Binding var end: Int
+    /// The handle a finger took when it came down; nil between drags. Gesture
+    /// state, so a drag the scroll view takes away leaves nothing held.
+    @GestureState private var held: Handle? = nil
+
+    private enum Handle { case start, end }
+
+    static let height: CGFloat = 44
+
+    init(start: Binding<Int>, end: Binding<Int>) {
+        self._start = start
+        self._end = end
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            GeometryReader { proxy in
+                band(width: proxy.size.width)
+            }
+            .frame(height: Self.height)
+            marks
+        }
+    }
+
+    private func band(width: CGFloat) -> some View {
+        let shape = TileShape.small.shape
+        return ZStack(alignment: .topLeading) {
+            ZStack(alignment: .leading) {
+                Palette.raised
+                ForEach(QuietHoursBand.spans(start: start, end: end), id: \.self) { span in
+                    Palette.ground
+                        .frame(width: max(0, CGFloat(span.to - span.from) * width))
+                        .offset(x: CGFloat(span.from) * width)
+                }
+                Image("PaperGrain")
+                    .resizable(resizingMode: .tile)
+                    .opacity(0.035)
+                    .allowsHitTesting(false)
+            }
+            .clipShape(shape)
+            .overlay { shape.strokeBorder(Palette.rule, lineWidth: 1) }
+            .accessibilityHidden(true)
+
+            handle(.start, minute: start, width: width)
+            handle(.end, minute: end, width: width)
+        }
+        .frame(width: width, height: Self.height)
+        .contentShape(Rectangle())
+        .gesture(drag(width: width))
+        .accessibilityElement(children: .contain)
+    }
+
+    /// A 6 × 30 ivory capsule in a 44-point column: the column is what a
+    /// screen reader's cursor frames, and what a finger aims at.
+    private func handle(_ which: Handle, minute: Int, width: CGFloat) -> some View {
+        let x = min(max(CGFloat(QuietHoursBand.position(of: minute)) * width, 3), max(3, width - 3))
+        return Capsule()
+            .fill(Palette.text)
+            .frame(width: 6, height: 30)
+            .frame(width: 44, height: Self.height)
+            .contentShape(Rectangle())
+            .accessibilityElement()
+            .accessibilityLabel(which == .start ? Copy.quietHoursBegin : Copy.quietHoursEnd)
+            .accessibilityValue(Self.clock(minute))
+            .accessibilityAdjustableAction { direction in
+                if direction == .increment {
+                    move(which, by: 1)
+                } else if direction == .decrement {
+                    move(which, by: -1)
+                }
+            }
+            .accessibilitySortPriority(which == .start ? 1 : 0)
+            .position(x: x, y: Self.height / 2)
+    }
+
+    /// The three hours under the band — six in the evening, midnight, six
+    /// in the morning — each a tick at the band's lower edge and the hour
+    /// as the reader's own clock says it, hour only. A picture of where the
+    /// night falls; the handles say the times themselves.
+    private var marks: some View {
+        PlacedAcross(fractions: QuietHoursBand.marks.map { QuietHoursBand.position(of: $0) }) {
+            ForEach(QuietHoursBand.marks, id: \.self) { minute in
+                VStack(spacing: 3) {
+                    Rectangle()
+                        .fill(Palette.rule)
+                        .frame(width: 1, height: 5)
+                    SmallCaps(Self.hour(minute), size: 10)
+                }
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    /// The handle is chosen once, where the finger came down, and kept for
+    /// the whole drag — chosen afresh each time, the start handle dragged
+    /// past the end one would hand the drag over to it halfway.
+    private func drag(width: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .updating($held) { drag, held, _ in
+                if held == nil { held = nearer(to: drag.startLocation.x, width: width) }
+            }
+            .onChanged { drag in
+                guard width > 0 else { return }
+                let which = held ?? nearer(to: drag.startLocation.x, width: width)
+                set(which, to: QuietHoursBand.minute(at: Double(drag.location.x / width)))
+            }
+    }
+
+    private func nearer(to x: CGFloat, width: CGFloat) -> Handle {
+        let fromStart = abs(CGFloat(QuietHoursBand.position(of: start)) * width - x)
+        let fromEnd = abs(CGFloat(QuietHoursBand.position(of: end)) * width - x)
+        return fromStart < fromEnd ? .start : .end
+    }
+
+    private func move(_ which: Handle, by steps: Int) {
+        set(which, to: QuietHoursBand.stepped(which == .start ? start : end, by: steps))
+    }
+
+    /// Written through only when the minute is a different one: the
+    /// binding persists and re-registers push, and a finger held still on
+    /// the band sends a change every frame.
+    private func set(_ which: Handle, to minute: Int) {
+        let edge = which == .start ? $start : $end
+        guard minute != edge.wrappedValue else { return }
+        var still = Transaction()
+        still.disablesAnimations = true
+        withTransaction(still) { edge.wrappedValue = minute }
+    }
+
+    /// A minute of the day as the reader's clock says it ("10:00 PM",
+    /// "22:00"): the handles' spoken values, and the tile's title.
+    static func clock(_ minute: Int) -> String {
+        date(minute).formatted(date: .omitted, time: .shortened)
+    }
+
+    /// The hour alone ("6 PM", "18"), for the marks.
+    static func hour(_ minute: Int) -> String {
+        date(minute).formatted(.dateTime.hour())
+    }
+
+    /// A minute of the day on a day the clocks do not change: today, an
+    /// hour that a change of clocks skips would be read as the hour after.
+    private static func date(_ minute: Int) -> Date {
+        let m = QuietHoursBand.wrapped(minute)
+        let day = Date(timeIntervalSinceReferenceDate: 43_200)
+        return Calendar.current.date(bySettingHour: m / 60, minute: m % 60, second: 0, of: day) ?? day
+    }
+}
+
+/// Subviews set along a width, each centred over its fraction of it and
+/// hung from the top: marks under a band, wherever the band says they go.
+/// As tall as the tallest, so the hours under the quiet-hours band grow
+/// with Dynamic Type instead of spilling out of a fixed row.
+struct PlacedAcross: Layout {
+    var fractions: [Double]
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+        let natural = sizes.reduce(0) { $0 + $1.width }
+        let width = proposal.width.map { $0.isFinite ? $0 : natural } ?? natural
+        return CGSize(width: width, height: sizes.map(\.height).max() ?? 0)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        for index in subviews.indices {
+            let fraction = index < fractions.count ? fractions[index] : 0
+            subviews[index].place(
+                at: CGPoint(x: bounds.minX + bounds.width * CGFloat(fraction), y: bounds.minY),
+                anchor: .top, proposal: .unspecified)
+        }
+    }
+}
+
+// MARK: - A notification, shown before it arrives (A66)
+
+/// What a switch's notification will say, in a room of two: the other
+/// person's face and the sentence that will arrive (S19, A66). A picture
+/// of the notification, so a switch says what it lets through rather than
+/// describing it.
+struct SettingExample {
+    var person: Person?
+    var ink: Ink?
+    var image: UIImage?
+    var sentence: String
+}
+
+/// The example drawn: a small well inside the tile, the face at 16 points
+/// and the sentence beside it. One element to a screen reader, said as an
+/// example ("It reads: …") so it is not mistaken for a notification that
+/// has come.
+struct SettingExampleView: View {
+    var example: SettingExample
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            PortraitView(person: example.person, ink: example.ink, size: 16, image: example.image)
+                .padding(.top, 1)
+            Text(example.sentence)
+                .font(RibbonType.ui(14))
+                .foregroundStyle(Palette.text.opacity(0.8))
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .well(.small)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Copy.notificationExampleSpoken(example.sentence))
+    }
+}

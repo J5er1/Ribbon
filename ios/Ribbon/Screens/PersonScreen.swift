@@ -169,15 +169,23 @@ private struct LeftNoteTile: View {
 }
 
 /// Picking an ink when colour is identity (§4.5, §6.7) — an invitation, not
-/// an interruption. Eight swatches, each drawn at 30 points inside a 44
-/// point target, the chosen one ringed.
+/// an interruption. The eight inks are eight ribbons hanging from a rule
+/// (A66), each in a 44 point column: yours pulled further down than the
+/// rest, one somebody else holds drawn short and faint. Which is yours is
+/// said by a ribbon's length, a shape, and not by its colour or a ring.
 struct InkPickerSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let room: Room
     /// A swatch has been taken and the sheet is on its way out.
     @State private var choosing = false
+
+    /// Your ink's ribbon, pulled down past the others; the column's height.
+    private static let yours: CGFloat = 60
+    /// An ink nobody in the room holds.
+    private static let free: CGFloat = 44
+    /// An ink somebody else holds: short, and faint besides.
+    private static let held: CGFloat = 30
 
     var body: some View {
         VStack(spacing: 26) {
@@ -193,34 +201,36 @@ struct InkPickerSheet: View {
                         guard !isTaken, !choosing else { return }
                         choosing = true
                         model.pickInk(ink, in: room)
-                        // The ring settles round the choice before the sheet
-                        // goes, so the choice is seen to be taken. It used to
-                        // leave on the same frame, and the ring never moved.
+                        // The ribbon is pulled down to its new length before
+                        // the sheet goes, so the choice is seen to be taken.
+                        // The hand's spring has all but arrived by then.
                         DispatchQueue.main.asyncAfter(deadline: .now() + RibbonMotion.arriveDuration) {
                             dismiss()
                         }
                     } label: {
-                        ZStack {
-                            Circle()
-                                .strokeBorder(Palette.text.opacity(0.8), lineWidth: 1.6)
-                                .frame(width: 38, height: 38)
-                                .scaleEffect(ink == mine || reduceMotion ? 1 : 0.84)
-                                .opacity(ink == mine ? 1 : 0)
-                                // Under reduce motion the ring only fades
-                                // from one swatch to the next.
-                                .animation(reduceMotion ? RibbonMotion.arrive : RibbonMotion.touched, value: mine)
-                            Circle()
-                                .fill(ink.color.opacity(isTaken ? 0.2 : 1))
-                                .frame(width: 30, height: 30)
-                        }
-                        .frame(width: 44, height: 44)
-                        .contentShape(Circle())
+                        // Lengths change on the hand's spring, the old
+                        // ribbon of yours rising as the new one is pulled;
+                        // under reduce motion one length fades into the
+                        // other (`HangingRibbon`).
+                        HangingRibbon(
+                            color: ink.color.opacity(isTaken ? 0.2 : 1),
+                            width: 18,
+                            length: ink == mine ? Self.yours : (isTaken ? Self.held : Self.free))
+                        .frame(width: 44, height: Self.yours, alignment: .top)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.pressable)
                     .disabled(isTaken)
                     .accessibilityLabel(Copy.inkSwatchSpoken(ink.displayName, yours: ink == mine, taken: isTaken))
                     .accessibilityAddTraits(ink == mine ? [.isSelected] : [])
                 }
+            }
+            // The rule the ribbons hang from, drawn over their top edges
+            // so each reads as tucked under it.
+            .overlay(alignment: .top) {
+                HairlineRule()
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
             }
             .frame(maxWidth: .infinity)
             .padding(.horizontal, 12)
@@ -229,7 +239,9 @@ struct InkPickerSheet: View {
         .frame(maxWidth: .infinity)
         .room()
         .presentationBackground(Palette.ground)
-        .presentationDetents([.height(220)])
+        // Sixteen points taller than the circles needed: each column is
+        // now as long as your ribbon hangs.
+        .presentationDetents([.height(236)])
         // iPad ignores detents; without this the eight swatches sit at
         // the top of a vast empty form sheet.
         .presentationSizing(.fitted)
