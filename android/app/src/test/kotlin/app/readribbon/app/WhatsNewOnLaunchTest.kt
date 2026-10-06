@@ -15,16 +15,21 @@ import app.readribbon.screens.LONG_LOOP_MS
 import app.readribbon.screens.LOOP_MS
 import app.readribbon.screens.STILL_AT
 import app.readribbon.screens.body
+import app.readribbon.screens.flyleafFrame
 import app.readribbon.screens.followingFrame
 import app.readribbon.screens.loopTime
 import app.readribbon.screens.lordFrame
+import app.readribbon.screens.nightFrame
+import app.readribbon.screens.notificationsFrame
 import app.readribbon.screens.originalFrame
 import app.readribbon.screens.ownVersionFrame
 import app.readribbon.screens.roomGroupsFrame
 import app.readribbon.screens.selectionFrame
+import app.readribbon.screens.shelfFrame
 import app.readribbon.screens.staysFrame
 import app.readribbon.screens.timeline
 import app.readribbon.screens.title
+import app.readribbon.screens.versionsFrame
 import app.readribbon.services.Notifications
 import app.readribbon.services.LocalPresenceService
 import kotlin.time.Clock
@@ -262,6 +267,89 @@ class WhatsNewOnLaunchTest {
         assertTrue("awake before the follower moves on", staysFrame(awakeAgain).follower <= 1f)
     }
 
+    // The third release's five (A67).
+
+    @Test fun reduceMotionHoldsTheFrontOfTheBookAtItsEnd() {
+        val flyleaf = flyleafFrame(WhatsNewItem.flyleaf.timeline.stillAt)
+        assertTrue("every room's ribbon laid in", flyleaf.ribbons.all { it == 1f })
+        assertEquals(1f, flyleaf.shown, 0f)
+
+        val shelf = shelfFrame(WhatsNewItem.yourShelf.timeline.stillAt)
+        assertTrue("every book on the shelf", shelf.embers.all { it == 1f })
+        assertEquals(1f, shelf.shown, 0f)
+
+        val versions = versionsFrame(WhatsNewItem.versionsByReading.timeline.stillAt)
+        assertEquals("the ribbon in the version chosen by its words", 1f, versions.second, 0f)
+        assertEquals("and out of the other", 0f, versions.first, 0f)
+
+        val notifications = notificationsFrame(WhatsNewItem.notificationsByName.timeline.stillAt)
+        assertEquals("the switch on", 1f, notifications.on, 0f)
+        assertEquals("and the words it lets through written", 1f, notifications.written * notifications.said, 0f)
+
+        val night = nightFrame(WhatsNewItem.quietHoursNight.timeline.stillAt)
+        assertEquals("the night drawn", 1f, night.drawn * night.shown, 0f)
+        assertEquals("from ten in the evening, as it was set", 0f, night.later, 0f)
+    }
+
+    @Test fun eachFrontOfTheBookLoopBeginsAndEndsAtRest() {
+        for (t in listOf(0, WhatsNewItem.flyleaf.timeline.loopMs - 1)) {
+            val flyleaf = flyleafFrame(t)
+            assertEquals("no ribbon showing", 0f, flyleaf.shown * flyleaf.ribbons.sum(), 0.001f)
+        }
+        for (t in listOf(0, WhatsNewItem.yourShelf.timeline.loopMs - 1)) {
+            val shelf = shelfFrame(t)
+            assertEquals("an empty shelf", 0f, shelf.shown * shelf.embers.sum(), 0.001f)
+        }
+        for (t in listOf(0, WhatsNewItem.versionsByReading.timeline.loopMs - 1)) {
+            val versions = versionsFrame(t)
+            assertEquals("the ribbon at rest in the first", 1f, versions.first, 0.001f)
+            assertEquals(0f, versions.second, 0.001f)
+        }
+        for (t in listOf(0, WhatsNewItem.notificationsByName.timeline.loopMs - 1)) {
+            val notifications = notificationsFrame(t)
+            assertEquals("the switch off", 0f, notifications.on, 0.001f)
+            assertEquals("and nothing said", 0f, notifications.written * notifications.said, 0.001f)
+        }
+        for (t in listOf(0, WhatsNewItem.quietHoursNight.timeline.loopMs - 1)) {
+            val night = nightFrame(t)
+            assertEquals("no night on the band", 0f, night.drawn * night.shown, 0.001f)
+        }
+    }
+
+    /** Your rooms' ribbons, and the embers on the shelf, come one after another — never a later one ahead. */
+    @Test fun theRibbonsAndTheEmbersComeInTurn() {
+        for (t in 0 until LOOP_MS step 10) {
+            val ribbons = flyleafFrame(t).ribbons
+            assertEquals("the ribbons at $t", ribbons.sortedDescending(), ribbons)
+            val embers = shelfFrame(t).embers
+            assertEquals("the embers at $t", embers.sortedDescending(), embers)
+        }
+    }
+
+    /** One ribbon marks the version you read: it lifts out of one row before it is laid into the other. */
+    @Test fun theVersionsRibbonIsInOneRowAtATime() {
+        for (t in 0 until WhatsNewItem.versionsByReading.timeline.loopMs) {
+            val versions = versionsFrame(t)
+            assertEquals("at $t", 0f, versions.first * versions.second, 0f)
+        }
+    }
+
+    /**
+     * The night's start is moved on an hour with the whole night drawn,
+     * rests there as long as a picture rests, and is back at ten before the
+     * night fades.
+     */
+    @Test fun theNightsStartIsMovedAnHourAndBack() {
+        val loop = WhatsNewItem.quietHoursNight.timeline.loopMs
+        val atEleven = (0 until loop).filter { nightFrame(it).later == 1f }
+        assertTrue("it rests at eleven", atEleven.size >= 1600)
+        assertTrue("with the night drawn", atEleven.all { nightFrame(it).drawn * nightFrame(it).shown == 1f })
+        assertTrue(
+            "and is back at ten before it fades",
+            (0 until loop).filter { nightFrame(it).shown < 1f }.all { nightFrame(it).later == 0f },
+        )
+    }
+
     /**
      * The new pictures breathe as the first release's do: once everything
      * has arrived, nearly two seconds of nothing moving before the loop lets
@@ -279,6 +367,11 @@ class WhatsNewOnLaunchTest {
             WhatsNewItem.nativeSelection to ::selectionFrame,
             WhatsNewItem.roomGroups to ::roomGroupsFrame,
             WhatsNewItem.lordReadsLord to ::lordFrame,
+            WhatsNewItem.flyleaf to ::flyleafFrame,
+            WhatsNewItem.yourShelf to ::shelfFrame,
+            WhatsNewItem.versionsByReading to ::versionsFrame,
+            WhatsNewItem.notificationsByName to ::notificationsFrame,
+            WhatsNewItem.quietHoursNight to ::nightFrame,
         )) {
             val timeline = item.timeline
             val breath = stillFor(timeline.loopMs, timeline.stillAt, frame)
@@ -301,6 +394,8 @@ class WhatsNewOnLaunchTest {
             assertTrue("${release.id} has a day", Copy.whatsNewReleased(release.released) != null)
         }
         assertEquals("6 October 2026", Copy.whatsNewReleased("2026-10-06"))
+        assertEquals("7 October 2026", Copy.whatsNewReleased("2026-10-07"))
+        assertEquals("The front of the book", Copy.whatsNewTitle("2026-10-flyleaf"))
         assertEquals("Staying on the same page", Copy.whatsNewTitle("2026-10-following"))
         assertEquals("The words under the words", Copy.whatsNewTitle("2026-10-original"))
         assertEquals("an unknown release is headed by the screen", Copy.WHATS_NEW_HEADING, Copy.whatsNewTitle("gone"))

@@ -134,8 +134,9 @@ import app.readribbon.reading.SELECTION_TINT
 // You (A65), it is the same page with every release on it, newest first.
 //
 // The "little animations" are drawn, not played: the app's own type on its
-// own paper, its own lift, its own ink wash and its own follow line, doing
-// what they do on the page. No images, no confetti, no badges, no counts —
+// own paper, its own lift, its own ink wash and its own follow line — and
+// since A67 its own ribbons, embers and night — doing what they do in the
+// app. No images, no confetti, no badges, no counts —
 // a picture of a feature that looked like an advert for it would undo the
 // rest of the screen. Each one loops on a pure clock so that a frame of it
 // is a function of the time and can be photographed, and under reduce
@@ -217,7 +218,7 @@ fun WhatsNewHistoryScreen(
  * new"; read again it is all of them, each under its day.
  *
  * A lazy list either way, so a picture is drawn — and its clock runs — only
- * while it is on the screen: read again, eleven pictures and counting would
+ * while it is on the screen: read again, a dozen pictures and counting would
  * otherwise all be running at once for the three in view.
  */
 @Composable
@@ -703,7 +704,7 @@ internal data class LordFrame(val name: Float)
 internal fun lordFrame(t: Int): LordFrame =
     LordFrame(name = beat(t, at = 900, ms = 480) * (1f - beat(t, at = 3300, ms = 400)))
 
-// The third release's five (A66).
+// The third release's five (A67).
 
 /**
  * Your name in the front of the book: from the binding under Ruth's name her
@@ -1705,7 +1706,7 @@ private fun DrawScope.drawTheName(page: TheName, inks: VignetteInks, frame: Lord
     faded(frame.name) { drawText(page.printed, topLeft = page.printedAt) }
 }
 
-// MARK: - The third release's pictures (A66)
+// MARK: - The third release's pictures (A67)
 //
 // These five are of things that are not the page — You, a shelf, a row with
 // a ribbon in it, a switch, the night's band — so they are drawn from what
