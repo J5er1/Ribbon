@@ -1,7 +1,7 @@
 import XCTest
 @testable import RibbonCore
 
-// Quiet hours, drawn as the night (A66): the band's arithmetic.
+// Quiet hours, drawn as the night (A67): the band's arithmetic.
 // QuietHoursBandTest.kt holds the Kotlin port to the same cases.
 final class QuietHoursBandTests: XCTestCase {
     func h(_ hour: Int, _ minute: Int = 0) -> Int { hour * 60 + minute }

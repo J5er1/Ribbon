@@ -3,7 +3,7 @@ package app.readribbon.core
 import kotlin.test.assertEquals
 import org.junit.Test
 
-// Quiet hours, drawn as the night (A66): the band's arithmetic.
+// Quiet hours, drawn as the night (A67): the band's arithmetic.
 // A port of core/Tests/RibbonCoreTests/QuietHoursBandTests.swift, case for case.
 class QuietHoursBandTest {
     fun h(hour: Int, minute: Int = 0) = hour * 60 + minute

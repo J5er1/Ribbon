@@ -5,7 +5,7 @@ package app.readribbon.core
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
-// Your shelf (A66): every book you have finished, in every room you have
+// Your shelf (A67): every book you have finished, in every room you have
 // read in, as one row of embers under your name on You. A room's shelf
 // (S10) is that room's; this one is yours — what the printed keepsake
 // would be if it were made of a person rather than of a room.

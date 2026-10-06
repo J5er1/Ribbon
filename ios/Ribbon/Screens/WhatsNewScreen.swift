@@ -1369,7 +1369,7 @@ private struct DivineName: TextRenderer, Animatable {
 
 // MARK: 8. Your name in the front of the book
 
-/// The top of You as it opens now (A66), a flyleaf: Ruth's face and her
+/// The top of You as it opens now (A67), a flyleaf: Ruth's face and her
 /// name, the binding under them, and from it her rooms' ribbons laid in
 /// one after another, each with the room and where it lies. Then they
 /// fade off together, and are laid in again.
@@ -1790,7 +1790,7 @@ private struct WritesIn: TextRenderer, Animatable {
 
 // MARK: 12. Quiet hours, drawn as the night
 
-/// The quiet hours' band (A66), noon to noon, with its three hours under
+/// The quiet hours' band (A67), noon to noon, with its three hours under
 /// it. The night draws itself from ten in the evening to six in the
 /// morning, its end handle carried out along it; the start handle is moved
 /// on an hour and the night follows it, and after a while is moved back.

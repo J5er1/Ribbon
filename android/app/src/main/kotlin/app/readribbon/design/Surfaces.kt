@@ -83,7 +83,7 @@ import app.readribbon.app.Copy
 // fastest way to make this look like everybody else's settings, and §14's
 // last test is whether the thing is "obviously made by a person rather than
 // assembled from defaults". The few marks here — a chevron, a ribbon laid
-// into the chosen tile (A66) — are drawn, small, and specific to what they
+// into the chosen tile (A67) — are drawn, small, and specific to what they
 // say.
 
 /** The smallest thing a finger is allowed to have to hit (§11, deviation 12). */
@@ -455,7 +455,7 @@ fun GroupScope.Setting(
  *
  * @param example the notification this switch lets through, drawn under the
  *   title — a picture of what will arrive, where a subtitle would only
- *   describe it (S19, A66). Read after the title, as part of the one switch.
+ *   describe it (S19, A67). Read after the title, as part of the one switch.
  */
 @Composable
 fun GroupScope.SettingSwitch(
@@ -632,14 +632,14 @@ fun GroupScope.SettingControl(
     }
 }
 
-/** The ribbon laid into a chosen row (A66), and the clear slot kept for it. */
+/** The ribbon laid into a chosen row (A67), and the clear slot kept for it. */
 private val ChosenRibbonWidth = 10.dp
 private val ChosenRibbonLength = 22.dp
 
 /**
  * A row that is one of a set you pick from, with the chosen one marked.
  *
- * Marked by a ribbon laid into the top of its tile (A66) — the way a book
+ * Marked by a ribbon laid into the top of its tile (A67) — the way a book
  * is marked at the page you chose, and the shape the rest of the room uses
  * for "this one". It was a drawn check, which was Material's mark for a
  * choice and nothing of the book's. The ribbon belongs to its row: it lays
@@ -648,7 +648,7 @@ private val ChosenRibbonLength = 22.dp
  * travels implies the rows in between were passed through, and they weren't.
  *
  * @param specimen a few words of what the choice *is*, set the way it will
- *   be read: a version's own text of the verse you are at (S20, A66). In
+ *   be read: a version's own text of the verse you are at (S20, A67). In
  *   the Scripture face, between the title and the subtitle, so the row is
  *   chosen by reading it rather than by its name.
  */

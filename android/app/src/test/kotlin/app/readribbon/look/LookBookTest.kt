@@ -510,7 +510,7 @@ class LookBookTest {
     }
 
     /**
-     * You, as the front of the book (A66): your name, a ribbon for each room
+     * You, as the front of the book (A67): your name, a ribbon for each room
      * — one left at a chapter, one between books — and the shelf, with a
      * book read in company and one read alone standing on one baseline.
      */

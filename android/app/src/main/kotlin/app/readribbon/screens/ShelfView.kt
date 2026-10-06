@@ -399,7 +399,7 @@ private fun ShelfEmber(
  * @param onOpenVerse a quoted verse opens the reading at that verse — the
  *   finished book's own pages, not a copy.
  * @param onReadAgain starting the book again, in the room it was read in.
- *   Null where the record is opened from your own shelf on You (A66):
+ *   Null where the record is opened from your own shelf on You (A67):
  *   reading a book again belongs to the room, not to you, so there it is not
  *   offered — and a control that is not offered is not drawn.
  * @param onOpenPerson a portrait goes to its person (S12). Swift pushes a

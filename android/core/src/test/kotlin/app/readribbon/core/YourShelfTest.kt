@@ -8,7 +8,7 @@ import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 import org.junit.Test
 
-// Your shelf (A66): every book you have finished, in every room you have
+// Your shelf (A67): every book you have finished, in every room you have
 // read in, and who each was read with — never as a count.
 // A port of core/Tests/RibbonCoreTests/YourShelfTests.swift, case for case.
 class YourShelfTest {

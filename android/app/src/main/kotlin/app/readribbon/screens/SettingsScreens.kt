@@ -162,7 +162,7 @@ import kotlinx.coroutines.withContext
 // picker: chartreuse is the brand's, not the user's" survives that: it offers
 // two rooms, and never a colour somebody chose by hand.
 //
-// And since A66 the screens show rather than describe. A version is chosen by
+// And since A67 the screens show rather than describe. A version is chosen by
 // reading it, the size is previewed on a piece of the page itself, a room of
 // two is spoken of by the name of the one other person in it, and the quiet
 // hours are a night drawn on a band where there were two rows and a clock
@@ -202,13 +202,13 @@ private const val SCRIPTURE_ASSETS = "scripture"
 
 /**
  * Where the versions and the preview are shown when no book is open: the
- * first verse of John, the beginning the app's own pictures use (A66).
+ * first verse of John, the beginning the app's own pictures use (A67).
  */
 private val NoBookOpen = VerseAddress(bookID = "JHN", chapter = 1, verse = 1)
 
 /**
  * A room's faces beside its name on Notifications: the size its tile in Your
- * rooms draws them, overlapping as they do there (A66).
+ * rooms draws them, overlapping as they do there (A67).
  */
 private val HeaderFace = 18.dp
 private val HeaderFaceOverlap = (-5).dp
@@ -230,7 +230,7 @@ private val LabelFoot = 10.dp
  * Translation is personal, not shared (§2.6); changing it never moves your
  * position or breaks a note's anchor.
  *
- * A version is chosen by reading it (A66): each row carries the verse you
+ * A version is chosen by reading it (A67): each row carries the verse you
  * are at, in that version's own words, wherever this phone already holds
  * them. And the size previews over a piece of the page itself — that verse
  * and the next, numbered and coloured the way the page sets them — so the
@@ -330,7 +330,7 @@ private fun readingPlace(model: AppModel): VerseAddress =
  * Each version's chapter at [place], as this phone already holds it: a
  * bundled version always, a licensed one only once that chapter has streamed
  * here for the book being read. Nothing is fetched to fill a settings screen
- * (A66): licensed text streams to be read, and the phone keeps it only for
+ * (A67): licensed text streams to be read, and the phone keeps it only for
  * the book being read — a row is no reason to ask the proxy for a chapter.
  *
  * Read off the main thread, as the original panel reads the room's versions
@@ -368,7 +368,7 @@ private fun rememberHeldChapters(
  * Material's own slider (A18/A29) with the ticks turned off: seventeen drawn
  * stops is an instrument panel, and this is a book. The two letters are the
  * ends of the scale set in the face the slider sizes, so the control says
- * what it does before it is touched (A66) — a picture, not a word, and
+ * what it does before it is touched (A67) — a picture, not a word, and
  * nobody hears it. The well is the page's own ground rather than a paler
  * surface, so a control sits *in* its tile rather than on it.
  */
@@ -423,7 +423,7 @@ private fun ScaleEnd(size: Float) {
 }
 
 /**
- * The live preview, as a page (A66): the verse you are at and the one after
+ * The live preview, as a page (A67): the verse you are at and the one after
  * it, in your version, at your size and spacing, with the reference under it.
  *
  * On the page's own ground and grain, because it is a window onto the reading
@@ -623,7 +623,7 @@ private fun Segments(
  * notification. Nothing here is about absence, lapses, streaks, or reminders
  * to read, because those notifications don't exist.
  *
- * They say who (A66). Each room's switches sit under its faces, and in a
+ * They say who (A67). Each room's switches sit under its faces, and in a
  * room of two — where "they" is one person — the switches name them and show
  * the notification itself, their face beside the words that will arrive. A
  * room of three or more, or one you are alone in, reads as it always did.
@@ -783,7 +783,7 @@ private fun NotificationRoomGroup(model: AppModel, room: Room) {
 }
 
 /**
- * A room's section label with its faces before it (A66) — the same
+ * A room's section label with its faces before it (A67) — the same
  * overlapping faces its tile in Your rooms draws, so the room is known by
  * who is in it as well as by its name.
  *
@@ -861,7 +861,7 @@ private fun theOther(model: AppModel, room: Room): TheOther? {
 }
 
 /**
- * Quiet hours (S19), as one tile (A66): the night drawn as a band, and over
+ * Quiet hours (S19), as one tile (A67): the night drawn as a band, and over
  * it the two times in a sentence — in the same clock the band's ends are
  * spoken in, so what is read and what is heard agree.
  *

@@ -36,15 +36,15 @@ public enum WhatsNewItem: String, Codable, Hashable, Sendable, CaseIterable {
     /// The New King James as printed: LORD, and its copyright line (A64).
     case lordReadsLord
     /// You opens like the front of a Bible: your name, your face, a ribbon
-    /// for every room you read in, and a colophon at the foot (A66).
+    /// for every room you read in, and a colophon at the foot (A67).
     case flyleaf
-    /// Every book you have finished, with whoever, on one shelf (A66).
+    /// Every book you have finished, with whoever, on one shelf (A67).
     case yourShelf
-    /// Each version is shown in its own words, and a ribbon marks yours (A66).
+    /// Each version is shown in its own words, and a ribbon marks yours (A67).
     case versionsByReading
-    /// The notification switches say who, in the words the phone will use (A66).
+    /// The notification switches say who, in the words the phone will use (A67).
     case notificationsByName
-    /// Quiet hours are one band, the night, rather than two wheels (A66).
+    /// Quiet hours are one band, the night, rather than two wheels (A67).
     case quietHoursNight
 }
 

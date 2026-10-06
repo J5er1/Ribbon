@@ -1,6 +1,6 @@
 import Foundation
 
-// Quiet hours, drawn as the night (A66). S19 set the two ends with two
+// Quiet hours, drawn as the night (A67). S19 set the two ends with two
 // wheels, one under each row — the most borrowed-looking thing in the app.
 // They are one band now: a day laid out from noon to noon, so that a night
 // sits whole in the middle of it and never breaks at an edge, with the

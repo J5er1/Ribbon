@@ -19,7 +19,7 @@ import RibbonCore
 /// The version is yours (A60, reversing A42), and so is the page: size,
 /// spacing and red letter move only your own page.
 ///
-/// A version is chosen by reading it (S20, A66): each row carries the verse
+/// A version is chosen by reading it (S20, A67): each row carries the verse
 /// you are at, in that version's own words. And the preview under the size
 /// is a piece of the page itself — that verse and the next, numbered and
 /// coloured the way the page sets them — so the size, the spacing and the
@@ -99,7 +99,7 @@ struct TextSettingsScreen: View {
     /// A chapter as this phone already holds it: a bundled version always,
     /// a licensed one only once that chapter has streamed here for the
     /// book being read. Nothing is fetched to fill a settings screen —
-    /// a version without the words here simply shows none (A66).
+    /// a version without the words here simply shows none (A67).
     private func heldChapter(_ address: VerseAddress, in version: TranslationID) -> ScriptureChapter? {
         guard let licensed = TranslationRegistry.translation(for: version), !licensed.isBundled else {
             return model.scripture.chapter(address, translation: version)
@@ -119,7 +119,7 @@ struct TextSettingsScreen: View {
         return specimens
     }
 
-    /// The live preview, as a page (A66): the verse you are at and the one
+    /// The live preview, as a page (A67): the verse you are at and the one
     /// after it, in your version, at your size and spacing, in a well of its
     /// own, with the reference under it.
     @ViewBuilder
@@ -263,7 +263,7 @@ struct Segments: View {
 /// here is about absence, lapses, streaks, or reminders to read, because
 /// those notifications don't exist.
 ///
-/// They say who (A66). Each room's switches sit under its faces, and in a
+/// They say who (A67). Each room's switches sit under its faces, and in a
 /// room of two — where "they" is one person — the switches name them and
 /// show the notification itself, their face beside the words that will
 /// arrive. A room of three or more, or one you are alone in, reads as it
@@ -304,7 +304,7 @@ struct NotificationSettingsScreen: View {
 
                 SettingsGroup(title: Copy.quietHours, footnote: Copy.thinkingOfYouStillArrives) {
                     // One tile, where there were two rows and a wheel under
-                    // each (A66): the night drawn as a band, and over it the
+                    // each (A67): the night drawn as a band, and over it the
                     // two times in a sentence — in the same clock the
                     // handles are spoken in, so what is read and what is
                     // heard agree.
@@ -371,7 +371,7 @@ struct NotificationSettingsScreen: View {
         }
     }
 
-    /// A room's section label with its faces before it (A66) — the same
+    /// A room's section label with its faces before it (A67) — the same
     /// overlapping faces its tile in Your rooms draws, so the room is known
     /// by who is in it as well as by its name. The label stays the heading
     /// a screen reader stops at; the faces are a picture, and say nothing,

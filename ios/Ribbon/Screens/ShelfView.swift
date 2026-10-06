@@ -143,7 +143,7 @@ struct EmberRecordScreen: View {
     /// than offered — a control that does nothing is not drawn (§6.1).
     var onOpenVerse: ((VerseAddress) -> Void)?
     /// Starting the book again, in the room it was read in. Nil where the
-    /// record is opened from your own shelf on You (A66): reading a book
+    /// record is opened from your own shelf on You (A67): reading a book
     /// again belongs to the room, not to you, so there it is not offered.
     var onReadAgain: ((String) -> Void)? = nil
 

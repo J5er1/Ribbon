@@ -76,7 +76,7 @@ import kotlinx.coroutines.withContext
 import android.icu.text.DateFormat as IcuDateFormat
 import android.icu.util.TimeZone as IcuTimeZone
 
-// Things drawn in the room's own idiom (A66).
+// Things drawn in the room's own idiom (A67).
 //
 // One new shape, and what is made of it. The ribbon tail is the Wave's own
 // tail made straight — "straight reads calm and bookish" (brief §5) — a band
@@ -150,7 +150,7 @@ fun RibbonTail(
 
 /**
  * The chosen one's mark: a ribbon laid into the top edge of whatever was
- * chosen, and lifted out of whatever stopped being chosen (A66).
+ * chosen, and lifted out of whatever stopped being chosen (A67).
  *
  * It grows down from its top edge on the handled spring — the size of a
  * hand, and a hand is what lays a ribbon into a book — and lifts back up the
@@ -209,7 +209,7 @@ fun ChoiceRibbon(
 
 /**
  * A ribbon hanging from a binding: one of your rooms on You, an ink in the
- * picker (A66).
+ * picker (A67).
  *
  * @param length where it hangs to. A change of length is drawn rather than
  *   cut — the ink you choose is pulled down past the others on the handled
@@ -306,7 +306,7 @@ fun HangingRibbon(
     }
 }
 
-// MARK: Quiet hours, drawn as the night (S19, A66)
+// MARK: Quiet hours, drawn as the night (S19, A67)
 
 /** The band: a finger's height, at the nested radius a well inside a tile takes. */
 private val BandHeight = 44.dp
@@ -333,7 +333,7 @@ private const val QUARTERS = QuietHoursBand.day / QuietHoursBand.step
 private const val LAST_QUARTER = QUARTERS - 1
 
 /**
- * The quiet hours, as one band (S19, A66): a day from noon to noon, waking
+ * The quiet hours, as one band (S19, A67): a day from noon to noon, waking
  * hours raised and the night banked into the ground under it, with a handle
  * at each end of the night.
  *
@@ -609,7 +609,7 @@ private fun hourOnly(minute: Int, is24: Boolean, locale: Locale): String {
 private const val MINUTE_MS = 60_000L
 private const val HOUR_MS = 3_600_000L
 
-// MARK: A notification, shown before it arrives (S19, A66)
+// MARK: A notification, shown before it arrives (S19, A67)
 
 /**
  * What a switch's notification will say, and whose face it will come with —

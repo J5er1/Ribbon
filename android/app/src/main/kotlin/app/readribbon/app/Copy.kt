@@ -1197,87 +1197,87 @@ object Copy {
     const val ORIGINAL_CREDIT =
         "Hebrew and Greek: the Berean Standard Bible translation tables and the Westminster Leningrad Codex, public domain. Definitions: Strong’s Exhaustive Concordance (1890), public domain. Hebrew set in Noto Serif Hebrew (SIL Open Font License)."
 
-    // The front of the book (A66) — You opens the way a Bible does: the
+    // The front of the book (A67) — You opens the way a Bible does: the
     // name on the flyleaf, a ribbon for each room, the shelf, and a colophon
     // at the end. Nothing here is a count.
 
-    /** The flyleaf (A66): the section of ribbons under your name. */
+    /** The flyleaf (A67): the section of ribbons under your name. */
     const val YOUR_RIBBONS = "Your ribbons"
 
-    /** The flyleaf (A66): what the ribbons are, said once under them. */
+    /** The flyleaf (A67): what the ribbons are, said once under them. */
     const val YOUR_RIBBONS_FOOTNOTE = "One for each room you read in, left where that room left it."
 
-    /** The flyleaf (A66): a room's ribbon with no book open in that room. */
+    /** The flyleaf (A67): a room's ribbon with no book open in that room. */
     const val BETWEEN_BOOKS = "between books"
 
     /**
-     * The flyleaf (A66): one ribbon, spoken — the room, where its ribbon
+     * The flyleaf (A67): one ribbon, spoken — the room, where its ribbon
      * lies, and your ink there when ink is who you are in it.
      */
     fun ribbonSpoken(room: String, place: String, ink: String?): String =
         if (ink == null) "$room. $place." else "$room. $place. Your ink there is $ink."
 
     /**
-     * The flyleaf (A66): what touching a ribbon does, as TalkBack's click
+     * The flyleaf (A67): what touching a ribbon does, as TalkBack's click
      * label says an action — "double-tap to go to that room" — where iOS's
      * hint says the consequence.
      */
     const val GOES_TO_THAT_ROOM = "go to that room"
 
-    /** Your shelf (A66): every book you have finished, in every room. */
+    /** Your shelf (A67): every book you have finished, in every room. */
     const val YOUR_SHELF = "Your shelf"
 
     /**
-     * Your shelf (A66): who a book was read with, by first name, the rest as
+     * Your shelf (A67): who a book was read with, by first name, the rest as
      * "others" — never a number.
      */
     fun shelfWith(names: List<String>, andOthers: Boolean): String =
         "with " + listed(if (andOthers) names + "others" else names)
 
-    /** Your shelf (A66): a room of three or more, said by its own name. */
+    /** Your shelf (A67): a room of three or more, said by its own name. */
     fun shelfWithRoom(name: String) = "with $name"
 
-    /** Your shelf (A66): one ember, spoken. */
+    /** Your shelf (A67): one ember, spoken. */
     fun emberSpoken(book: String, company: String?): String =
         if (company == null) book else "$book, $company"
 
     /**
-     * The colophon (A66): what the book is set in, the way a book's last
+     * The colophon (A67): what the book is set in, the way a book's last
      * page says it.
      */
     const val COLOPHON_SET_IN = "Set in Literata and Alegreya Sans."
 
-    /** Text (A66): the verse every version is shown at. */
+    /** Text (A67): the verse every version is shown at. */
     fun specimenAt(reference: String) = "Each one shows $reference in its own words."
 
-    /** Text (A66): the size, spoken — a measure of type, not of a person. */
+    /** Text (A67): the size, spoken — a measure of type, not of a person. */
     fun textSizeValue(size: Double): String {
         val whole = size % 1.0 == 0.0
         return (if (whole) size.toInt().toString() else String.format(java.util.Locale.ROOT, "%.1f", size)) + " point"
     }
 
-    /** Notifications (A66): the words a switch's notification will use, spoken. */
+    /** Notifications (A67): the words a switch's notification will use, spoken. */
     fun notificationExampleSpoken(sentence: String) = "It reads: $sentence"
 
-    /** Notifications (A66): the cards, in a room of two. */
+    /** Notifications (A67): the cards, in a room of two. */
     fun cardsOpenSubNamed(name: String) = "When you and $name have both answered."
 
-    /** Notifications (A66): the book opened, in a room of two. */
+    /** Notifications (A67): the book opened, in a room of two. */
     fun whenNameOpensTheBook(name: String) = "When $name opens the book"
 
-    /** Notifications (A66): thinking of you, in a room of two. */
+    /** Notifications (A67): thinking of you, in a room of two. */
     fun thinkingOfYouSubNamed(name: String) = "A touch on the shoulder from $name. No words."
 
-    /** Quiet hours (A66): the band's two ends, said as one line. */
+    /** Quiet hours (A67): the band's two ends, said as one line. */
     fun quietHoursFromUntil(from: String, until: String) = "From $from until $until"
 
-    /** Quiet hours (A66): both ends on the same minute. */
+    /** Quiet hours (A67): both ends on the same minute. */
     const val NO_QUIET_HOURS = "No quiet hours"
 
-    /** Quiet hours (A66): what the band is for. */
+    /** Quiet hours (A67): what the band is for. */
     const val QUIET_HOURS_BAND_SUB = "Drag either end of the night."
 
-    /** Quiet hours (A66): the band's two handles, spoken. */
+    /** Quiet hours (A67): the band's two handles, spoken. */
     const val QUIET_HOURS_BEGIN = "Quiet hours begin"
     const val QUIET_HOURS_END = "Quiet hours end"
 
@@ -1482,40 +1482,40 @@ object Copy {
      */
     const val WHATS_NEW_HISTORY_DONE = "Done"
 
-    /** What's new (A66): You opens like the front of a Bible. */
+    /** What's new (A67): You opens like the front of a Bible. */
     const val WHATS_NEW_FLYLEAF_TITLE = "Your name in the front of the book"
 
-    /** What's new (A66): the flyleaf and its ribbons. */
+    /** What's new (A67): the flyleaf and its ribbons. */
     const val WHATS_NEW_FLYLEAF_BODY =
         "Tap your face and the page opens the way a Bible does: your name, " +
             "then a ribbon for each room you read in, left where that room left it."
 
-    /** What's new (A66): your shelf, across your rooms. */
+    /** What's new (A67): your shelf, across your rooms. */
     const val WHATS_NEW_SHELF_TITLE = "Every book you have finished, on one shelf"
 
-    /** What's new (A66): what is on it. */
+    /** What's new (A67): what is on it. */
     const val WHATS_NEW_SHELF_BODY =
         "Under your ribbons, an ember for each book you finished in any of your rooms, and who you read it with."
 
-    /** What's new (A66): versions shown in their own words. */
+    /** What's new (A67): versions shown in their own words. */
     const val WHATS_NEW_VERSIONS_TITLE = "Choose a version by reading it"
 
-    /** What's new (A66): the specimens, the ribbon, and the page. */
+    /** What's new (A67): the specimens, the ribbon, and the page. */
     const val WHATS_NEW_VERSIONS_BODY =
         "Each version shows your verse in its own words, and a ribbon marks the one you read. " +
             "The size you choose is set on a real page."
 
-    /** What's new (A66): the switches say who. */
+    /** What's new (A67): the switches say who. */
     const val WHATS_NEW_NOTIFICATIONS_TITLE = "Notifications say who"
 
-    /** What's new (A66): in a room of two. */
+    /** What's new (A67): in a room of two. */
     const val WHATS_NEW_NOTIFICATIONS_BODY =
         "In a room of two, each switch shows the words your phone will use, with their name and their face."
 
-    /** What's new (A66): quiet hours as one band. */
+    /** What's new (A67): quiet hours as one band. */
     const val WHATS_NEW_QUIET_HOURS_TITLE = "Quiet hours, drawn as the night"
 
-    /** What's new (A66): how it is set. */
+    /** What's new (A67): how it is set. */
     const val WHATS_NEW_QUIET_HOURS_BODY =
         "One band from noon to noon. Drag either end of the dark stretch. " +
             "Thinking of you still arrives, as a touch."

@@ -53,20 +53,20 @@ enum class WhatsNewItem {
 
     /**
      * You opens like the front of a Bible: your name, your face, a ribbon
-     * for every room you read in, and a colophon at the foot (A66).
+     * for every room you read in, and a colophon at the foot (A67).
      */
     flyleaf,
 
-    /** Every book you have finished, with whoever, on one shelf (A66). */
+    /** Every book you have finished, with whoever, on one shelf (A67). */
     yourShelf,
 
-    /** Each version is shown in its own words, and a ribbon marks yours (A66). */
+    /** Each version is shown in its own words, and a ribbon marks yours (A67). */
     versionsByReading,
 
-    /** The notification switches say who, in the words the phone will use (A66). */
+    /** The notification switches say who, in the words the phone will use (A67). */
     notificationsByName,
 
-    /** Quiet hours are one band, the night, rather than two pickers (A66). */
+    /** Quiet hours are one band, the night, rather than two pickers (A67). */
     quietHoursNight,
 }
 

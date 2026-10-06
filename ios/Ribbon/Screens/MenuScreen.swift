@@ -36,7 +36,7 @@ private enum MenuRoute: Hashable {
     case whatsNew
     case joinWithInvite
     case join(UUID)
-    /// One ember on your shelf (A66), by its reading: the book's record,
+    /// One ember on your shelf (A67), by its reading: the book's record,
     /// inside You rather than over the room.
     case ember(UUID)
 }
@@ -99,7 +99,7 @@ struct MenuScreen: View {
             .navigationDestination(for: PersonRoute.self) { route in
                 // An ember's record names who read it, as portraits, and a
                 // portrait goes to its person (S12) — here too, now that a
-                // record can be opened from your shelf (A66). Without this
+                // record can be opened from your shelf (A67). Without this
                 // the faces in it would be links that go nowhere.
                 if let personRoom = model.room(route.roomID) {
                     PersonScreen(
@@ -175,7 +175,7 @@ struct MenuScreen: View {
             if let reading = model.state.readings.first(where: { $0.id == readingID }) {
                 // The record the room's shelf opens (S11), with one thing
                 // left off: reading the book again belongs to the room it
-                // was read in, not to you (A66). A quoted verse opens the
+                // was read in, not to you (A67). A quoted verse opens the
                 // book over its own room, the way a tapped notification
                 // does — the menu goes, the room comes, the page opens.
                 // A room you have left keeps its books on your shelf
@@ -260,7 +260,7 @@ private struct RoomMenuScreen: View {
 
 /// One room: its name, who is in it, what it is reading, and its fire. The
 /// current one has a ribbon laid into it from the tile's top edge, as the
-/// chosen version has (A66) — a shape, where it was a 2-point line of the
+/// chosen version has (A67) — a shape, where it was a 2-point line of the
 /// accent — and, because colour is never the only signal (§11), it is said
 /// as selected too.
 private struct RoomTile: View {
@@ -420,7 +420,7 @@ private struct RoomControls: View {
 
 // MARK: - You (S18)
 
-/// You, set as the front of a Bible (A66): your name on the flyleaf, a
+/// You, set as the front of a Bible (A67): your name on the flyleaf, a
 /// ribbon for each room you read in, the books you have finished, then the
 /// settings, and at the very end a colophon — what the book is, what it is
 /// set in, and where its words come from.
@@ -507,7 +507,7 @@ private struct YouScreen: View {
     }
 }
 
-/// Your ribbons (A66): one for each room you read in, hanging from a
+/// Your ribbons (A67): one for each room you read in, hanging from a
 /// hairline across the page the way a Bible's ribbons hang from its
 /// binding, each left where that room left it. A ribbon is a place, never a
 /// measure (A30): it says which chapter, not how far.
@@ -635,7 +635,7 @@ private extension VerticalAlignment {
     static let emberFloor = VerticalAlignment(EmberFloor.self)
 }
 
-/// Your shelf (A66): every book you have finished, in every room you have
+/// Your shelf (A67): every book you have finished, in every room you have
 /// read in — the books of a room you have left among them, as leaving
 /// promises (§6.8) — first finished first. Embers on one baseline with no
 /// shelf drawn (S10), each with its book and who it was read with. Never a
@@ -719,7 +719,7 @@ private struct YourShelfSection: View {
     }
 }
 
-/// The colophon (A66): the book's last page, where a book says what it is,
+/// The colophon (A67): the book's last page, where a book says what it is,
 /// what it is set in, and whose words it borrows — the Wave, the version,
 /// the typefaces, and the credit owed for the original words (A60). Set
 /// small and centred, as a colophon is, after the last thing that can be

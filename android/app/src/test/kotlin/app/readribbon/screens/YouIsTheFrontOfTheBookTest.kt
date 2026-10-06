@@ -42,7 +42,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * You, set as the front of the book (A66): a ribbon for each room you read
+ * You, set as the front of the book (A67): a ribbon for each room you read
  * in, which takes you to that room; your shelf, once there is a book on it,
  * whose embers open their record inside You without offering to read the
  * book again; and the colophon at the end.

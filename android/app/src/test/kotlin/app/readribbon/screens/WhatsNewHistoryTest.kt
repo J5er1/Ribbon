@@ -91,7 +91,7 @@ class WhatsNewHistoryTest {
         openYou(m)
         compose.onNodeWithText(Copy.WHATS_NEW_ROW_SUB).assertExists()
         // Scrolled to first: your ribbons now stand between your name and
-        // the settings (A66), and on a short phone this row is below them.
+        // the settings (A67), and on a short phone this row is below them.
         compose.onNodeWithText(Copy.WHATS_NEW_ROW).performScrollTo().performClick()
         compose.waitForIdle()
 

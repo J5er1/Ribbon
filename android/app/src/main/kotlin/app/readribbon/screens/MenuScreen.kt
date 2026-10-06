@@ -238,7 +238,7 @@ private object MenuRoute {
     fun join(token: Uuid): String = "join/$token"
 
     /**
-     * One ember on your shelf (A66): the book's record, pushed inside You
+     * One ember on your shelf (A67): the book's record, pushed inside You
      * rather than over the room.
      */
     const val EMBER_PATTERN = "ember/{readingID}"
@@ -293,7 +293,7 @@ private val MarkWidth = 2.dp
 private val MarkHeight = 34.dp
 
 /**
- * The ribbon laid into the current room's tile (A66), the chosen version's
+ * The ribbon laid into the current room's tile (A67), the chosen version's
  * mark a size smaller: hung from the tile's top edge, this far in from its
  * leading edge — over the space the hairline left, clear of the name.
  */
@@ -302,7 +302,7 @@ private val CurrentRibbonLength = 20.dp
 private val CurrentRibbonInset = 12.dp
 
 /**
- * Your ribbons on You (A66): each room's column, the ribbon's width, and its
+ * Your ribbons on You (A67): each room's column, the ribbon's width, and its
  * length — no two neighbours alike, because two ribbons of slightly
  * different length read as two people (brief §5), and six of one length
  * would be a fringe rather than six rooms.
@@ -315,14 +315,14 @@ private val RibbonLengths = listOf(56.dp, 48.dp, 62.dp, 52.dp, 58.dp, 46.dp)
 private const val RIBBON_STAGGER_MS = 80
 
 /**
- * Your shelf on You (A66): the gap between embers, as on a room's shelf,
+ * Your shelf on You (A67): the gap between embers, as on a room's shelf,
  * and the width the words under each are set in — enough for "with the
  * Thursday study" on two lines under the smallest ember.
  */
 private val ShelfSpacing = 18.dp
 private val ShelfWords = 104.dp
 
-/** The colophon (A66): its air from what is above it, and the Wave's size. */
+/** The colophon (A67): its air from what is above it, and the Wave's size. */
 private val ColophonAir = 28.dp
 private val ColophonMark = 22.dp
 
@@ -579,7 +579,7 @@ fun MenuScreen(
                     } else {
                         // The record the room's shelf opens (S11), with one
                         // thing left off: reading the book again belongs to
-                        // the room it was read in, not to you (A66).
+                        // the room it was read in, not to you (A67).
                         EmberRecordScreen(
                             model = model,
                             reading = reading,
@@ -834,7 +834,7 @@ private fun RoomMenu(
  * a property of the phone, and the downloads are megabytes on it. Nothing on
  * this screen is about a room, which is the whole point of there being two.
  *
- * Set as the front of a Bible (A66): your name on the flyleaf, a ribbon for
+ * Set as the front of a Bible (A67): your name on the flyleaf, a ribbon for
  * each room you read in, the books you have finished, then the settings, and
  * at the very end a colophon — what the book is, what it is set in, and where
  * its words come from. The ribbons are about rooms only as places you have
@@ -1089,7 +1089,7 @@ private fun MenuRow(
  * apart at a glance. A book's name is an address, not a score (Law 2).
  *
  * The room you are in has a ribbon laid into it from the tile's top edge, as
- * the chosen version has (A66) — a shape, where it was a 2 dp line of the
+ * the chosen version has (A67) — a shape, where it was a 2 dp line of the
  * accent.
  */
 @Composable
@@ -1454,10 +1454,10 @@ private fun YouIdentity(model: AppModel) {
     }
 }
 
-// MARK: The front of the book (A66)
+// MARK: The front of the book (A67)
 
 /**
- * Your ribbons (A66): one for each room you read in, hanging from a hairline
+ * Your ribbons (A67): one for each room you read in, hanging from a hairline
  * across the page the way a Bible's ribbons hang from its binding, each left
  * where that room left it. A ribbon is a place, never a measure (A30): it
  * says which chapter, not how far.
@@ -1613,7 +1613,7 @@ private fun ribbonPlace(model: AppModel, room: Room): String {
 }
 
 /**
- * Your shelf (A66): every book you have finished, in every room you have
+ * Your shelf (A67): every book you have finished, in every room you have
  * read in — the books of a room you have left among them, as leaving
  * promises (§6.8) — first finished first. Embers on one baseline with no
  * shelf drawn (S10), each with its book and who it was read with. Never a
@@ -1738,7 +1738,7 @@ private fun companyLine(model: AppModel, reading: Reading): String? =
     }
 
 /**
- * The colophon (A66): the book's last page, where a book says what it is,
+ * The colophon (A67): the book's last page, where a book says what it is,
  * what it is set in, and whose words it borrows — the Wave, the version, the
  * typefaces, and the credit for the original words (A60). Set small and
  * centred, as a colophon is, after the last thing that can be done here.
@@ -2154,7 +2154,7 @@ private fun UpdateSection(model: AppModel) {
 
         // The card's air is the card's own, and comes and goes with it: with
         // nothing to say there is nothing here at all, and the colophon keeps
-        // its own measure from whatever is above it (A66).
+        // its own measure from whatever is above it (A67).
         Column {
             Air(SectionGap)
             UpdateCard(

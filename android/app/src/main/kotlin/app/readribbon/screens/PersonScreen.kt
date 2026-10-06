@@ -101,7 +101,7 @@ import kotlin.uuid.Uuid
 // anything they've done.
 
 /**
- * The inks in the picker are ribbons (A66): each this wide, hanging this
+ * The inks in the picker are ribbons (A67): each this wide, hanging this
  * far — further for the one that is yours, pulled down past the others, and
  * short for one somebody else holds. Which is yours is said by a length, a
  * shape, where it used to be a ring.
@@ -596,7 +596,7 @@ fun ConfirmChoice(
  * Picking an ink when color is identity (§4.5, §6.7) — an invitation, not
  * an interruption.
  *
- * The eight inks are eight ribbons hanging from a rule (A66), each in a
+ * The eight inks are eight ribbons hanging from a rule (A67), each in a
  * 44 dp column: yours pulled further down than the rest, one somebody else
  * holds drawn short and faint.
  *

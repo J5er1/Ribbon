@@ -37,7 +37,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * Notifications say who (S19, A66).
+ * Notifications say who (S19, A67).
  *
  * In a room of two "they" is one person, so the switches name her — in the
  * words her notifications will use, the first word of her name — and the

@@ -218,7 +218,7 @@ struct RowText: View {
     var subtitle: String?
     var titleColor: Color = Palette.text
     /// A few words of Scripture between the title and the subtitle — a
-    /// version shown by what it says (S20, A66). Set as the page sets
+    /// version shown by what it says (S20, A67). Set as the page sets
     /// Scripture, a shade under ivory, and never more than three lines.
     var specimen: String? = nil
 
@@ -288,7 +288,7 @@ struct SettingRow: View {
 
 /// A row with a switch on it — the drawn one (I40), and the whole row
 /// takes the tap. Under the title, where a room of two makes it possible,
-/// an example of the notification the switch lets through (A66).
+/// an example of the notification the switch lets through (A67).
 struct SettingSwitch: View {
     var title: String
     var subtitle: String?
@@ -389,7 +389,7 @@ struct SettingControl<Control: View>: View {
 }
 
 /// One of several: a row that is chosen or not, with a ribbon laid into
-/// it from its top edge when it is (A66) — the place kept, as a ribbon
+/// it from its top edge when it is (A67) — the place kept, as a ribbon
 /// keeps a place in a book. The group is the radio; each row reports its
 /// state, so the ribbon is never the only signal (§11).
 ///

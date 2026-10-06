@@ -34,7 +34,7 @@ import org.robolectric.annotation.Config
 
 /**
  * A version is chosen by reading it, and the size is shown on the page
- * (S20, A66).
+ * (S20, A67).
  *
  * Each version's row carries the verse you are at in its own words, read
  * off the main thread from what the phone already holds, and the group's

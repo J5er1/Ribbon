@@ -25,7 +25,7 @@ import org.robolectric.annotation.Config
  * Both ends of the quiet hours can be moved without dragging them.
  *
  * The two rows that each opened Material's clock are one drawn band now
- * (A66). A clock is something TalkBack can already set; a drawing is
+ * (A67). A clock is something TalkBack can already set; a drawing is
  * nothing to a screen reader until it is told what it is, and a band that
  * could only be dragged would have taken quiet hours away from anybody who
  * cannot drag. So what this asserts is the half of the band no look book

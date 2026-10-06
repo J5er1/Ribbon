@@ -110,7 +110,7 @@ class SettingsFlowSettlesTest {
 
     // Each row is scrolled to before it is tapped: your ribbons, and your
     // shelf once a book is finished, now stand between your name and these
-    // rows (A66), so where they fall depends on the phone.
+    // rows (A67), so where they fall depends on the phone.
 
     @Test fun openingAppearanceSettles() {
         openTheMenu(MenuEntry.YOU)

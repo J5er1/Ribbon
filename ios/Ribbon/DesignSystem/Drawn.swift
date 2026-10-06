@@ -1,7 +1,7 @@
 import SwiftUI
 import RibbonCore
 
-// Things drawn in the room's own idiom (A66, I40).
+// Things drawn in the room's own idiom (A67, I40).
 //
 // The last platform defaults on You and the settings screens were Apple's
 // switch, slider and time wheel, and a circle with a check in it — the
@@ -14,7 +14,7 @@ import RibbonCore
 // and the selection tick a drawn control would reach for is the first
 // thing it names as left off.
 
-// MARK: - The ribbon's end (A66)
+// MARK: - The ribbon's end (A67)
 
 /// A straight ribbon end: a band as wide as its rect, ending in a
 /// swallowtail. The Wave's own tails made straight — "straight reads calm
@@ -91,7 +91,7 @@ struct HangingRibbon: View {
     }
 }
 
-/// The chosen one of several (A66): a ribbon laid into the tile from its
+/// The chosen one of several (A67): a ribbon laid into the tile from its
 /// top edge, where the circle and check used to be. A row becoming chosen
 /// has its ribbon laid in, on the hand's spring — a thing the size of a
 /// hand, settling into place; the row losing the choice has its ribbon
@@ -318,9 +318,9 @@ struct RibbonSlider: View {
     }
 }
 
-// MARK: - Quiet hours, drawn as the night (A66)
+// MARK: - Quiet hours, drawn as the night (A67)
 
-/// The quiet hours as one band (A66), where there were two rows and a
+/// The quiet hours as one band (A67), where there were two rows and a
 /// wheel under each: a day laid out from noon to noon, the waking hours
 /// raised, the quiet stretch banked — the ground with the paper's grain,
 /// the dark part of the day — and a handle at each end of it. The
@@ -507,10 +507,10 @@ struct PlacedAcross: Layout {
     }
 }
 
-// MARK: - A notification, shown before it arrives (A66)
+// MARK: - A notification, shown before it arrives (A67)
 
 /// What a switch's notification will say, in a room of two: the other
-/// person's face and the sentence that will arrive (S19, A66). A picture
+/// person's face and the sentence that will arrive (S19, A67). A picture
 /// of the notification, so a switch says what it lets through rather than
 /// describing it.
 struct SettingExample {

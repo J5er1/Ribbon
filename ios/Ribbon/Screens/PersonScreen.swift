@@ -170,7 +170,7 @@ private struct LeftNoteTile: View {
 
 /// Picking an ink when colour is identity (§4.5, §6.7) — an invitation, not
 /// an interruption. The eight inks are eight ribbons hanging from a rule
-/// (A66), each in a 44 point column: yours pulled further down than the
+/// (A67), each in a 44 point column: yours pulled further down than the
 /// rest, one somebody else holds drawn short and faint. Which is yours is
 /// said by a ribbon's length, a shape, and not by its colour or a ring.
 struct InkPickerSheet: View {
