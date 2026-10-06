@@ -4333,9 +4333,12 @@ A65. **Every release says what it brought, and all of them can be read again
       capitals.
 
     **Read again from You.** "What's new" under This phone opens the same
-    screen with every release, newest first, each under its day and its own
-    title. Leaving it records nothing: the launch's decision is untouched,
-    and the launch still shows only the latest. Each release now carries the
+    screen with every release, newest first, under the screen's own heading
+    and each under its day and its own title — pushed in You's stack on both
+    phones, so back, Done, Esc and (on the iPhone) the pull past the top all
+    go back to You. Leaving it records nothing: the launch's decision is
+    untouched, and the launch still shows only the latest. The list is lazy,
+    so only the pictures on the screen move. Each release now carries the
     day it was released, and its title is its own rather than the screen's.
 
     **The rule, kept where it will be read.** The core's rule tests were

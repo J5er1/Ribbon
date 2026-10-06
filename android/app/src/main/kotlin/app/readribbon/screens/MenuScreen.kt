@@ -102,6 +102,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import app.readribbon.app.AppModel
@@ -329,6 +330,14 @@ fun MenuScreen(
     // handler below is never visited and the shortcut can never fire.
     val keys = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { keys.requestFocus() } }
+    // And again whenever a page that moved focus (What's new read again puts
+    // it on its heading) has gone: its focused node goes with it, and focus
+    // is cleared rather than given back.
+    val top by navController.currentBackStackEntryAsState()
+    LaunchedEffect(top?.destination?.route) {
+        val route = top?.destination?.route
+        if (route == MenuRoute.YOU || route == MenuRoute.ROOM) runCatching { keys.requestFocus() }
+    }
 
     Box(
         modifier
@@ -341,7 +350,14 @@ fun MenuScreen(
             // predictive-back handler above catches it.
             .onPreviewKeyEvent { event ->
                 if (event.key == Key.Escape && event.type == KeyEventType.KeyUp) {
-                    close()
+                    // What's new read again goes back to You, as Done does
+                    // and as Esc does on the iPhone; anywhere else, the menu
+                    // closes.
+                    if (navController.currentDestination?.route == MenuRoute.WHATS_NEW) {
+                        navController.popBackStack()
+                    } else {
+                        close()
+                    }
                     true
                 } else {
                     false

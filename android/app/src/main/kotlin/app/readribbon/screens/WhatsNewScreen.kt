@@ -231,8 +231,9 @@ private fun WhatsNewPage(
             .fillMaxSize()
             .semantics { paneTitle = Copy.WHATS_NEW_HEADING }
             .onPreviewKeyEvent { event ->
-                // Esc on a hardware keyboard, as the menu takes it.
-                if (event.key == Key.Escape && event.type == KeyEventType.KeyUp) {
+                // Esc on a hardware keyboard, as the menu takes it. Read
+                // again, the menu's own handler sees it first and goes back.
+                if (!readAgain && event.key == Key.Escape && event.type == KeyEventType.KeyUp) {
                     leave()
                     true
                 } else {
@@ -294,10 +295,33 @@ private fun WhatsNewPage(
                         }
                     },
             ) {
+                // Read again, the page is headed as the iPhone's is: "What's
+                // new" over the list, where focus starts, and each release
+                // under its day and its own title.
+                if (readAgain) {
+                    item(key = "whats-new") {
+                        LaunchedEffect(headingFocus) {
+                            if (!focused) {
+                                focused = true
+                                runCatching { headingFocus.requestFocus() }
+                            }
+                        }
+                        Column(
+                            column
+                                .padding(top = 44.dp)
+                                .fillMaxWidth()
+                                .focusRequester(headingFocus)
+                                .focusable()
+                                .semantics(mergeDescendants = true) { heading() },
+                        ) {
+                            SmallCaps(Copy.WHATS_NEW_HEADING, size = 13f, color = Palette.muted)
+                        }
+                    }
+                }
                 releases.forEachIndexed { r, release ->
                     item(key = "heading:${release.id}") {
                         val first = r == 0
-                        if (first) {
+                        if (first && !readAgain) {
                             LaunchedEffect(headingFocus) {
                                 if (!focused) {
                                     focused = true
@@ -313,8 +337,20 @@ private fun WhatsNewPage(
                             },
                             title = Copy.whatsNewTitle(release.id),
                             modifier = column
-                                .padding(top = if (first) 44.dp else BETWEEN_RELEASES)
-                                .then(if (first) Modifier.focusRequester(headingFocus).focusable() else Modifier),
+                                .padding(
+                                    top = when {
+                                        !first -> BETWEEN_RELEASES
+                                        readAgain -> 28.dp
+                                        else -> 44.dp
+                                    },
+                                )
+                                .then(
+                                    if (first && !readAgain) {
+                                        Modifier.focusRequester(headingFocus).focusable()
+                                    } else {
+                                        Modifier
+                                    },
+                                ),
                         )
                     }
                     release.items.forEachIndexed { index, item ->
@@ -606,15 +642,17 @@ internal data class RoomGroupsFrame(
     val shown: Float,
 )
 
+// The faces first, then "and others", then the words that differ brought
+// forward — the iPhone's order, and the spec's.
 internal fun roomGroupsFrame(t: Int): RoomGroupsFrame = RoomGroupsFrame(
-    wash = beat(t, at = 400, ms = 480),
     faces = listOf(
-        beat(t, at = 1000, ms = 320),
-        beat(t, at = 1250, ms = 320),
-        beat(t, at = 1500, ms = 320),
+        beat(t, at = 400, ms = 320),
+        beat(t, at = 650, ms = 320),
+        beat(t, at = 900, ms = 320),
     ),
-    others = beat(t, at = 1900, ms = 320),
-    shown = 1f - beat(t, at = 4060, ms = 400),
+    others = beat(t, at = 1300, ms = 320),
+    wash = beat(t, at = 2000, ms = 480),
+    shown = 1f - beat(t, at = 4100, ms = 400),
 )
 
 /** The New King James as printed: "Lord" becomes LORD in small capitals, in place ([name]). */

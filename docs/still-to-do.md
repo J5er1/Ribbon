@@ -153,6 +153,11 @@ And what A64 changed, on the same two phones:
   copyright line sits under each chapter. One on the New King James, the
   other on the Berean: following lands on the same words.
 
+What's new (A65): update over an older build and open the app — the screen
+shows "Staying on the same page" with its four pictures moving. Then You →
+What's new: both releases, newest first, each under its day; Done, back and
+Esc go back to You, and the next launch does not show it again.
+
 A mark following its words (A60, I37) — compiled on both platforms by CI,
 never yet run on a phone:
 
