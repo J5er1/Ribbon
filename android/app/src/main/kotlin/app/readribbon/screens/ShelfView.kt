@@ -398,6 +398,10 @@ private fun ShelfEmber(
  *
  * @param onOpenVerse a quoted verse opens the reading at that verse — the
  *   finished book's own pages, not a copy.
+ * @param onReadAgain starting the book again, in the room it was read in.
+ *   Null where the record is opened from your own shelf on You (A66):
+ *   reading a book again belongs to the room, not to you, so there it is not
+ *   offered — and a control that is not offered is not drawn.
  * @param onOpenPerson a portrait goes to its person (S12). Swift pushes a
  *   `PersonRoute`; the route type lives with the root's NavHost, so the two
  *   halves of it are passed here instead.
@@ -407,7 +411,7 @@ fun EmberRecordScreen(
     model: AppModel,
     reading: Reading,
     onOpenVerse: (VerseAddress) -> Unit,
-    onReadAgain: (String) -> Unit,
+    onReadAgain: ((String) -> Unit)? = null,
     onOpenPerson: (personID: Uuid, roomID: Uuid) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -583,10 +587,12 @@ fun EmberRecordScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    QuietControl(
-                        title = Copy.READ_IT_AGAIN,
-                        onClick = { onReadAgain(reading.bookID) },
-                    )
+                    if (onReadAgain != null) {
+                        QuietControl(
+                            title = Copy.READ_IT_AGAIN,
+                            onClick = { onReadAgain(reading.bookID) },
+                        )
+                    }
                     // "Make this a book" arrives with the printed keepsake
                     // (§15 horizon).
                 }

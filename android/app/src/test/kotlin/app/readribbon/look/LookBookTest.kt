@@ -509,9 +509,17 @@ class LookBookTest {
         }
     }
 
+    /**
+     * You, as the front of the book (A66): your name, a ribbon for each room
+     * — one left at a chapter, one between books — and the shelf, with a
+     * book read in company and one read alone standing on one baseline.
+     */
     @Test fun theMenu() {
         val open = reading("MRK", FireScale.medium)
         val second = Room(name = "Thursday", createdAt = now - 200.hours)
+        val ruthRead = reading("RUT", FireScale.small).copy(finishedAt = now - 20.hours)
+        val johnRead = reading("JHN", FireScale.medium)
+            .copy(roomID = second.id, finishedAt = now - 100.hours)
         val state = AppState(
             me = me,
             people = mapOf(me.id to me, ruth.id to ruth),
@@ -526,7 +534,16 @@ class LookBookTest {
                     joinedAt = now - 200.hours,
                 ),
             ),
-            readings = listOf(open),
+            readings = listOf(johnRead, ruthRead, open),
+            ribbons = listOf(
+                Ribbon(
+                    readingID = open.id,
+                    personID = ruth.id,
+                    chapter = 4,
+                    verse = 12,
+                    placedAt = now - 3.hours,
+                ),
+            ),
             currentRoomID = room.id,
         )
         val m = model(state)
