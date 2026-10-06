@@ -1944,6 +1944,44 @@ class LookBookTest {
         capture("whats-new-again-foot-ribbon")
     }
 
+    /**
+     * The release's fifth picture (A66) on its own, through its beats: at
+     * rest; the word held and its line arrived bare over the verse above,
+     * tangled in its letters; the ground coming under it as the Hebrew grows;
+     * and on its ground, the frame reduce motion holds — then reduce motion
+     * itself, on both palettes.
+     */
+    @Test fun theWhatsNewHebrewOnItsGround() {
+        val appearance = Appearance(ApplicationProvider.getApplicationContext())
+        appearance.wallpaperColour = true
+        val latest = app.readribbon.core.WhatsNew.releases.first()
+        val release = latest.copy(items = listOf(app.readribbon.core.WhatsNewItem.originalReadable))
+        var still by mutableStateOf(false)
+        var at by mutableStateOf<Long?>(0L)
+        compose.setContent {
+            RibbonTheme(appearance = appearance) {
+                CompositionLocalProvider(app.readribbon.design.LocalReduceMotion provides still) {
+                    Box(Modifier.fillMaxSize()) {
+                        WhatsNewScreen(release = release, onLeave = {}, frozenAt = at)
+                    }
+                }
+            }
+        }
+        for (t in listOf(0L, 1_800L, 2_500L, 3_600L)) {
+            at = t
+            capture("whats-new-readable-at-$t")
+        }
+        appearance.wallpaperColour = false
+        capture("whats-new-readable-at-3600-ribbon")
+        at = 1_800L
+        capture("whats-new-readable-at-1800-ribbon")
+        at = null
+        still = true
+        capture("whats-new-readable-still-ribbon")
+        appearance.wallpaperColour = true
+        capture("whats-new-readable-still")
+    }
+
     private fun shootWhatsNew(name: String, still: Boolean, frozenAt: Long?) {
         val appearance = Appearance(ApplicationProvider.getApplicationContext())
         appearance.wallpaperColour = true
