@@ -4349,6 +4349,99 @@ A65. **Every release says what it brought, and all of them can be read again
     reader can notice adds its entry, its words and its pictures, on both
     phones.
 
+A67. **The front of the book: You and the settings, made by hand
+    (2026-10-flyleaf).** Owner: *"what would make the settings and profile
+    more on brand? what can we do to make it more interesting and any other
+    ideas"* — and, handed the ideas, *"build it as you wish"*, *"if you come
+    up with more add it"*.
+
+    What was wrong was not the tiles. A23's paper is the room's own. It was
+    §17's last question — *is it obviously made by a person rather than
+    assembled from platform defaults?* — which these screens still failed in
+    four places: the size slider, the switches, the wheels or dial that set
+    quiet hours, and a radio check marking the version. And You read as an
+    account page. A face, a name, three rows, a version string: nothing on
+    it was Ribbon's. No ribbon, no ink, no ember, no book.
+
+    **You opens the way a Bible does.** Under the name, as on a flyleaf:
+    *Your ribbons* — one for each room you read in, hanging from a hairline
+    that stands for the binding, each in your ink there, or the accent where
+    two of you draw from every ink. Their lengths differ, because "two
+    ribbons of slightly different length read as two people" (brief §5).
+    Under each, the room and where its ribbon lies (A30): the chapter
+    ("Mark 4"), else the open book, else *between books*. A30's rules
+    still hold. It is an address, never a measure, so it is a chapter rather
+    than a verse or a fraction. It is offered, never applied, so touching it
+    goes to the room and does not open the book at the ribbon.
+
+    **Your shelf.** Every book you have finished, as one row of embers,
+    each with who it was read with: first names, the rest as "and others",
+    or a room of three or more by its own name. It includes the books of a
+    room you have left. Leaving has always said *"Leave this room? You'll
+    keep the books on your shelf"* (§6.8), and until now there was no shelf
+    of yours for that to be true of; leaving takes the room and your
+    membership, the readings stay on the phone, and so they stay here, said
+    by nothing because their company is gone. An ember opens its record,
+    inside You; a verse in it opens the book in its room, by the same path
+    a tapped notification takes. *Read it again* is not offered there:
+    starting a book belongs to the room. `YourShelf` is in both cores, with
+    the same tests on both. No count anywhere — not a number of books, not
+    in a label.
+
+    **A colophon.** The version line and the credit at the foot became the
+    last page of a book: the Wave, small and quiet, the version, *Set in
+    Literata and Alegreya Sans.*, and the credit A60 put there. On Android
+    the version line still checks for an update when touched.
+
+    **A ribbon marks a choice.** The version you read — and every other
+    single choice on paper, onboarding's intents included — is marked by a
+    ribbon laid into the top of its tile, where a radio check was. The room
+    you are in, in Your rooms, by a smaller one where a chartreuse bar was.
+    Your ink, in the picker, is the ribbon pulled longest. A shape, so
+    colour is still never the only signal, and each keeps its selected
+    state for a screen reader.
+
+    **Choose a version by reading it.** Each version shows the verse you are
+    at, in its own words — a licensed one only when its chapter is already
+    on the phone; nothing is fetched to make a sample. The preview under the
+    size became a page: that verse and the next, numbered the way the page
+    numbers them, with the words of Jesus in red when the switch is on. So
+    all three of the page's settings now show on it, where only the size
+    did.
+
+    **Notifications say who.** Each room's switches sit under its faces. In a
+    room of two, each switch is said with their name ("When Ruth opens the
+    book") and, for the two that arrive as sentences, shows the sentence the
+    phone will use, with their face: *Ruth left you a note at Mark 4:12*. A
+    room of three or more is said as it was.
+
+    **Quiet hours, drawn as the night.** One band, the day laid out noon to
+    noon so a night sits whole in its middle, the quiet stretch banked dark,
+    a handle at each end, moved a quarter hour at a time by a finger or a
+    screen reader. `QuietHoursBand` is the band's arithmetic, in both cores,
+    so a time is in the same place on both phones.
+
+    **What did not change, and why.** No theme, accent or icon picker (S18's
+    "not here"). No haptics for any of the new controls: §9.3 names
+    selection ticks as unwanted (I25). No join date and no count on You: a
+    person's page says who they are and what they kept, never how much.
+    Android keeps Material's switch and slider (A18, A29: structure is
+    Material's, paint is Ribbon's) and gains the slider's two A's and its
+    spoken size; iOS draws its switch and slider as well (I40).
+
+    **Two ideas left for the owner, on purpose.** A paper light mode — §16.1
+    says "no light mode" is not shippable past phase two, and Text is where
+    the switch would live, but the light palette is still undecided. And
+    the display face: Literata stands in for Cesso (§16.12), and Fraunces —
+    the brief's own choice, and free to embed — would give the titles and
+    your name the warmth the brief describes. Both change the whole app,
+    and neither is mine to decide in a pass about one screen.
+
+    The release says so in five pictures, made of the page's own type and
+    inks: the ribbons laying in under a name, embers rising onto a shelf,
+    a ribbon moving between two versions, a switch turning on and its
+    sentence writing itself in, and the night drawing itself onto the band.
+
 ## iOS (phase four): the second pass
 
 Android took a design pass of its own (A18–A51) and the two platforms
@@ -5123,6 +5216,46 @@ I39. **Native selection, and a room of eleven, on iOS (A62).** The decisions
       edited; a second haptic, if iOS plays its own on the long-press; and
       in the panel, Literata's Medium, the overlapping faces and a block's
       fade inside the measured scroll view.
+
+I40. **The front of the book, on iOS (A67): the last of the system's
+    controls, drawn.** The decisions are A67's; what is only iOS's:
+
+    - **The switch is drawn, the Toggle kept.** `SettingSwitch` is still a
+      `Toggle`, so what VoiceOver says — a switch, its name, on or off — is
+      the system's own; only its picture is ours, through
+      `RibbonToggleStyle`: a 46 × 28 well with a paper knob that goes dark
+      and crosses as the well fills with the accent. The whole tile takes
+      the tap, margins included, where the system's switch took only its
+      own pill. Android keeps Material's switch (A18, A29): there the
+      structure is Material's by decision, and here the default is Apple's,
+      which is somebody else's app.
+    - **The size slider is drawn**: a well with a small A and a large one,
+      the accent up to a paper thumb, which follows the finger with nothing
+      easing it. To VoiceOver it is one adjustable element, said as a size
+      ("19 point") and moved by half a point.
+    - **Quiet hours lost their wheels.** The two `DatePicker` wheels that
+      opened under their rows are the band (`QuietHoursBandView`), and
+      `SettingRow` lost `active`, which only ever lit the row whose wheel
+      was open. Each handle is its own adjustable element, the beginning
+      read first. The times are formatted on a fixed day rather than today,
+      so a time inside an hour the clocks skip is not read as the hour
+      after.
+    - **No haptics** on any of them (I25).
+    - **An ember opened from You** is pushed inside You's own stack, and a
+      portrait in it opens its person there too (the stack gained
+      `PersonRoute`), so nothing in it is a link that goes nowhere. A
+      verse in it goes to its room by the same road a notification takes
+      (`pendingDestination`); in a room you have left, the record's verses
+      are quotations and not buttons.
+    - **Written without Xcode, compiled by CI on the first push.** Every
+      file passes `swiftc -parse` here, and the band's and the shelf's
+      rules (23 tests) run on Linux. The app has not run. What to look at
+      on a phone: a custom-styled `Toggle` should still read as a switch
+      and toggle once on a double-tap; whether a drag that starts on the
+      band or the slider still lets the page scroll; the ribbon under the
+      first row's large top corner; the embers' shared baseline through
+      their buttons; the flyleaf's ribbons laying in while the menu's
+      cover is still rising.
 
 ## Licensed translations (decided: API.Bible)
 

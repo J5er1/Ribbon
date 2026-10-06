@@ -158,6 +158,41 @@ shows "Staying on the same page" with its four pictures moving. Then You →
 What's new: both releases, newest first, each under its day; Done, back and
 Esc go back to You, and the next launch does not show it again.
 
+The front of the book (A67, I40), on both phones — compiled by CI, never
+yet run on a phone:
+
+- Your face → You: under your name, a ribbon for each room you are in,
+  hanging from a hairline, of different lengths, each in your ink there
+  (or the accent in a room of two). Under each, the room and "Mark 4", the
+  book, or "between books". Touch one: the menu closes on that room.
+- Finish a book, or open You on a phone that has one: its ember is under
+  your ribbons with who you read it with. Touch it: its record opens inside
+  You, with no "Read it again"; touch a verse in it: the book opens there,
+  in its own room. Leave a room that has an ember: the ember stays, with no
+  name under it.
+- At the foot, the colophon: the Wave, the version, "Set in Literata and
+  Alegreya Sans.", the credit. On Android, touching the version still
+  checks for an update.
+- Text: each version shows the verse you are at in its own words; a
+  licensed one only once its chapter has come. Move the size: the page
+  under it grows, with its verse numbers. The World English in a Gospel,
+  red letter on: the words of Jesus turn red in the preview.
+- The chosen version, the room you are in, and onboarding's choice are
+  marked by a ribbon laid into the top of the tile. In a room of three, the
+  ink picker's inks are ribbons, yours the longest.
+- Notifications in a room of two: their faces over the switches, "When
+  Ruth opens the book", and the sentence the phone will say under "Notes
+  left for you". Quiet hours: drag either end of the band; set both ends
+  to the same time and it says "No quiet hours".
+- With VoiceOver and TalkBack: each end of the band moves a quarter hour
+  at a time and says its time; each ribbon says its room, its place and
+  your ink there; the chosen version is said as selected.
+- iPhone only (I40): the switches, the size and the band are drawn. With
+  VoiceOver a switch is still a switch, on or off, and the size moves by
+  half a point and says "19 point".
+- What's new: update over an older build and open the app — "The front of
+  the book", five pictures moving; reduce motion holds each still.
+
 A mark following its words (A60, I37) — compiled on both platforms by CI,
 never yet run on a phone:
 
