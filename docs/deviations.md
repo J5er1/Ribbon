@@ -4459,10 +4459,99 @@ A67. **The front of the book: You and the settings, made by hand
     your name the warmth the brief describes. Both change the whole app,
     and neither is mine to decide in a pass about one screen.
 
-    The release says so in five pictures, made of the page's own type and
+    The release says so in six pictures, made of the page's own type and
     inks: the ribbons laying in under a name, embers rising onto a shelf,
-    a ribbon moving between two versions, a switch turning on and its
-    sentence writing itself in, and the night drawing itself onto the band.
+    a ribbon moving between two versions, a page setting itself the
+    reader's way (A68), a switch turning on and its sentence writing itself
+    in, and the night drawing itself onto the band.
+
+A68. **The page, the way you read it (2026-10-flyleaf).** Owner, after A67:
+    *"Can we also add more customization for the text?"*
+
+    S20's anatomy was four things: the version, the size, three steps of
+    spacing, red letter. It gains three, in the same group, and one wider
+    range. Every one of them is off, or at Book, until the reader moves it,
+    so the page is exactly the page it was:
+
+    - **Weight: Lighter, Book, Heavier.** Literata is a variable face, and
+      its own weight axis carries the change, so no file is added: 350,
+      400, 470. Book is today's 400, set by today's path. Heavier stops at
+      470 because Medium (500) already means something on its own: in the
+      original words' panel it is how a word another version says
+      differently is brought forward (A62), and the page's heaviest letter
+      must not be mistaken for that. Lighter stops at 350, because thinner
+      strokes than that break up at 16 points on a dark ground.
+    - **The system's Bold Text adds 150** to whichever weight is chosen, on
+      the page and the preview: a real weight on the axis, never a smeared
+      bold. Until now iOS ignored Bold Text on the page altogether, and
+      Android drew a synthetic bold over the 400.
+    - **A new line for every verse.** In a prose paragraph each numbered
+      verse begins its own line; the paragraph's first line keeps its
+      indent, or its space after a break, so paragraphs can still be seen,
+      and poetry, psalm titles and stanza breaks are left exactly as they
+      are. Easier to find your place, and to study by. The break is never
+      a character of any verse: marks, phrase marks (A41g, A60), selection
+      (A62), the number's tap, landing and following all count in a verse's
+      own text, and that text is the same in both settings. Two phones in
+      one room can disagree about it, as they already disagree about size;
+      following counts words, not points.
+    - **Clearer verse numbers.** The numbers sit at 45%, as S02 sets them,
+      which is 4.1:1 on the ground: quiet, and a little under what small
+      text should have. Clearer is 70%, 8.6:1. Nothing moves. Hiding them
+      instead was the other way, and it is not offered: A62's owner choice
+      was to take a whole verse by its number, and the room speaks in
+      addresses — *Ruth left you a note at Mark 4:12*.
+    - **The size reaches 28,** where it stopped at 24. At 28 a phone line
+      holds about twenty-five characters, which is what S02 already plans
+      for at the largest Dynamic Type.
+
+    The steps, the weights, the alphas and the size's range are one table in
+    both cores (`PageType`), and so is the rule for where a verse begins a
+    line (`ScriptureBlock.verseLineStarts()`), with the same tests on both.
+    The page and the Text screen's preview ask the same functions, so the
+    preview cannot show a different page from the one the reader gets.
+
+    Text settings stay on the phone, as they always have: "Yours alone.
+    Nobody else's page moves." Nothing is sent and the server has no column
+    for them.
+
+    **On Android, the page keeps its verse when a setting changes.** The
+    book stays composed under the menu, and a chapter set again by a new
+    size or spacing rose with a different verse on the reading line, which
+    the next save then kept. That was already so for size and spacing; a
+    verse to a line would have made it a page or more. Once the chapter is
+    measured again, the page lands back on the reader's verse, with no
+    animation. iOS needs nothing: there the book is closed while You is
+    open, and opens on the saved verse.
+
+    **Not offered, and why.** A second typeface: the brief's type stack is
+    settled, and Scripture in Literata "must never feel like an interface",
+    which Alegreya Sans, the interface's face, would. Margins: the gutter
+    keeps its width (S02) and the right edge belongs to the presence form.
+    Section headings: the data leaves them out on purpose ("Scripture, not
+    apparatus"), and the World English has none. A drop cap or a chapter
+    numeral: the two phones cannot set one alike without touching a verse's
+    own text. A softer ink for night: a tenth softer already fails the 4.5:1
+    floor over stacked washes, and the system's Reduce White Point and Extra
+    Dim dim everything evenly. Justified text with hyphenation: at about
+    thirty-five characters a line it needs hyphens, and hyphenation is slow
+    on Android while the note carve sets the chapter again on every frame;
+    it waits for Psalm 119 to be timed on both phones.
+
+    **Found on the way, and left for the owner,** because each changes
+    every reader's page:
+    - a verse number can end a line with its verse starting on the next
+      (the thin space after it allows a break), which puts that verse's
+      gutter mark, landing and follow a line high; a word joiner after the
+      thin space would keep them together;
+    - a stanza break before poetry is dropped on both phones — thousands
+      of them in the Berean;
+    - LORD could be set in Literata's own small capitals (`c2sc`), which
+      changes no offset, rather than the plain capitals A64 settled for;
+    - the two phones' line spacing differs: iOS multiplies Literata's own
+      line (1.485 em), so Book is about 2.55 em there, and Android
+      multiplies the em, so Book is 1.72 em. Look at both side by side
+      before changing either.
 
 ## iOS (phase four): the second pass
 
@@ -5293,6 +5382,37 @@ I40. **The front of the book, on iOS (A67): the last of the system's
       first row's large top corner; the embers' shared baseline through
       their buttons; the flyleaf's ribbons laying in while the menu's
       cover is still rising.
+
+I41. **The page, the way you read it, on iOS (A68), and settings that
+    survive the next update.**
+
+    - **A new settings field no longer resets the app.** `AppSettings` used
+      Swift's generated decoder, which ignores a property's default and
+      throws when a key is missing. Any new field would have made every
+      state file written by the build before it fail to decode. The
+      salvage that follows (A43) keeps only what nothing else knows, and
+      the settings would have failed there the same way; the person, their
+      rooms, notes, highlights, positions and every write still owed to the
+      server would have gone with them, and the update would have opened on
+      onboarding as if newly installed. `AppSettings` and `RoomNotificationPrefs` now live in
+      RibbonCore, with their keys spelled out and a decoder that reads each
+      field on its own: a missing or unreadable field costs only itself.
+      They are in the core so the rule has tests, which run on Linux; the
+      app has no test target. Android's settings stay in the app, where
+      they use kotlinx-datetime, and its decoder already took defaults for
+      missing keys (StateSurvivesAnUpdateTest).
+    - **Weight on the axis.** The page asks Core Text for Literata with its
+      current variation and only the weight axis changed, then scales it
+      through `UIFontMetrics` as before. Book takes today's path, unchanged.
+      Literata's named instances have no PostScript names, so "Literata-
+      Medium" was never an option.
+    - **A verse to a line** is a LINE SEPARATOR (U+2028) before the number,
+      outside every verse's own text: one paragraph still, so the first
+      line's indent and the paragraph's space are not repeated, and the
+      page's debug assertion that its verse text is the chapter's own still
+      holds.
+    - **Bold Text** is read from `legibilityWeight` where the page's theme is
+      built, so turning it on sets the page again.
 
 ## Licensed translations (decided: API.Bible)
 

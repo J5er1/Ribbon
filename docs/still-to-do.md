@@ -202,7 +202,30 @@ yet run on a phone:
   VoiceOver a switch is still a switch, on or off, and the size moves by
   half a point and says "19 point".
 - What's new: update over an older build and open the app — "The front of
-  the book", five pictures moving; reduce motion holds each still.
+  the book", six pictures moving; reduce motion holds each still.
+
+The page, the way you read it (A68, I41), on both phones:
+
+- Update from the build before this one, with a text size, quiet hours and
+  one room's switches changed first: everything is kept, and the app opens
+  on the room, not on onboarding (I41's whole point on iPhone).
+- Text → Weight at Book: the page looks exactly as it did. Lighter and
+  Heavier change the letters, and only on the page and the preview — the
+  original words' panel, the room and the cards keep their weight. On
+  iPhone check the optical size has not changed with the weight.
+- Bold Text on (iOS Accessibility → Display & Text Size; Android
+  Accessibility → Display size and text): the page grows heavier at every
+  weight, cleanly, with no smeared bold.
+- A new line for every verse, on Mark 1 and Psalm 119: each verse in a
+  paragraph starts its own line, the paragraph's first line keeps its
+  indent, and poetry is unchanged. Mark a phrase, select across two verses,
+  tap a number, open a note: all as before. Follow someone who has it off.
+- Clearer verse numbers: brighter, and nothing moves.
+- Size at 28 with the largest text the phone allows: Psalm 119's indented
+  lines still wrap and nothing is clipped.
+- Android: with a book open behind You, change the size or a verse to a
+  line, close You and raise the book with the fire: the same verse is on
+  the reading line.
 
 A mark following its words (A60, I37) — compiled on both platforms by CI,
 never yet run on a phone:
