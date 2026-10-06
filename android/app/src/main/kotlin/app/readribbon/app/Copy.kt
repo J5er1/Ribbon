@@ -1391,6 +1391,16 @@ object Copy {
     const val WHATS_NEW_LORD_BODY =
         "LORD reads LORD where the Hebrew has the divine name, and each chapter carries its copyright line."
 
+    /** What's new (A66): the held word's line, readable over the page. */
+    const val WHATS_NEW_READABLE_TITLE = "The Hebrew, easy to read"
+
+    /**
+     * What's new (A66): what changed about it — its own ground, a larger
+     * word, and no verse running through it.
+     */
+    const val WHATS_NEW_READABLE_BODY =
+        "The word you hold, in Hebrew or Greek, sits on its own ground above the toolbar, set larger, with no verse running through it."
+
     /** What's new, read again (A65): the row in You, under This phone. */
     const val WHATS_NEW_ROW = "What’s new"
 

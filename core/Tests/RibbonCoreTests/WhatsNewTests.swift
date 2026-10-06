@@ -13,7 +13,8 @@ final class WhatsNewTests: XCTestCase {
     func testTodaysRelease() {
         XCTAssertEqual(WhatsNew.releases.first?.id, "2026-10-following")
         XCTAssertEqual(
-            WhatsNew.releases.first?.items, [.followingStays, .nativeSelection, .roomGroups, .lordReadsLord])
+            WhatsNew.releases.first?.items,
+            [.followingStays, .nativeSelection, .roomGroups, .lordReadsLord, .originalReadable])
     }
 
     // Read again from You (A65): every release, newest first, each dated,
@@ -49,6 +50,7 @@ final class WhatsNewTests: XCTestCase {
         XCTAssertEqual(WhatsNewItem.nativeSelection.rawValue, "nativeSelection")
         XCTAssertEqual(WhatsNewItem.roomGroups.rawValue, "roomGroups")
         XCTAssertEqual(WhatsNewItem.lordReadsLord.rawValue, "lordReadsLord")
+        XCTAssertEqual(WhatsNewItem.originalReadable.rawValue, "originalReadable")
         let json = try JSONEncoder().encode([WhatsNewItem.original, .ownVersion, .followingWords])
         XCTAssertEqual(String(decoding: json, as: UTF8.self), #"["original","ownVersion","followingWords"]"#)
     }

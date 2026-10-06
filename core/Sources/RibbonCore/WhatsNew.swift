@@ -35,6 +35,9 @@ public enum WhatsNewItem: String, Codable, Hashable, Sendable, CaseIterable {
     case roomGroups
     /// The New King James as printed: LORD, and its copyright line (A64).
     case lordReadsLord
+    /// The held word's line, readable over the page: on glass of its own,
+    /// the Hebrew larger and at full strength (A66).
+    case originalReadable
 }
 
 /// A release worth telling someone about. The id is a name, not a version
@@ -61,7 +64,7 @@ public enum WhatsNew {
     public static let releases: [WhatsNewRelease] = [
         WhatsNewRelease(
             id: "2026-10-following", released: "2026-10-06",
-            items: [.followingStays, .nativeSelection, .roomGroups, .lordReadsLord]),
+            items: [.followingStays, .nativeSelection, .roomGroups, .lordReadsLord, .originalReadable]),
         WhatsNewRelease(
             id: "2026-10-original", released: "2026-10-04",
             items: [.original, .ownVersion, .followingWords]),

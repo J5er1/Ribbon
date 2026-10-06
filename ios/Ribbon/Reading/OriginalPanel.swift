@@ -11,10 +11,21 @@ import RibbonCore
 // Above the toolbar, while a verse is held, a quieter line says the held
 // word in the original (§7.5) and is the same door into the panel.
 
-/// The line over the toolbar: `λόγος · logos · Word`, muted, one line.
+/// The line over the toolbar: `λόγος · logos · Word`, one line.
+///
+/// It sits on the toolbar's own glass, hugging what it says, because it is
+/// drawn over the page: bare, the verses ran straight through it, and a
+/// muted Hebrew word with its points under a line of Literata could not be
+/// read (A66). The original word is set larger than the words around it and
+/// at full strength — Hebrew a step larger again, for its points; how to say
+/// it and what your version says stay muted beside it.
 struct OriginalLineView: View {
     let line: OriginalLine
     var onOpen: () -> Void
+
+    /// The held word in the line: Greek in Literata, Hebrew a step larger.
+    static let greekSize: CGFloat = 18
+    static let hebrewSize: CGFloat = 21
 
     var body: some View {
         Button(action: onOpen) {
@@ -23,21 +34,26 @@ struct OriginalLineView: View {
                 .foregroundStyle(Palette.muted)
                 .lineLimit(1)
                 .truncationMode(.tail)
-                .padding(.horizontal, 20)
+                .padding(.horizontal, 18)
                 // Small to read, a finger's height to take (§11).
-                .frame(maxWidth: 420, minHeight: 44)
-                .contentShape(Rectangle())
+                .frame(minHeight: 44)
+                .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        .ribbonGlass(in: Capsule(), interactive: true)
+        .padding(.horizontal, 16)
+        .frame(maxWidth: 420)
         .accessibilityLabel(Copy.originalWordSpoken(line.translit, line.rendering ?? "", ""))
         .accessibilityHint(Copy.originalLineAction)
     }
 
-    /// The words in their own face, how to say them in italic, and — for
-    /// one word — what your version says for it, between middle dots.
+    /// The words in their own face at full strength, how to say them in
+    /// italic, and — for one word — what your version says for it, between
+    /// middle dots.
     private var said: Text {
         let word = Text(line.original)
-            .font(RibbonType.original(17, hebrew: line.isHebrew))
+            .font(RibbonType.original(line.isHebrew ? Self.hebrewSize : Self.greekSize, hebrew: line.isHebrew))
+            .foregroundStyle(Palette.text)
         let translit = Text(line.translit)
             .font(RibbonType.scriptureItalic(14))
         if let rendering = line.rendering {

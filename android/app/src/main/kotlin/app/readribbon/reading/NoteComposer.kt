@@ -136,10 +136,16 @@ enum class ComposerMode {
  * content it is applied to rather than what lies behind it, and sampling the
  * window's backdrop would mean rendering the reading surface a second time
  * on every frame while a finger is on the toolbar. So the nearest honest
- * thing is drawn instead — the raised surface under the same 0.72 tint of
- * the unlit ground, with a hairline edge that catches a little more light
- * along the top. The edge is what carried the material on iOS, and it is
- * what carries it here. Written down in docs/deviations.md.
+ * thing is drawn instead — the raised surface under a tint of the unlit
+ * ground, with a hairline edge that catches a little more light along the
+ * top. The edge is what carried the material on iOS, and it is what carries
+ * it here. Written down in docs/deviations.md.
+ *
+ * The tint is denser than iOS's 0.72 (A66). iOS's glass blurs what lies
+ * under it, so the verses beneath are a smear; here nothing blurs them, and
+ * at 0.72 they read through sharp — a line of the page running under the
+ * Hebrew on the toolbar, fighting its points. At [GLASS_TINT] they are a
+ * trace, and what is on the material is all that reads.
  *
  * iOS's `interactive:` has no equivalent to carry across: the theme's flat
  * state layer (§12.2, the ripple's replacement) is what answers a press.
@@ -148,10 +154,10 @@ enum class ComposerMode {
  * fire, the shelf, embers, or as a screen background.
  */
 @Composable
-private fun Modifier.ribbonGlass(shape: Shape): Modifier = this
+internal fun Modifier.ribbonGlass(shape: Shape): Modifier = this
     .clip(shape)
     .background(Palette.raised.copy(alpha = 0.55f), shape)
-    .background(Palette.ground.copy(alpha = 0.72f), shape)
+    .background(Palette.ground.copy(alpha = GLASS_TINT), shape)
     .border(
         width = 1.dp,
         brush = Brush.verticalGradient(
@@ -159,6 +165,9 @@ private fun Modifier.ribbonGlass(shape: Shape): Modifier = this
         ),
         shape = shape,
     )
+
+/** How much of the unlit ground the material lays over the raised surface (A66). */
+private const val GLASS_TINT = 0.9f
 
 /**
  * The toolbar's arrival, for the reading screen to hand to its
@@ -229,7 +238,15 @@ fun LeaveToolbar(
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         if (roomPaused) {
-            SmallCaps(Copy.NEW_NOTES_NEED_THE_ROOM, size = 12f)
+            // Over the page, like the line: on the bar's material, never
+            // bare on the verses (A66).
+            SmallCaps(
+                Copy.NEW_NOTES_NEED_THE_ROOM,
+                size = 12f,
+                modifier = Modifier
+                    .ribbonGlass(CircleShape)
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+            )
         }
         // The held word in the original, quietly, over the inks. It fades
         // in and out and never moves — under reduce motion as well, where a
