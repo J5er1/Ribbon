@@ -256,8 +256,6 @@ struct RibbonSlider<Leading: View, Trailing: View>: View {
     /// The position under a finger that is still down, not yet written.
     @State private var held: Int?
 
-    private static let thumb: CGFloat = 24
-
     init(
         index: Binding<Int>, count: Int, mark: Int? = nil,
         label: String, spoken: @escaping (Int) -> String,
@@ -310,7 +308,7 @@ struct RibbonSlider<Leading: View, Trailing: View>: View {
     }
 
     private func track(width: CGFloat, height: CGFloat) -> some View {
-        let thumb = Self.thumb
+        let thumb = SliderEnd.thumb
         let travel = max(1, width - thumb)
         let centre = thumb / 2 + travel * CGFloat(fraction(shown))
         return ZStack(alignment: .leading) {
@@ -360,7 +358,7 @@ struct RibbonSlider<Leading: View, Trailing: View>: View {
     /// The position under a point on the track.
     private func position(_ x: CGFloat, travel: CGFloat) -> Int {
         guard count > 1 else { return 0 }
-        let along = min(max((x - Self.thumb / 2) / travel, 0), 1)
+        let along = min(max((x - SliderEnd.thumb / 2) / travel, 0), 1)
         return Int((Double(along) * Double(count - 1)).rounded())
     }
 
@@ -395,6 +393,10 @@ struct RibbonSlider<Leading: View, Trailing: View>: View {
 /// or large end, not a word, so none is in Copy and nobody hears them. Held
 /// at one type size by the slider, as What's New holds its pictures.
 enum SliderEnd {
+    /// The slider's paper thumb, across. Here rather than on the slider,
+    /// which is generic over its pictures and can keep no stored constant.
+    static let thumb: CGFloat = 24
+
     /// A letter, or two, set in the reader's typeface: Text size's A's,
     /// Weight's light and heavy a, Letter spacing's close and open ab.
     static func letters(
