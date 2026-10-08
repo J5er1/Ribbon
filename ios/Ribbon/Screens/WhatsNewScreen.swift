@@ -2289,8 +2289,8 @@ private struct QuietHoursNightVignette: View {
 /// John 1:1's first words five times, each in one of the page's typefaces
 /// (A69) at the size that looks like Literata's, the face's name after it
 /// in small caps. A short ribbon marks the chosen one — the chosen row in
-/// ivory, the rest quieter — and moves down a row at a beat, then comes
-/// back to Literata.
+/// ivory, the rest quieter — and moves down a row at a beat, rests on the
+/// last, Atkinson Hyperlegible, and comes back to Literata.
 private struct TypefaceVignette: View {
     let startsAfter: Double
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -2305,7 +2305,7 @@ private struct TypefaceVignette: View {
     private static let row: CGFloat = 24
     private static let ribbon = CGSize(width: 3, height: 14)
     /// How long a row is chosen before the ribbon moves on.
-    private static let dwell: Double = 1.2
+    private static let dwell: Double = 0.88
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -2336,16 +2336,22 @@ private struct TypefaceVignette: View {
     }
 
     private func play() async {
+        let last = PageFaces.all.count - 1
+        // How it stands under reduce motion: come down to the last face.
+        guard !reduceMotion else {
+            chosen = last
+            return
+        }
         chosen = 0
-        // How it ends, and how it stands under reduce motion: Literata.
-        guard !reduceMotion else { return }
         guard await beat(startsAfter) else { return }
         while true {
-            for next in Array(1..<PageFaces.all.count) + [0] {
-                guard await beat(Self.dwell) else { return }
+            for next in 1...last {
+                guard await beat(next == 1 ? Vignette.breath : Self.dwell) else { return }
                 withAnimation(RibbonMotion.settle) { chosen = next }
             }
-            guard await beat(Vignette.breath) else { return }
+            guard await beat(RibbonMotion.settleDuration + Vignette.rest) else { return }
+            withAnimation(RibbonMotion.settle) { chosen = 0 }
+            guard await beat(RibbonMotion.settleDuration + Vignette.breath) else { return }
         }
     }
 }

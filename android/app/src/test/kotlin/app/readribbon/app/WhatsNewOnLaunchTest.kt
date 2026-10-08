@@ -25,6 +25,7 @@ import app.readribbon.screens.originalFrame
 import app.readribbon.screens.ownVersionFrame
 import app.readribbon.screens.readableFrame
 import app.readribbon.screens.pageFrame
+import app.readribbon.screens.typefaceFrame
 import app.readribbon.screens.roomGroupsFrame
 import app.readribbon.screens.selectionFrame
 import app.readribbon.screens.shelfFrame
@@ -342,6 +343,9 @@ class WhatsNewOnLaunchTest {
         assertEquals("a verse to a line", 1f, page.lines, 0f)
         assertEquals("the numbers clear", 1f, page.clear, 0f)
         assertEquals("and the letters heavier", 1f, page.heavier, 0f)
+
+        val faces = typefaceFrame(WhatsNewItem.typeface.timeline.stillAt)
+        assertEquals("the ribbon come down to the last typeface", 4f, faces.row, 0f)
     }
 
     @Test fun eachFrontOfTheBookLoopBeginsAndEndsAtRest() {
@@ -372,6 +376,9 @@ class WhatsNewOnLaunchTest {
             assertEquals("one paragraph", 0f, page.lines, 0.001f)
             assertEquals("its numbers quiet", 0f, page.clear, 0.001f)
             assertEquals("at Book", 0f, page.heavier, 0.001f)
+        }
+        for (t in listOf(0, WhatsNewItem.typeface.timeline.loopMs - 1)) {
+            assertEquals("the ribbon on Literata", 0f, typefaceFrame(t).row, 0.001f)
         }
     }
 
@@ -446,6 +453,7 @@ class WhatsNewOnLaunchTest {
             WhatsNewItem.notificationsByName to ::notificationsFrame,
             WhatsNewItem.quietHoursNight to ::nightFrame,
             WhatsNewItem.yourPage to ::pageFrame,
+            WhatsNewItem.typeface to ::typefaceFrame,
         )) {
             val timeline = item.timeline
             val breath = stillFor(timeline.loopMs, timeline.stillAt, frame)

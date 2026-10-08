@@ -2775,21 +2775,21 @@ private fun DrawScope.drawNight(page: TheNight, inks: VignetteInks, grain: Brush
     }
 }
 
-/** The typefaces: the ribbon on Literata, where it begins and ends. */
-internal const val TYPEFACE_STILL_AT = 400
+/** The typefaces: the ribbon come down to the last of them, Atkinson Hyperlegible. */
+internal const val TYPEFACE_STILL_AT = 4000
 
 /**
  * Set in the type you read best (A69): John 1:1's first words in each of
  * the page's five typefaces, and a short ribbon marking the chosen one. It
- * moves down a row every 1200 ms ([row]: 0 on Literata, 4 on Atkinson
- * Hyperlegible), the iPhone's beat, and comes back up to Literata on one.
+ * moves down a row at a beat ([row]: 0 on Literata, 4 on Atkinson
+ * Hyperlegible), rests on the last, and comes back up to Literata on one.
  */
 internal data class TypefaceFrame(val row: Float)
 
 internal fun typefaceFrame(t: Int): TypefaceFrame = TypefaceFrame(
-    row = beat(t, at = 1200, ms = 400) + beat(t, at = 2400, ms = 400) +
-        beat(t, at = 3600, ms = 400) + beat(t, at = 4800, ms = 400) -
-        (PageFaces.all.size - 1) * beat(t, at = 5600, ms = 400),
+    row = beat(t, at = 400, ms = 400) + beat(t, at = 1280, ms = 400) +
+        beat(t, at = 2160, ms = 400) + beat(t, at = 3040, ms = 400) -
+        (PageFaces.all.size - 1) * beat(t, at = 5560, ms = 400),
 )
 
 // MARK: - Set in the type you read best (A69)
