@@ -182,7 +182,7 @@ class YouIsTheFrontOfTheBookTest {
 
         compose.onNodeWithText(Copy.YOUR_RIBBONS).assertExists()
         compose.onNodeWithText(Copy.YOUR_SHELF).assertDoesNotExist()
-        compose.onNodeWithText(Copy.COLOPHON_SET_IN).performScrollTo().assertExists()
+        compose.onNodeWithText(Copy.colophonSetIn("Literata")).performScrollTo().assertExists()
         compose.onNodeWithText(Copy.ORIGINAL_CREDIT).performScrollTo().assertExists()
     }
 

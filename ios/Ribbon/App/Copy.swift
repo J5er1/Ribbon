@@ -455,7 +455,7 @@ enum Copy {
     // What each settings door leads to, under its title (ledger A23).
     /// S20 (A68): what Text is about, now that the page has more to set
     /// than a subtitle can list.
-    static let textSub = "Translation, and how the page is set"
+    static let textSub = "Translation, typeface, and how the page is set"
     static let notificationsSub = "Per room, and your quiet hours"
     @MainActor static var downloadsSub: String { "What Scripture is held on this \(deviceNoun)" }
     static let planSub = "What your room has"
@@ -470,6 +470,7 @@ enum Copy {
     static let planLede = "What your room has, and when Ribbon asks."
     @MainActor static var downloadsLede: String { "What is on this \(deviceNoun), and what isn't." }
     static let thePage = "The page"
+    static let typeface = "Typeface"
     static let notesLeftForYouSub = "When they leave one at a verse."
     static let cardsOpenSub = "When everyone has answered."
     static let whenTheyOpenTheBookSub = "So you can read at the same time."
@@ -478,6 +479,8 @@ enum Copy {
     static let lineSpacingSub = "How much air between the lines."
     /// S20 (A68): Literata's own weight, drawn, never a bold laid on top.
     static let weightSub = "How much ink each letter carries."
+    static let letterSpacingSub = "Room between the letters. A line holds fewer of them."
+    static let marginsSub = "Room either side of the words. At the largest sizes the words keep it."
     /// S20 (A68): prose only; a poem is already set line by line.
     static let verseLinesSub = "Easier to find your place. Poetry keeps its own lines."
     /// S20 (A68): only the numbers' ink changes, so nothing on the page moves.
@@ -501,6 +504,8 @@ enum Copy {
     static let lineSpacing = "Line spacing"
     /// S20 (A68): the weight control's title, and its name to a screen reader.
     static let weight = "Weight"
+    static let letterSpacing = "Letter spacing"
+    static let margins = "Margins"
     /// S20 (A68): says what happens, in the page's own terms.
     static let verseLines = "A new line for every verse"
     /// S20 (A68): the numbers, not the verses, are what change.
@@ -526,6 +531,22 @@ enum Copy {
     static let weightLighter = "Lighter"
     static let weightBook = "Book"
     static let weightHeavier = "Heavier"
+    /// Text (A69): each typeface in a line of its own.
+    static let typefaceLiterataSub = "Drawn for long reading on a screen."
+    static let typefaceSourceSerifSub = "Crisp and open, a little sturdier."
+    static let typefaceGaramondSub = "The Garamond of printed Bibles."
+    static let typefaceAlegreyaSub = "Warm, with the movement of a pen."
+    static let typefaceAtkinsonSub = "Every letter distinct, for low vision."
+    static func typefaceSub(_ id: String) -> String? {
+        switch id {
+        case PageFaces.literata.id: typefaceLiterataSub
+        case PageFaces.sourceSerif.id: typefaceSourceSerifSub
+        case PageFaces.ebGaramond.id: typefaceGaramondSub
+        case PageFaces.alegreya.id: typefaceAlegreyaSub
+        case PageFaces.atkinson.id: typefaceAtkinsonSub
+        default: nil
+        }
+    }
     /// What quiet hours do not silence (S19): the one notification that is
     /// a touch rather than a sentence, said plainly so nobody is surprised
     /// by it.
@@ -586,14 +607,46 @@ enum Copy {
         return "\(book), \(company)"
     }
     /// The colophon (A67): what the book is set in, the way a book's last
-    /// page says it.
-    static let colophonSetIn = "Set in Literata and Alegreya Sans."
+    /// page says it — your page's typeface (A69).
+    static func colophonSetIn(_ face: String) -> String { "Set in \(face) and Alegreya Sans." }
     /// Text (A67): the verse every version is shown at.
     static func specimenAt(_ reference: String) -> String { "Each one shows \(reference) in its own words." }
+    /// Text (A69): the verse every typeface is shown at.
+    static func typefaceSpecimenAt(_ reference: String) -> String { "Each one sets \(reference) in its own letters." }
     /// Text (A67): the size, spoken — a measure of type, not of a person.
     static func textSizeValue(_ size: Double) -> String {
         let whole = size.rounded() == size
         return (whole ? String(Int(size)) : String(format: "%.1f", size)) + " point"
+    }
+    /// Text (A69): line spacing, spoken — the multiple, with its old name on
+    /// one of the three stops it had.
+    static func lineSpacingValue(_ hundredths: Int) -> String {
+        let number = String(format: "%.2f", Double(hundredths) / 100)
+        switch hundredths {
+        case PageType.lineSpacingNamed[0]: return "\(number), \(lineSpacingClose)"
+        case PageType.lineSpacingNamed[1]: return "\(number), \(lineSpacingBook)"
+        case PageType.lineSpacingNamed[2]: return "\(number), \(lineSpacingOpen)"
+        default: return number
+        }
+    }
+    /// Text (A69): weight, spoken — never an axis number: the nearest of the
+    /// three stops it had, and how many steps from it.
+    static func weightValue(_ reading: NamedReading) -> String {
+        let stop = [weightLighter, weightBook, weightHeavier][min(max(reading.index, 0), 2)]
+        guard reading.offset != 0 else { return stop }
+        let steps = abs(reading.offset) == 1 ? "1 step" : "\(abs(reading.offset)) steps"
+        return "\(steps) \(reading.offset > 0 ? "heavier" : "lighter") than \(stop)"
+    }
+    /// Text (A69): letter spacing, spoken, in ems.
+    static func letterSpacingValue(_ thousandths: Int) -> String {
+        guard thousandths != 0 else { return "As set" }
+        var number = String(format: "%.3f", Double(thousandths) / 1000)
+        while number.hasSuffix("0") { number.removeLast() }
+        return "\(number) em wider"
+    }
+    /// Text (A69): the margins, spoken.
+    static func marginValue(_ points: Int) -> String {
+        points == 0 ? "As set" : "\(points) point margins"
     }
     /// Notifications (A67): the words a switch's notification will use,
     /// spoken.
@@ -765,7 +818,12 @@ enum Copy {
     static let whatsNewPageTitle = "The page, the way you read it"
     /// What's new (A68): where it is, and what it does.
     static let whatsNewPageBody =
-        "In Text, each verse can start a line of its own, the letters can be lighter or heavier, the verse numbers clearer, and the size goes larger."
+        "In Text, sliders set the size, the spacing, the weight, the room between letters and the margins, with the page in view while you move them. Each verse can start a line of its own, and the verse numbers can be clearer."
+    /// What's new (A69): five typefaces.
+    static let whatsNewTypefaceTitle = "Set in the type you read best"
+    /// What's new (A69): where it is, and what it does.
+    static let whatsNewTypefaceBody =
+        "In Text, the page can be set in Literata, Source Serif, EB Garamond, Alegreya or Atkinson Hyperlegible. Each shows your verse in its own letters, at a size that matches."
     /// What's new (A67): the switches say who.
     static let whatsNewNotificationsTitle = "Notifications say who"
     /// What's new (A67): in a room of two.

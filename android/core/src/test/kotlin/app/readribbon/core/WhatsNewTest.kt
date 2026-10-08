@@ -30,6 +30,7 @@ class WhatsNewTest {
                 WhatsNewItem.yourShelf,
                 WhatsNewItem.versionsByReading,
                 WhatsNewItem.yourPage,
+                WhatsNewItem.typeface,
                 WhatsNewItem.notificationsByName,
                 WhatsNewItem.quietHoursNight,
             ),
@@ -99,6 +100,7 @@ class WhatsNewTest {
         assertEquals("yourPage", WhatsNewItem.yourPage.name)
         assertEquals("notificationsByName", WhatsNewItem.notificationsByName.name)
         assertEquals("quietHoursNight", WhatsNewItem.quietHoursNight.name)
+        assertEquals("typeface", WhatsNewItem.typeface.name)
         val json = Json.encodeToString(
             listOf(WhatsNewItem.original, WhatsNewItem.ownVersion, WhatsNewItem.followingWords),
         )

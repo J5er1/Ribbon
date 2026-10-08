@@ -30,6 +30,18 @@ struct ReadingTheme: Equatable {
     /// its width at every type size (§08).
     var gutterWidth: CGFloat = 28
     var trailingMargin: CGFloat = 26
+    /// The reader's typeface (A69). `fontSize` stays Literata's size: the
+    /// face is set at the size that looks the same (`PageType.pointSize`),
+    /// and the verse numbers, the indents and the running head keep to it.
+    var face: PageFace = PageFaces.literata
+    /// Room between the letters, in thousandths of an em (A69): on the
+    /// words only, never on a verse number.
+    var letterSpacing: Int = 0
+    /// The margin the page gives either side at this width and size (A69):
+    /// outside the gutter on the left, so notes stay beside their words,
+    /// and beside the trailing edge on the right, which the presence form
+    /// keeps as it always has.
+    var margin: CGFloat = 0
 }
 
 extension ReadingTheme {
@@ -38,7 +50,10 @@ extension ReadingTheme {
     /// cannot show a page the reader will not get. Bold Text is passed in
     /// by whoever reads it from the environment, so that turning it on sets
     /// the page again.
-    init(_ settings: AppSettings, boldText: Bool, dynamicTypeSize: DynamicTypeSize) {
+    ///
+    /// `columnWidth` is the width the page is set in, which the margin
+    /// gives way to (A69); with none, the page has no margin.
+    init(_ settings: AppSettings, boldText: Bool, dynamicTypeSize: DynamicTypeSize, columnWidth: CGFloat = 0) {
         self.init(
             fontSize: settings.scriptureSize,
             lineHeightMultiple: settings.lineHeightMultiple,
@@ -46,7 +61,30 @@ extension ReadingTheme {
             weight: settings.weight(boldText: boldText),
             versePerLine: settings.versePerLine,
             verseNumberAlpha: settings.verseNumberAlpha,
-            dynamicTypeSize: dynamicTypeSize)
+            dynamicTypeSize: dynamicTypeSize,
+            face: settings.face,
+            letterSpacing: settings.letterSpacingThousandths)
+        margin = Self.margin(
+            requested: settings.marginRequested, columnWidth: columnWidth, fontSize: fontSize,
+            gutterWidth: gutterWidth, trailingMargin: trailingMargin)
+    }
+
+    /// The margin a column this wide can give at this size (A69): what the
+    /// reader asked for, less whatever would leave the words narrower than
+    /// thirteen ems of Literata at the size Dynamic Type makes it.
+    static func margin(
+        requested: Double, columnWidth: CGFloat, fontSize: CGFloat,
+        gutterWidth: CGFloat = 28, trailingMargin: CGFloat = 26
+    ) -> CGFloat {
+        guard requested > 0, columnWidth > 0 else { return 0 }
+        let size = Double(RibbonType.uiScripture(fontSize).pointSize)
+        let textWidth = Double(columnWidth - gutterWidth - 8 - trailingMargin)
+        return CGFloat(PageType.margin(requested: requested, textWidth: textWidth, size: size))
+    }
+
+    /// Where the words begin and end inside the text view.
+    var textInsets: UIEdgeInsets {
+        UIEdgeInsets(top: 0, left: margin + gutterWidth + 8, bottom: 0, right: trailingMargin + margin)
     }
 }
 
@@ -602,8 +640,7 @@ struct ChapterTextView: UIViewRepresentable {
         view.delegate = context.coordinator
         view.isScrollEnabled = false
         view.backgroundColor = .clear
-        view.textContainerInset = UIEdgeInsets(
-            top: 0, left: theme.gutterWidth + 8, bottom: 0, right: theme.trailingMargin)
+        view.textContainerInset = theme.textInsets
         view.adjustsFontForContentSizeCategory = true
 
         // Ours, beside the system's own: it reads the touch before the
@@ -627,6 +664,11 @@ struct ChapterTextView: UIViewRepresentable {
     }
 
     func updateUIView(_ view: UITextView, context: Context) {
+        // The margin follows the reader's setting and the page's width (A69).
+        if view.textContainerInset != theme.textInsets {
+            view.textContainerInset = theme.textInsets
+            view.invalidateIntrinsicContentSize()
+        }
         context.coordinator.parent = self
         handle.textView = view
         handle.coordinator = context.coordinator
@@ -1340,13 +1382,18 @@ struct ChapterTextView: UIViewRepresentable {
         // The reader's weight is the page's: its words, a psalm's title and
         // the newline that closes a block (A68). The numbers and the running
         // head are Alegreya Sans's, and keep their own.
-        let bodyFont = RibbonType.uiScripture(theme.fontSize, weight: theme.weight)
-        let titleFont = RibbonType.uiScripture(theme.fontSize * 0.82, weight: theme.weight)
+        let bodyFont = RibbonType.uiScripture(theme.fontSize, weight: theme.weight, face: theme.face)
+        let titleFont = RibbonType.uiScripture(theme.fontSize * 0.82, weight: theme.weight, face: theme.face)
+        // Letter spacing (A69): a kern on the words alone, in each run's own
+        // points, which moves no character a mark or a selection counts in.
+        let spacing = CGFloat(PageType.letterSpacingEm(theme.letterSpacing))
         let em = theme.fontSize
 
         func paragraphStyle(_ style: BlockStyle, isFirstBlock: Bool, afterBreak: Bool) -> NSParagraphStyle {
             let p = NSMutableParagraphStyle()
-            p.lineHeightMultiple = theme.lineHeightMultiple
+            // Multiplies the face's own line, so a face other than
+            // Literata takes the multiple that keeps Literata's pitch (A69).
+            p.lineHeightMultiple = CGFloat(PageType.naturalLineMultiple(Double(theme.lineHeightMultiple), face: theme.face))
             switch style {
             case .p:
                 // A printed page: first-line indent, except the paragraph
@@ -1446,6 +1493,9 @@ struct ChapterTextView: UIViewRepresentable {
                             : ivory),
                     .paragraphStyle: style,
                 ]
+                if spacing > 0 {
+                    attributes[.kern] = spacing * (block.s == .d ? titleFont : bodyFont).pointSize
+                }
                 if let verse = runningVerse, block.s != .d {
                     attributes[.ribbonVerse] = verse
                     // Where this run sits in the verse's own text and on

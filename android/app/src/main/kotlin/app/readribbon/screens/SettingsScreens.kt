@@ -13,25 +13,33 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -39,9 +47,25 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -57,7 +81,9 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
@@ -69,6 +95,8 @@ import app.readribbon.app.firstName
 import app.readribbon.core.Bible
 import app.readribbon.core.BlockStyle
 import app.readribbon.core.Ink
+import app.readribbon.core.PageFace
+import app.readribbon.core.PageFaces
 import app.readribbon.core.PageType
 import app.readribbon.core.Person
 import app.readribbon.core.QuietHoursBand
@@ -77,6 +105,7 @@ import app.readribbon.core.ScriptureChapter
 import app.readribbon.core.Translation
 import app.readribbon.core.TranslationID
 import app.readribbon.core.VerseAddress
+import app.readribbon.data.AppSettings
 import app.readribbon.data.RoomNotificationPrefs
 import app.readribbon.design.Air
 import app.readribbon.design.ArrivingLate
@@ -109,11 +138,14 @@ import app.readribbon.design.paper
 import app.readribbon.design.pressable
 import app.readribbon.design.rememberBoldText
 import app.readribbon.design.rememberReduceMotion
+import app.readribbon.design.room
 import app.readribbon.design.well
 import app.readribbon.services.Notifications
 import app.readribbon.services.cachedRemoteChapter
+import kotlin.math.roundToInt
 import kotlin.uuid.ExperimentalUuidApi
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 // S19–S22, and S26 — the screens the menu pushes to.
@@ -175,22 +207,6 @@ private val MinTarget: Dp = 44.dp
 /** Where a subscription is managed on this platform (§6.11). */
 private const val PLAY_SUBSCRIPTIONS = "https://play.google.com/store/account/subscriptions"
 
-/**
- * Scripture size runs 16 → 28 in half-point steps (S20; 28 since A68): the
- * core's numbers, so both phones' sliders end in the same place.
- */
-private val SCRIPTURE_MIN = PageType.sizeMin.toFloat()
-private val SCRIPTURE_MAX = PageType.sizeMax.toFloat()
-private val SCRIPTURE_STEP = PageType.sizeStep.toFloat()
-
-/**
- * Compose counts the stops *between* the ends, where Swift's `step:` counts
- * the distance between them. 16 → 28 by halves is twenty-five positions, so
- * twenty-three of them are interior.
- */
-private val SCRIPTURE_STEPS =
-    ((SCRIPTURE_MAX - SCRIPTURE_MIN) / SCRIPTURE_STEP).toInt() - 1
-
 /** Swift's fallback when the bundle has no folder for a translation (S21). */
 private const val FALLBACK_MEGABYTES = 5
 
@@ -247,6 +263,7 @@ fun TextSettingsScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val density = LocalDensity.current
     // Bundled translations always; licensed ones (NKJV first) appear the
     // day their edition is configured on the proxy — never as a dead row.
     val translations = model.availableTranslations
@@ -258,96 +275,254 @@ fun TextSettingsScreen(
             held.chapters[translation.id]?.text(place.verse)?.let { translation.id to it }
         }
         .toMap()
+    // Every typeface shows your verse (A69): in your version if this phone
+    // holds it, else in the Berean Standard, which it always does.
+    val yours = held.chapters[model.words(model.currentRoom)]
+    val faceSpecimen = yours?.text(place.verse) ?: held.chapters[TranslationID.bsb]?.text(place.verse)
+    val boldText = rememberBoldText()
 
-    SettingsScaffold(
-        route = Flows.TEXT,
-        title = Copy.TEXT_AND_TRANSLATION,
-        lede = Copy.TEXT_LEDE,
-        onBack = onBack,
-        modifier = modifier,
-    ) {
-        SettingsGroup(
-            count = translations.size,
-            title = Copy.TRANSLATION,
-            detail = Copy.TRANSLATION_IS_YOURS,
-            // Which verse the rows are showing, and only when one of them is
-            // showing it: a line about a verse nobody can see is a line
-            // about nothing. While the rows are still being read it is
-            // there already, so the verses arriving under it do not also
-            // bring a line of their own and move the page group down twice.
-            footnote = if (specimens.isEmpty() && held.read) null else Copy.specimenAt(place.formatted),
+    // The settings as the slider under a finger would make them, until it
+    // lifts and they are written once (A69); and a moment after any change,
+    // so the pinned page does not vanish on the frame the finger lifts.
+    var holding by remember { mutableStateOf<AppSettings?>(null) }
+    var lingerTurn by remember { mutableIntStateOf(0) }
+    var lingering by remember { mutableStateOf(false) }
+    LaunchedEffect(lingerTurn) {
+        if (lingerTurn == 0) return@LaunchedEffect
+        lingering = true
+        delay(LINGER_MS)
+        lingering = false
+    }
+    val shownSettings = holding ?: model.settings
+    var stripBounds by remember { mutableStateOf<Rect?>(null) }
+    val windowHeight = LocalWindowInfo.current.containerSize.height.toFloat()
+    val barBottom = with(density) {
+        (WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + BarHeight).toPx()
+    }
+    // Pinned while a slider is held or was just moved, and only while less
+    // than half the strip in the screen's flow can be seen under the bar.
+    val pinned = (holding != null || lingering) && stripBounds?.let { bounds ->
+        val bottom = if (windowHeight > 0f) minOf(bounds.bottom, windowHeight) else bounds.bottom
+        val seen = bottom - maxOf(bounds.top, barBottom)
+        seen < bounds.height / 2f
+    } == true
+
+    fun commit(change: (AppSettings) -> AppSettings) {
+        model.updateSettings(change)
+        lingerTurn += 1
+    }
+    fun hold(index: Int?, change: (AppSettings, Int) -> AppSettings) {
+        holding = index?.let { change(model.settings, it) }
+    }
+
+    Box(modifier.fillMaxSize()) {
+        SettingsScaffold(
+            route = Flows.TEXT,
+            title = Copy.TEXT_AND_TRANSLATION,
+            lede = Copy.TEXT_LEDE,
+            onBack = onBack,
         ) {
-            translations.forEach { translation ->
-                SettingChoice(
-                    title = translation.displayName,
-                    subtitle = if (translation.isBundled) {
-                        Copy.bundledSub(context)
-                    } else {
-                        Copy.streamsSub(context)
-                    },
-                    specimen = specimens[translation.id],
-                    chosen = model.words(model.currentRoom) == translation.id,
-                    onClick = { model.setTranslation(translation.id) },
+            SettingsGroup(
+                count = translations.size,
+                title = Copy.TRANSLATION,
+                detail = Copy.TRANSLATION_IS_YOURS,
+                // Which verse the rows are showing, and only when one of them
+                // is showing it: a line about a verse nobody can see is a line
+                // about nothing. While the rows are still being read it is
+                // there already, so the verses arriving under it do not also
+                // bring a line of their own and move the page group down twice.
+                footnote = if (specimens.isEmpty() && held.read) null else Copy.specimenAt(place.formatted),
+            ) {
+                translations.forEach { translation ->
+                    SettingChoice(
+                        title = translation.displayName,
+                        subtitle = if (translation.isBundled) {
+                            Copy.bundledSub(context)
+                        } else {
+                            Copy.streamsSub(context)
+                        },
+                        specimen = specimens[translation.id],
+                        chosen = model.words(model.currentRoom) == translation.id,
+                        onClick = { model.setTranslation(translation.id) },
+                    )
+                }
+            }
+
+            Air(GroupGap)
+
+            // A typeface is chosen by reading it too (A69): your verse in
+            // each, at the size that looks like Literata's 16.
+            SettingsGroup(
+                count = PageFaces.all.size,
+                title = Copy.TYPEFACE,
+                detail = Copy.THE_PAGE_IS_YOURS,
+                footnote = if (faceSpecimen == null) null else Copy.typefaceSpecimenAt(place.formatted),
+            ) {
+                PageFaces.all.forEach { face ->
+                    SettingChoice(
+                        title = face.name,
+                        subtitle = Copy.typefaceSub(face.id),
+                        specimen = faceSpecimen,
+                        specimenFace = face,
+                        specimenWeight = model.settings.weight(boldText = boldText),
+                        chosen = model.settings.face == face,
+                        onClick = { commit { it.copy(typeface = face.id) } },
+                    )
+                }
+            }
+
+            Air(GroupGap)
+
+            // The page itself, edge to edge, over the controls that set it.
+            if (yours != null) {
+                PageStrip(
+                    chapter = yours,
+                    place = place,
+                    settings = shownSettings,
+                    boldText = boldText,
+                    modifier = Modifier
+                        .bleed(ScreenMarginForStrip)
+                        .onGloballyPositioned { stripBounds = it.boundsInWindow() }
+                        .testTag(PAGE_STRIP_TAG),
+                )
+                Air(14.dp)
+            }
+
+            ThePageGroup(model, ::commit, ::hold)
+        }
+
+        // The strip again, pinned under the bar while a slider further down
+        // is held (A69). A copy: it takes no touch, and TalkBack has heard
+        // the strip it copies.
+        AnimatedVisibility(
+            visible = pinned && yours != null,
+            enter = fadeIn(RibbonMotion.settle(rememberReduceMotion())),
+            exit = fadeOut(RibbonMotion.settle(rememberReduceMotion())),
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = with(density) { barBottom.toDp() }),
+            label = "page-strip-pinned",
+        ) {
+            if (yours != null) {
+                PageStrip(
+                    chapter = yours,
+                    place = place,
+                    settings = shownSettings,
+                    boldText = boldText,
+                    modifier = Modifier
+                        .clearAndSetSemantics {}
+                        .testTag(PAGE_STRIP_PINNED_TAG),
                 )
             }
         }
+    }
+}
 
-        Air(GroupGap)
-
-        SettingsGroup(count = 6, title = Copy.THE_PAGE, detail = Copy.THE_PAGE_IS_YOURS) {
-            SettingControl(title = Copy.TEXT_SIZE, detail = Copy.TEXT_SIZE_SUB) {
-                ScriptureSizeWell(model)
-                ScripturePreview(model, place, held.chapters[model.words(model.currentRoom)])
-            }
-            SettingControl(title = Copy.LINE_SPACING, detail = Copy.LINE_SPACING_SUB) {
-                Segments(
-                    labels = listOf(
-                        Copy.LINE_SPACING_CLOSE,
-                        Copy.LINE_SPACING_BOOK,
-                        Copy.LINE_SPACING_OPEN,
-                    ),
-                    chosenIndex = model.settings.lineSpacingStep,
-                    onSelect = { index ->
-                        model.updateSettings { it.copy(lineSpacingStep = index) }
-                    },
-                )
-            }
-            // Literata's own weight (A68), three stops as the spacing has,
-            // Book in the middle where the page has always been. A step a
-            // later build saved past the ends is shown where the page sets
-            // it, at the nearer end.
-            SettingControl(title = Copy.WEIGHT, detail = Copy.WEIGHT_SUB) {
-                Segments(
-                    labels = listOf(
-                        Copy.WEIGHT_LIGHTER,
-                        Copy.WEIGHT_BOOK,
-                        Copy.WEIGHT_HEAVIER,
-                    ),
-                    chosenIndex = model.settings.weightStep.coerceIn(0, PageType.weights.lastIndex),
-                    onSelect = { index ->
-                        model.updateSettings { it.copy(weightStep = index) }
-                    },
-                )
-            }
-            SettingSwitch(
-                title = Copy.VERSE_LINES,
-                subtitle = Copy.VERSE_LINES_SUB,
-                value = model.settings.versePerLine,
-                onChange = { on -> model.updateSettings { it.copy(versePerLine = on) } },
-            )
-            SettingSwitch(
-                title = Copy.CLEAR_NUMBERS,
-                subtitle = Copy.CLEAR_NUMBERS_SUB,
-                value = model.settings.clearVerseNumbers,
-                onChange = { on -> model.updateSettings { it.copy(clearVerseNumbers = on) } },
-            )
-            SettingSwitch(
-                title = Copy.RED_LETTER,
-                subtitle = Copy.RED_LETTER_SUB,
-                value = model.settings.redLetter,
-                onChange = { on -> model.updateSettings { it.copy(redLetter = on) } },
+/**
+ * The page group (A68, A69): five sliders — size, spacing, weight, letter
+ * spacing, margins — then the three switches. Each slider moves through its
+ * scale's positions; while one is held the strip shows the page it would
+ * make, and it is written once, when the finger lifts.
+ */
+@Composable
+private fun ThePageGroup(
+    model: AppModel,
+    commit: ((AppSettings) -> AppSettings) -> Unit,
+    hold: (Int?, (AppSettings, Int) -> AppSettings) -> Unit,
+) {
+    val settings = model.settings
+    val face = settings.face
+    val lineHeights = PageType.lineHeightScale
+    val weights = PageType.weightScale
+    val spacings = PageType.letterSpacingScale
+    val margins = PageType.marginScale
+    val lineHeight = PageType.lineHeightHundredths(settings.lineHeightHundredths, settings.lineSpacingStep)
+    val weight = PageType.weight(settings.pageWeight, settings.weightStep)
+    SettingsGroup(count = 8, title = Copy.THE_PAGE, detail = Copy.THE_PAGE_IS_YOURS) {
+        SettingControl(title = Copy.TEXT_SIZE, detail = Copy.TEXT_SIZE_SUB) {
+            PageSlider(
+                label = Copy.TEXT_SIZE,
+                count = PageType.sizePositions,
+                index = PageType.sizeIndex(settings.scriptureSize),
+                spoken = { Copy.textSizeValue(PageType.size(it)) },
+                onHold = { i -> hold(i) { s, at -> s.copy(scriptureSize = PageType.size(at)) } },
+                onSettle = { i -> commit { it.copy(scriptureSize = PageType.size(i)) } },
+                small = { EndLetters("A", 13f, face = face) },
+                large = { EndLetters("A", 21f, face = face) },
             )
         }
+        SettingControl(title = Copy.LINE_SPACING, detail = Copy.LINE_SPACING_SUB) {
+            PageSlider(
+                label = Copy.LINE_SPACING,
+                count = lineHeights.count,
+                index = lineHeights.index(of = lineHeight),
+                mark = lineHeights.bookIndex,
+                spoken = { Copy.lineSpacingValue(lineHeights.value(at = it)) },
+                onHold = { i -> hold(i) { s, at -> s.withLineHeight(lineHeights.value(at = at)) } },
+                onSettle = { i -> commit { it.withLineHeight(lineHeights.value(at = i)) } },
+                small = { EndRules(gap = 2.dp) },
+                large = { EndRules(gap = 6.dp) },
+            )
+        }
+        // Literata's own weight (A68), in the typeface you read (A69).
+        SettingControl(title = Copy.WEIGHT, detail = Copy.WEIGHT_SUB) {
+            PageSlider(
+                label = Copy.WEIGHT,
+                count = weights.count,
+                index = weights.index(of = weight),
+                mark = weights.bookIndex,
+                spoken = { Copy.weightValue(weights.nearestNamed(weights.value(at = it), PageType.weights)) },
+                onHold = { i -> hold(i) { s, at -> s.withWeight(weights.value(at = at)) } },
+                onSettle = { i -> commit { it.withWeight(weights.value(at = i)) } },
+                small = { EndLetters("a", 17f, weight = weights.values.first(), face = face) },
+                large = { EndLetters("a", 17f, weight = weights.values.last(), face = face) },
+            )
+        }
+        SettingControl(title = Copy.LETTER_SPACING, detail = Copy.LETTER_SPACING_SUB) {
+            PageSlider(
+                label = Copy.LETTER_SPACING,
+                count = spacings.count,
+                index = spacings.index(of = settings.letterSpacingThousandths),
+                spoken = { Copy.letterSpacingValue(spacings.value(at = it)) },
+                onHold = { i -> hold(i) { s, at -> s.copy(letterSpacingThousandths = spacings.value(at = at)) } },
+                onSettle = { i -> commit { it.copy(letterSpacingThousandths = spacings.value(at = i)) } },
+                small = { EndLetters("ab", 15f, face = face) },
+                large = { EndLetters("ab", 15f, face = face, spacing = 0.25f) },
+            )
+        }
+        // Outside the gutter, so notes stay beside their words, and beside
+        // the trailing edge, which the presence panel keeps as it always
+        // has (A69).
+        SettingControl(title = Copy.MARGINS, detail = Copy.MARGINS_SUB) {
+            PageSlider(
+                label = Copy.MARGINS,
+                count = margins.count,
+                index = margins.index(of = settings.marginPoints),
+                spoken = { Copy.marginValue(margins.value(at = it)) },
+                onHold = { i -> hold(i) { s, at -> s.copy(marginPoints = margins.value(at = at)) } },
+                onSettle = { i -> commit { it.copy(marginPoints = margins.value(at = i)) } },
+                small = { EndPage(inset = 1.5.dp) },
+                large = { EndPage(inset = 4.5.dp) },
+            )
+        }
+        SettingSwitch(
+            title = Copy.VERSE_LINES,
+            subtitle = Copy.VERSE_LINES_SUB,
+            value = settings.versePerLine,
+            onChange = { on -> model.updateSettings { it.copy(versePerLine = on) } },
+        )
+        SettingSwitch(
+            title = Copy.CLEAR_NUMBERS,
+            subtitle = Copy.CLEAR_NUMBERS_SUB,
+            value = settings.clearVerseNumbers,
+            onChange = { on -> model.updateSettings { it.copy(clearVerseNumbers = on) } },
+        )
+        SettingSwitch(
+            title = Copy.RED_LETTER,
+            subtitle = Copy.RED_LETTER_SUB,
+            value = settings.redLetter,
+            onChange = { on -> model.updateSettings { it.copy(redLetter = on) } },
+        )
     }
 }
 
@@ -423,18 +598,44 @@ private data class HeldChapters(
 )
 
 /**
- * The size slider, in its well, between a small A and a large one.
+ * A slider for the page (A69), in its well, between a picture of its small
+ * end and one of its large end.
  *
- * Material's own slider (A18/A29) with the ticks turned off: twenty-five drawn
- * stops is an instrument panel, and this is a book. The two letters are the
- * ends of the scale set in the face the slider sizes, so the control says
- * what it does before it is touched (A67) — a picture, not a word, and
- * nobody hears it. The well is the page's own ground rather than a paler
- * surface, so a control sits *in* its tile rather than on it.
+ * Material's own slider (A18/A29) with the ticks turned off: thirteen drawn
+ * stops is an instrument panel, and this is a book. It moves through
+ * positions — the caller's scale says what each is — with one mark on the
+ * track at Book where Book is not an end, the word the three stops used to
+ * say. While a finger is down the position is the slider's own, told to
+ * [onHold] so the strip can show the page it makes; it is written once
+ * through [onSettle], when the finger lifts, or at once for a tap, a key or
+ * TalkBack, whose `setProgress` finishes the change itself. The pictures
+ * are unheard; the slider says its value the caller's way.
  */
+// The track slot, for Book's mark, is still marked experimental in Material 1.4.
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ScriptureSizeWell(model: AppModel) {
-    val size = model.settings.scriptureSize
+private fun PageSlider(
+    label: String,
+    count: Int,
+    index: Int,
+    spoken: (Int) -> String,
+    onHold: (Int?) -> Unit,
+    onSettle: (Int) -> Unit,
+    small: @Composable () -> Unit,
+    large: @Composable () -> Unit,
+    mark: Int? = null,
+) {
+    var live by remember { mutableStateOf<Int?>(null) }
+    val shown = live ?: index
+    val colors = SliderDefaults.colors(
+        thumbColor = Palette.accent,
+        activeTrackColor = Palette.accent,
+        activeTickColor = Color.Transparent,
+        inactiveTrackColor = Palette.rule,
+        inactiveTickColor = Color.Transparent,
+    )
+    val markColor = Palette.muted
+    val markFraction = mark?.takeIf { it in 1 until count - 1 }?.let { it.toFloat() / (count - 1) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -443,112 +644,226 @@ private fun ScriptureSizeWell(model: AppModel) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        ScaleEnd(13f)
+        Box(Modifier.clearAndSetSemantics {}) { small() }
         Slider(
-            value = size.toFloat(),
+            value = shown.toFloat(),
             onValueChange = { next ->
-                model.updateSettings { it.copy(scriptureSize = next.toDouble()) }
+                val at = next.roundToInt().coerceIn(0, count - 1)
+                if (at != live) {
+                    live = at
+                    onHold(at)
+                }
             },
-            valueRange = SCRIPTURE_MIN..SCRIPTURE_MAX,
-            steps = SCRIPTURE_STEPS,
-            colors = SliderDefaults.colors(
-                thumbColor = Palette.accent,
-                activeTrackColor = Palette.accent,
-                activeTickColor = Color.Transparent,
-                inactiveTrackColor = Palette.rule,
-                inactiveTickColor = Color.Transparent,
-            ),
+            onValueChangeFinished = {
+                val at = live
+                live = null
+                onHold(null)
+                if (at != null && at != index) onSettle(at)
+            },
+            valueRange = 0f..(count - 1).toFloat(),
+            steps = (count - 2).coerceAtLeast(0),
+            colors = colors,
+            track = { state ->
+                SliderDefaults.Track(
+                    sliderState = state,
+                    colors = colors,
+                    // Book's mark, where the thumb's centre is at Book: the
+                    // track spans exactly the thumb's travel.
+                    modifier = if (markFraction == null) {
+                        Modifier
+                    } else {
+                        Modifier.drawWithContent {
+                            drawContent()
+                            val x = size.width * markFraction
+                            val half = 4.dp.toPx()
+                            drawLine(
+                                color = markColor,
+                                start = Offset(x, size.height / 2f - half),
+                                end = Offset(x, size.height / 2f + half),
+                                strokeWidth = 1.dp.toPx(),
+                            )
+                        }
+                    },
+                )
+            },
             modifier = Modifier
                 .weight(1f)
                 .semantics {
-                    contentDescription = Copy.TEXT_SIZE
-                    // Said as a size in points, a measure of type, where
-                    // Material would say how far along the bar it is.
-                    stateDescription = Copy.textSizeValue(size)
+                    contentDescription = label
+                    // Said as a measure of type, where Material would say
+                    // how far along the bar it is.
+                    stateDescription = spoken(shown)
                 },
         )
-        ScaleEnd(21f)
+        Box(Modifier.clearAndSetSemantics {}) { large() }
     }
 }
 
-/** One end of the size scale: the letter A, at that end's size, unheard. */
+/** A slider's end as letters in the reader's typeface: the A's, the a's, the ab's. */
 @Composable
-private fun ScaleEnd(size: Float) {
+private fun EndLetters(text: String, size: Float, weight: Int = 400, face: PageFace = PageFaces.literata, spacing: Float = 0f) {
     Text(
-        text = "A",
-        style = RibbonType.scripture(size),
+        text = text,
+        style = RibbonType.scripture(size, weight, face).copy(
+            letterSpacing = if (spacing > 0f) spacing.em else TextUnit.Unspecified,
+        ),
         color = Palette.muted,
-        modifier = Modifier.clearAndSetSemantics {},
     )
 }
 
+/** Line spacing's ends: three short rules, close or open. */
+@Composable
+private fun EndRules(gap: Dp) {
+    val ink = Palette.muted
+    Canvas(Modifier.size(width = 14.dp, height = 3.dp + gap * 2)) {
+        val step = (size.height - 1.dp.toPx()) / 2f
+        repeat(3) { i ->
+            drawRect(ink, topLeft = Offset(0f, step * i), size = Size(size.width, 1.dp.toPx()))
+        }
+    }
+}
+
+/** Margins' ends: a tiny page with narrow or wide margins. */
+@Composable
+private fun EndPage(inset: Dp) {
+    val ink = Palette.muted
+    Canvas(Modifier.size(width = 14.dp, height = 18.dp)) {
+        val line = 1.dp.toPx()
+        drawRoundRect(ink, cornerRadius = CornerRadius(1.5.dp.toPx()), style = Stroke(line))
+        val left = inset.toPx()
+        val top = (size.height - line * 3 - 3.dp.toPx() * 2) / 2f
+        repeat(3) { i ->
+            drawRect(
+                ink,
+                topLeft = Offset(left, top + (line + 3.dp.toPx()) * i),
+                size = Size(size.width - left * 2, line),
+            )
+        }
+    }
+}
+
 /**
- * The live preview, as a page (A67): the verse you are at and the one after
- * it, in your version, at your size, spacing and weight (A68), with the
- * reference under it.
+ * A strip of the page itself, edge to edge (A69): the page's ground and a
+ * hairline over and under it, the place in the page's small caps, and the
+ * verse you are at and the ones after it set by the page's own theme — its
+ * typeface, size, weight, spacing, letter spacing, margins, verse lines,
+ * number ink and red letter — at the page's own insets, so the lines break
+ * where they would on the page. It is one height whatever the page's
+ * settings are, and the words that run past it fade into the ground.
  *
- * On the page's own ground and grain, because it is a window onto the reading
- * surface and not a sample of it. Swift adds its leading with `.lineSpacing`,
- * which is the gap *between* lines; Compose sets the line box itself, so the
- * multiple is applied to the whole line height — the same arithmetic the
- * reading surface does.
- *
- * @param chapter your version's chapter, as this phone holds it; with none,
- *   no preview, as there never was one for words the phone does not have.
+ * @param chapter your version's chapter, as this phone holds it.
  */
 @Composable
-private fun ScripturePreview(model: AppModel, place: VerseAddress, chapter: ScriptureChapter?) {
-    val settings = model.settings
+private fun PageStrip(
+    chapter: ScriptureChapter,
+    place: VerseAddress,
+    settings: AppSettings,
+    boldText: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val density = LocalDensity.current
     val size = settings.scriptureSize.toFloat()
-    val redLetter = settings.redLetter
-    val versePerLine = settings.versePerLine
-    val numberAlpha = settings.verseNumberAlpha.toFloat()
-    // The page's weight, Bold Text folded in as the page folds it (A68).
-    val weight = settings.weight(boldText = rememberBoldText())
+    val face = settings.face
+    val weight = settings.weight(boldText = boldText)
+    val spacing = settings.letterSpacingEm.toFloat()
     // Read here, in composition, and handed to the typesetter: the room's
     // ink follows the wallpaper (A18), and the page is set from it.
     val ivory = Palette.text
-    val page = remember(chapter, place.verse, size, redLetter, versePerLine, numberAlpha, ivory) {
-        chapter?.let { pageOf(it, place.verse, size, redLetter, versePerLine, numberAlpha, ivory) }
+    val page = remember(chapter, place.verse, size, settings.redLetter, settings.versePerLine, settings.verseNumberAlpha, ivory) {
+        pageOf(
+            chapter, place.verse, place.verse + STRIP_VERSES - 1, size, settings.redLetter,
+            settings.versePerLine, settings.verseNumberAlpha.toFloat(), ivory,
+        )
     }
-    // A page read after the screen was drawn opens under the size rather
-    // than landing on one frame and pushing everything below it down.
-    ArrivingLate(page) { shown -> PreviewPage(model, place, shown, size, weight, ivory) }
+    // Never more than 40% of the window, once the window has a height.
+    val window = LocalWindowInfo.current.containerSize.height
+    val tall = (STRIP_HEIGHT * density.fontScale).let { wanted ->
+        if (window > 0) wanted.coerceAtMost(with(density) { (window * 0.4f).toDp() }) else wanted
+    }
+    val rule = Palette.rule
+    BoxWithConstraints(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(tall)
+            .clipToBounds()
+            .room()
+            .drawWithContent {
+                drawContent()
+                val line = 1.dp.toPx()
+                drawRect(rule, size = Size(this.size.width, line))
+                drawRect(rule, topLeft = Offset(0f, this.size.height - line), size = Size(this.size.width, line))
+            },
+    ) {
+        val textWidth = (maxWidth - GutterAndTrailing).value.toDouble()
+        val margin = PageType.margin(
+            requested = settings.marginRequested,
+            textWidth = textWidth,
+            size = (size * density.fontScale).toDouble(),
+        ).toFloat().dp
+        val fade = with(density) { STRIP_FADE.toPx() }
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
+                .drawWithContent {
+                    drawContent()
+                    val stop = (1f - fade / this.size.height).coerceIn(0f, 1f)
+                    drawRect(
+                        brush = Brush.verticalGradient(0f to Color.Black, stop to Color.Black, 1f to Color.Transparent),
+                        blendMode = BlendMode.DstIn,
+                    )
+                }
+                .padding(start = margin + StripLeading, end = StripTrailing + margin, top = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            SmallCaps(place.formatted, size = 11f)
+            if (page != null) {
+                Text(
+                    text = page,
+                    // Drawn at the weight, never synthesized over it, as the
+                    // page is (A68); the line height is the page's, on
+                    // Literata's size whatever the face (A69).
+                    style = RibbonType.scripture(size, weight, face).copy(
+                        lineHeight = (size * settings.lineHeightMultiple.toFloat()).sp,
+                        fontSynthesis = FontSynthesis.None,
+                        letterSpacing = if (spacing > 0f) spacing.em else TextUnit.Unspecified,
+                    ),
+                    color = ivory,
+                )
+            }
+        }
+    }
 }
 
-@Composable
-private fun PreviewPage(
-    model: AppModel,
-    place: VerseAddress,
-    page: AnnotatedString,
-    size: Float,
-    weight: Int,
-    ivory: Color,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .well(RibbonShape.rowShape)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Text(
-            text = page,
-            // Drawn at the weight, never synthesized over it, as the page is
-            // (A68): Bold Text is in the weight already.
-            style = RibbonType.scripture(size, weight).copy(
-                lineHeight = (size * model.settings.lineHeightMultiple.toFloat()).sp,
-                fontSynthesis = FontSynthesis.None,
-            ),
-            color = ivory,
-        )
-        SmallCaps(place.formatted, size = 11f)
-    }
+/** The strip's words: the verse you are at and the three after it. */
+private const val STRIP_VERSES = 4
+private val STRIP_HEIGHT = 176.dp
+private val STRIP_FADE = 28.dp
+/** The page's own insets, as ChapterText sets them: the gutter and its 8, and the trailing margin. */
+private val StripLeading = 28.dp + 8.dp
+private val StripTrailing = 26.dp
+private val GutterAndTrailing = StripLeading + StripTrailing
+/** How far the strip reaches past the screen's side margins: RibbonScreen's own. */
+private val ScreenMarginForStrip = 20.dp
+/** The bar over a settings screen: Material's top app bar. */
+private val BarHeight = 64.dp
+/** How long the pinned strip stays after the last change. */
+private const val LINGER_MS = 1200L
+
+internal const val PAGE_STRIP_TAG = "page-window"
+internal const val PAGE_STRIP_PINNED_TAG = "page-window-pinned"
+
+/** A child drawn [by] wider on each side than its parent gives it, centred on it: out to the screen's edges. */
+private fun Modifier.bleed(by: Dp): Modifier = this.layout { measurable, constraints ->
+    val extra = (by * 2).roundToPx()
+    val width = constraints.maxWidth + extra
+    val placeable = measurable.measure(constraints.copy(minWidth = width, maxWidth = width))
+    layout(constraints.maxWidth, placeable.height) { placeable.place(-extra / 2, 0) }
 }
 
 /**
- * Two verses set the way reading/ChapterText.kt sets them, so the preview is
- * the page and not a description of it: a number before each verse but a
+ * Verses set the way reading/ChapterText.kt sets them, so the strip is the
+ * page and not a description of it: a number before each verse but a
  * chapter's first — small caps at 0.62 of the size, ivory at the page's 45%
  * or its clearer ink, raised, and a thin space after it — the words of Jesus
  * in the crimson ink when the switch is on, each block of the chapter on a
@@ -565,6 +880,7 @@ private fun PreviewPage(
 private fun pageOf(
     chapter: ScriptureChapter,
     first: Int,
+    last: Int,
     size: Float,
     redLetter: Boolean,
     versePerLine: Boolean,
@@ -593,13 +909,13 @@ private fun pageOf(
                 if (v != null) running = v
                 val verse = running
                 if (block.s == BlockStyle.d || verse == null) continue
-                if (verse != first && verse != first + 1) continue
+                if (verse < first || verse > last) continue
                 // A block's own line, and the line the page starts before a
                 // verse — never both, and never one before the first words.
                 if ((!wrote && length > 0) || (wrote && index in lineStarts)) append('\n')
                 wrote = true
                 if (verse != 1 && numbered.add(verse)) {
-                    withStyle(number) { append("$verse ") }
+                    withStyle(number) { append("$verse\u2009") }
                 }
                 if (redLetter && span.isRedLetter) {
                     withStyle(red) { append(span.t) }
@@ -610,100 +926,6 @@ private fun pageOf(
         }
     }
     return page.takeIf { it.isNotEmpty() }
-}
-
-/**
- * Three choices, one of them lifted.
- *
- * Drawn rather than Material's `SingleChoiceSegmentedButtonRow`, which brings
- * its own outlines, its own tick and its own container colour — three pieces
- * of chrome in a room that has none.
- *
- * The selected segment is a pill that *moves*. That is the whole reason this
- * is hand-drawn: one object sliding between three places is the true account
- * of what happened, and three segments changing colour on the same frame is
- * not. It rides the same critically damped spring every other small moving
- * thing in the app does, so it arrives without overshooting (§9.1).
- */
-@Composable
-private fun Segments(
-    labels: List<String>,
-    // Not `selected`: the semantics property of that name is what each
-    // segment sets below, and a shadowed parameter there is a silent bug.
-    chosenIndex: Int,
-    onSelect: (Int) -> Unit,
-) {
-    val still = rememberReduceMotion()
-    val at by animateFloatAsState(
-        targetValue = chosenIndex.toFloat(),
-        animationSpec = RibbonMotion.handled(still),
-        label = "the-chosen-segment",
-    )
-
-    BoxWithConstraints(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(52.dp)
-            .well(RibbonShape.rowShape),
-    ) {
-        val cell = maxWidth / labels.size
-        // Through `paper`, not a bare fill: on Ribbon's own palette the pill
-        // and the groove it runs in are 1.05:1 apart, so a filled pill is no
-        // pill at all and which of three words is chosen would be carried by
-        // the text's brightness alone. The edge comes with the helper.
-        Box(
-            Modifier
-                // The lambda overload, because `at` is animating: this way
-                // the pill's travel is a layout change per frame rather than
-                // a recomposition per frame.
-                .offset { IntOffset(((cell * at) + 4.dp).roundToPx(), 4.dp.roundToPx()) }
-                .width(cell - 8.dp)
-                .height(44.dp)
-                .paper(RibbonShape.smallShape),
-        )
-        Row(Modifier.fillMaxWidth()) {
-            labels.forEachIndexed { index, label ->
-                val chosen = index == chosenIndex
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(52.dp)
-                        .sizeIn(minHeight = MinTarget)
-                        .clip(RibbonShape.smallShape)
-                        .pressable(role = Role.RadioButton) { onSelect(index) }
-                        // The lifted pill is a shape, and a shape is not
-                        // enough on its own for somebody who cannot see it
-                        // (§11): the segment says it is the chosen one.
-                        .semantics { selected = chosen },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    // The pill slides on a spring and its three labels used
-                    // to change colour on one frame, so the object that moved
-                    // and the words it moved between were telling two
-                    // different stories about the same event. On the same
-                    // token the pill rides, so a word brightens as the pill
-                    // reaches it.
-                    val wordColour by animateColorAsState(
-                        targetValue = if (chosen) Palette.text else Palette.muted,
-                        animationSpec = RibbonMotion.handled(still),
-                        label = "the-chosen-word",
-                    )
-                    // One line that gives way before it is cut: at the
-                    // largest font scale "Heavier" is wider than a third of
-                    // the control on a narrow phone, and a stop nobody can
-                    // read is no stop (§11). Never larger than the words'
-                    // own size; as small as 0.6 of it, as on iPhone.
-                    Text(
-                        text = label,
-                        style = RibbonType.ui(15f),
-                        color = wordColour,
-                        maxLines = 1,
-                        autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = 15.sp),
-                    )
-                }
-            }
-        }
-    }
 }
 
 // MARK: S19 — notifications

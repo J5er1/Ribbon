@@ -14,7 +14,7 @@ final class WhatsNewTests: XCTestCase {
         XCTAssertEqual(WhatsNew.releases.first?.id, "2026-10-flyleaf")
         XCTAssertEqual(
             WhatsNew.releases.first?.items,
-            [.flyleaf, .yourShelf, .versionsByReading, .yourPage, .notificationsByName, .quietHoursNight])
+            [.flyleaf, .yourShelf, .versionsByReading, .yourPage, .typeface, .notificationsByName, .quietHoursNight])
         // The Hebrew made easy to read (A66) belongs to the release before.
         let following = WhatsNew.releases.dropFirst().first
         XCTAssertEqual(following?.id, "2026-10-following")
@@ -67,6 +67,7 @@ final class WhatsNewTests: XCTestCase {
         XCTAssertEqual(WhatsNewItem.yourPage.rawValue, "yourPage")
         XCTAssertEqual(WhatsNewItem.notificationsByName.rawValue, "notificationsByName")
         XCTAssertEqual(WhatsNewItem.quietHoursNight.rawValue, "quietHoursNight")
+        XCTAssertEqual(WhatsNewItem.typeface.rawValue, "typeface")
         let json = try JSONEncoder().encode([WhatsNewItem.original, .ownVersion, .followingWords])
         XCTAssertEqual(String(decoding: json, as: UTF8.self), #"["original","ownVersion","followingWords"]"#)
     }

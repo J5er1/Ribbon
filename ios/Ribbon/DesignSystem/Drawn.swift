@@ -212,94 +212,117 @@ private enum PageDrag {
     }
 }
 
-// MARK: - The slider (I41)
+// MARK: - The slider (I41, A69)
 
-/// A slider drawn on the page (I41), for Text's size: a well with a small A
-/// at one end and a large one at the other — the two ends of the scale,
-/// set in the Scripture face the slider sizes — and between them the
-/// rule, the accent up to the thumb, and a paper thumb.
+/// A slider drawn on the page (I41): a well with a picture of the scale's
+/// small end at one side and its large end at the other, and between them
+/// the rule, the accent up to the thumb, and a paper thumb. Text's size,
+/// spacing, weight, letter spacing and margins are each one (A69).
+///
+/// It moves through positions, not numbers: the caller's scale says what
+/// each position is (`PageType`'s scales, the size's 25 half points). A
+/// mark on the rule shows where Book is, where Book is not an end — the
+/// word the three stops used to say.
 ///
 /// The thumb follows the finger exactly, with nothing easing it: while it
 /// is held it is where the finger is, and a finger lifting off a step
-/// leaves nothing to settle. It lands on the nearest step and stops at
-/// either end.
+/// leaves nothing to settle. While it is held the position is the
+/// slider's own, told to `onHold` so the screen can show the page it
+/// makes; it is written once, when the finger lifts. A tap, or a screen
+/// reader's step, is written at once.
 ///
 /// Nothing moves on a touch alone. The well sits in a page that scrolls,
 /// and a thumb that lands on it on its way up the page is the page's: a
-/// tap sets the size where the finger lifts, a drag takes the thumb once it
-/// is plainly sideways, and a drag that is plainly up or down is left to
-/// the scroll.
+/// tap sets the position where the finger lifts, a drag takes the thumb
+/// once it is plainly sideways, and a drag that is plainly up or down is
+/// left to the scroll.
 ///
 /// To a screen reader it is one adjustable element: its label, its value
-/// said the caller's way ("19 point"), and a swipe up or down moves one
-/// step.
-struct RibbonSlider: View {
-    @Binding var value: Double
-    var range: ClosedRange<Double>
-    var step: Double
+/// said the caller's way ("19 point", "1.72, Book"), and a swipe up or
+/// down moves one position.
+struct RibbonSlider<Leading: View, Trailing: View>: View {
+    @Binding var index: Int
+    var count: Int
+    var mark: Int?
     var label: String
-    var spoken: (Double) -> String
+    var spoken: (Int) -> String
+    var onHold: (Int?) -> Void
+    var leading: Leading
+    var trailing: Trailing
 
     /// Whether the drag under way is the slider's — decided once, on its
     /// first movement, and nil between drags.
     @GestureState private var sideways: Bool? = nil
+    /// The position under a finger that is still down, not yet written.
+    @State private var held: Int?
 
     private static let thumb: CGFloat = 24
 
     init(
-        value: Binding<Double>, in range: ClosedRange<Double>, step: Double,
-        label: String, spoken: @escaping (Double) -> String
+        index: Binding<Int>, count: Int, mark: Int? = nil,
+        label: String, spoken: @escaping (Int) -> String,
+        onHold: @escaping (Int?) -> Void = { _ in },
+        @ViewBuilder leading: () -> Leading, @ViewBuilder trailing: () -> Trailing
     ) {
-        self._value = value
-        self.range = range
-        self.step = step
+        self._index = index
+        self.count = count
+        self.mark = mark
         self.label = label
         self.spoken = spoken
+        self.onHold = onHold
+        self.leading = leading()
+        self.trailing = trailing()
     }
+
+    /// Where the thumb is: under the finger while it is held.
+    private var shown: Int { held ?? index }
 
     var body: some View {
         HStack(spacing: 12) {
-            end(13)
+            leading
+                .dynamicTypeSize(.large)
+                .accessibilityHidden(true)
             GeometryReader { proxy in
                 track(width: proxy.size.width, height: proxy.size.height)
             }
-            end(21)
+            trailing
+                .dynamicTypeSize(.large)
+                .accessibilityHidden(true)
         }
         .padding(.horizontal, 14)
         .frame(height: 44)
         .well(.small)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(label)
-        .accessibilityValue(spoken(value))
+        .accessibilityValue(spoken(shown))
         .accessibilityAdjustableAction { direction in
             if direction == .increment {
-                set(value + step)
+                write(index + 1)
             } else if direction == .decrement {
-                set(value - step)
+                write(index - 1)
             }
         }
-    }
-
-    /// One end of the scale: a letter as a picture of a size, not a word,
-    /// so it is not in Copy and nobody hears it. Held at one type size,
-    /// as What's New holds its pictures: it is a drawing of the scale,
-    /// and a drawing that grew with Dynamic Type would leave the well.
-    private func end(_ size: CGFloat) -> some View {
-        Text(verbatim: "A")
-            .font(RibbonType.scripture(size))
-            .foregroundStyle(Palette.muted)
-            .dynamicTypeSize(.large)
-            .accessibilityHidden(true)
+        // A drag the scroll took away ends without `onEnded`: what it held
+        // is written all the same.
+        .onChange(of: sideways) { _, now in
+            if now == nil { release() }
+        }
     }
 
     private func track(width: CGFloat, height: CGFloat) -> some View {
         let thumb = Self.thumb
         let travel = max(1, width - thumb)
-        let centre = thumb / 2 + travel * CGFloat(fraction)
+        let centre = thumb / 2 + travel * CGFloat(fraction(shown))
         return ZStack(alignment: .leading) {
             Rectangle()
                 .fill(Palette.rule)
                 .frame(height: 1)
+            if let mark, mark > 0, mark < count - 1 {
+                Rectangle()
+                    .fill(Palette.muted)
+                    .frame(width: 1, height: 8)
+                    .offset(x: thumb / 2 + travel * CGFloat(fraction(mark)) - 0.5)
+            }
             Rectangle()
                 .fill(Palette.chartreuse)
                 .frame(width: centre, height: 2)
@@ -312,7 +335,7 @@ struct RibbonSlider: View {
         .frame(width: width, height: height)
         .contentShape(Rectangle())
         .onTapGesture(coordinateSpace: .local) { location in
-            follow(location.x, travel: travel)
+            write(position(location.x, travel: travel))
         }
         // Alongside the page's scroll rather than in place of it, so that a
         // drag up or down still moves the page.
@@ -323,36 +346,90 @@ struct RibbonSlider: View {
                 }
                 .onChanged { drag in
                     guard sideways ?? PageDrag.isSideways(drag.translation) else { return }
-                    follow(drag.location.x, travel: travel)
+                    let under = position(drag.location.x, travel: travel)
+                    guard under != held else { return }
+                    var still = Transaction()
+                    still.disablesAnimations = true
+                    withTransaction(still) { held = under }
+                    onHold(under)
                 }
+                .onEnded { _ in release() }
         )
     }
 
-    /// The step under a point on the track.
-    private func follow(_ x: CGFloat, travel: CGFloat) {
+    /// The position under a point on the track.
+    private func position(_ x: CGFloat, travel: CGFloat) -> Int {
+        guard count > 1 else { return 0 }
         let along = min(max((x - Self.thumb / 2) / travel, 0), 1)
-        set(range.lowerBound + Double(along) * (range.upperBound - range.lowerBound))
+        return Int((Double(along) * Double(count - 1)).rounded())
     }
 
-    /// Where the value sits along the scale, 0 to 1.
-    private var fraction: Double {
-        let span = range.upperBound - range.lowerBound
-        guard span > 0 else { return 0 }
-        return min(max((value - range.lowerBound) / span, 0), 1)
+    /// Where a position sits along the track, 0 to 1.
+    private func fraction(_ position: Int) -> Double {
+        guard count > 1 else { return 0 }
+        return min(max(Double(position) / Double(count - 1), 0), 1)
     }
 
-    /// The nearest step to a proposed value, held to the range, written
-    /// only when it is a different step — the binding persists, and a
-    /// finger resting on the track sends a change every frame.
-    private func set(_ proposed: Double) {
-        let stepped = step > 0
-            ? range.lowerBound + ((proposed - range.lowerBound) / step).rounded() * step
-            : proposed
-        let held = min(max(stepped, range.lowerBound), range.upperBound)
-        guard held != value else { return }
+    /// The finger has lifted: what it held is written, once.
+    private func release() {
+        guard let last = held else { return }
+        held = nil
+        write(last)
+        onHold(nil)
+    }
+
+    /// A position, held to the ends, written only when it is a different
+    /// one — the binding persists the whole state.
+    private func write(_ proposed: Int) {
+        let next = min(max(proposed, 0), max(count - 1, 0))
+        guard next != index else { return }
         var still = Transaction()
         still.disablesAnimations = true
-        withTransaction(still) { value = held }
+        withTransaction(still) { index = next }
+    }
+}
+
+// MARK: - The slider's ends (A69)
+
+/// The pictures at a slider's two ends: each a drawing of the scale's small
+/// or large end, not a word, so none is in Copy and nobody hears them. Held
+/// at one type size by the slider, as What's New holds its pictures.
+enum SliderEnd {
+    /// A letter, or two, set in the reader's typeface: Text size's A's,
+    /// Weight's light and heavy a, Letter spacing's close and open ab.
+    static func letters(
+        _ text: String, size: CGFloat, weight: Int = 400,
+        face: PageFace = PageFaces.literata, tracking: CGFloat = 0
+    ) -> some View {
+        Text(verbatim: text)
+            .font(RibbonType.scripture(size, weight: weight, face: face))
+            .tracking(tracking)
+            .foregroundStyle(Palette.muted)
+    }
+
+    /// Three short rules, close or open: Line spacing's ends.
+    static func rules(gap: CGFloat) -> some View {
+        VStack(spacing: gap) {
+            ForEach(0..<3, id: \.self) { _ in
+                Rectangle().fill(Palette.muted).frame(width: 14, height: 1)
+            }
+        }
+        .frame(width: 14)
+    }
+
+    /// A tiny page with narrow or wide margins: Margins' ends.
+    static func page(inset: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: 1.5)
+            .strokeBorder(Palette.muted, lineWidth: 1)
+            .frame(width: 14, height: 18)
+            .overlay {
+                VStack(spacing: 3) {
+                    ForEach(0..<3, id: \.self) { _ in
+                        Rectangle().fill(Palette.muted).frame(height: 1)
+                    }
+                }
+                .padding(.horizontal, inset)
+            }
     }
 }
 

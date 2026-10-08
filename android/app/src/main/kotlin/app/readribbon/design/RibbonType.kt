@@ -15,6 +15,9 @@ import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
+import app.readribbon.core.PageFace
+import app.readribbon.core.PageFaces
+import app.readribbon.core.PageType
 
 // The four faces (brand brief §9):
 //   Scripture & reading — Literata. Must never feel like an interface.
@@ -66,6 +69,34 @@ object RibbonFonts {
             ),
         ),
     )
+
+    /**
+     * The reader's typeface (A69). Literata is [literata], unchanged; any
+     * other face is its own bundled file (`fonts/<fileStem>.ttf`), moved
+     * along its weight axis — [weight] is the face's own, already matched
+     * to Literata's colour by `PageType.faceWeight` — and along its optical
+     * size where it has one.
+     */
+    fun page(face: PageFace, weight: FontWeight = FontWeight.Normal, opticalSize: Float = 14f): FontFamily =
+        if (face == PageFaces.literata) {
+            literata(weight, opticalSize)
+        } else {
+            FontFamily(
+                Font(
+                    path = "fonts/${face.fileStem}.ttf",
+                    assetManager = assets,
+                    weight = weight,
+                    variationSettings = if (face.hasOpticalSize) {
+                        FontVariation.Settings(
+                            FontVariation.weight(weight.weight),
+                            FontVariation.opticalSizing(opticalSize.sp),
+                        )
+                    } else {
+                        FontVariation.Settings(FontVariation.weight(weight.weight))
+                    },
+                ),
+            )
+        }
 
     val sans: FontFamily by lazy {
         FontFamily(
@@ -120,17 +151,34 @@ object RibbonType {
      * one this always returned, field for field; any other weight is named on
      * the style as well as set on the face, so the style says what the face
      * is. Bold Text is the caller's to fold in (see ReadingTheme.weight).
+     *
+     * [face] is the reader's typeface (A69), which only the page, the Text
+     * screen's strip and its typeface rows pass. [size] and [weight] stay
+     * Literata's: another face is set at the size that looks the same
+     * (`PageType.pointSize`) and at the weight that matches its colour
+     * (`PageType.faceWeight`), and its line height keeps Literata's.
      */
     @Composable
-    fun scripture(size: Float, weight: Int = 400): TextStyle {
-        val family = remember(size, weight) { RibbonFonts.literata(FontWeight(weight), size) }
-        return TextStyle(
-            fontFamily = family,
-            fontWeight = if (weight == 400) null else FontWeight(weight),
-            fontSize = size.sp,
-            lineHeight = (size * 1.62f).sp,
-        )
-    }
+    fun scripture(size: Float, weight: Int = 400, face: PageFace = PageFaces.literata): TextStyle =
+        remember(size, weight, face) {
+            if (face == PageFaces.literata) {
+                TextStyle(
+                    fontFamily = RibbonFonts.literata(FontWeight(weight), size),
+                    fontWeight = if (weight == 400) null else FontWeight(weight),
+                    fontSize = size.sp,
+                    lineHeight = (size * 1.62f).sp,
+                )
+            } else {
+                val pointSize = PageType.pointSize(size.toDouble(), face).toFloat()
+                val drawn = PageType.faceWeight(weight, face)
+                TextStyle(
+                    fontFamily = RibbonFonts.page(face, FontWeight(drawn), pointSize),
+                    fontWeight = FontWeight(drawn),
+                    fontSize = pointSize.sp,
+                    lineHeight = (size * 1.62f).sp,
+                )
+            }
+        }
 
     /**
      * Literata's italic, for a word's transliteration (A60): how to say it,

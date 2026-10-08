@@ -23,6 +23,7 @@ import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -493,6 +494,9 @@ fun ReadingScreen(
             weight = settings.weight(boldText = boldText),
             versePerLine = settings.versePerLine,
             verseNumberAlpha = settings.verseNumberAlpha.toFloat(),
+            face = settings.face,
+            letterSpacing = settings.letterSpacingThousandths,
+            marginRequested = settings.marginRequested.toFloat(),
         )
     }
 
@@ -1555,7 +1559,10 @@ fun ReadingScreen(
     // runs while the book is down (it ends as the book goes). And never over
     // a landing of the page's own — one still on its way, or one made while
     // this waited, is going where the page is meant to be.
-    val wordsFallBy = listOf(theme.fontSize, theme.lineHeightMultiple, theme.weight, theme.versePerLine)
+    val wordsFallBy = listOf(
+        theme.fontSize, theme.lineHeightMultiple, theme.weight, theme.versePerLine,
+        theme.face.id, theme.letterSpacing, theme.marginRequested,
+    )
     var setOnStandby by remember { mutableStateOf(wordsFallBy) }
     LaunchedEffect(wordsFallBy, astir) {
         if (astir || wordsFallBy == setOnStandby) {
@@ -2823,7 +2830,7 @@ private fun ChapterSection(
         val marks = remember(highlights, translation, chapter) {
             verseMarks(model.original, reading.bookID, n, highlights, translation, chapter)
         }
-        Box(
+        BoxWithConstraints(
             modifier = Modifier
                 .readingMeasure(measureInset)
                 .alpha(arrival)
@@ -2831,10 +2838,13 @@ private fun ChapterSection(
                 .trackedIn(container, onFrame),
             contentAlignment = Alignment.TopStart,
         ) {
+            // The margin this column can give (A69): the column is what the
+            // presence panel has left, so the panel never costs the words.
+            val margin = theme.marginIn(maxWidth, density.fontScale)
             ChapterText(
                 chapter = chapter,
                 runningHead = runningHead,
-                theme = theme,
+                theme = theme.copy(margin = margin),
                 marks = marks,
                 selection = selection,
                 lifted = lifted,
@@ -2869,7 +2879,7 @@ private fun ChapterSection(
                             VerseAddress(bookID = reading.bookID, chapter = n, verse = verse),
                         )
                     },
-                    modifier = Modifier.positioned(x = GUTTER_X, y = y),
+                    modifier = Modifier.positioned(x = margin + GUTTER_X, y = y),
                 )
             }
 
@@ -2905,7 +2915,7 @@ private fun ChapterSection(
                             // read to layout instead of recomposing the card
                             // every time the carve settles.
                             .offset { IntOffset(0, (heldSlot.value ?: 0.dp).roundToPx()) }
-                            .padding(start = 36.dp, end = 26.dp)
+                            .padding(start = 36.dp + margin, end = 26.dp + margin)
                             .onSizeChanged { size ->
                                 onNoteCardHeight(with(density) { size.height.toDp() })
                             },
@@ -2944,10 +2954,11 @@ private fun ChapterSection(
         // forward (S25's "book won't download").
         var missed by remember(n, licensed) { mutableStateOf(false) }
         var attempt by remember(n, licensed) { mutableIntStateOf(0) }
+        BoxWithConstraints(Modifier.readingMeasure(measureInset)) {
+            // The page's margin (A69), so the running head sits where the words will.
+            val margin = theme.marginIn(maxWidth, density.fontScale)
         Column(
-            modifier = Modifier
-                .readingMeasure(measureInset)
-                .padding(start = 36.dp),
+            modifier = Modifier.padding(start = 36.dp + margin),
         ) {
             SmallCaps(runningHead, size = 14f, color = Palette.text.copy(alpha = 0.4f))
             if (missed) {
@@ -2972,6 +2983,7 @@ private fun ChapterSection(
                 // skeleton reads as fake text.
                 Spacer(Modifier.height(320.dp))
             }
+        }
         }
         // Keyed on the network as well, so a connection coming back retries
         // without anybody having to tap anything — and on `astir`, so the
@@ -3663,7 +3675,17 @@ fun PassageEnd(
     ) {
         Spacer(Modifier.height(34.dp))
         EditionCopyright(copyright)
-        HairlineRule(Modifier.padding(start = 36.dp, end = 26.dp))
+        // Keeps to the words' width, the page's margin included (A69).
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val settings = model.settings
+            val margin = ReadingTheme(
+                fontSize = settings.scriptureSize.toFloat(),
+                lineHeightMultiple = settings.lineHeightMultiple.toFloat(),
+                redLetter = settings.redLetter,
+                marginRequested = settings.marginRequested.toFloat(),
+            ).marginIn(maxWidth, LocalDensity.current.fontScale)
+            HairlineRule(Modifier.padding(start = 36.dp + margin, end = 26.dp + margin))
+        }
 
         if (room != null) {
             val card = model.card(reading, chapter)

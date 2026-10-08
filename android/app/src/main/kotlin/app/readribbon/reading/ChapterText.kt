@@ -75,10 +75,14 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import app.readribbon.app.Copy
 import app.readribbon.core.BlockStyle
 import app.readribbon.core.Ink
+import app.readribbon.core.PageFace
+import app.readribbon.core.PageFaces
+import app.readribbon.core.PageType
 import app.readribbon.core.ScriptureChapter
 import app.readribbon.core.VerseRange
 import app.readribbon.design.LocalRoomColours
@@ -154,7 +158,40 @@ data class ReadingTheme(
     val versePerLine: Boolean = false,
     /** The verse numbers' ink: S02's quiet 45%, or clearer (A68). Nothing moves either way. */
     val verseNumberAlpha: Float = 0.45f,
+    /**
+     * The reader's typeface (A69). [fontSize] stays Literata's: the face is
+     * set at the size that looks the same (`PageType.pointSize`), and the
+     * verse numbers, the indents and the line height keep to Literata's.
+     */
+    val face: PageFace = PageFaces.literata,
+    /** Room between the letters, in thousandths of an em (A69): on the words only. */
+    val letterSpacing: Int = 0,
+    /** The margin the reader asked for either side, in dp (A69), before it gives way. */
+    val marginRequested: Float = 0f,
+    /**
+     * The margin the page gives at its width (A69, [marginIn]): outside the
+     * gutter, so notes stay beside their words, and beside the trailing
+     * edge, which the presence panel keeps as it always has.
+     */
+    val margin: Dp = 0.dp,
 )
+
+/**
+ * The margin a column [columnWidth] wide gives the page at this size (A69):
+ * what the reader asked for, less whatever would leave the words narrower
+ * than thirteen ems of Literata at the size the font scale makes it. The
+ * column is what is left once the presence panel has taken its room, so the
+ * panel opening takes the margin first and never the words.
+ */
+fun ReadingTheme.marginIn(columnWidth: Dp, fontScale: Float): Dp {
+    if (marginRequested <= 0f || columnWidth <= 0.dp) return 0.dp
+    val textWidth = (columnWidth - gutterWidth - 8.dp - trailingMargin).value.toDouble()
+    return PageType.margin(
+        requested = marginRequested.toDouble(),
+        textWidth = textWidth,
+        size = (fontSize * fontScale).toDouble(),
+    ).toFloat().dp
+}
 
 /** Where each verse's marks and geometry ended up, for the overlay above. */
 data class ChapterLayout(
@@ -377,10 +414,14 @@ fun ChapterText(
     // and under Bold Text are Alegreya's real Medium rather than a smeared
     // one. At 400, with Bold Text off, there was never anything to
     // synthesize, and the page is the page it was.
-    val bodyStyle = RibbonType.scripture(theme.fontSize, theme.weight)
-        .copy(fontSynthesis = FontSynthesis.None)
-    val descriptorStyle = RibbonType.scripture(theme.fontSize * 0.82f, theme.weight)
-        .copy(fontSynthesis = FontSynthesis.None)
+    //
+    // In the reader's typeface (A69), with its letter spacing on the words
+    // alone: the numbers set their own, 0.
+    val spacing = PageType.letterSpacingEm(theme.letterSpacing).toFloat()
+    val bodyStyle = RibbonType.scripture(theme.fontSize, theme.weight, theme.face)
+        .copy(fontSynthesis = FontSynthesis.None, letterSpacing = if (spacing > 0f) spacing.em else TextUnit.Unspecified)
+    val descriptorStyle = RibbonType.scripture(theme.fontSize * 0.82f, theme.weight, theme.face)
+        .copy(fontSynthesis = FontSynthesis.None, letterSpacing = if (spacing > 0f) spacing.em else TextUnit.Unspecified)
 
     // The carve animates open and closed. S04 asks for the line height to
     // open over 400 ms; the placeholder's height is an ordinary measured
@@ -548,9 +589,9 @@ fun ChapterText(
 
     Box(
         modifier = modifier.padding(
-            // iOS: textContainerInset = (0, gutterWidth + 8, 0, trailingMargin).
-            start = theme.gutterWidth + 8.dp,
-            end = theme.trailingMargin,
+            // iOS: textContainerInset = (0, margin + gutterWidth + 8, 0, trailingMargin + margin).
+            start = theme.margin + theme.gutterWidth + 8.dp,
+            end = theme.trailingMargin + theme.margin,
         ),
     ) {
         CompositionLocalProvider(

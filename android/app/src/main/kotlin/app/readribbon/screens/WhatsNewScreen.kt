@@ -89,11 +89,13 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import app.readribbon.app.Copy
 import app.readribbon.core.FireScale
 import app.readribbon.core.Ink
+import app.readribbon.core.PageFaces
 import app.readribbon.core.PageType
 import app.readribbon.core.QuietHoursBand
 import app.readribbon.core.TranslationID
@@ -483,6 +485,7 @@ internal val WhatsNewItem.title: String
         WhatsNewItem.yourShelf -> Copy.WHATS_NEW_SHELF_TITLE
         WhatsNewItem.versionsByReading -> Copy.WHATS_NEW_VERSIONS_TITLE
         WhatsNewItem.yourPage -> Copy.WHATS_NEW_PAGE_TITLE
+        WhatsNewItem.typeface -> Copy.WHATS_NEW_TYPEFACE_TITLE
         WhatsNewItem.notificationsByName -> Copy.WHATS_NEW_NOTIFICATIONS_TITLE
         WhatsNewItem.quietHoursNight -> Copy.WHATS_NEW_QUIET_HOURS_TITLE
     }
@@ -501,6 +504,7 @@ internal val WhatsNewItem.body: String
         WhatsNewItem.yourShelf -> Copy.WHATS_NEW_SHELF_BODY
         WhatsNewItem.versionsByReading -> Copy.WHATS_NEW_VERSIONS_BODY
         WhatsNewItem.yourPage -> Copy.WHATS_NEW_PAGE_BODY
+        WhatsNewItem.typeface -> Copy.WHATS_NEW_TYPEFACE_BODY
         WhatsNewItem.notificationsByName -> Copy.WHATS_NEW_NOTIFICATIONS_BODY
         WhatsNewItem.quietHoursNight -> Copy.WHATS_NEW_QUIET_HOURS_BODY
     }
@@ -562,6 +566,7 @@ internal val WhatsNewItem.timeline: Timeline
         WhatsNewItem.originalReadable -> Timeline(LONG_LOOP_MS, READABLE_STILL_AT)
         WhatsNewItem.quietHoursNight -> Timeline(LONG_LOOP_MS, NIGHT_STILL_AT)
         WhatsNewItem.yourPage -> Timeline(LONG_LOOP_MS, PAGE_STILL_AT)
+        WhatsNewItem.typeface -> Timeline(LONG_LOOP_MS, TYPEFACE_STILL_AT)
     }
 
 /** Where a loop of [loopMs] is, [elapsedMs] after the screen appeared and [startAfter] late. */
@@ -1079,6 +1084,10 @@ private fun Vignette(item: WhatsNewItem, startAfter: Long, frozenAt: Long?, modi
         WhatsNewItem.yourPage -> Modifier.drawWithCache {
             val page = layOutThePage(measurer, inks, faces, smallCaps)
             onDrawBehind { drawThePage(page, pageFrame(clock.longValue.toInt())) }
+        }
+        WhatsNewItem.typeface -> Modifier.drawWithCache {
+            val page = layOutTheTypefaces(measurer, inks, smallCaps)
+            onDrawBehind { drawTheTypefaces(page, inks, typefaceFrame(clock.longValue.toInt())) }
         }
         WhatsNewItem.notificationsByName -> Modifier.drawWithCache {
             val page = layOutTheSwitch(measurer, inks, ui)
@@ -2764,6 +2773,91 @@ private fun DrawScope.drawNight(page: TheNight, inks: VignetteInks, grain: Brush
         drawRect(inks.rule, topLeft = hour.tick.topLeft, size = hour.tick.size)
         drawText(hour.hour, topLeft = hour.hourAt)
     }
+}
+
+/** The typefaces: the ribbon on Literata, where it begins and ends. */
+internal const val TYPEFACE_STILL_AT = 400
+
+/**
+ * Set in the type you read best (A69): John 1:1's first words in each of
+ * the page's five typefaces, and a short ribbon marking the chosen one. It
+ * moves down a row every 1200 ms ([row]: 0 on Literata, 4 on Atkinson
+ * Hyperlegible), the iPhone's beat, and comes back up to Literata on one.
+ */
+internal data class TypefaceFrame(val row: Float)
+
+internal fun typefaceFrame(t: Int): TypefaceFrame = TypefaceFrame(
+    row = beat(t, at = 1200, ms = 400) + beat(t, at = 2400, ms = 400) +
+        beat(t, at = 3600, ms = 400) + beat(t, at = 4800, ms = 400) -
+        (PageFaces.all.size - 1) * beat(t, at = 5600, ms = 400),
+)
+
+// MARK: - Set in the type you read best (A69)
+//
+// The page's five typefaces, each from its own bundled file at the size that
+// looks like Literata's and the weight that matches its colour — what the
+// page itself is set from — with the face's name after it in the page's
+// small caps. The chosen row is ivory and the others quieter, by how near the
+// ribbon is, so the ribbon moving is what changes.
+
+/** Literata's size for the picture; every other face at the size that looks like it. */
+private const val TYPEFACE_SIZE = 12f
+private const val TYPEFACE_LINE = "In the beginning was the Word"
+private val TYPEFACE_ROW = 24.dp
+private val TYPEFACE_RIBBON = DpSize(3.dp, 14.dp)
+
+private class TypefaceRow(val line: TextLayoutResult, val name: TextLayoutResult, val at: Offset, val nameAt: Offset)
+private class TheTypefaces(val rows: List<TypefaceRow>, val ribbonX: Float, val top: Float, val rowHeight: Float)
+
+private fun CacheDrawScope.layOutTheTypefaces(
+    measurer: TextMeasurer,
+    inks: VignetteInks,
+    smallCaps: TextStyle,
+): TheTypefaces {
+    val inset = INSET.toPx()
+    val faces = PageFaces.all
+    val rowHeight = minOf(TYPEFACE_ROW.toPx(), (size.height - inset) / faces.size)
+    val ribbonRoom = 14.dp.toPx()
+    val gap = 10.dp.toPx()
+    fun lay(scale: Float) = faces.map { face ->
+        val pointSize = PageType.pointSize(TYPEFACE_SIZE.toDouble(), face).toFloat() * scale
+        val weight = FontWeight(PageType.faceWeight(400, face))
+        val style = TextStyle(
+            fontFamily = RibbonFonts.page(face, weight, pointSize),
+            fontWeight = weight,
+            fontSize = pointSize.sp,
+            color = inks.text,
+        )
+        val name = smallCaps.copy(fontSize = (9f * scale).sp, color = inks.muted)
+        measurer.measure(TYPEFACE_LINE, style, softWrap = false, maxLines = 1, density = this) to
+            measurer.measure(face.name, name, softWrap = false, maxLines = 1, density = this)
+    }
+    val room = size.width - inset * 2 - ribbonRoom
+    var laid = lay(1f)
+    val widest = laid.maxOf { (line, name) -> line.size.width + gap + name.size.width }
+    if (widest > room && widest > 0f) laid = lay(room / widest * 0.98f)
+    val top = (size.height - rowHeight * faces.size) / 2f
+    val left = inset + ribbonRoom
+    val rows = laid.mapIndexed { i, (line, name) ->
+        val lineY = top + rowHeight * i + (rowHeight - line.size.height) / 2f
+        val nameY = lineY + line.getLineBaseline(0) - name.getLineBaseline(0)
+        TypefaceRow(line, name, Offset(left, lineY), Offset(left + line.size.width + gap, nameY))
+    }
+    return TheTypefaces(rows, ribbonX = inset, top = top, rowHeight = rowHeight)
+}
+
+private fun DrawScope.drawTheTypefaces(page: TheTypefaces, inks: VignetteInks, frame: TypefaceFrame) {
+    page.rows.forEachIndexed { i, row ->
+        val near = (1f - kotlin.math.abs(frame.row - i)).coerceIn(0f, 1f)
+        drawText(row.line, topLeft = row.at, alpha = 0.45f + 0.55f * near)
+        drawText(row.name, topLeft = row.nameAt)
+    }
+    val ribbon = TYPEFACE_RIBBON.toSize()
+    drawRect(
+        color = inks.accent,
+        topLeft = Offset(page.ribbonX, page.top + page.rowHeight * frame.row + (page.rowHeight - ribbon.height) / 2f),
+        size = ribbon,
+    )
 }
 
 // MARK: - The page, the way you read it (A68)

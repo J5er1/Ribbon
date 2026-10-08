@@ -69,6 +69,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.readribbon.app.Copy
+import app.readribbon.core.PageFace
+import app.readribbon.core.PageFaces
 import kotlinx.coroutines.withContext
 
 // The furniture: cards, groups, rows.
@@ -711,6 +713,10 @@ fun GroupScope.SettingChoice(
     modifier: Modifier = Modifier,
     subtitle: String? = null,
     specimen: String? = null,
+    /** The face the specimen is set in (A69): Literata for a version, each typeface for itself. */
+    specimenFace: PageFace = PageFaces.literata,
+    /** The specimen's weight, in Literata's terms: Book, or Book with Bold Text (A69). */
+    specimenWeight: Int = 400,
 ) {
     val shape = slot()
     Box(
@@ -742,7 +748,7 @@ fun GroupScope.SettingChoice(
                 ArrivingLate(specimen) { words ->
                     Text(
                         text = words,
-                        style = RibbonType.scripture(16f),
+                        style = RibbonType.scripture(16f, specimenWeight, specimenFace),
                         color = Palette.text.copy(alpha = 0.86f),
                         maxLines = 3,
                         overflow = TextOverflow.Ellipsis,

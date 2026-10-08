@@ -6,25 +6,23 @@ import android.content.Context
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsNodeInteraction
-import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
-import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasAnySibling
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
-import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
-import androidx.compose.ui.text.TextLayoutResult
 import androidx.test.core.app.ApplicationProvider
 import app.readribbon.app.AppModel
 import app.readribbon.app.Copy
 import app.readribbon.core.Membership
+import app.readribbon.core.PageFaces
 import app.readribbon.core.PageType
 import app.readribbon.core.Person
 import app.readribbon.core.Room
@@ -87,24 +85,18 @@ class ThePageAsYouReadItTest {
         return model
     }
 
-    /**
-     * One of Weight's stops, scrolled to: "Book" is Line spacing's middle
-     * word too, so a stop is found beside Weight's own ends.
-     */
-    private fun weightStop(label: String): SemanticsNodeInteraction = compose.onNode(
-        hasText(label) and
-            (hasAnySibling(hasText(Copy.WEIGHT_LIGHTER)) or hasAnySibling(hasText(Copy.WEIGHT_HEAVIER))),
-    ).performScrollTo()
-
     private fun switchRow(title: String): SemanticsNodeInteraction =
         compose.onNode(hasText(title) and isToggleable()).performScrollTo()
 
     @Test fun thePagesRowsAreInTheIPhonesOrder() {
         show()
         val titles = listOf(
+            Copy.TYPEFACE,
             Copy.TEXT_SIZE,
             Copy.LINE_SPACING,
             Copy.WEIGHT,
+            Copy.LETTER_SPACING,
+            Copy.MARGINS,
             Copy.VERSE_LINES,
             Copy.CLEAR_NUMBERS,
             Copy.RED_LETTER,
@@ -117,24 +109,54 @@ class ThePageAsYouReadItTest {
         assertEquals("the rows top to bottom", tops.sorted(), tops)
     }
 
-    @Test fun weightsStopsSayWhichIsChosenAndATapChoosesAnother() {
+    @Test fun theSlidersSayTheirValuesAndWriteTheOldStepBeside() {
         val model = show()
-        weightStop(Copy.WEIGHT_BOOK).assertIsSelected()
-        weightStop(Copy.WEIGHT_LIGHTER).assertIsNotSelected()
-        weightStop(Copy.WEIGHT_HEAVIER).assertIsNotSelected()
+        fun slider(label: String) = compose.onNodeWithContentDescription(label)
+        fun said(label: String) = slider(label).fetchSemanticsNode().config[SemanticsProperties.StateDescription]
+        assertEquals(Copy.lineSpacingValue(172), said(Copy.LINE_SPACING))
+        assertEquals(Copy.WEIGHT_BOOK, said(Copy.WEIGHT))
+        assertEquals(Copy.letterSpacingValue(0), said(Copy.LETTER_SPACING))
+        assertEquals(Copy.marginValue(0), said(Copy.MARGINS))
+        for (label in listOf(Copy.LINE_SPACING, Copy.WEIGHT, Copy.LETTER_SPACING, Copy.MARGINS)) {
+            val range = slider(label).fetchSemanticsNode().config[SemanticsProperties.ProgressBarRangeInfo]
+            assertEquals("$label runs over thirteen positions", 12f, range.range.endInclusive, 0f)
+            assertEquals("eleven of them between the ends", 11, range.steps)
+        }
 
-        weightStop(Copy.WEIGHT_HEAVIER).performClick()
+        slider(Copy.WEIGHT).performScrollTo().performSemanticsAction(SemanticsActions.SetProgress) { it(12f) }
         compose.waitForIdle()
-        assertEquals("Heavier is the last step", 2, model.settings.weightStep)
-        assertEquals("drawn at 470", 470, model.settings.weight(boldText = false))
-        weightStop(Copy.WEIGHT_HEAVIER).assertIsSelected()
-        weightStop(Copy.WEIGHT_BOOK).assertIsNotSelected()
+        assertEquals("Heavier, on the axis", 470, model.settings.pageWeight)
+        assertEquals("the old step written beside it", 2, model.settings.weightStep)
+        assertEquals(Copy.WEIGHT_HEAVIER, said(Copy.WEIGHT))
+        slider(Copy.WEIGHT).performSemanticsAction(SemanticsActions.SetProgress) { it(7f) }
+        compose.waitForIdle()
+        assertEquals(420, model.settings.pageWeight)
+        assertEquals("nearer Book than Heavier", 1, model.settings.weightStep)
+        assertEquals("2 steps heavier than Book", said(Copy.WEIGHT))
 
-        weightStop(Copy.WEIGHT_LIGHTER).performClick()
+        slider(Copy.LINE_SPACING).performScrollTo().performSemanticsAction(SemanticsActions.SetProgress) { it(8f) }
         compose.waitForIdle()
-        assertEquals("Lighter is the first", 0, model.settings.weightStep)
-        weightStop(Copy.WEIGHT_LIGHTER).assertIsSelected()
-        assertEquals("and the spacing is untouched", PageType.defaultLineSpacingStep, model.settings.lineSpacingStep)
+        assertEquals(190, model.settings.lineHeightHundredths)
+        assertEquals("Open, the old step", 2, model.settings.lineSpacingStep)
+        assertEquals(1.9, model.settings.lineHeightMultiple, 0.0)
+
+        slider(Copy.LETTER_SPACING).performScrollTo().performSemanticsAction(SemanticsActions.SetProgress) { it(5f) }
+        compose.waitForIdle()
+        assertEquals(25, model.settings.letterSpacingThousandths)
+        slider(Copy.MARGINS).performScrollTo().performSemanticsAction(SemanticsActions.SetProgress) { it(12f) }
+        compose.waitForIdle()
+        assertEquals(48, model.settings.marginPoints)
+        assertEquals("the size is untouched", PageType.defaultSize, model.settings.scriptureSize, 0.0)
+    }
+
+    @Test fun aTypefaceIsChosenByReadingIt() {
+        val model = show()
+        val garamond = compose.onNode(hasText(PageFaces.ebGaramond.name) and hasAnySibling(hasText(Copy.TYPEFACE_GARAMOND_SUB)), useUnmergedTree = true)
+        garamond.performScrollTo().performClick()
+        compose.waitForIdle()
+        assertEquals("ebGaramond", model.settings.typeface)
+        assertEquals(PageFaces.ebGaramond, model.settings.face)
+        assertEquals("the colophon follows it", "Set in EB Garamond and Alegreya Sans.", Copy.colophonSetIn(model.settings.face.name))
     }
 
     @Test fun aLineForEveryVerseIsASwitchAndThePieceOfPageShowsIt() {
@@ -171,27 +193,30 @@ class ThePageAsYouReadItTest {
         show()
         val slider = compose.onNodeWithContentDescription(Copy.TEXT_SIZE).fetchSemanticsNode()
         val range = slider.config[SemanticsProperties.ProgressBarRangeInfo]
-        assertEquals(16f, range.range.start, 0f)
-        assertEquals(28f, range.range.endInclusive, 0f)
+        // Twenty-five positions, 16 to 28 by halves (PageType.size(at:)).
+        assertEquals(0f, range.range.start, 0f)
+        assertEquals((PageType.sizePositions - 1).toFloat(), range.range.endInclusive, 0f)
         assertEquals("twenty-three stops between the ends", 23, range.steps)
+        assertEquals(16.0, PageType.size(0), 0.0)
+        assertEquals(28.0, PageType.size(PageType.sizePositions - 1), 0.0)
+        assertEquals(Copy.textSizeValue(19.0), slider.config[SemanticsProperties.StateDescription])
     }
 
     /**
-     * At the largest font scale on a narrow phone, each of Weight's stops is
-     * still one whole word on one line: "Heavier" is wider than a third of
-     * the control there, and it gives way in size rather than being cut.
+     * The strip of the page keeps one height whatever the page's settings
+     * are (A69), so nothing under a finger moves while a slider is dragged —
+     * here at the largest font scale on a narrow phone, where it matters most.
      */
     @Config(qualifiers = "w320dp-h700dp-xhdpi", fontScale = 2f)
-    @Test fun theWeightsStopsAreWholeAtTheLargestFontScale() {
-        show()
-        for (word in listOf(Copy.WEIGHT_LIGHTER, Copy.WEIGHT_HEAVIER)) {
-            val node = compose.onNodeWithText(word, useUnmergedTree = true)
-            val layouts = mutableListOf<TextLayoutResult>()
-            node.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
-            val layout = layouts.single()
-            assertEquals("$word is one line", 1, layout.lineCount)
-            assertFalse("$word is not cut", layout.hasVisualOverflow)
-        }
+    @Test fun theStripKeepsOneHeightWhateverTheSize() {
+        val model = show()
+        val strip = compose.onNodeWithTag(PAGE_STRIP_TAG)
+        val before = strip.fetchSemanticsNode().size.height
+        assertTrue("the strip is there", before > 0)
+        compose.onNodeWithContentDescription(Copy.TEXT_SIZE).performScrollTo()
+            .performSemanticsAction(SemanticsActions.SetProgress) { it((PageType.sizePositions - 1).toFloat()) }
+        compose.waitForIdle()
+        assertEquals(28.0, model.settings.scriptureSize, 0.0)
+        assertEquals("the same height at 28", before, strip.fetchSemanticsNode().size.height)
     }
 }
-

@@ -730,6 +730,7 @@ private struct YourShelfSection: View {
 /// small and centred, as a colophon is, after the last thing that can be
 /// done here.
 private struct Colophon: View {
+    @Environment(AppModel.self) private var model
     var version: String
 
     var body: some View {
@@ -739,7 +740,7 @@ private struct Colophon: View {
             SmallCaps(version, size: 11, color: Palette.muted.opacity(0.7))
             // Sentences, so set as sentences rather than in small caps.
             Group {
-                Text(Copy.colophonSetIn)
+                Text(Copy.colophonSetIn(model.settings.face.name))
                 Text(Copy.originalCredit)
             }
             .font(RibbonType.ui(12))

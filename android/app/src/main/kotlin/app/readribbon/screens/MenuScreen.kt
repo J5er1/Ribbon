@@ -1820,7 +1820,7 @@ private fun Colophon(model: AppModel, version: String, reduceMotion: Boolean) {
         // typefaces the book is set in, and where the original words come
         // from (A60).
         Text(
-            text = Copy.COLOPHON_SET_IN,
+            text = Copy.colophonSetIn(model.settings.face.name),
             style = RibbonType.ui(12f),
             color = quiet,
             textAlign = TextAlign.Center,

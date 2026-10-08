@@ -52,6 +52,9 @@ public enum WhatsNewItem: String, Codable, Hashable, Sendable, CaseIterable {
     case notificationsByName
     /// Quiet hours are one band, the night, rather than two wheels (A67).
     case quietHoursNight
+    /// The page can be set in one of five typefaces, each at a size that
+    /// matches Literata's (A69).
+    case typeface
 }
 
 /// A release worth telling someone about. The id is a name, not a version
@@ -77,8 +80,8 @@ public enum WhatsNew {
     /// are simply how the app is now — there for the reading, from You.
     public static let releases: [WhatsNewRelease] = [
         WhatsNewRelease(
-            id: "2026-10-flyleaf", released: "2026-10-07",
-            items: [.flyleaf, .yourShelf, .versionsByReading, .yourPage, .notificationsByName, .quietHoursNight]),
+            id: "2026-10-flyleaf", released: "2026-10-08",
+            items: [.flyleaf, .yourShelf, .versionsByReading, .yourPage, .typeface, .notificationsByName, .quietHoursNight]),
         WhatsNewRelease(
             id: "2026-10-following", released: "2026-10-06",
             items: [.followingStays, .nativeSelection, .roomGroups, .lordReadsLord, .originalReadable]),

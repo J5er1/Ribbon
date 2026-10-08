@@ -1,4 +1,5 @@
 import SwiftUI
+import RibbonCore
 
 // Paper and wells (build book §9.2, ledger A20/A23).
 //
@@ -221,6 +222,12 @@ struct RowText: View {
     /// version shown by what it says (S20, A67). Set as the page sets
     /// Scripture, a shade under ivory, and never more than three lines.
     var specimen: String? = nil
+    /// The face the specimen is set in: Literata for a version, each
+    /// typeface for itself (A69), at the size that looks like Literata's 16.
+    var specimenFace: PageFace = PageFaces.literata
+    /// The weight the specimen is set at, Literata's terms: Book, or Book
+    /// with Bold Text (A69).
+    var specimenWeight: Int = 400
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -229,7 +236,7 @@ struct RowText: View {
                 .foregroundStyle(titleColor)
             if let specimen {
                 Text(specimen)
-                    .font(RibbonType.scripture(16))
+                    .font(RibbonType.scripture(16, weight: specimenWeight, face: specimenFace))
                     .foregroundStyle(Palette.text.opacity(0.86))
                     .lineLimit(3)
                     .fixedSize(horizontal: false, vertical: true)
@@ -399,16 +406,21 @@ struct SettingChoice: View {
     var title: String
     var subtitle: String?
     var specimen: String?
+    var specimenFace: PageFace
+    var specimenWeight: Int
     var chosen: Bool
     var action: () -> Void
 
     init(
         _ title: String, subtitle: String? = nil, specimen: String? = nil,
+        specimenFace: PageFace = PageFaces.literata, specimenWeight: Int = 400,
         chosen: Bool, action: @escaping () -> Void
     ) {
         self.title = title
         self.subtitle = subtitle
         self.specimen = specimen
+        self.specimenFace = specimenFace
+        self.specimenWeight = specimenWeight
         self.chosen = chosen
         self.action = action
     }
@@ -418,7 +430,9 @@ struct SettingChoice: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 12) {
-                RowText(title: title, subtitle: subtitle, specimen: specimen)
+                RowText(
+                    title: title, subtitle: subtitle, specimen: specimen,
+                    specimenFace: specimenFace, specimenWeight: specimenWeight)
                 Spacer(minLength: 8)
                 // The ribbon's column, kept clear on every row, chosen or
                 // not, so no line of text runs under a ribbon and nothing

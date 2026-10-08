@@ -241,6 +241,7 @@ private struct WhatsNewItemView: View {
         case .yourShelf: YourShelfVignette(startsAfter: startsAfter)
         case .versionsByReading: VersionsByReadingVignette(startsAfter: startsAfter)
         case .yourPage: YourPageVignette(startsAfter: startsAfter)
+        case .typeface: TypefaceVignette(startsAfter: startsAfter)
         case .notificationsByName: NotificationsByNameVignette(startsAfter: startsAfter)
         case .quietHoursNight: QuietHoursNightVignette(startsAfter: startsAfter)
         }
@@ -260,6 +261,7 @@ private struct WhatsNewItemView: View {
         case .yourShelf: return Copy.whatsNewShelfTitle
         case .versionsByReading: return Copy.whatsNewVersionsTitle
         case .yourPage: return Copy.whatsNewPageTitle
+        case .typeface: return Copy.whatsNewTypefaceTitle
         case .notificationsByName: return Copy.whatsNewNotificationsTitle
         case .quietHoursNight: return Copy.whatsNewQuietHoursTitle
         }
@@ -279,6 +281,7 @@ private struct WhatsNewItemView: View {
         case .yourShelf: return Copy.whatsNewShelfBody
         case .versionsByReading: return Copy.whatsNewVersionsBody
         case .yourPage: return Copy.whatsNewPageBody
+        case .typeface: return Copy.whatsNewTypefaceBody
         case .notificationsByName: return Copy.whatsNewNotificationsBody
         case .quietHoursNight: return Copy.whatsNewQuietHoursBody
         }
@@ -2276,6 +2279,72 @@ private struct QuietHoursNightVignette: View {
             withAnimation(RibbonMotion.settle) { shown = 0 }
             guard await beat(RibbonMotion.settleDuration) else { return }
             drawn = 0
+            guard await beat(Vignette.breath) else { return }
+        }
+    }
+}
+
+// MARK: 15. Set in the type you read best
+
+/// John 1:1's first words five times, each in one of the page's typefaces
+/// (A69) at the size that looks like Literata's, the face's name after it
+/// in small caps. A short ribbon marks the chosen one — the chosen row in
+/// ivory, the rest quieter — and moves down a row at a beat, then comes
+/// back to Literata.
+private struct TypefaceVignette: View {
+    let startsAfter: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// The row the ribbon marks, Literata's first.
+    @State private var chosen = 0
+
+    private static let line = "In the beginning was the Word"
+    /// Literata's size for the picture; every other face is set at the
+    /// size that looks like it.
+    private static let size: CGFloat = 12
+    private static let row: CGFloat = 24
+    private static let ribbon = CGSize(width: 3, height: 14)
+    /// How long a row is chosen before the ribbon moves on.
+    private static let dwell: Double = 1.2
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(PageFaces.all.enumerated()), id: \.offset) { index, face in
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                        Text(verbatim: Self.line)
+                            .font(Font(RibbonType.uiPageFace(
+                                face, CGFloat(PageType.pointSize(Double(Self.size), face: face)),
+                                weight: 400) as CTFont))
+                            .foregroundStyle(Palette.text)
+                        SmallCaps(face.name, size: 9)
+                    }
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .frame(height: Self.row, alignment: .leading)
+                    .opacity(index == chosen ? 1 : 0.45)
+                }
+            }
+            .padding(.leading, 14)
+            Rectangle()
+                .fill(Palette.chartreuse)
+                .frame(width: Self.ribbon.width, height: Self.ribbon.height)
+                .offset(y: CGFloat(chosen) * Self.row + (Self.row - Self.ribbon.height) / 2)
+        }
+        .padding(.horizontal, 22)
+        .task(id: reduceMotion) { await play() }
+    }
+
+    private func play() async {
+        chosen = 0
+        // How it ends, and how it stands under reduce motion: Literata.
+        guard !reduceMotion else { return }
+        guard await beat(startsAfter) else { return }
+        while true {
+            for next in Array(1..<PageFaces.all.count) + [0] {
+                guard await beat(Self.dwell) else { return }
+                withAnimation(RibbonMotion.settle) { chosen = next }
+            }
             guard await beat(Vignette.breath) else { return }
         }
     }

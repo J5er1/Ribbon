@@ -1,7 +1,10 @@
 package app.readribbon.app
 
 import android.content.Context
+import app.readribbon.core.NamedReading
 import app.readribbon.core.OriginalLanguage
+import app.readribbon.core.PageFaces
+import app.readribbon.core.PageType
 
 // Every user-facing string, in one place, so the voice rules (§10) can be
 // audited: short sentences, second person, no exclamation points, never name
@@ -991,7 +994,7 @@ object Copy {
      * S20 (A68): Text's says what it is about, now that the page has more to
      * set than a subtitle can list.
      */
-    const val TEXT_SUB = "Translation, and how the page is set"
+    const val TEXT_SUB = "Translation, typeface, and how the page is set"
     const val NOTIFICATIONS_SUB = "Per room, and your quiet hours"
     /**
      * A function, not a constant, for the reason deviation A8 exists: the
@@ -1096,6 +1099,7 @@ object Copy {
 
     /** The two groups on the text screen. */
     const val THE_PAGE = "The page"
+    const val TYPEFACE = "Typeface"
 
     /** The one group on Appearance. */
     const val COLOUR = "Colour"
@@ -1118,6 +1122,8 @@ object Copy {
     const val LINE_SPACING_SUB = "How much air between the lines."
     /** S20 (A68): Literata's own weight, drawn, never a bold laid on top. */
     const val WEIGHT_SUB = "How much ink each letter carries."
+    const val LETTER_SPACING_SUB = "Room between the letters. A line holds fewer of them."
+    const val MARGINS_SUB = "Room either side of the words. At the largest sizes the words keep it."
     /** S20 (A68): prose only; a poem is already set line by line. */
     const val VERSE_LINES_SUB = "Easier to find your place. Poetry keeps its own lines."
     /** S20 (A68): only the numbers' ink changes, so nothing on the page moves. */
@@ -1140,6 +1146,8 @@ object Copy {
     const val LINE_SPACING = "Line spacing"
     /** S20 (A68): the weight control's title, and its name to a screen reader. */
     const val WEIGHT = "Weight"
+    const val LETTER_SPACING = "Letter spacing"
+    const val MARGINS = "Margins"
     /** S20 (A68): says what happens, in the page's own terms. */
     const val VERSE_LINES = "A new line for every verse"
     /** S20 (A68): the numbers, not the verses, are what change. */
@@ -1172,6 +1180,21 @@ object Copy {
     const val WEIGHT_LIGHTER = "Lighter"
     const val WEIGHT_BOOK = "Book"
     const val WEIGHT_HEAVIER = "Heavier"
+
+    /** Text (A69): each typeface in a line of its own. */
+    const val TYPEFACE_LITERATA_SUB = "Drawn for long reading on a screen."
+    const val TYPEFACE_SOURCE_SERIF_SUB = "Crisp and open, a little sturdier."
+    const val TYPEFACE_GARAMOND_SUB = "The Garamond of printed Bibles."
+    const val TYPEFACE_ALEGREYA_SUB = "Warm, with the movement of a pen."
+    const val TYPEFACE_ATKINSON_SUB = "Every letter distinct, for low vision."
+    fun typefaceSub(id: String): String? = when (id) {
+        PageFaces.literata.id -> TYPEFACE_LITERATA_SUB
+        PageFaces.sourceSerif.id -> TYPEFACE_SOURCE_SERIF_SUB
+        PageFaces.ebGaramond.id -> TYPEFACE_GARAMOND_SUB
+        PageFaces.alegreya.id -> TYPEFACE_ALEGREYA_SUB
+        PageFaces.atkinson.id -> TYPEFACE_ATKINSON_SUB
+        else -> null
+    }
 
     /**
      * What quiet hours do not silence (S19): the one notification that is a
@@ -1266,18 +1289,57 @@ object Copy {
 
     /**
      * The colophon (A67): what the book is set in, the way a book's last
-     * page says it.
+     * page says it — your page's typeface (A69).
      */
-    const val COLOPHON_SET_IN = "Set in Literata and Alegreya Sans."
+    fun colophonSetIn(face: String) = "Set in $face and Alegreya Sans."
 
     /** Text (A67): the verse every version is shown at. */
     fun specimenAt(reference: String) = "Each one shows $reference in its own words."
+
+    /** Text (A69): the verse every typeface is shown at. */
+    fun typefaceSpecimenAt(reference: String) = "Each one sets $reference in its own letters."
 
     /** Text (A67): the size, spoken — a measure of type, not of a person. */
     fun textSizeValue(size: Double): String {
         val whole = size % 1.0 == 0.0
         return (if (whole) size.toInt().toString() else String.format(java.util.Locale.ROOT, "%.1f", size)) + " point"
     }
+
+    /**
+     * Text (A69): line spacing, spoken — the multiple, with its old name on
+     * one of the three stops it had.
+     */
+    fun lineSpacingValue(hundredths: Int): String {
+        val number = String.format(java.util.Locale.ROOT, "%.2f", hundredths / 100.0)
+        return when (hundredths) {
+            PageType.lineSpacingNamed[0] -> "$number, $LINE_SPACING_CLOSE"
+            PageType.lineSpacingNamed[1] -> "$number, $LINE_SPACING_BOOK"
+            PageType.lineSpacingNamed[2] -> "$number, $LINE_SPACING_OPEN"
+            else -> number
+        }
+    }
+
+    /**
+     * Text (A69): weight, spoken — never an axis number: the nearest of the
+     * three stops it had, and how many steps from it.
+     */
+    fun weightValue(reading: NamedReading): String {
+        val stop = listOf(WEIGHT_LIGHTER, WEIGHT_BOOK, WEIGHT_HEAVIER)[reading.index.coerceIn(0, 2)]
+        if (reading.offset == 0) return stop
+        val n = kotlin.math.abs(reading.offset)
+        val steps = if (n == 1) "1 step" else "$n steps"
+        return "$steps ${if (reading.offset > 0) "heavier" else "lighter"} than $stop"
+    }
+
+    /** Text (A69): letter spacing, spoken, in ems. */
+    fun letterSpacingValue(thousandths: Int): String {
+        if (thousandths == 0) return "As set"
+        val number = String.format(java.util.Locale.ROOT, "%.3f", thousandths / 1000.0).trimEnd('0')
+        return "$number em wider"
+    }
+
+    /** Text (A69): the margins, spoken. */
+    fun marginValue(points: Int): String = if (points == 0) "As set" else "$points point margins"
 
     /** Notifications (A67): the words a switch's notification will use, spoken. */
     fun notificationExampleSpoken(sentence: String) = "It reads: $sentence"
@@ -1547,8 +1609,17 @@ object Copy {
 
     /** What's new (A68): where it is, and what it does. */
     const val WHATS_NEW_PAGE_BODY =
-        "In Text, each verse can start a line of its own, the letters can be lighter or heavier, " +
-            "the verse numbers clearer, and the size goes larger."
+        "In Text, sliders set the size, the spacing, the weight, the room between letters and the margins, " +
+            "with the page in view while you move them. Each verse can start a line of its own, " +
+            "and the verse numbers can be clearer."
+
+    /** What's new (A69): five typefaces. */
+    const val WHATS_NEW_TYPEFACE_TITLE = "Set in the type you read best"
+
+    /** What's new (A69): where it is, and what it does. */
+    const val WHATS_NEW_TYPEFACE_BODY =
+        "In Text, the page can be set in Literata, Source Serif, EB Garamond, Alegreya or Atkinson Hyperlegible. " +
+            "Each shows your verse in its own letters, at a size that matches."
 
     /** What's new (A67): the switches say who. */
     const val WHATS_NEW_NOTIFICATIONS_TITLE = "Notifications say who"

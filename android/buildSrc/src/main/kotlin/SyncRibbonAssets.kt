@@ -47,6 +47,11 @@ abstract class SyncRibbonAssets @Inject constructor(
                 rename("""Literata\[opsz,wght]\.ttf""", "Literata.ttf")
                 rename("""Literata-Italic\[opsz,wght]\.ttf""", "Literata-Italic.ttf")
                 rename("""NotoSerifHebrew\[wdth,wght]\.ttf""", "NotoSerifHebrew.ttf")
+                // The page's other typefaces (A69): each by its PageFace.fileStem.
+                rename("""SourceSerif4\[opsz,wght]\.ttf""", "SourceSerif4.ttf")
+                rename("""EBGaramond\[wght]\.ttf""", "EBGaramond.ttf")
+                rename("""Alegreya\[wght]\.ttf""", "Alegreya.ttf")
+                rename("""AtkinsonHyperlegibleNext\[wght]\.ttf""", "AtkinsonHyperlegibleNext.ttf")
             }
             from(from.dir("Fonts")) {
                 into("fonts")

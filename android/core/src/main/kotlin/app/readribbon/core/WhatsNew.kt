@@ -80,6 +80,12 @@ enum class WhatsNewItem {
 
     /** Quiet hours are one band, the night, rather than two pickers (A67). */
     quietHoursNight,
+
+    /**
+     * The page can be set in one of five typefaces, each at a size that
+     * matches Literata's (A69).
+     */
+    typeface,
 }
 
 /**
@@ -103,12 +109,13 @@ object WhatsNew {
     val releases: List<WhatsNewRelease> = listOf(
         WhatsNewRelease(
             id = "2026-10-flyleaf",
-            released = "2026-10-07",
+            released = "2026-10-08",
             items = listOf(
                 WhatsNewItem.flyleaf,
                 WhatsNewItem.yourShelf,
                 WhatsNewItem.versionsByReading,
                 WhatsNewItem.yourPage,
+                WhatsNewItem.typeface,
                 WhatsNewItem.notificationsByName,
                 WhatsNewItem.quietHoursNight,
             ),
