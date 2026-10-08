@@ -60,7 +60,12 @@ class SettingsSurviveADamagedFileTest {
             "quietHoursEnd": 480,
             "weightStep": 2,
             "versePerLine": true,
-            "clearVerseNumbers": true
+            "clearVerseNumbers": true,
+            "lineHeightHundredths": 184,
+            "pageWeight": 460,
+            "letterSpacingThousandths": 15,
+            "marginPoints": 24,
+            "typeface": "alegreya"
           },
           "hasSeenMarginHint": true,
           "hasPulledTheFire": true,
@@ -83,6 +88,64 @@ class SettingsSurviveADamagedFileTest {
         assertEquals("weight", 2, state.settings.weightStep)
         assertTrue("a new line for every verse", state.settings.versePerLine)
         assertTrue("clearer verse numbers", state.settings.clearVerseNumbers)
+        // And the sliders' and the face's from A69.
+        assertEquals("line spacing slid", 184, state.settings.lineHeightHundredths)
+        assertEquals("weight slid", 460, state.settings.pageWeight)
+        assertEquals("letter spacing", 15, state.settings.letterSpacingThousandths)
+        assertEquals("margins", 24, state.settings.marginPoints)
+        assertEquals("typeface", "alegreya", state.settings.typeface)
+    }
+
+    /**
+     * A settings object with one value this build cannot read, as a later
+     * build might write it: the file will not decode whole, and the bad
+     * value costs only itself, as an unreadable field does on the iPhone
+     * (I42, A69).
+     */
+    @Test fun aBadPageValueCostsOnlyItself() = runTest {
+        stateFile.writeText(
+            """
+            {
+              "settings": {
+                "scriptureSize": 26.0,
+                "lineSpacingStep": 2,
+                "redLetter": true,
+                "quietHoursStart": 1320,
+                "quietHoursEnd": 480,
+                "weightStep": 2,
+                "versePerLine": true,
+                "clearVerseNumbers": true,
+                "lineHeightHundredths": 184,
+                "pageWeight": "heavier",
+                "letterSpacingThousandths": 15,
+                "marginPoints": "wide",
+                "typeface": 7
+              },
+              "hasSeenMarginHint": true
+            }
+            """.trimIndent(),
+        )
+
+        val state = LocalStore(context).load()
+
+        // The bad ones take their defaults.
+        assertEquals("an unreadable weight reads its step", null, state.settings.pageWeight)
+        assertEquals("an unreadable margin is none", 0, state.settings.marginPoints)
+        assertEquals("an unreadable face is Literata", "literata", state.settings.typeface)
+        // And everything beside them is kept.
+        assertEquals("text size", 26.0, state.settings.scriptureSize, 0.0001)
+        assertEquals("line spacing", 2, state.settings.lineSpacingStep)
+        assertTrue("red letter", state.settings.redLetter)
+        assertEquals("quiet hours start", 1320, state.settings.quietHoursStart)
+        assertEquals("quiet hours end", 480, state.settings.quietHoursEnd)
+        assertEquals("weight", 2, state.settings.weightStep)
+        assertTrue("a new line for every verse", state.settings.versePerLine)
+        assertTrue("clearer verse numbers", state.settings.clearVerseNumbers)
+        assertEquals("line spacing slid", 184, state.settings.lineHeightHundredths)
+        assertEquals("letter spacing", 15, state.settings.letterSpacingThousandths)
+        assertEquals("the page's weight is its step's", 470, state.settings.weight(boldText = false))
+        assertTrue("the margin hint stays seen", state.hasSeenMarginHint)
+        assertTrue("the unreadable file is kept aside", kept.exists())
     }
 
     /**

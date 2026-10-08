@@ -1,8 +1,10 @@
 package app.readribbon.data
 
+import app.readribbon.core.PageFaces
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -119,6 +121,83 @@ class StateSurvivesAnUpdateTest {
         assertFalse("verses run on in their paragraphs", state.settings.versePerLine)
         assertFalse("the numbers stay quiet", state.settings.clearVerseNumbers)
         assertEquals("at the page's own ink", 0.45, state.settings.verseNumberAlpha, 0.0001)
+        // And the sliders' and the face's from A69, where the steps already were.
+        assertNull("no line spacing slid", state.settings.lineHeightHundredths)
+        assertNull("no weight slid", state.settings.pageWeight)
+        assertEquals("the letters as set", 0, state.settings.letterSpacingThousandths)
+        assertEquals("no margin", 0, state.settings.marginPoints)
+        assertEquals("in Literata", "literata", state.settings.typeface)
+        assertEquals("in Literata", PageFaces.literata, state.settings.face)
+        assertEquals("the old Open is still open", 1.9, state.settings.lineHeightMultiple, 0.0)
+    }
+
+    /**
+     * A file written once the sliders exist (A69): every key, the sliders'
+     * values and the steps written beside them, read back as they went in.
+     */
+    @Test fun aFileWithTheSlidersDecodes() {
+        val state = json.decodeFromString<AppState>(
+            """
+            {
+              "settings": {
+                "scriptureSize": 22.5,
+                "lineSpacingStep": 2,
+                "redLetter": false,
+                "quietHoursStart": 1320,
+                "quietHoursEnd": 360,
+                "roomNotifications": {},
+                "weightStep": 1,
+                "versePerLine": true,
+                "clearVerseNumbers": false,
+                "lineHeightHundredths": 184,
+                "pageWeight": 420,
+                "letterSpacingThousandths": 25,
+                "marginPoints": 32,
+                "typeface": "ebGaramond"
+              }
+            }
+            """.trimIndent(),
+        )
+        val settings = state.settings
+
+        assertEquals("text size", 22.5, settings.scriptureSize, 0.0)
+        assertEquals("the step beside", 2, settings.lineSpacingStep)
+        assertEquals("the slider's value", 184, settings.lineHeightHundredths)
+        assertEquals("is the page", 1.84, settings.lineHeightMultiple, 0.0)
+        assertEquals("the step beside", 1, settings.weightStep)
+        assertEquals("the slider's value", 420, settings.pageWeight)
+        assertEquals("is the page", 420, settings.weight(boldText = false))
+        assertEquals("with Bold Text", 570, settings.weight(boldText = true))
+        assertEquals("letter spacing", 0.025, settings.letterSpacingEm, 0.0)
+        assertEquals("margins", 32.0, settings.marginRequested, 0.0)
+        assertEquals("the face", PageFaces.ebGaramond, settings.face)
+        assertTrue("a new line for every verse", settings.versePerLine)
+    }
+
+    /**
+     * A slider writes its value and, beside it, the old step nearest it, so
+     * that a build from before the sliders, which reads only the step, opens
+     * on nearly the same page (A69).
+     */
+    @Test fun aSliderWritesTheOldStepBeside() {
+        val spaced = AppSettings().withLineHeight(184)
+        assertEquals(184, spaced.lineHeightHundredths)
+        assertEquals(2, spaced.lineSpacingStep)
+        assertEquals(165, AppSettings().withLineHeight(163).lineHeightHundredths)
+        assertEquals(1, AppSettings().withLineHeight(163).lineSpacingStep)
+        assertEquals(0, AppSettings().withLineHeight(150).lineSpacingStep)
+        val lighter = AppSettings().withWeight(360)
+        assertEquals(360, lighter.pageWeight)
+        assertEquals(0, lighter.weightStep)
+        assertEquals(510, lighter.weight(boldText = true))
+        assertEquals(470, AppSettings().withWeight(999).pageWeight)
+        assertEquals(2, AppSettings().withWeight(999).weightStep)
+        assertEquals(1, AppSettings().withWeight(420).weightStep)
+        // A value no slider writes is still held when the page reads it.
+        val wild = AppSettings(marginPoints = 1000, letterSpacingThousandths = -5, typeface = "comicSans")
+        assertEquals(48.0, wild.marginRequested, 0.0)
+        assertEquals(0.0, wild.letterSpacingEm, 0.0)
+        assertEquals(PageFaces.literata, wild.face)
     }
 
     /**

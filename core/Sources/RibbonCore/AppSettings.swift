@@ -62,6 +62,8 @@ public struct AppSettings: Codable, Hashable, Sendable {
     /// Scripture's size in points, before Dynamic Type (`PageType.sizeRange`).
     public var scriptureSize: Double
     /// 0, 1, 2 → Close, Book, Open (S20's three steps, `PageType.lineHeightMultiples`).
+    /// Once the slider has been moved, the stop nearest its value, kept for
+    /// a build from before the sliders (A69).
     public var lineSpacingStep: Int
     public var redLetter: Bool
     /// One per person, applying to every room (S19). Minutes from midnight,
@@ -70,13 +72,30 @@ public struct AppSettings: Codable, Hashable, Sendable {
     public var quietHoursEnd: Int
     public var roomNotifications: [UUID: RoomNotificationPrefs]
     /// 0, 1, 2 → Lighter, Book, Heavier (A68, `PageType.weights`). A step
-    /// rather than a weight, so the table can be retuned under it.
+    /// rather than a weight, so the table can be retuned under it. Once the
+    /// slider has been moved, the stop nearest its value, kept for a build
+    /// from before the sliders (A69).
     public var weightStep: Int
     /// In prose, each numbered verse starts its own line (A68). Poetry,
     /// titles and stanza breaks are set as they always were.
     public var versePerLine: Bool
     /// Verse numbers in a stronger ink, nothing moved (A68).
     public var clearVerseNumbers: Bool
+    /// The line spacing slider's value, in hundredths of the multiple
+    /// (A69). Nil until a reader moves it: the page is then the step's.
+    public var lineHeightHundredths: Int?
+    /// The weight slider's value on Literata's axis, before Bold Text
+    /// (A69). Nil until a reader moves it: the page is then the step's.
+    public var pageWeight: Int?
+    /// Room between the letters, in thousandths of an em (A69).
+    public var letterSpacingThousandths: Int
+    /// The margin asked for, in points a side (A69). The page gives less
+    /// when the words would otherwise be too narrow.
+    public var marginPoints: Int
+    /// The page's face, by its id (A69). A String, never an enum, so a
+    /// face a later build adds opens here in Literata rather than costing
+    /// the field.
+    public var typeface: String
 
     public init(
         scriptureSize: Double = PageType.defaultSize,
@@ -87,7 +106,12 @@ public struct AppSettings: Codable, Hashable, Sendable {
         roomNotifications: [UUID: RoomNotificationPrefs] = [:],
         weightStep: Int = PageType.defaultWeightStep,
         versePerLine: Bool = false,
-        clearVerseNumbers: Bool = false
+        clearVerseNumbers: Bool = false,
+        lineHeightHundredths: Int? = nil,
+        pageWeight: Int? = nil,
+        letterSpacingThousandths: Int = 0,
+        marginPoints: Int = 0,
+        typeface: String = PageFaces.literata.id
     ) {
         self.scriptureSize = scriptureSize
         self.lineSpacingStep = lineSpacingStep
@@ -98,6 +122,11 @@ public struct AppSettings: Codable, Hashable, Sendable {
         self.weightStep = weightStep
         self.versePerLine = versePerLine
         self.clearVerseNumbers = clearVerseNumbers
+        self.lineHeightHundredths = lineHeightHundredths
+        self.pageWeight = pageWeight
+        self.letterSpacingThousandths = letterSpacingThousandths
+        self.marginPoints = marginPoints
+        self.typeface = typeface
     }
 
     /// Spelled out: these are the names in every file already saved. A
@@ -112,6 +141,11 @@ public struct AppSettings: Codable, Hashable, Sendable {
         case weightStep = "weightStep"
         case versePerLine = "versePerLine"
         case clearVerseNumbers = "clearVerseNumbers"
+        case lineHeightHundredths = "lineHeightHundredths"
+        case pageWeight = "pageWeight"
+        case letterSpacingThousandths = "letterSpacingThousandths"
+        case marginPoints = "marginPoints"
+        case typeface = "typeface"
     }
 
     /// A field missing from an older file, or one this build cannot read,
@@ -131,19 +165,60 @@ public struct AppSettings: Codable, Hashable, Sendable {
         weightStep = read(.weightStep, weightStep)
         versePerLine = read(.versePerLine, versePerLine)
         clearVerseNumbers = read(.clearVerseNumbers, clearVerseNumbers)
+        lineHeightHundredths = read(.lineHeightHundredths, lineHeightHundredths)
+        pageWeight = read(.pageWeight, pageWeight)
+        letterSpacingThousandths = read(.letterSpacingThousandths, letterSpacingThousandths)
+        marginPoints = read(.marginPoints, marginPoints)
+        typeface = read(.typeface, typeface)
     }
 
+    /// The slider's value if a reader has moved it, else the old step's
+    /// (A69): a file from before the sliders opens on its own page.
     public var lineHeightMultiple: Double {
-        PageType.lineHeightMultiple(step: lineSpacingStep)
+        PageType.lineHeightMultiple(
+            hundredths: PageType.lineHeightHundredths(saved: lineHeightHundredths, legacyStep: lineSpacingStep))
     }
 
     /// The page's weight on Literata's axis, with the system's Bold Text
-    /// folded in (A68).
+    /// folded in (A68): the slider's value if a reader has moved it, else
+    /// the old step's (A69). A face draws it through `PageType.faceWeight`.
     public func weight(boldText: Bool) -> Int {
-        PageType.weight(step: weightStep, boldText: boldText)
+        PageType.weight(saved: pageWeight, legacyStep: weightStep) + (boldText ? PageType.boldTextWeight : 0)
     }
 
     public var verseNumberAlpha: Double {
         PageType.verseNumberAlpha(clear: clearVerseNumbers)
+    }
+
+    /// The page's face. One this build does not have is Literata.
+    public var face: PageFace {
+        PageFaces.face(id: typeface)
+    }
+
+    /// The room between letters, in ems, held to the scale.
+    public var letterSpacingEm: Double {
+        PageType.letterSpacingEm(letterSpacingThousandths)
+    }
+
+    /// The margin asked for, in points, held to the scale. What the page
+    /// gives is `PageType.margin(requested:textWidth:size:)`.
+    public var marginRequested: Double {
+        Double(PageType.marginScale.held(marginPoints))
+    }
+
+    /// The line spacing slider's write: the value held to the scale, and
+    /// the nearest old step beside it, so that a build from before the
+    /// sliders opens on nearly the same page.
+    public mutating func setLineHeight(_ hundredths: Int) {
+        let held = PageType.lineHeightScale.held(hundredths)
+        lineHeightHundredths = held
+        lineSpacingStep = PageType.lineSpacingStep(forHundredths: held)
+    }
+
+    /// The weight slider's write, as for line spacing.
+    public mutating func setWeight(_ weight: Int) {
+        let held = PageType.weightScale.held(weight)
+        pageWeight = held
+        weightStep = PageType.weightStep(forWeight: held)
     }
 }

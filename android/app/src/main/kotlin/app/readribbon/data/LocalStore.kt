@@ -8,6 +8,8 @@ import app.readribbon.core.Highlight
 import app.readribbon.core.Invite
 import app.readribbon.core.Membership
 import app.readribbon.core.Note
+import app.readribbon.core.PageFace
+import app.readribbon.core.PageFaces
 import app.readribbon.core.PageType
 import app.readribbon.core.Person
 import app.readribbon.core.QuietDay
@@ -25,6 +27,7 @@ import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.jsonObject
 import java.io.File
@@ -61,13 +64,19 @@ data class RoomNotificationPrefs(
  * the file is read without `coerceInputValues`, so a value a later build adds
  * to an enum would make this whole object unreadable to the build before it,
  * and salvage would hand back every default. A step out of range only sets
- * the nearer end of its table ([PageType]).
+ * the nearer end of its table ([PageType]), and a slider's value out of range
+ * the nearer end of its scale (A69). The face is kept as its id, a String,
+ * for the same reason.
  */
 @Serializable
 data class AppSettings(
     /** Scripture's size in points, before font scale ([PageType.sizeRange]). */
     val scriptureSize: Double = PageType.defaultSize,
-    /** 0, 1, 2 → Close, Book, Open (S20's three steps, [PageType.lineHeightMultiples]). */
+    /**
+     * 0, 1, 2 → Close, Book, Open (S20's three steps, [PageType.lineHeightMultiples]).
+     * Once the slider has been moved, the stop nearest its value, kept for a
+     * build from before the sliders (A69).
+     */
     val lineSpacingStep: Int = PageType.defaultLineSpacingStep,
     val redLetter: Boolean = false,
     /** One per person, applying to every room (S19). Minutes from midnight,
@@ -77,7 +86,9 @@ data class AppSettings(
     val roomNotifications: Map<Uuid, RoomNotificationPrefs> = emptyMap(),
     /**
      * 0, 1, 2 → Lighter, Book, Heavier (A68, [PageType.weights]). A step
-     * rather than a weight, so the table can be retuned under it.
+     * rather than a weight, so the table can be retuned under it. Once the
+     * slider has been moved, the stop nearest its value, kept for a build
+     * from before the sliders (A69).
      */
     val weightStep: Int = PageType.defaultWeightStep,
     /**
@@ -87,15 +98,77 @@ data class AppSettings(
     val versePerLine: Boolean = false,
     /** Verse numbers in a stronger ink, nothing moved (A68). */
     val clearVerseNumbers: Boolean = false,
+    /**
+     * The line spacing slider's value, in hundredths of the multiple (A69).
+     * Null until a reader moves it: the page is then the step's.
+     */
+    val lineHeightHundredths: Int? = null,
+    /**
+     * The weight slider's value on Literata's axis, before Bold Text (A69).
+     * Null until a reader moves it: the page is then the step's.
+     */
+    val pageWeight: Int? = null,
+    /** Room between the letters, in thousandths of an em (A69). */
+    val letterSpacingThousandths: Int = 0,
+    /**
+     * The margin asked for, in dp a side (A69). The page gives less when the
+     * words would otherwise be too narrow.
+     */
+    val marginPoints: Int = 0,
+    /**
+     * The page's face, by its id (A69). A String, never an enum, so a face a
+     * later build adds opens here in Literata rather than costing the field.
+     */
+    val typeface: String = PageFaces.literata.id,
 ) {
+    /**
+     * The slider's value if a reader has moved it, else the old step's (A69):
+     * a file from before the sliders opens on its own page.
+     */
     val lineHeightMultiple: Double
-        get() = PageType.lineHeightMultiple(lineSpacingStep)
+        get() = PageType.lineHeightMultipleOf(PageType.lineHeightHundredths(lineHeightHundredths, lineSpacingStep))
 
-    /** The page's weight on Literata's axis, with the system's Bold Text folded in (A68). */
-    fun weight(boldText: Boolean): Int = PageType.weight(weightStep, boldText)
+    /**
+     * The page's weight on Literata's axis, with the system's Bold Text
+     * folded in (A68): the slider's value if a reader has moved it, else the
+     * old step's (A69). A face draws it through [PageType.faceWeight].
+     */
+    fun weight(boldText: Boolean): Int =
+        PageType.weight(saved = pageWeight, legacyStep = weightStep) + if (boldText) PageType.boldTextWeight else 0
 
     val verseNumberAlpha: Double
         get() = PageType.verseNumberAlpha(clearVerseNumbers)
+
+    /** The page's face. One this build does not have is Literata. */
+    val face: PageFace
+        get() = PageFaces.face(typeface)
+
+    /** The room between letters, in ems, held to the scale. */
+    val letterSpacingEm: Double
+        get() = PageType.letterSpacingEm(letterSpacingThousandths)
+
+    /**
+     * The margin asked for, in dp, held to the scale. What the page gives is
+     * [PageType.margin].
+     */
+    val marginRequested: Double
+        get() = PageType.marginScale.held(marginPoints).toDouble()
+
+    /**
+     * The line spacing slider's write: the value held to the scale, and the
+     * nearest old step beside it, so that a build from before the sliders
+     * opens on nearly the same page.
+     */
+    fun withLineHeight(h: Int): AppSettings {
+        val held = PageType.lineHeightScale.held(h)
+        return copy(lineHeightHundredths = held, lineSpacingStep = PageType.lineSpacingStep(forHundredths = held))
+    }
+
+    /** The weight slider's write, as for line spacing. */
+    fun withWeight(w: Int): AppSettings {
+        val held = PageType.weightScale.held(w)
+        return copy(pageWeight = held, weightStep = PageType.weightStep(forWeight = held))
+    }
 
     /**
      * Whether the clock is inside quiet hours (S19).
@@ -331,8 +404,12 @@ class LocalStore(context: Context) {
 
         return AppState(
             // Eyes, sleep, and which rooms may wake the phone. None of it is
-            // anywhere else.
-            settings = saved("settings", AppSettings()) { json.decodeFromJsonElement(it) },
+            // anywhere else. Read whole if it will be, else field by field,
+            // so that one bad value costs only itself (as I42 on the iPhone).
+            settings = saved("settings", AppSettings()) {
+                runCatching { json.decodeFromJsonElement<AppSettings>(it) }
+                    .getOrElse { _ -> salvageSettings(it.jsonObject) }
+            },
             // The three "asked once" flags (§6.1). Losing one is not a
             // disaster, it is a hint or a permission prompt coming back — but
             // a hint that comes back is the thing §6.1 is against.
@@ -364,6 +441,47 @@ class LocalStore(context: Context) {
             // device has never merged, which makes the next merge silent
             // (S19) — and after a reset that is exactly right, because
             // everything is about to arrive at once.
+        )
+    }
+
+    /**
+     * The settings read one field at a time, for a settings object that will
+     * not decode whole: a field that is missing or unreadable takes its
+     * default and costs nothing else. Since the sliders (A69) the settings
+     * hold more numbers a later build might write differently, and before
+     * this, one bad one cost all of them.
+     */
+    private fun salvageSettings(fields: JsonObject): AppSettings {
+        val book = AppSettings()
+
+        fun <T> saved(name: String, fallback: T, read: (JsonElement) -> T): T {
+            val raw = fields[name] ?: return fallback
+            return runCatching { read(raw) }.getOrDefault(fallback)
+        }
+
+        return AppSettings(
+            scriptureSize = saved("scriptureSize", book.scriptureSize) { json.decodeFromJsonElement(it) },
+            lineSpacingStep = saved("lineSpacingStep", book.lineSpacingStep) { json.decodeFromJsonElement(it) },
+            redLetter = saved("redLetter", book.redLetter) { json.decodeFromJsonElement(it) },
+            quietHoursStart = saved("quietHoursStart", book.quietHoursStart) { json.decodeFromJsonElement(it) },
+            quietHoursEnd = saved("quietHoursEnd", book.quietHoursEnd) { json.decodeFromJsonElement(it) },
+            roomNotifications = saved("roomNotifications", book.roomNotifications) {
+                json.decodeFromJsonElement(it)
+            },
+            weightStep = saved("weightStep", book.weightStep) { json.decodeFromJsonElement(it) },
+            versePerLine = saved("versePerLine", book.versePerLine) { json.decodeFromJsonElement(it) },
+            clearVerseNumbers = saved("clearVerseNumbers", book.clearVerseNumbers) {
+                json.decodeFromJsonElement(it)
+            },
+            lineHeightHundredths = saved("lineHeightHundredths", book.lineHeightHundredths) {
+                json.decodeFromJsonElement(it)
+            },
+            pageWeight = saved("pageWeight", book.pageWeight) { json.decodeFromJsonElement(it) },
+            letterSpacingThousandths = saved("letterSpacingThousandths", book.letterSpacingThousandths) {
+                json.decodeFromJsonElement(it)
+            },
+            marginPoints = saved("marginPoints", book.marginPoints) { json.decodeFromJsonElement(it) },
+            typeface = saved("typeface", book.typeface) { json.decodeFromJsonElement(it) },
         )
     }
 
