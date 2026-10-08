@@ -272,6 +272,35 @@ The page, the way you read it (A68, I42), on both phones:
   line, close You and raise the book with the fire: the same verse is on
   the reading line.
 
+Sliders and typefaces (A69, I43), on both phones:
+
+- With nothing moved, the page is exactly as it was, in Literata.
+- Text → Typeface: each row shows your verse in its own letters; pick each
+  in turn and read John 1 and Psalm 119 at 16, at 19 and at 28. The size
+  looks the same in every face, nothing is clipped, Psalm 119's indents
+  hold. On iPhone check Core Text found each face (not Literata standing
+  in) and that Heavier is heavier in every one.
+- Bold Text on: every face heavier, cleanly, no smeared bold. Garamond and
+  Alegreya: Lighter is their regular, a little lighter than their Book.
+- Hold a word on the page in each face: the original words' panel is still
+  in Literata, its differing words in Medium.
+- Drag each slider: the strip at the top changes as you drag, nothing under
+  your finger moves, and the setting is written when you lift. Scrolled
+  down to Margins, hold the slider: the strip appears under the bar, and
+  goes a moment after you let go. No haptics anywhere.
+- With VoiceOver or TalkBack each slider says a measure ("1.72, Book",
+  "2 steps heavier than Book", "As set") and moves one position a swipe.
+- Margins at the end, in a room with someone present: the note marks stay
+  beside the words; open the presence panel — it is where it always was,
+  never over a word, and the margin gives way before the words do. Follow
+  someone with no margins: you land on the same words.
+- Letter spacing at the end: words are still words; on Android look at
+  "fi" and "fl" (ligatures may drop).
+- Android: change the face or a margin with the book down under You, raise
+  it: the same verse on the reading line.
+- What's new: "Set in the type you read best", the ribbon walking the five
+  faces; reduce motion holds it on the last.
+
 A mark following its words (A60, I37) — compiled on both platforms by CI,
 never yet run on a phone:
 

@@ -4598,6 +4598,83 @@ A68. **The page, the way you read it (2026-10-flyleaf).** Owner, after A67:
       multiplies the em, so Book is 1.72 em. Look at both side by side
       before changing either.
 
+A69. **Sliders with the page in view, and five typefaces (2026-10-flyleaf).**
+    Owner, on the day #47 was to merge: *"sliders for text adjustment with
+    preview are important customization and maybe aditional fonts"*; asked
+    whether to merge first, *"Add to #47 first"*; asked which fonts, *"just
+    add em all"*; asked which settings become sliders, all four offered,
+    and *"careful with margin so that it doesnt effect the presence
+    feature"*.
+
+    This reverses three things on the record, and only these: A68's "Not
+    offered" for a second typeface and for margins, S20's "line spacing,
+    three steps", and `PageType`'s note that every choice is kept as a step.
+    Until a reader moves something the page is exactly A68's page.
+
+    - **Five typefaces, chosen by reading them.** Literata stays the page's
+      own and the default; Source Serif 4, EB Garamond, Alegreya and
+      Atkinson Hyperlegible Next join it, each OFL, each a variable face on
+      its own weight axis, each shown in Text with your verse set in it and
+      a ribbon on the one you read (A67's idiom). Each is set at the size
+      that has Literata's x-height (`PageType.pointSize`: Garamond's 19 is
+      23.8), so the size slider means one thing in every face and a line
+      holds about as many letters; and at the weight whose ink matches
+      Literata's (`faceWeight`: Garamond's Book is 440). Garamond and
+      Alegreya have nothing under 400, so their Lighter is their regular.
+      Only the page, Text's strip and the typeface rows take the face:
+      the original words' panel keeps Literata and its Medium (A62), the
+      Greek stays Literata's and the Hebrew Noto's, the numbers and running
+      heads stay Alegreya Sans SC. The colophon names the face you read.
+      Atkinson Hyperlegible is a sans, which the brief keeps off the page;
+      it is here as the reader's choice for legibility, at the owner's word,
+      not as the house's.
+    - **Sliders for the page.** Line spacing and Weight become sliders, and
+      Letter spacing and Margins join them; each has thirteen positions,
+      evenly spaced, from a scale in both cores. Spacing keeps Close, Book
+      and Open exactly (1.55, 1.72, 1.90) among them, weight keeps 350, 400
+      and 470 and still stops short of Medium, letter spacing runs from
+      none to 0.06 em, margins from none to 48 either side. A mark on the
+      track shows Book. A screen reader hears a measure of type, never an
+      axis number: "1.72, Book", "2 steps heavier than Book", "0.025 em
+      wider", "24 point margins". Values are stored as integers under keys
+      of their own, and the old step is written beside each, so an older
+      build opens on the nearest page it knows; old files read their steps
+      as before.
+    - **The page in view.** Over the page's controls is a strip of the page
+      itself, edge to edge, at the page's own width, insets and margins, so
+      its lines break where the page's do. It keeps one height whatever is
+      set, so nothing under a finger moves while a slider is dragged; and
+      while a slider further down is held, a copy of it is pinned under the
+      bar, and stays a moment after. A slider is written once, when the
+      finger lifts.
+    - **Margins, and presence.** The left edge is the notes': the margin
+      goes outside the gutter, which keeps its width, so a note's mark stays
+      beside its words. The right edge is the people's: the margin is room
+      between the words and that edge, and the presence form — lozenge,
+      panel, the follow thread — is where it was and its files are
+      untouched. On Android the panel still asks the column for its room;
+      the margin is worked out from what is left, so opening the panel
+      takes the margin first and never the words. The words keep at least
+      thirteen ems of Literata at the size Dynamic Type or the font scale
+      makes them, so at the largest sizes the margins give way altogether,
+      as the slider's line says. Presence and following speak in verses
+      and words, never in points, so a margin moves them no more than a
+      text size does; on Android the page set again on standby lands back
+      on its verse for a face, a spacing or a margin as for a size.
+    - **What's New** gains a seventh picture in this release: John 1:1's
+      first words in each face, a ribbon walking down them and resting on
+      the last.
+
+    **Still not offered.** Word spacing (neither phone's text system has
+    it), hiding the verse numbers (A68), a font list or a picker by name, and
+    any face that cannot draw the weights the page asks for.
+
+    **Left as it was found.** The two phones' line spacing still differs
+    (A68): iOS multiplies each face's own line, Android the em. The core
+    keeps every face's pitch equal to Literata's on each phone, so a face
+    changes nothing about the difference; looking at both side by side is
+    still owed before changing either.
+
 ## iOS (phase four): the second pass
 
 Android took a design pass of its own (A18–A51) and the two platforms
@@ -5528,6 +5605,34 @@ I42. **The page, the way you read it, on iOS (A68), and settings that
       words also give way in size, to 0.6, before they are cut: "Heavier"
       is wider than a third of the control at AX3 on a narrow phone. Android's
       segments do the same at its largest font scale.
+
+I43. **Sliders and typefaces, on iOS (A69).**
+
+    - **Faces on the axis.** Every face is found by its PostScript name,
+      then its family, and moved along its weight axis the way Literata is
+      (I42): the variation copied, 'wght' set, 'opsz' left to Core Text.
+      Literata at Book takes today's path, unchanged; a face that cannot be
+      found sets the page in Literata rather than the system's. The page's
+      size stays Literata's — the face is set at `pointSize`, and the
+      numbers, indents and running head keep to Literata's size.
+    - **One pitch whatever the face.** `lineHeightMultiple` multiplies a
+      face's own line, so another face takes the multiple that keeps
+      Literata's pitch (`naturalLineMultiple`). The strip in Text adds the
+      page's leading to SwiftUI's natural line (`extraLeading`), where the
+      old preview added a share of the size and was a seventh tighter than
+      the page.
+    - **Letter spacing** is a kern on the words' runs alone, in each run's
+      own points; no character a mark or a selection counts in moves.
+    - **Margins** follow the page in `updateUIView` as well as at creation,
+      and the gutter's marks, the fetching chapter, the open note and the
+      passage end's rule move with them.
+    - **The drawn slider moves through positions.** `RibbonSlider` takes an
+      index and a count, a Book mark, and pictures for its two ends from the
+      caller; the size slider moves to it. While a finger is down the
+      position is its own and only shown; it is written when the finger
+      lifts, or at once for a tap or a VoiceOver step. A drag the scroll
+      takes away is written all the same. `Segments` had no caller left
+      and is gone.
 
 ## Licensed translations (decided: API.Bible)
 
