@@ -56,6 +56,36 @@ enum class WhatsNewItem {
      * the Hebrew larger and at full strength (A66).
      */
     originalReadable,
+
+    /**
+     * You opens like the front of a Bible: your name, your face, a ribbon
+     * for every room you read in, and a colophon at the foot (A67).
+     */
+    flyleaf,
+
+    /** Every book you have finished, with whoever, on one shelf (A67). */
+    yourShelf,
+
+    /** Each version is shown in its own words, and a ribbon marks yours (A67). */
+    versionsByReading,
+
+    /**
+     * The page, the way you read it: a new line for every verse, a lighter
+     * or heavier letter, clearer verse numbers, and a larger size (A68).
+     */
+    yourPage,
+
+    /** The notification switches say who, in the words the phone will use (A67). */
+    notificationsByName,
+
+    /** Quiet hours are one band, the night, rather than two pickers (A67). */
+    quietHoursNight,
+
+    /**
+     * The page can be set in one of five typefaces, each at a size that
+     * matches Literata's (A69).
+     */
+    typeface,
 }
 
 /**
@@ -77,6 +107,19 @@ object WhatsNew {
      * are simply how the app is now — there for the reading, from You.
      */
     val releases: List<WhatsNewRelease> = listOf(
+        WhatsNewRelease(
+            id = "2026-10-flyleaf",
+            released = "2026-10-08",
+            items = listOf(
+                WhatsNewItem.flyleaf,
+                WhatsNewItem.yourShelf,
+                WhatsNewItem.versionsByReading,
+                WhatsNewItem.yourPage,
+                WhatsNewItem.typeface,
+                WhatsNewItem.notificationsByName,
+                WhatsNewItem.quietHoursNight,
+            ),
+        ),
         WhatsNewRelease(
             id = "2026-10-following",
             released = "2026-10-06",

@@ -2,8 +2,6 @@
 
 package app.readribbon.screens
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,8 +18,8 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -39,12 +37,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -68,6 +67,7 @@ import app.readribbon.core.NoteKind
 import app.readribbon.core.Room
 import app.readribbon.core.VerseAddress
 import app.readribbon.design.HairlineRule
+import app.readribbon.design.HangingRibbon
 import app.readribbon.design.Air
 import app.readribbon.design.InkDot
 import app.readribbon.design.NoteMark
@@ -100,18 +100,22 @@ import kotlin.uuid.Uuid
 // follow, nothing to score. No join date, no activity, no counts of
 // anything they've done.
 
-/** The drawn ink swatch in the picker. */
-private val SWATCH_DIAMETER: Dp = 30.dp
+/**
+ * The inks in the picker are ribbons (A67): each this wide, hanging this
+ * far — further for the one that is yours, pulled down past the others, and
+ * short for one somebody else holds. Which is yours is said by a length, a
+ * shape, where it used to be a ring.
+ */
+private val INK_RIBBON_WIDTH: Dp = 18.dp
+private val INK_RIBBON_YOURS: Dp = 60.dp
+private val INK_RIBBON_FREE: Dp = 44.dp
+private val INK_RIBBON_HELD: Dp = 30.dp
 
 /**
- * The width each swatch is tapped by. Swift draws 30 pt and widens the hit
- * shape to ~44 pt with `contentShape(Rectangle().inset(by: -7))`, keeping
- * the 16 pt gaps it lays out with; Compose has no hit-shape-only inset, so
- * the gap is folded into the target instead — eight 44 dp columns come to
- * exactly the 352 dp the Swift row occupies, and the drawn circles keep a
- * 14 dp gap rather than 16. Widening the frames and keeping the gaps would
- * overflow a 360 dp phone, which is the same arithmetic Swift's comment
- * does for 375 pt.
+ * The width each ink is tapped by: eight 44 dp columns side by side, which
+ * is exactly the 352 dp the Swift row occupies and still fits a 360 dp
+ * phone. Each column is as long as your ribbon, so every ink is a target
+ * the same size whatever its length.
  */
 private val SWATCH_TARGET: Dp = 44.dp
 
@@ -592,10 +596,15 @@ fun ConfirmChoice(
  * Picking an ink when color is identity (§4.5, §6.7) — an invitation, not
  * an interruption.
  *
- * Swift asks for a 220 pt detent and `.presentationSizing(.fitted)` so an
+ * The eight inks are eight ribbons hanging from a rule (A67), each in a
+ * 44 dp column: yours pulled further down than the rest, one somebody else
+ * holds drawn short and faint.
+ *
+ * Swift asks for a fixed detent and `.presentationSizing(.fitted)` so an
  * iPad does not float eight swatches at the top of a vast form sheet; a
  * modal bottom sheet is already the height of what it holds, on every size
- * of screen, so there is nothing to pin.
+ * of screen, so there is nothing to pin — the longer column is simply a
+ * taller sheet.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -641,12 +650,23 @@ fun InkPickerSheet(
                 )
                 val taken = model.members(room).mapNotNull { it.ink }
                 val mine = model.myMembership(room)?.ink
+                // Read here: a draw lambda is not a composition (A18).
+                val rule = Palette.rule
                 Row(
-                    modifier = Modifier.padding(
-                        bottom = 34.dp +
-                            WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(),
-                    ),
-                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .padding(
+                            bottom = 34.dp +
+                                WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(),
+                        )
+                        // The rule the ribbons hang from, the row's own width
+                        // and drawn over their top edges, so each reads as
+                        // tucked under it — the binding your ribbons hang
+                        // from on You.
+                        .drawWithContent {
+                            drawContent()
+                            drawRect(color = rule, size = Size(size.width, 1.dp.toPx()))
+                        },
+                    verticalAlignment = Alignment.Top,
                 ) {
                     Ink.entries.forEach { ink ->
                         val isTaken = taken.contains(ink) && ink != mine
@@ -668,9 +688,9 @@ fun InkPickerSheet(
 }
 
 /**
- * One ink to choose: 30 dp drawn, 44 dp tappable, ringed when it is already
- * yours and washed out when it is already someone else's. Which someone is
- * never said — an ink that is taken is only taken.
+ * One ink to choose: a ribbon in a 44 dp column, pulled down when it is
+ * already yours and short and faint when it is already someone else's.
+ * Which someone is never said — an ink that is taken is only taken.
  */
 @Composable
 private fun InkPickerSwatch(
@@ -680,19 +700,10 @@ private fun InkPickerSwatch(
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
-    // The ring is the answer to the tap, and the sheet slides away a moment
-    // later — so the ring has to be *seen* arriving, not merely be there in the
-    // frame before the slide. Eased in on the arrive token, which is long
-    // enough to read and short enough to finish before the sheet goes.
-    val ringed by animateFloatAsState(
-        targetValue = if (isMine) 1f else 0f,
-        animationSpec = RibbonMotion.arrive(rememberReduceMotion()),
-        label = "your-ink",
-    )
-
     Box(
         modifier = modifier
-            .size(SWATCH_TARGET)
+            .width(SWATCH_TARGET)
+            .height(INK_RIBBON_YOURS)
             .clickable(enabled = !isTaken, role = Role.Button, onClick = onClick)
             .semantics {
                 contentDescription = Copy.inkSwatchSpoken(
@@ -700,36 +711,26 @@ private fun InkPickerSwatch(
                     yours = isMine,
                     taken = isTaken,
                 )
+                // Yours is a length, and a length is not heard (§11): the
+                // column says it is the chosen one as well as saying "yours".
+                selected = isMine
                 if (isTaken) disabled()
             },
-        contentAlignment = Alignment.Center,
+        contentAlignment = Alignment.TopCenter,
     ) {
-        // Read out here: a draw lambda is not a composition, and the room's
-        // ink is a composition local now.
-        val ivory = Palette.text
-        Canvas(Modifier.size(SWATCH_TARGET)) {
-            val centre = Offset(size.width / 2f, size.height / 2f)
-            drawCircle(
-                color = ink.color.copy(alpha = if (isTaken) 0.2f else 1f),
-                radius = SWATCH_DIAMETER.toPx() / 2f,
-                center = centre,
-            )
-            if (ringed > 0f) {
-                // Swift's `.padding(-4)` on a stroked border: the ring sits
-                // 4 pt outside the swatch, and `strokeBorder` draws inside
-                // that edge rather than centred on it.
-                val stroke = 1.6.dp.toPx()
-                drawCircle(
-                    color = ivory.copy(alpha = 0.8f * ringed),
-                    // Closing on the swatch as it fades in, so the ring reads
-                    // as something settling around the ink rather than as a
-                    // second circle switched on beside it.
-                    radius = SWATCH_DIAMETER.toPx() / 2f +
-                        (4.dp.toPx() + (1f - ringed) * 5.dp.toPx()) - stroke / 2f,
-                    center = centre,
-                    style = Stroke(width = stroke),
-                )
-            }
-        }
+        // The length is the answer to the tap, and the sheet slides away a
+        // moment later — so the change has to be *seen*, not merely be there
+        // in the frame before the slide: yours is pulled down on the hand's
+        // spring as the one you left rises, and under reduce motion one
+        // length fades into the other.
+        HangingRibbon(
+            color = ink.color.copy(alpha = if (isTaken) 0.2f else 1f),
+            width = INK_RIBBON_WIDTH,
+            length = when {
+                isMine -> INK_RIBBON_YOURS
+                isTaken -> INK_RIBBON_HELD
+                else -> INK_RIBBON_FREE
+            },
+        )
     }
 }

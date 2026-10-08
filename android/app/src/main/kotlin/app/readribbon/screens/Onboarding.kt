@@ -80,6 +80,7 @@ import app.readribbon.app.AppModel
 import app.readribbon.app.Copy
 import app.readribbon.core.Ink
 import app.readribbon.core.Invite
+import app.readribbon.design.ChoiceRibbon
 import app.readribbon.design.Palette
 import app.readribbon.design.QuietControl
 import app.readribbon.design.RibbonMotion
@@ -146,6 +147,9 @@ private val ColumnMeasure = 420.dp
 
 /** The visible field is small; the tappable field is never under 44 dp. */
 private val TouchTarget = 44.dp
+
+/** An intent tile's words from its edge, and its ribbon from the same edge. */
+private val IntentInset = 18.dp
 
 /** The mark dissolving into the room — this file's own duration, still
  *  a cut under reduce motion like every other token (§11). */
@@ -464,9 +468,10 @@ private fun IntentStep(
         // and their own border, where every other list in the app is now a
         // seam-separated group sharing one outer radius.
         //
-        // So the words are `text` in both states, the accent hairline and
-        // the check carry the selection between them (colour is never the
-        // only signal, §11), and the tiles are the app's.
+        // So the words are `text` in both states, the ribbon laid into the
+        // chosen tile carries the selection with `selected` beside it (colour
+        // is never the only signal, §11, and A67), and the tiles are the
+        // app's.
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -485,7 +490,7 @@ private fun IntentStep(
                 val dotColor = ink.color
                 val shape = RibbonShape.inGroup(i, intents.size)
 
-                Row(
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = TouchTarget)
@@ -494,23 +499,15 @@ private fun IntentStep(
                             role = Role.RadioButton,
                             onClick = { onIntentSelected(i) },
                         )
-                        // The selected tile is ringed rather than repainted:
-                        // a fill change would have to be a colour the room
-                        // does not own, and a wallpaper may have taken the
-                        // one we would have used.
-                        .then(
-                            if (isSelected) {
-                                Modifier.border(1.dp, Palette.accent, shape)
-                            } else {
-                                Modifier
-                            },
-                        )
-                        .semantics { selected = isSelected }
-                        .padding(horizontal = 18.dp, vertical = 15.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                        // The ribbon is a shape and a colour, and neither is
+                        // heard (§11): the tile also says it is the chosen one.
+                        .semantics { selected = isSelected },
+                    contentAlignment = Alignment.CenterStart,
                 ) {
                     Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = IntentInset, vertical = 15.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
@@ -523,31 +520,23 @@ private fun IntentStep(
                             text = title,
                             style = RibbonType.ui(16f),
                             color = Palette.text,
+                            modifier = Modifier.weight(1f),
                         )
+                        // The ribbon's own column, kept clear in every tile,
+                        // chosen or not, as SettingChoice keeps it.
+                        Spacer(Modifier.width(10.dp))
                     }
-
-                    if (isSelected) {
-                        // Read out here: a draw lambda is not a composition,
-                        // and the room's accent is a composition local now.
-                        val accent = Palette.accent
-                        Canvas(modifier = Modifier.size(16.dp)) {
-                            val stroke = 2.dp.toPx()
-                            drawLine(
-                                color = accent,
-                                start = Offset(size.width * 0.2f, size.height * 0.5f),
-                                end = Offset(size.width * 0.45f, size.height * 0.75f),
-                                strokeWidth = stroke,
-                                cap = StrokeCap.Round,
-                            )
-                            drawLine(
-                                color = accent,
-                                start = Offset(size.width * 0.45f, size.height * 0.75f),
-                                end = Offset(size.width * 0.8f, size.height * 0.25f),
-                                strokeWidth = stroke,
-                                cap = StrokeCap.Round,
-                            )
-                        }
-                    }
+                    // The chosen tile is marked as every single choice on
+                    // paper is (A67): a ribbon laid in from the tile's top
+                    // edge, under the clip of its paper — the mark iOS draws
+                    // here too. It was an accent ring and a drawn check.
+                    ChoiceRibbon(
+                        laid = isSelected,
+                        color = Palette.accent,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(end = IntentInset),
+                    )
                 }
             }
         }

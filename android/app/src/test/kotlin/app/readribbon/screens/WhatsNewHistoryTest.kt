@@ -14,6 +14,7 @@ import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.test.core.app.ApplicationProvider
 import app.readribbon.app.AppModel
@@ -89,7 +90,9 @@ class WhatsNewHistoryTest {
         val m = model(seen = latest.id)
         openYou(m)
         compose.onNodeWithText(Copy.WHATS_NEW_ROW_SUB).assertExists()
-        compose.onNodeWithText(Copy.WHATS_NEW_ROW).performClick()
+        // Scrolled to first: your ribbons now stand between your name and
+        // the settings (A67), and on a short phone this row is below them.
+        compose.onNodeWithText(Copy.WHATS_NEW_ROW).performScrollTo().performClick()
         compose.waitForIdle()
 
         // The newest first, under its day, as a heading.
@@ -122,7 +125,7 @@ class WhatsNewHistoryTest {
         assertEquals(latest, m.whatsNew)
 
         openYou(m)
-        compose.onNodeWithText(Copy.WHATS_NEW_ROW).performClick()
+        compose.onNodeWithText(Copy.WHATS_NEW_ROW).performScrollTo().performClick()
         compose.waitForIdle()
         compose.onNodeWithText(Copy.WHATS_NEW_HISTORY_DONE).performClick()
         compose.waitForIdle()

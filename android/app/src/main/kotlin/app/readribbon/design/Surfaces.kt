@@ -1,7 +1,10 @@
 package app.readribbon.design
 
-import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -24,6 +27,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
@@ -37,9 +41,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -62,6 +69,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.readribbon.app.Copy
+import app.readribbon.core.PageFace
+import app.readribbon.core.PageFaces
+import kotlinx.coroutines.withContext
 
 // The furniture: cards, groups, rows.
 //
@@ -82,8 +92,9 @@ import app.readribbon.app.Copy
 // What is deliberately still absent: icons. Material's icon set is the
 // fastest way to make this look like everybody else's settings, and §14's
 // last test is whether the thing is "obviously made by a person rather than
-// assembled from defaults". The few marks here — a chevron, a moving dot —
-// are drawn, small, and specific to what they say.
+// assembled from defaults". The few marks here — a chevron, a ribbon laid
+// into the chosen tile (A67) — are drawn, small, and specific to what they
+// say.
 
 /** The smallest thing a finger is allowed to have to hit (§11, deviation 12). */
 private val MinTarget = 44.dp
@@ -448,6 +459,13 @@ fun GroupScope.Setting(
  * The whole row is the target and announces as one switch, which is what a
  * toggle is; the drawn switch is smaller than a finger, so the row carries
  * the minimum for it.
+ *
+ * Material's switch, kept (A18/A29): how a switch *behaves* is the
+ * platform's, and every Android hand already knows it.
+ *
+ * @param example the notification this switch lets through, drawn under the
+ *   title — a picture of what will arrive, where a subtitle would only
+ *   describe it (S19, A67). Read after the title, as part of the one switch.
  */
 @Composable
 fun GroupScope.SettingSwitch(
@@ -456,13 +474,14 @@ fun GroupScope.SettingSwitch(
     onChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
     subtitle: String? = null,
+    example: SettingExample? = null,
 ) {
     val shape = slot()
     val source = remember { MutableInteractionSource() }
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .sizeIn(minHeight = if (subtitle == null) RowHeight else TallRowHeight)
+            .sizeIn(minHeight = if (subtitle == null && example == null) RowHeight else TallRowHeight)
             // Squash first, then the paper it is squashing — see
             // [pressablePaper] for why the order is load-bearing.
             .pressed(source)
@@ -485,6 +504,9 @@ fun GroupScope.SettingSwitch(
             Text(text = title, style = RibbonType.ui(17f), color = Palette.text)
             if (subtitle != null) {
                 Text(text = subtitle, style = RibbonType.ui(13f), color = Palette.muted)
+            }
+            if (example != null) {
+                SettingExampleView(example, modifier = Modifier.padding(top = 5.dp))
             }
         }
         Switch(
@@ -621,11 +643,67 @@ fun GroupScope.SettingControl(
 }
 
 /**
+ * Something read after its screen was drawn, arriving rather than appearing
+ * (A67): the space under it opens to it on `settle` and its words fade in,
+ * so nothing lands on one frame and pushes everything below it down. Under
+ * reduce motion the space is simply there and only the fade is left, on the
+ * clock that keeps a fade a fade (I22). Whatever is there on the first frame
+ * is simply there, and whatever leaves keeps its last words to leave with.
+ *
+ * Nothing at all is drawn while [value] is null — not even the space a
+ * column's spacing would put round it.
+ */
+@Composable
+fun <T : Any> ArrivingLate(
+    value: T?,
+    modifier: Modifier = Modifier,
+    content: @Composable (T) -> Unit,
+) {
+    val still = rememberReduceMotion()
+    val present = value != null
+    var last by remember { mutableStateOf(value) }
+    LaunchedEffect(value) { if (value != null) last = value }
+    val alpha = remember { Animatable(if (present) 1f else 0f) }
+    LaunchedEffect(present) {
+        withContext(FadesUnderReduceMotion) {
+            alpha.animateTo(if (present) 1f else 0f, RibbonMotion.settle())
+        }
+    }
+    // `visible` rather than a transition state: what is there on the first
+    // frame starts there, and only a change afterwards is animated.
+    AnimatedVisibility(
+        visible = present,
+        modifier = modifier,
+        enter = expandVertically(RibbonMotion.settle(still), expandFrom = Alignment.Top),
+        exit = shrinkVertically(RibbonMotion.settle(still), shrinkTowards = Alignment.Top),
+        label = "arriving-late",
+    ) {
+        val words = value ?: last ?: return@AnimatedVisibility
+        Box(Modifier.graphicsLayer { this.alpha = alpha.value }) {
+            content(words)
+        }
+    }
+}
+
+/** The ribbon laid into a chosen row (A67), and the clear slot kept for it. */
+private val ChosenRibbonWidth = 10.dp
+private val ChosenRibbonLength = 22.dp
+
+/**
  * A row that is one of a set you pick from, with the chosen one marked.
  *
- * The dot belongs to its row and fades up where the choice landed, rather
- * than sliding down the list past rows nobody chose — a mark that travels
- * implies the rows in between were passed through, and they weren't.
+ * Marked by a ribbon laid into the top of its tile (A67) — the way a book
+ * is marked at the page you chose, and the shape the rest of the room uses
+ * for "this one". It was a drawn check, which was Material's mark for a
+ * choice and nothing of the book's. The ribbon belongs to its row: it lays
+ * in where the choice landed and lifts out of the row the choice left,
+ * rather than sliding down the list past rows nobody chose — a mark that
+ * travels implies the rows in between were passed through, and they weren't.
+ *
+ * @param specimen a few words of what the choice *is*, set the way it will
+ *   be read: a version's own text of the verse you are at (S20, A67). In
+ *   the Scripture face, between the title and the subtitle, so the row is
+ *   chosen by reading it rather than by its name.
  */
 @Composable
 fun GroupScope.SettingChoice(
@@ -634,65 +712,69 @@ fun GroupScope.SettingChoice(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     subtitle: String? = null,
+    specimen: String? = null,
+    /** The face the specimen is set in (A69): Literata for a version, each typeface for itself. */
+    specimenFace: PageFace = PageFaces.literata,
+    /** The specimen's weight, in Literata's terms: Book, or Book with Bold Text (A69). */
+    specimenWeight: Int = 400,
 ) {
     val shape = slot()
-    val still = rememberReduceMotion()
-    val accent = Palette.accent
-    val dot by animateColorAsState(
-        targetValue = if (chosen) accent else Color.Transparent,
-        animationSpec = RibbonMotion.touched(still),
-        label = "the-chosen-one",
-    )
-    Row(
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .sizeIn(minHeight = if (subtitle == null) RowHeight else TallRowHeight)
+            .sizeIn(
+                minHeight = if (subtitle == null && specimen == null) RowHeight else TallRowHeight,
+            )
             .pressablePaper(shape, role = Role.RadioButton, onClick = onClick)
-            // The dot is a colour, and colour is never the only signal
-            // (§11): the row also announces itself as the chosen one.
-            .semantics { selected = chosen }
-            .padding(horizontal = TextInset, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+            // The ribbon is a shape and a colour, and neither is heard (§11):
+            // the row also announces itself as the chosen one.
+            .semantics { selected = chosen },
+        contentAlignment = Alignment.CenterStart,
     ) {
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(3.dp),
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = TextInset, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(text = title, style = RibbonType.ui(17f), color = Palette.text)
-            if (subtitle != null) {
-                Text(text = subtitle, style = RibbonType.ui(13f), color = Palette.muted)
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Text(text = title, style = RibbonType.ui(17f), color = Palette.text)
+                // A specimen is read off the main thread, so one can come
+                // after its row is drawn.
+                ArrivingLate(specimen) { words ->
+                    Text(
+                        text = words,
+                        style = RibbonType.scripture(16f, specimenWeight, specimenFace),
+                        color = Palette.text.copy(alpha = 0.86f),
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(vertical = 2.dp),
+                    )
+                }
+                if (subtitle != null) {
+                    Text(text = subtitle, style = RibbonType.ui(13f), color = Palette.muted)
+                }
             }
+            // The ribbon's own column, kept clear in every row, chosen or not:
+            // words that ran under it in one row and stopped short of it in
+            // the next would move as the choice did.
+            Spacer(Modifier.width(ChosenRibbonWidth))
         }
-        // A check, not a dot.
-        //
-        // Material marks a single choice in a settings list with a check, and
-        // an 8 dp filled circle — which is what stood here — reads as a
-        // status light rather than as "this one". Drawn rather than an icon
-        // font, for the reason every mark in this app is drawn: the app ships
-        // no icon set and adding one for a single tick would be a dependency
-        // in exchange for a shape two lines describe.
-        Box(
-            Modifier
-                .size(20.dp)
-                .drawBehind {
-                    if (dot.alpha == 0f) return@drawBehind
-                    val stroke = 2.dp.toPx()
-                    drawLine(
-                        color = dot,
-                        start = Offset(size.width * 0.18f, size.height * 0.52f),
-                        end = Offset(size.width * 0.42f, size.height * 0.76f),
-                        strokeWidth = stroke,
-                        cap = StrokeCap.Round,
-                    )
-                    drawLine(
-                        color = dot,
-                        start = Offset(size.width * 0.42f, size.height * 0.76f),
-                        end = Offset(size.width * 0.82f, size.height * 0.26f),
-                        strokeWidth = stroke,
-                        cap = StrokeCap.Round,
-                    )
-                },
+        // Laid over the tile's paper rather than in the row, so it hangs from
+        // the tile's own top edge and not from the padding inside it; the
+        // tile's clip is what makes it read as tucked under the edge.
+        ChoiceRibbon(
+            laid = chosen,
+            color = Palette.accent,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(end = TextInset),
+            width = ChosenRibbonWidth,
+            length = ChosenRibbonLength,
         )
     }
 }

@@ -1,7 +1,10 @@
 package app.readribbon.app
 
 import android.content.Context
+import app.readribbon.core.NamedReading
 import app.readribbon.core.OriginalLanguage
+import app.readribbon.core.PageFaces
+import app.readribbon.core.PageType
 
 // Every user-facing string, in one place, so the voice rules (§10) can be
 // audited: short sentences, second person, no exclamation points, never name
@@ -987,8 +990,11 @@ object Copy {
      * find out what it is; a row that says what is actually on the phone has
      * answered already. Each one states a fact about *your* copy of the app,
      * never a feature description.
+     *
+     * S20 (A68): Text's says what it is about, now that the page has more to
+     * set than a subtitle can list.
      */
-    const val TEXT_SUB = "Translation, size, spacing, red letter"
+    const val TEXT_SUB = "Translation, typeface, and how the page is set"
     const val NOTIFICATIONS_SUB = "Per room, and your quiet hours"
     /**
      * A function, not a constant, for the reason deviation A8 exists: the
@@ -1093,6 +1099,7 @@ object Copy {
 
     /** The two groups on the text screen. */
     const val THE_PAGE = "The page"
+    const val TYPEFACE = "Typeface"
 
     /** The one group on Appearance. */
     const val COLOUR = "Colour"
@@ -1113,16 +1120,20 @@ object Copy {
     const val THINKING_OF_YOU_SUB = "A touch on the shoulder. No words."
     const val TEXT_SIZE_SUB = "Scripture only. Everything else stays where it is."
     const val LINE_SPACING_SUB = "How much air between the lines."
+    /** S20 (A68): Literata's own weight, drawn, never a bold laid on top. */
+    const val WEIGHT_SUB = "How much ink each letter carries."
+    const val LETTER_SPACING_SUB = "Room between the letters. A line holds fewer of them."
+    const val MARGINS_SUB = "Room either side of the words. At the largest sizes the words keep it."
+    /** S20 (A68): prose only; a poem is already set line by line. */
+    const val VERSE_LINES_SUB = "Easier to find your place. Poetry keeps its own lines."
+    /** S20 (A68): only the numbers' ink changes, so nothing on the page moves. */
+    const val CLEAR_NUMBERS_SUB = "Brighter, so a verse is quick to find."
     const val RED_LETTER_SUB = "Where the text marks them."
 
     /** What a translation is, told as a fact about this phone. */
     fun bundledSub(context: Context) = "On this ${deviceNoun(context)} already, whole."
     fun streamsSub(context: Context) =
         "Streams. The book you are in stays on the ${deviceNoun(context)}."
-
-    /** The two ends of quiet hours, as rows rather than as a sentence. */
-    const val QUIET_HOURS_FROM = "From"
-    const val QUIET_HOURS_UNTIL = "Until"
 
     const val TEXT_AND_TRANSLATION = "Text"
     const val NOTIFICATIONS = "Notifications"
@@ -1133,6 +1144,14 @@ object Copy {
     const val TRANSLATION = "Translation"
     const val TEXT_SIZE = "Text size"
     const val LINE_SPACING = "Line spacing"
+    /** S20 (A68): the weight control's title, and its name to a screen reader. */
+    const val WEIGHT = "Weight"
+    const val LETTER_SPACING = "Letter spacing"
+    const val MARGINS = "Margins"
+    /** S20 (A68): says what happens, in the page's own terms. */
+    const val VERSE_LINES = "A new line for every verse"
+    /** S20 (A68): the numbers, not the verses, are what change. */
+    const val CLEAR_NUMBERS = "Clearer verse numbers"
     const val RED_LETTER = "Words of Jesus in red"
     const val NOTES_LEFT_FOR_YOU = "Notes left for you"
     const val CARDS_OPEN = "The cards open"
@@ -1154,8 +1173,28 @@ object Copy {
     const val LINE_SPACING_BOOK = "Book"
     const val LINE_SPACING_OPEN = "Open"
 
-    /** Between the two ends of quiet hours (S19). Swift writes it inline. */
-    const val QUIET_HOURS_TO = "to"
+    /**
+     * S20 (A68): the three stops of the weight control, Book in the middle
+     * as it is for line spacing: the weight the page has always had.
+     */
+    const val WEIGHT_LIGHTER = "Lighter"
+    const val WEIGHT_BOOK = "Book"
+    const val WEIGHT_HEAVIER = "Heavier"
+
+    /** Text (A69): each typeface in a line of its own. */
+    const val TYPEFACE_LITERATA_SUB = "Drawn for long reading on a screen."
+    const val TYPEFACE_SOURCE_SERIF_SUB = "Crisp and open, a little sturdier."
+    const val TYPEFACE_GARAMOND_SUB = "The Garamond of printed Bibles."
+    const val TYPEFACE_ALEGREYA_SUB = "Warm, with the movement of a pen."
+    const val TYPEFACE_ATKINSON_SUB = "Every letter distinct, for low vision."
+    fun typefaceSub(id: String): String? = when (id) {
+        PageFaces.literata.id -> TYPEFACE_LITERATA_SUB
+        PageFaces.sourceSerif.id -> TYPEFACE_SOURCE_SERIF_SUB
+        PageFaces.ebGaramond.id -> TYPEFACE_GARAMOND_SUB
+        PageFaces.alegreya.id -> TYPEFACE_ALEGREYA_SUB
+        PageFaces.atkinson.id -> TYPEFACE_ATKINSON_SUB
+        else -> null
+    }
 
     /**
      * What quiet hours do not silence (S19): the one notification that is a
@@ -1203,6 +1242,129 @@ object Copy {
      */
     const val ORIGINAL_CREDIT =
         "Hebrew and Greek: the Berean Standard Bible translation tables and the Westminster Leningrad Codex, public domain. Definitions: Strong’s Exhaustive Concordance (1890), public domain. Hebrew set in Noto Serif Hebrew (SIL Open Font License)."
+
+    // The front of the book (A67) — You opens the way a Bible does: the
+    // name on the flyleaf, a ribbon for each room, the shelf, and a colophon
+    // at the end. Nothing here is a count.
+
+    /** The flyleaf (A67): the section of ribbons under your name. */
+    const val YOUR_RIBBONS = "Your ribbons"
+
+    /** The flyleaf (A67): what the ribbons are, said once under them. */
+    const val YOUR_RIBBONS_FOOTNOTE = "One for each room you read in, left where that room left it."
+
+    /** The flyleaf (A67): a room's ribbon with no book open in that room. */
+    const val BETWEEN_BOOKS = "between books"
+
+    /**
+     * The flyleaf (A67): one ribbon, spoken — the room, where its ribbon
+     * lies, and your ink there when ink is who you are in it.
+     */
+    fun ribbonSpoken(room: String, place: String, ink: String?): String =
+        if (ink == null) "$room. $place." else "$room. $place. Your ink there is $ink."
+
+    /**
+     * The flyleaf (A67): what touching a ribbon does, as TalkBack's click
+     * label says an action — "double-tap to go to that room" — where iOS's
+     * hint says the consequence.
+     */
+    const val GOES_TO_THAT_ROOM = "go to that room"
+
+    /** Your shelf (A67): every book you have finished, in every room. */
+    const val YOUR_SHELF = "Your shelf"
+
+    /**
+     * Your shelf (A67): who a book was read with, by first name, the rest as
+     * "others" — never a number.
+     */
+    fun shelfWith(names: List<String>, andOthers: Boolean): String =
+        "with " + listed(if (andOthers) names + "others" else names)
+
+    /** Your shelf (A67): a room of three or more, said by its own name. */
+    fun shelfWithRoom(name: String) = "with $name"
+
+    /** Your shelf (A67): one ember, spoken. */
+    fun emberSpoken(book: String, company: String?): String =
+        if (company == null) book else "$book, $company"
+
+    /**
+     * The colophon (A67): what the book is set in, the way a book's last
+     * page says it — your page's typeface (A69).
+     */
+    fun colophonSetIn(face: String) = "Set in $face and Alegreya Sans."
+
+    /** Text (A67): the verse every version is shown at. */
+    fun specimenAt(reference: String) = "Each one shows $reference in its own words."
+
+    /** Text (A69): the verse every typeface is shown at. */
+    fun typefaceSpecimenAt(reference: String) = "Each one sets $reference in its own letters."
+
+    /** Text (A67): the size, spoken — a measure of type, not of a person. */
+    fun textSizeValue(size: Double): String {
+        val whole = size % 1.0 == 0.0
+        return (if (whole) size.toInt().toString() else String.format(java.util.Locale.ROOT, "%.1f", size)) + " point"
+    }
+
+    /**
+     * Text (A69): line spacing, spoken — the multiple, with its old name on
+     * one of the three stops it had.
+     */
+    fun lineSpacingValue(hundredths: Int): String {
+        val number = String.format(java.util.Locale.ROOT, "%.2f", hundredths / 100.0)
+        return when (hundredths) {
+            PageType.lineSpacingNamed[0] -> "$number, $LINE_SPACING_CLOSE"
+            PageType.lineSpacingNamed[1] -> "$number, $LINE_SPACING_BOOK"
+            PageType.lineSpacingNamed[2] -> "$number, $LINE_SPACING_OPEN"
+            else -> number
+        }
+    }
+
+    /**
+     * Text (A69): weight, spoken — never an axis number: the nearest of the
+     * three stops it had, and how many steps from it.
+     */
+    fun weightValue(reading: NamedReading): String {
+        val stop = listOf(WEIGHT_LIGHTER, WEIGHT_BOOK, WEIGHT_HEAVIER)[reading.index.coerceIn(0, 2)]
+        if (reading.offset == 0) return stop
+        val n = kotlin.math.abs(reading.offset)
+        val steps = if (n == 1) "1 step" else "$n steps"
+        return "$steps ${if (reading.offset > 0) "heavier" else "lighter"} than $stop"
+    }
+
+    /** Text (A69): letter spacing, spoken, in ems. */
+    fun letterSpacingValue(thousandths: Int): String {
+        if (thousandths == 0) return "As set"
+        val number = String.format(java.util.Locale.ROOT, "%.3f", thousandths / 1000.0).trimEnd('0')
+        return "$number em wider"
+    }
+
+    /** Text (A69): the margins, spoken. */
+    fun marginValue(points: Int): String = if (points == 0) "As set" else "$points point margins"
+
+    /** Notifications (A67): the words a switch's notification will use, spoken. */
+    fun notificationExampleSpoken(sentence: String) = "It reads: $sentence"
+
+    /** Notifications (A67): the cards, in a room of two. */
+    fun cardsOpenSubNamed(name: String) = "When you and $name have both answered."
+
+    /** Notifications (A67): the book opened, in a room of two. */
+    fun whenNameOpensTheBook(name: String) = "When $name opens the book"
+
+    /** Notifications (A67): thinking of you, in a room of two. */
+    fun thinkingOfYouSubNamed(name: String) = "A touch on the shoulder from $name. No words."
+
+    /** Quiet hours (A67): the band's two ends, said as one line. */
+    fun quietHoursFromUntil(from: String, until: String) = "From $from until $until"
+
+    /** Quiet hours (A67): both ends on the same minute. */
+    const val NO_QUIET_HOURS = "No quiet hours"
+
+    /** Quiet hours (A67): what the band is for. */
+    const val QUIET_HOURS_BAND_SUB = "Drag either end of the night."
+
+    /** Quiet hours (A67): the band's two handles, spoken. */
+    const val QUIET_HOURS_BEGIN = "Quiet hours begin"
+    const val QUIET_HOURS_END = "Quiet hours end"
 
     // Updates
     fun updateAvailable(version: String) = "A new version of Ribbon is ready ($version)"
@@ -1322,6 +1484,7 @@ object Copy {
     fun whatsNewTitle(releaseID: String): String = when (releaseID) {
         "2026-10-original" -> "The words under the words"
         "2026-10-following" -> "Staying on the same page"
+        "2026-10-flyleaf" -> "The front of the book"
         else -> WHATS_NEW_HEADING
     }
 
@@ -1417,6 +1580,61 @@ object Copy {
      * only that this is finished.
      */
     const val WHATS_NEW_HISTORY_DONE = "Done"
+
+    /** What's new (A67): You opens like the front of a Bible. */
+    const val WHATS_NEW_FLYLEAF_TITLE = "Your name in the front of the book"
+
+    /** What's new (A67): the flyleaf and its ribbons. */
+    const val WHATS_NEW_FLYLEAF_BODY =
+        "Tap your face and the page opens the way a Bible does: your name, " +
+            "then a ribbon for each room you read in, left where that room left it."
+
+    /** What's new (A67): your shelf, across your rooms. */
+    const val WHATS_NEW_SHELF_TITLE = "Every book you have finished, on one shelf"
+
+    /** What's new (A67): what is on it. */
+    const val WHATS_NEW_SHELF_BODY =
+        "Under your ribbons, an ember for each book you finished in any of your rooms, and who you read it with."
+
+    /** What's new (A67): versions shown in their own words. */
+    const val WHATS_NEW_VERSIONS_TITLE = "Choose a version by reading it"
+
+    /** What's new (A67): the specimens, the ribbon, and the page. */
+    const val WHATS_NEW_VERSIONS_BODY =
+        "Each version shows your verse in its own words, and a ribbon marks the one you read. " +
+            "The size you choose is set on a real page."
+
+    /** What's new (A68): the page, set the way you read it. */
+    const val WHATS_NEW_PAGE_TITLE = "The page, the way you read it"
+
+    /** What's new (A68): where it is, and what it does. */
+    const val WHATS_NEW_PAGE_BODY =
+        "In Text, sliders set the size, the spacing, the weight, the room between letters and the margins, " +
+            "with the page in view while you move them. Each verse can start a line of its own, " +
+            "and the verse numbers can be clearer."
+
+    /** What's new (A69): five typefaces. */
+    const val WHATS_NEW_TYPEFACE_TITLE = "Set in the type you read best"
+
+    /** What's new (A69): where it is, and what it does. */
+    const val WHATS_NEW_TYPEFACE_BODY =
+        "In Text, the page can be set in Literata, Source Serif, EB Garamond, Alegreya or Atkinson Hyperlegible. " +
+            "Each shows your verse in its own letters, at a size that matches."
+
+    /** What's new (A67): the switches say who. */
+    const val WHATS_NEW_NOTIFICATIONS_TITLE = "Notifications say who"
+
+    /** What's new (A67): in a room of two. */
+    const val WHATS_NEW_NOTIFICATIONS_BODY =
+        "In a room of two, the switches use their name, and while a book is open, two of them show what your phone will say, with their face."
+
+    /** What's new (A67): quiet hours as one band. */
+    const val WHATS_NEW_QUIET_HOURS_TITLE = "Quiet hours, drawn as the night"
+
+    /** What's new (A67): how it is set. */
+    const val WHATS_NEW_QUIET_HOURS_BODY =
+        "One band from noon to noon. Drag either end of the dark stretch. " +
+            "Thinking of you still arrives, as a touch."
 }
 
 /** First names only, everywhere a person is addressed in a line of copy. */

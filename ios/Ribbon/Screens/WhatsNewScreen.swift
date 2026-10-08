@@ -1,3 +1,4 @@
+import CoreText
 import SwiftUI
 import RibbonCore
 
@@ -236,6 +237,13 @@ private struct WhatsNewItemView: View {
         case .roomGroups: RoomGroupsVignette(startsAfter: startsAfter)
         case .lordReadsLord: DivineNameVignette(startsAfter: startsAfter)
         case .originalReadable: ReadableLineVignette(startsAfter: startsAfter)
+        case .flyleaf: FlyleafVignette(startsAfter: startsAfter)
+        case .yourShelf: YourShelfVignette(startsAfter: startsAfter)
+        case .versionsByReading: VersionsByReadingVignette(startsAfter: startsAfter)
+        case .yourPage: YourPageVignette(startsAfter: startsAfter)
+        case .typeface: TypefaceVignette(startsAfter: startsAfter)
+        case .notificationsByName: NotificationsByNameVignette(startsAfter: startsAfter)
+        case .quietHoursNight: QuietHoursNightVignette(startsAfter: startsAfter)
         }
     }
 
@@ -249,6 +257,13 @@ private struct WhatsNewItemView: View {
         case .roomGroups: return Copy.whatsNewRoomGroupsTitle
         case .lordReadsLord: return Copy.whatsNewLordTitle
         case .originalReadable: return Copy.whatsNewReadableTitle
+        case .flyleaf: return Copy.whatsNewFlyleafTitle
+        case .yourShelf: return Copy.whatsNewShelfTitle
+        case .versionsByReading: return Copy.whatsNewVersionsTitle
+        case .yourPage: return Copy.whatsNewPageTitle
+        case .typeface: return Copy.whatsNewTypefaceTitle
+        case .notificationsByName: return Copy.whatsNewNotificationsTitle
+        case .quietHoursNight: return Copy.whatsNewQuietHoursTitle
         }
     }
 
@@ -262,6 +277,13 @@ private struct WhatsNewItemView: View {
         case .roomGroups: return Copy.whatsNewRoomGroupsBody
         case .lordReadsLord: return Copy.whatsNewLordBody
         case .originalReadable: return Copy.whatsNewReadableBody
+        case .flyleaf: return Copy.whatsNewFlyleafBody
+        case .yourShelf: return Copy.whatsNewShelfBody
+        case .versionsByReading: return Copy.whatsNewVersionsBody
+        case .yourPage: return Copy.whatsNewPageBody
+        case .typeface: return Copy.whatsNewTypefaceBody
+        case .notificationsByName: return Copy.whatsNewNotificationsBody
+        case .quietHoursNight: return Copy.whatsNewQuietHoursBody
         }
     }
 }
@@ -457,6 +479,174 @@ private enum Vignette {
     static let pageLeading: CGFloat = 10
     /// The line's room inside its ground, as Android's.
     static let barPadding = EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 16)
+
+    // MARK: Your name in the front of the book
+
+    /// Ruth's face as a portrait with no photograph draws one
+    /// (`PortraitView`): her initial in her ink, on the raised ground.
+    static func readerFace(_ size: CGFloat) -> some View {
+        ZStack {
+            Circle().fill(Palette.raised)
+            Text(verbatim: String(reader.prefix(1)))
+                .font(RibbonType.uiMedium(size * 0.42))
+                .foregroundStyle(Ink.teal.color)
+        }
+        .frame(width: size, height: size)
+    }
+
+    /// A room's ribbon on the flyleaf: its ink, how far it hangs, and the
+    /// room and the place it lies, as You sets them beside it.
+    struct FlyleafRibbon {
+        var color: Color
+        var length: CGFloat
+        var room: String
+        var place: String
+    }
+
+    /// Three rooms, no two ribbons the same length — "two ribbons of
+    /// slightly different length read as two people" (brief §5) — in the
+    /// accent where nobody's ink is theirs, in teal and plum where it is.
+    static let flyleaf: [FlyleafRibbon] = [
+        FlyleafRibbon(color: Palette.chartreuse, length: 34, room: "us", place: "mark 4"),
+        FlyleafRibbon(color: Ink.teal.color, length: 28, room: "thursday", place: "ruth 2"),
+        FlyleafRibbon(color: Ink.plum.color, length: 38, room: "family", place: "john 1"),
+    ]
+    static let flyleafRibbonWidth: CGFloat = 12
+
+    // MARK: Every book you have finished, on one shelf
+
+    /// A book on the shelf: the size its fire was, its name, and who it
+    /// was read with.
+    struct Shelved {
+        var scale: FireScale
+        var book: String
+        var company: String
+    }
+
+    /// A short book, a middling one and a long one, each the size its
+    /// fire was (§2.9): Philemon small, Mark medium, Isaiah large.
+    static let shelf: [Shelved] = [
+        Shelved(scale: .small, book: "philemon", company: "with jo"),
+        Shelved(scale: .medium, book: "mark", company: "with ruth"),
+        Shelved(scale: .large, book: "isaiah", company: "with thursday study"),
+    ]
+    /// The embers at a little over half the size You draws them, in the
+    /// same proportion to each other: Isaiah still looks like Isaiah.
+    static let emberShrink: CGFloat = 0.6
+    /// How far an ember rises onto the shelf as it comes.
+    static let rise: CGFloat = 6
+
+    // MARK: Choose a version by reading it
+
+    /// A version's own words under its name, smaller than the page's: a
+    /// specimen, as the Text screen sets one, and small enough that the
+    /// longer of the two lines fits a row on the smallest phone.
+    static let specimenSize: CGFloat = 14
+    /// Two rows as a group sets them: round where they meet the well,
+    /// small at the seam between them.
+    static let upperRow = TileShape(topLeading: 14, bottomLeading: 5, bottomTrailing: 5, topTrailing: 14)
+    static let lowerRow = TileShape(topLeading: 5, bottomLeading: 14, bottomTrailing: 14, topTrailing: 5)
+    /// Where the words start inside a row of the picture, and how far in
+    /// from its trailing edge the ribbon hangs.
+    static let rowInset: CGFloat = 14
+    /// The chosen marker at the picture's size: `ChoiceRibbon`'s 10 × 22,
+    /// a little shorter.
+    static let choiceWidth: CGFloat = 10
+    static let choiceLength: CGFloat = 20
+
+    // MARK: The page, the way you read it
+
+    /// Smaller than the other pictures' lines: three verses must fit the
+    /// well set a verse to a line, and six lines of Literata at 13 do.
+    static let pageSize: CGFloat = 13
+
+    /// A run of the picture's page: words, or a verse's number.
+    enum PageRun {
+        case words(String)
+        case number(Int)
+    }
+
+    /// John 1:1–3 as the Berean Standard has it, set as the page sets one
+    /// paragraph — the chapter's first verse without a number, the others
+    /// with theirs. Set by hand, line by line, so that the heavier letters
+    /// never send a word on to the next line, and the first line is the
+    /// same in both settings: the page is set again under it, in place.
+    static let asParagraph: [[PageRun]] = [
+        [.words("In the beginning was the Word, and the Word")],
+        [.words("was with God, and the Word was God. "), .number(2), .words("He was")],
+        [.words("with God in the beginning. "), .number(3), .words("Through Him all")],
+        [.words("things were made, and without Him nothing")],
+        [.words("was made that has been made.")],
+    ]
+
+    /// The same three verses a verse to a line (A68): each numbered verse
+    /// starts a line of its own, and the paragraph's first line is as it
+    /// was.
+    static let verseByVerse: [[PageRun]] = [
+        [.words("In the beginning was the Word, and the Word")],
+        [.words("was with God, and the Word was God.")],
+        [.number(2), .words("He was with God in the beginning.")],
+        [.number(3), .words("Through Him all things were made, and")],
+        [.words("without Him nothing was made that has")],
+        [.words("been made.")],
+    ]
+
+    /// The picture's page as one Text: the words in Literata at `weight`
+    /// on its own axis — the page's face, held at the picture's size — and
+    /// each number as the page sets one, small caps at 0.62 of the size,
+    /// raised by 0.3 of it, in ivory at `numbers`.
+    static func page(_ lines: [[PageRun]], weight: Int, numbers: Double) -> Text {
+        let face = Font(RibbonType.uiLiterata(pageSize, weight: weight) as CTFont)
+        var text = Text(verbatim: "")
+        for (index, line) in lines.enumerated() {
+            if index > 0 { text = Text("\(text)\n") }
+            for run in line {
+                switch run {
+                case .words(let words):
+                    text = Text("\(text)\(Text(verbatim: words).font(face))")
+                case .number(let verse):
+                    let number = Text(verbatim: "\(verse)\u{2009}")
+                        .font(RibbonType.smallCaps(pageSize * 0.62))
+                        .foregroundStyle(Palette.text.opacity(numbers))
+                        .baselineOffset(pageSize * 0.3)
+                    text = Text("\(text)\(number)")
+                }
+            }
+        }
+        return text
+    }
+
+    // MARK: Notifications say who
+
+    /// Where Ruth's note was left, in the sentence the phone will say.
+    static let notedAt = "Mark 4:12"
+    /// The switch at the picture's size: the row's 46 × 28
+    /// (`RibbonSwitch`) a little smaller, as the row's words are.
+    static let switchWidth: CGFloat = 40
+    static let switchHeight: CGFloat = 24
+    static let switchKnob: CGFloat = 18
+    static let switchInset: CGFloat = 3
+    /// How far behind the pen a letter takes to come up whole, so the
+    /// sentence is written in rather than wiped on.
+    static let nib: CGFloat = 18
+
+    // MARK: Quiet hours, drawn as the night
+
+    /// The picture's night, ten in the evening to six in the morning, and
+    /// the later start its handle is moved to — placed on the band from
+    /// noon to noon by the core's arithmetic, as the setting's band is.
+    static let nightFrom = QuietHoursBand.position(of: 22 * 60)
+    static let laterFrom = QuietHoursBand.position(of: 23 * 60)
+    static let nightTo = QuietHoursBand.position(of: 6 * 60)
+    /// The hours under the band, in the order `QuietHoursBand.marks` sets
+    /// them: words in a picture rather than the phone's clock, so both
+    /// phones' pictures say the same.
+    static let nightMarks = ["6 pm", "midnight", "6 am"]
+    /// The setting's band at the picture's size: 44 high made 28, its
+    /// corner and its handles in proportion.
+    static let bandHeight: CGFloat = 28
+    static let bandShape = TileShape(8)
+    static let nightHandle = CGSize(width: 4, height: 18)
 
     // The page's wash (ChapterTextView's layout manager), in the page's
     // numbers: a band at the height of the letters, bled a little, round
@@ -1462,6 +1652,706 @@ private struct SelectedWord: TextRenderer, Animatable {
         }
         for line in layout {
             context.draw(line)
+        }
+    }
+}
+
+// MARK: 9. Your name in the front of the book
+
+/// The top of You as it opens now (A67), a flyleaf: Ruth's face and her
+/// name, the binding under them, and from it her rooms' ribbons laid in
+/// one after another, each with the room and where it lies. Then they
+/// fade off together, and are laid in again.
+private struct FlyleafVignette: View {
+    let startsAfter: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// How many of the ribbons are laid in, left to right.
+    @State private var laid = 0
+    /// The ribbons as a whole, which fade off at the end rather than
+    /// lifting out one by one.
+    @State private var shown = 1.0
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Vignette.readerFace(30)
+                Text(Vignette.reader)
+                    .font(RibbonType.display(24))
+                    .foregroundStyle(Palette.text)
+                    .lineLimit(1)
+            }
+            VStack(spacing: 0) {
+                HairlineRule()
+                HStack(alignment: .top, spacing: 0) {
+                    ForEach(Array(Vignette.flyleaf.enumerated()), id: \.offset) { index, ribbon in
+                        hanging(ribbon, down: index < laid)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                .opacity(shown)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 22)
+        .task(id: reduceMotion) { await play() }
+    }
+
+    /// A ribbon at the left of its third, and beside it the room and,
+    /// muted, where it lies. The words come with their ribbon.
+    private func hanging(_ ribbon: Vignette.FlyleafRibbon, down: Bool) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            VignetteRibbon(color: ribbon.color, width: Vignette.flyleafRibbonWidth, length: ribbon.length, down: down)
+            VStack(alignment: .leading, spacing: 2) {
+                SmallCaps(ribbon.room, size: 11, color: Palette.text.opacity(0.8))
+                SmallCaps(ribbon.place, size: 11)
+            }
+            .lineLimit(1)
+            .padding(.top, 4)
+            .opacity(down ? 1 : 0)
+        }
+    }
+
+    private func play() async {
+        shown = 1
+        guard !reduceMotion else {
+            // How it ends: every room's ribbon laid in.
+            laid = Vignette.flyleaf.count
+            return
+        }
+        laid = 0
+        guard await beat(startsAfter) else { return }
+        while true {
+            for count in 1...Vignette.flyleaf.count {
+                withAnimation(RibbonMotion.open) { laid = count }
+                guard await beat(RibbonMotion.arriveDuration) else { return }
+            }
+            guard await beat(RibbonMotion.openDuration + Vignette.rest) else { return }
+            withAnimation(RibbonMotion.settle) { shown = 0 }
+            guard await beat(RibbonMotion.settleDuration) else { return }
+            laid = 0
+            shown = 1
+            guard await beat(Vignette.breath) else { return }
+        }
+    }
+}
+
+/// A ribbon hanging from the edge above it — the flyleaf's binding, a
+/// row's top — laid in by growing down from that edge, and lifted out back
+/// up it, as the app's own are (`HangingRibbon`). Drawn here rather than
+/// borrowed so that it moves only on the picture's beat, on the curve the
+/// beat gives it.
+private struct VignetteRibbon: View {
+    var color: Color
+    var width: CGFloat
+    var length: CGFloat
+    var down: Bool
+
+    var body: some View {
+        RibbonTail()
+            .fill(color)
+            .frame(width: width, height: length)
+            // Not quite nothing, as `HangingRibbon`'s: a scale of zero has
+            // no inverse.
+            .scaleEffect(x: 1, y: down ? 1 : 0.001, anchor: .top)
+            .opacity(down ? 1 : 0)
+    }
+}
+
+// MARK: 10. Every book you have finished, on one shelf
+
+/// Three embers on one baseline, a small book's, a middling one's and a
+/// long one's, each over its book and who it was read with. They rise
+/// onto the shelf in turn, and after a while fade off it together.
+private struct YourShelfVignette: View {
+    let startsAfter: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// How many embers have risen onto the shelf, left to right.
+    @State private var risen = 0
+    /// The shelf as a whole, which fades at the end rather than the embers
+    /// sinking back.
+    @State private var shown = 1.0
+
+    var body: some View {
+        // A grid, so the embers stand on one line whatever their size and
+        // the words hang from another, each book's words under its own
+        // ember — no shelf drawn (S10).
+        Grid(horizontalSpacing: 18, verticalSpacing: 6) {
+            GridRow(alignment: .bottom) {
+                ForEach(Array(Vignette.shelf.enumerated()), id: \.offset) { index, shelved in
+                    VignetteEmber(scale: shelved.scale, seed: 0.4 + Double(index) * 1.7)
+                        .opacity(index < risen ? 1 : 0)
+                        .offset(y: index < risen ? 0 : Vignette.rise)
+                }
+            }
+            GridRow(alignment: .top) {
+                ForEach(Array(Vignette.shelf.enumerated()), id: \.offset) { index, shelved in
+                    VStack(spacing: 2) {
+                        SmallCaps(shelved.book, size: 12, color: Palette.text.opacity(0.8))
+                        SmallCaps(shelved.company, size: 11)
+                    }
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .opacity(index < risen ? 1 : 0)
+                    .offset(y: index < risen ? 0 : Vignette.rise)
+                }
+            }
+        }
+        .opacity(shown)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 22)
+        .task(id: reduceMotion) { await play() }
+    }
+
+    private func play() async {
+        shown = 1
+        guard !reduceMotion else {
+            // How it ends: every book on the shelf.
+            risen = Vignette.shelf.count
+            return
+        }
+        risen = 0
+        guard await beat(startsAfter) else { return }
+        while true {
+            for count in 1...Vignette.shelf.count {
+                withAnimation(RibbonMotion.arrive) { risen = count }
+                guard await beat(RibbonMotion.arriveDuration) else { return }
+            }
+            guard await beat(Vignette.rest) else { return }
+            withAnimation(RibbonMotion.settle) { shown = 0 }
+            guard await beat(RibbonMotion.settleDuration) else { return }
+            risen = 0
+            shown = 1
+            guard await beat(Vignette.breath) else { return }
+        }
+    }
+}
+
+/// An ember drawn by the ember's own hand (`EmberView.draw`), in
+/// `EmberView`'s proportions at the size a picture of a shelf has room
+/// for. It breathes as an ember on the shelf does, each at its own time,
+/// and holds one instant under reduce motion.
+private struct VignetteEmber: View {
+    var scale: FireScale
+    var seed: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let size = CGFloat(scale.frameHeight) * 0.30 * Vignette.emberShrink
+        Group {
+            if reduceMotion {
+                Canvas { context, canvasSize in
+                    EmberView.draw(in: &context, size: canvasSize, time: seed)
+                }
+            } else {
+                TimelineView(.animation(minimumInterval: 1.0 / 12.0)) { timeline in
+                    Canvas { context, canvasSize in
+                        EmberView.draw(
+                            in: &context, size: canvasSize,
+                            time: timeline.date.timeIntervalSinceReferenceDate * 0.25 + seed)
+                    }
+                }
+            }
+        }
+        .frame(width: size * 1.7, height: size * 1.35)
+    }
+}
+
+// MARK: 11. Choose a version by reading it
+
+/// Two versions as the Text screen now sets them, each a name over its own
+/// words for the verse. The ribbon that marks yours lifts out of the first
+/// and is laid into the second; after a while it goes back.
+private struct VersionsByReadingVignette: View {
+    let startsAfter: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// Where the ribbon is laid, one flag to a row, so that it lifts out
+    /// of one before it is laid into the other.
+    @State private var inFirst = true
+    @State private var inSecond = false
+
+    var body: some View {
+        VStack(spacing: RibbonShape.seam) {
+            row(.bsb, Vignette.berean, shape: Vignette.upperRow, holds: inFirst)
+            row(.web, Vignette.worldEnglish, shape: Vignette.lowerRow, holds: inSecond)
+        }
+        .padding(.horizontal, 22)
+        .task(id: reduceMotion) { await play() }
+    }
+
+    /// A row of paper: the version's name in small caps over its line, and
+    /// the ribbon hanging from the row's top edge at the trailing side when
+    /// the row holds it — where `SettingChoice` hangs it.
+    private func row(_ version: TranslationID, _ line: Text, shape: TileShape, holds: Bool) -> some View {
+        HStack(spacing: 8) {
+            Vignette.labelled(
+                version,
+                line
+                    .font(RibbonType.scripture(Vignette.specimenSize))
+                    .foregroundStyle(Palette.text.opacity(0.86))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8))
+            Spacer(minLength: 0)
+            // The ribbon's room, kept on both rows, so a line never runs
+            // under it.
+            Color.clear.frame(width: Vignette.choiceWidth, height: 0)
+        }
+        .padding(.horizontal, Vignette.rowInset)
+        .padding(.vertical, 7)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .overlay(alignment: .topTrailing) {
+            VignetteRibbon(
+                color: Palette.chartreuse, width: Vignette.choiceWidth,
+                length: Vignette.choiceLength, down: holds)
+                .padding(.trailing, Vignette.rowInset)
+        }
+        .paper(shape)
+    }
+
+    private func play() async {
+        guard !reduceMotion else {
+            // How it ends: the ribbon in the version chosen by its words.
+            inFirst = false
+            inSecond = true
+            return
+        }
+        inFirst = true
+        inSecond = false
+        guard await beat(startsAfter) else { return }
+        while true {
+            withAnimation(RibbonMotion.settle) { inFirst = false }
+            guard await beat(RibbonMotion.settleDuration) else { return }
+            withAnimation(RibbonMotion.open) { inSecond = true }
+            guard await beat(RibbonMotion.openDuration + Vignette.rest) else { return }
+            withAnimation(RibbonMotion.settle) { inSecond = false }
+            guard await beat(RibbonMotion.settleDuration) else { return }
+            withAnimation(RibbonMotion.open) { inFirst = true }
+            guard await beat(RibbonMotion.openDuration + Vignette.breath) else { return }
+        }
+    }
+}
+
+// MARK: 12. The page, the way you read it
+
+/// A small page of John 1:1–3, set the ways Text now offers (A68). One
+/// paragraph at Book, its numbers quiet; then the page is set again a
+/// verse to a line, as a cross-fade rather than words travelling; then the
+/// numbers come clear; then the letters thicken from Book to Heavier on
+/// Literata's own axis. Held, and then all of it settles back together.
+private struct YourPageVignette: View {
+    let startsAfter: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// How far the page has gone from one paragraph to a verse to a line.
+    @State private var lined = 0.0
+    /// How far the numbers have gone from quiet to clear.
+    @State private var clear = 0.0
+    /// How far the letters have gone from Book to Heavier.
+    @State private var heavier = 0.0
+
+    var body: some View {
+        // The two settings added together rather than laid one over the
+        // other: where they set the same letters in the same place — the
+        // first line, and the words a line keeps — the ink stays whole
+        // through the middle instead of dipping as a plain cross-fade's
+        // does, so only what is set again is seen to change, as on Android.
+        // In a group of its own, so the adding stops at the page.
+        ZStack(alignment: .topLeading) {
+            VignettePage(lines: Vignette.asParagraph, heavier: heavier, clear: clear)
+                .opacity(1 - lined)
+            VignettePage(lines: Vignette.verseByVerse, heavier: heavier, clear: clear)
+                .opacity(lined)
+                .blendMode(.plusLighter)
+        }
+        .compositingGroup()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 20)
+        .task(id: reduceMotion) { await play() }
+    }
+
+    private func play() async {
+        guard !reduceMotion else {
+            // How it ends: a verse to a line, the numbers clear, the
+            // letters heavier.
+            lined = 1
+            clear = 1
+            heavier = 1
+            return
+        }
+        lined = 0
+        clear = 0
+        heavier = 0
+        guard await beat(startsAfter) else { return }
+        while true {
+            // The page as it was, looked at before anything changes.
+            guard await beat(Vignette.rest) else { return }
+            withAnimation(RibbonMotion.open) { lined = 1 }
+            guard await beat(RibbonMotion.openDuration + Vignette.rest) else { return }
+            withAnimation(RibbonMotion.open) { clear = 1 }
+            guard await beat(RibbonMotion.openDuration + Vignette.rest) else { return }
+            withAnimation(RibbonMotion.open) { heavier = 1 }
+            guard await beat(RibbonMotion.openDuration + Vignette.rest) else { return }
+            withAnimation(RibbonMotion.settle) {
+                lined = 0
+                clear = 0
+                heavier = 0
+            }
+            guard await beat(RibbonMotion.settleDuration) else { return }
+        }
+    }
+}
+
+/// The picture's page at a point between Book and Heavier and between
+/// quiet numbers and clear ones, from the page's own table (A68). It is
+/// set again at every step of the way, so the letters thicken along the
+/// axis, as the reader's page would be set at each weight, rather than one
+/// weight fading over another.
+private struct VignettePage: View, Animatable {
+    let lines: [[Vignette.PageRun]]
+    var heavier: Double
+    var clear: Double
+
+    var animatableData: AnimatablePair<Double, Double> {
+        get { AnimatablePair(heavier, clear) }
+        set {
+            heavier = newValue.first
+            clear = newValue.second
+        }
+    }
+
+    var body: some View {
+        // Book and Heavier: the middle and last of the table's three.
+        let book = Double(PageType.weights[1])
+        let heavy = Double(PageType.weights[2])
+        let quiet = PageType.quietVerseNumberAlpha
+        Vignette.page(
+            lines,
+            weight: Int((book + (heavy - book) * heavier).rounded()),
+            numbers: quiet + (PageType.clearVerseNumberAlpha - quiet) * clear)
+            .foregroundStyle(Palette.text)
+            .lineLimit(lines.count)
+            .minimumScaleFactor(0.8)
+    }
+}
+
+// MARK: 13. Notifications say who
+
+/// The first switch of a room of two: "Notes left for you", and under it
+/// the sentence the phone will say, with Ruth's face. The switch turns on
+/// and the sentence writes itself in; then it fades and the switch turns
+/// off.
+private struct NotificationsByNameVignette: View {
+    let startsAfter: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    @State private var on = 0.0
+    @State private var written = 0.0
+    /// The sentence as a whole, which fades at the end rather than being
+    /// unwritten.
+    @State private var said = 1.0
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 10) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(Copy.notesLeftForYou)
+                    .font(RibbonType.ui(15))
+                    .foregroundStyle(Palette.text)
+                    .lineLimit(1)
+                // The example as the row draws it (`SettingExampleView`):
+                // a small well, the face, and the words that will arrive.
+                HStack(alignment: .top, spacing: 6) {
+                    Vignette.readerFace(14)
+                        .padding(.top, 1)
+                    Text(Copy.notifNoteLeft(Vignette.reader, Vignette.notedAt))
+                        .font(RibbonType.ui(13))
+                        .foregroundStyle(Palette.text.opacity(0.8))
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textRenderer(WritesIn(written: written))
+                        .opacity(said)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .well(.small)
+            }
+            Spacer(minLength: 0)
+            VignetteSwitch(on: on)
+        }
+        .padding(.horizontal, Vignette.rowInset)
+        .padding(.vertical, 12)
+        .paper(.row)
+        .padding(.horizontal, 22)
+        .task(id: reduceMotion) { await play() }
+    }
+
+    private func play() async {
+        said = 1
+        guard !reduceMotion else {
+            // How it ends: on, and the sentence it lets through written.
+            on = 1
+            written = 1
+            return
+        }
+        on = 0
+        written = 0
+        guard await beat(startsAfter) else { return }
+        while true {
+            withAnimation(RibbonMotion.open) { on = 1 }
+            guard await beat(RibbonMotion.openDuration) else { return }
+            withAnimation(RibbonMotion.open) { written = 1 }
+            guard await beat(RibbonMotion.openDuration + Vignette.rest) else { return }
+            withAnimation(RibbonMotion.settle) {
+                said = 0
+                on = 0
+            }
+            guard await beat(RibbonMotion.settleDuration) else { return }
+            written = 0
+            said = 1
+            guard await beat(Vignette.breath) else { return }
+        }
+    }
+}
+
+/// The row's switch at the picture's size, drawn as the app draws its own
+/// (`RibbonSwitch`, I41): a well, the accent filling it as it turns on,
+/// and a paper knob crossing to the trailing end and taking the ground's
+/// colour. One value, `on`, from 0 to 1, so the whole of it moves on the
+/// picture's beat and nothing else's.
+private struct VignetteSwitch: View {
+    var on: Double
+
+    var body: some View {
+        let near = Vignette.switchInset
+        let far = Vignette.switchWidth - Vignette.switchKnob - Vignette.switchInset
+        ZStack(alignment: .leading) {
+            Color.clear
+                .frame(width: Vignette.switchWidth, height: Vignette.switchHeight)
+                .well(TileShape(Vignette.switchHeight / 2))
+            Capsule()
+                .fill(Palette.chartreuse)
+                .frame(width: Vignette.switchWidth, height: Vignette.switchHeight)
+                .opacity(on)
+            Circle()
+                .fill(Palette.surface)
+                .overlay { Circle().strokeBorder(Palette.rule, lineWidth: 1) }
+                .overlay { Circle().fill(Palette.ground).opacity(on) }
+                .frame(width: Vignette.switchKnob, height: Vignette.switchKnob)
+                .offset(x: near + (far - near) * CGFloat(on))
+        }
+        .frame(width: Vignette.switchWidth, height: Vignette.switchHeight)
+    }
+}
+
+/// Writes a line in the way a pen does: letter by letter in reading order,
+/// across a wrap and on, each letter coming up out of nothing over the
+/// nib's width behind the pen rather than a wipe crossing the words.
+/// `written` is how far along, 0 to 1.
+private struct WritesIn: TextRenderer, Animatable {
+    var written: Double
+
+    var animatableData: Double {
+        get { written }
+        set { written = newValue }
+    }
+
+    func draw(layout: Text.Layout, in context: inout GraphicsContext) {
+        let length = layout.reduce(CGFloat(0)) { $0 + $1.typographicBounds.rect.width }
+        // Run on past the last letter by the nib, so that it too is whole
+        // when the pen stops.
+        let pen = (length + Vignette.nib) * CGFloat(written)
+        var before: CGFloat = 0
+        for line in layout {
+            let edge = line.typographicBounds.rect
+            for run in line {
+                for letter in run {
+                    let at = before + letter.typographicBounds.rect.minX - edge.minX
+                    let come = min(max((pen - at) / Vignette.nib, 0), 1)
+                    guard come > 0 else { continue }
+                    var ink = context
+                    ink.opacity = Double(come)
+                    ink.draw(letter)
+                }
+            }
+            before += edge.width
+        }
+    }
+}
+
+// MARK: 14. Quiet hours, drawn as the night
+
+/// The quiet hours' band (A67), noon to noon, with its three hours under
+/// it. The night draws itself from ten in the evening to six in the
+/// morning, its end handle carried out along it; the start handle is moved
+/// on an hour and the night follows it, and after a while is moved back.
+/// Then the night fades.
+private struct QuietHoursNightVignette: View {
+    let startsAfter: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// Where the quiet hours begin, along the band.
+    @State private var from = Vignette.nightFrom
+    /// How much of the night is drawn, out from its beginning.
+    @State private var drawn = 0.0
+    /// The night as a whole — the dark stretch and its handles — which
+    /// fades at the end rather than undrawing.
+    @State private var shown = 0.0
+
+    var body: some View {
+        VStack(spacing: 0) {
+            GeometryReader { proxy in
+                band(width: proxy.size.width)
+            }
+            .frame(height: Vignette.bandHeight)
+            PlacedAcross(fractions: QuietHoursBand.marks.map { QuietHoursBand.position(of: $0) }) {
+                ForEach(Vignette.nightMarks, id: \.self) { mark in
+                    VStack(spacing: 3) {
+                        Rectangle()
+                            .fill(Palette.rule)
+                            .frame(width: 1, height: 4)
+                        SmallCaps(mark, size: 9)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 22)
+        .task(id: reduceMotion) { await play() }
+    }
+
+    /// The setting's band, smaller (`QuietHoursBandView`): the waking hours
+    /// raised, the night banked — the ground with its grain — a rule round
+    /// the whole, and an ivory handle at each end of the night.
+    private func band(width: CGFloat) -> some View {
+        let shape = Vignette.bandShape.shape
+        let reach = from + (Vignette.nightTo - from) * drawn
+        return ZStack(alignment: .leading) {
+            Palette.raised
+            Palette.ground
+                .frame(width: max(0, CGFloat(reach - from) * width))
+                .offset(x: CGFloat(from) * width)
+                .opacity(shown)
+            Image("PaperGrain")
+                .resizable(resizingMode: .tile)
+                .opacity(0.035)
+            handle(at: from, width: width)
+            handle(at: reach, width: width)
+        }
+        .frame(width: width, height: Vignette.bandHeight)
+        .clipShape(shape)
+        .overlay { shape.strokeBorder(Palette.rule, lineWidth: 1) }
+    }
+
+    private func handle(at position: Double, width: CGFloat) -> some View {
+        Capsule()
+            .fill(Palette.text)
+            .frame(width: Vignette.nightHandle.width, height: Vignette.nightHandle.height)
+            .offset(x: CGFloat(position) * width - Vignette.nightHandle.width / 2)
+            .opacity(shown)
+    }
+
+    private func play() async {
+        from = Vignette.nightFrom
+        guard !reduceMotion else {
+            // How it ends: ten in the evening to six in the morning, drawn.
+            drawn = 1
+            shown = 1
+            return
+        }
+        drawn = 0
+        shown = 0
+        guard await beat(startsAfter) else { return }
+        while true {
+            // The handles come with the night they hold, rather than
+            // standing on an empty band.
+            withAnimation(RibbonMotion.open) {
+                drawn = 1
+                shown = 1
+            }
+            // A breath between the night drawn and its start moved, so the
+            // two read as two things done rather than one movement.
+            guard await beat(RibbonMotion.openDuration + Vignette.breath) else { return }
+            withAnimation(RibbonMotion.open) { from = Vignette.laterFrom }
+            guard await beat(RibbonMotion.openDuration + Vignette.rest) else { return }
+            withAnimation(RibbonMotion.open) { from = Vignette.nightFrom }
+            guard await beat(RibbonMotion.openDuration) else { return }
+            withAnimation(RibbonMotion.settle) { shown = 0 }
+            guard await beat(RibbonMotion.settleDuration) else { return }
+            drawn = 0
+            guard await beat(Vignette.breath) else { return }
+        }
+    }
+}
+
+// MARK: 15. Set in the type you read best
+
+/// John 1:1's first words five times, each in one of the page's typefaces
+/// (A69) at the size that looks like Literata's, the face's name after it
+/// in small caps. A short ribbon marks the chosen one — the chosen row in
+/// ivory, the rest quieter — and moves down a row at a beat, rests on the
+/// last, Atkinson Hyperlegible, and comes back to Literata.
+private struct TypefaceVignette: View {
+    let startsAfter: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// The row the ribbon marks, Literata's first.
+    @State private var chosen = 0
+
+    private static let line = "In the beginning was the Word"
+    /// Literata's size for the picture; every other face is set at the
+    /// size that looks like it.
+    private static let size: CGFloat = 12
+    private static let row: CGFloat = 24
+    private static let ribbon = CGSize(width: 3, height: 14)
+    /// How long a row is chosen before the ribbon moves on.
+    private static let dwell: Double = 0.88
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(PageFaces.all.enumerated()), id: \.offset) { index, face in
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                        Text(verbatim: Self.line)
+                            .font(Font(RibbonType.uiPageFace(
+                                face, CGFloat(PageType.pointSize(Double(Self.size), face: face)),
+                                weight: 400) as CTFont))
+                            .foregroundStyle(Palette.text)
+                        SmallCaps(face.name, size: 9)
+                    }
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .frame(height: Self.row, alignment: .leading)
+                    .opacity(index == chosen ? 1 : 0.45)
+                }
+            }
+            .padding(.leading, 14)
+            Rectangle()
+                .fill(Palette.chartreuse)
+                .frame(width: Self.ribbon.width, height: Self.ribbon.height)
+                .offset(y: CGFloat(chosen) * Self.row + (Self.row - Self.ribbon.height) / 2)
+        }
+        .padding(.horizontal, 22)
+        .task(id: reduceMotion) { await play() }
+    }
+
+    private func play() async {
+        let last = PageFaces.all.count - 1
+        // How it stands under reduce motion: come down to the last face.
+        guard !reduceMotion else {
+            chosen = last
+            return
+        }
+        chosen = 0
+        guard await beat(startsAfter) else { return }
+        while true {
+            for next in 1...last {
+                guard await beat(next == 1 ? Vignette.breath : Self.dwell) else { return }
+                withAnimation(RibbonMotion.settle) { chosen = next }
+            }
+            guard await beat(RibbonMotion.settleDuration + Vignette.rest) else { return }
+            withAnimation(RibbonMotion.settle) { chosen = 0 }
+            guard await beat(RibbonMotion.settleDuration + Vignette.breath) else { return }
         }
     }
 }

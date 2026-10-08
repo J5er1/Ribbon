@@ -15,9 +15,11 @@ import app.readribbon.core.FuelEvent
 import app.readribbon.core.Handiwork
 import app.readribbon.core.Ink
 import app.readribbon.core.Membership
+import app.readribbon.core.PageType
 import app.readribbon.core.Person
 import app.readribbon.core.Reading
 import app.readribbon.core.ReadingPoint
+import app.readribbon.core.ReadingPosition
 import app.readribbon.core.Room
 import app.readribbon.core.VerseAddress
 import app.readribbon.data.AppState
@@ -31,6 +33,7 @@ import app.readribbon.services.PresenceEvent
 import app.readribbon.services.LineWords
 import app.readribbon.services.PresenceService
 import app.readribbon.services.PresentPerson
+import kotlin.math.abs
 import kotlin.time.Duration.Companion.hours
 import kotlin.uuid.Uuid
 import kotlinx.coroutines.flow.Flow
@@ -69,6 +72,10 @@ import org.robolectric.annotation.GraphicsMode
  * Which turns "composed" and "being opened" into two different things for the
  * first time, and three things in this screen had been relying on them being
  * one. The tests below are those three.
+ *
+ * A68 found a fourth: a page standing by can be set again — a size or a
+ * weight chosen in Text, over the room — and has to keep its verse when it
+ * is.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -137,13 +144,18 @@ class StandbyPageTest {
     /** A second reader, following this one. */
     private val ruth = Person(name = "Ruth")
 
+    /** The model the page was composed with, for a test that changes its settings. */
+    private lateinit var model: AppModel
+
     /**
      * Composes the page at rest — exactly as it now stands beneath the room —
      * and hands back the sheet so a test can raise and lower it.
+     *
+     * @param at where you are in the book, if not at its start.
      */
-    private fun page(presence: Overheard): BookSheet {
+    private fun page(presence: Overheard, at: VerseAddress? = null): BookSheet {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
-        val model = AppModel(
+        model = AppModel(
             context = context,
             initialState = AppState(
                 me = me,
@@ -158,6 +170,17 @@ class StandbyPageTest {
                     ),
                 ),
                 readings = listOf(open),
+                positions = listOfNotNull(
+                    at?.let {
+                        ReadingPosition(
+                            readingID = open.id,
+                            personID = me.id,
+                            chapter = it.chapter,
+                            verse = it.verse,
+                            updatedAt = now - 2.hours,
+                        )
+                    },
+                ),
                 currentRoomID = room.id,
             ),
             store = LocalStore(context),
@@ -279,6 +302,59 @@ class StandbyPageTest {
             presence.said.contains("reading"),
         )
     }
+
+    /**
+     * The page set again while it stands by rises at the verse it stood at
+     * (A68).
+     *
+     * Text is reached from the menu, over the room, with the book composed
+     * beneath both (A51). A size, a weight or a line for every verse chosen
+     * there sets every chapter again, and the list keeps its pixel offset
+     * into a chapter that is now another shape: without a landing the book
+     * rises on another verse, and `trackReading` saves that one as where you
+     * are.
+     */
+    @Test fun aPageSetAgainOnStandbyRisesAtItsVerse() {
+        val presence = Overheard()
+        val sheet = page(presence, at = VerseAddress("MRK", 1, 30))
+        val before = topOfVerse(30)
+
+        compose.runOnIdle {
+            model.updateSettings { it.copy(scriptureSize = 26.0, weightStep = 2, versePerLine = true) }
+        }
+        compose.waitForIdle()
+        compose.runOnIdle { sheet.animate(open = true) }
+        compose.waitForIdle()
+        // Past a position save, so a page that rose on another verse would
+        // have said so.
+        compose.mainClock.advanceTimeBy(3_000)
+        compose.waitForIdle()
+
+        val after = topOfVerse(30)
+        // A line at the new size, at xhdpi: the verse's box grows about its
+        // first line as the type does, and nothing else may move it.
+        val line = 26f * PageType.lineHeightMultiple(PageType.defaultLineSpacingStep).toFloat() * 2f
+        assertTrue(
+            "verse 30 should rise where it stood (${before}px), not at ${after}px",
+            abs(after - before) < line,
+        )
+        assertEquals("and still be where you are", VerseAddress("MRK", 1, 30), model.myPosition(open))
+    }
+
+    /**
+     * Where verse [n]'s box begins, through its own node (see
+     * [versesMeasured]): its place rather than its bounds, which are clipped
+     * to the screen and would put a verse that has gone off it at the top.
+     */
+    private fun topOfVerse(n: Int): Float = compose.onNode(
+        SemanticsMatcher("verse $n") { node ->
+            node.config.getOrNull(SemanticsProperties.ContentDescription)
+                ?.firstOrNull()
+                .orEmpty()
+                .startsWith("Verse $n. ")
+        },
+        useUnmergedTree = true,
+    ).fetchSemanticsNode().positionInRoot.y
 
     @Test fun closingTheBookWithdrawsFromTheRoom() {
         val presence = Overheard()

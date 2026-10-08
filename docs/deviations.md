@@ -4389,6 +4389,292 @@ A66. **The held word's line is read on its own ground (amends A60).** Owner:
     not gone out when this was added; had it, this would have been a release
     of its own.
 
+A67. **The front of the book: You and the settings, made by hand
+    (2026-10-flyleaf).** Owner: *"what would make the settings and profile
+    more on brand? what can we do to make it more interesting and any other
+    ideas"* — and, handed the ideas, *"build it as you wish"*, *"if you come
+    up with more add it"*.
+
+    What was wrong was not the tiles. A23's paper is the room's own. It was
+    §17's last question — *is it obviously made by a person rather than
+    assembled from platform defaults?* — which these screens still failed in
+    four places: the size slider, the switches, the wheels or dial that set
+    quiet hours, and a radio check marking the version. And You read as an
+    account page. A face, a name, three rows, a version string: nothing on
+    it was Ribbon's. No ribbon, no ink, no ember, no book.
+
+    **You opens the way a Bible does.** Under the name, as on a flyleaf:
+    *Your ribbons* — one for each room you read in, hanging from a hairline
+    that stands for the binding, each in your ink there, or the accent where
+    two of you draw from every ink. Their lengths differ, because "two
+    ribbons of slightly different length read as two people" (brief §5).
+    Under each, the room and where its ribbon lies (A30): the chapter
+    ("Mark 4"), else the open book, else *between books* — in a column that
+    widens with the reader's type, so a name wraps at the largest sizes
+    rather than ending in an ellipsis, as the words under each ember on the
+    shelf do. A30's rules still hold. It is an address, never a measure, so it is a chapter rather
+    than a verse or a fraction. It is offered, never applied, so touching it
+    goes to the room and does not open the book at the ribbon.
+
+    **Your shelf.** Every book you have finished, as one row of embers,
+    each with who it was read with: first names, the rest as "and others",
+    or a room of three or more by its own name. It includes the books of a
+    room you have left. Leaving has always said *"Leave this room? You'll
+    keep the books on your shelf"* (§6.8), and until now there was no shelf
+    of yours for that to be true of; leaving takes the room and your
+    membership, the readings stay on the phone, and so they stay here —
+    said by nothing, whatever memberships of that room the phone still
+    holds, because the people of a room you have walked out of are not
+    named on your page. An ember opens its record, inside You; a verse in
+    it opens the book in its room, by the same path a tapped notification
+    takes, and a face opens its person. For a room you have left there is
+    no room to open, so that record quotes its verses and shows its faces
+    and offers neither: nothing is drawn as a control that does nothing.
+    *Read it again* is not offered from You at all: starting a book belongs
+    to the room. `YourShelf` is in both cores, with
+    the same tests on both. No count anywhere — not a number of books, not
+    in a label.
+
+    **A colophon.** The version line and the credit at the foot became the
+    last page of a book: the Wave, small and quiet, the version, *Set in
+    Literata and Alegreya Sans.*, and the credit A60 put there. On Android
+    the version line still checks for an update when touched.
+
+    **A ribbon marks a choice.** The version you read — and every other
+    single choice on paper, onboarding's intents included — is marked by a
+    ribbon laid into the top of its tile, where a radio check was. The room
+    you are in, in Your rooms, by a smaller one where a chartreuse bar was.
+    Your ink, in the picker, is the ribbon pulled longest. A shape, so
+    colour is still never the only signal, and each keeps its selected
+    state for a screen reader.
+
+    **Choose a version by reading it.** Each version shows the verse you are
+    at, in its own words — a licensed one only when its chapter is already
+    on the phone; nothing is fetched to make a sample. The preview under the
+    size became a page: that verse and the next, numbered the way the page
+    numbers them, with the words of Jesus in red when the switch is on. So
+    all three of the page's settings now show on it, where only the size
+    did. What the phone has to read from a file comes after the screen is
+    drawn, and arrives rather than appears: its row opens to it and its
+    words fade in, and under reduce motion only the fade is left. What it
+    already holds — the book being read, almost always — is there with the
+    screen, so on most openings nothing arrives at all.
+
+    **Notifications say who.** Each room's switches sit under its faces. In a
+    room of two, each switch is said with their name ("When Ruth opens the
+    book") and, for the two that arrive as sentences, shows the sentence the
+    phone will use, with their face: *Ruth left you a note at Mark 4:12*. A
+    room of three or more is said as it was.
+
+    **Quiet hours, drawn as the night.** One band, the day laid out noon to
+    noon so a night sits whole in its middle, the quiet stretch banked dark,
+    a handle at each end, moved a quarter hour at a time by a finger or a
+    screen reader — and on Android by a keyboard's arrows, since the rows it
+    replaced were tiles a keyboard could reach — and stopping at the band's
+    ends for each of them alike: a step past noon does not jump to the
+    other side. `QuietHoursBand` is the band's arithmetic, in both cores, so a
+    time is in the same place on both phones.
+
+    **Nothing moves on a touch alone.** The band, and on iOS the size (I41),
+    sit in pages that scroll, and a thumb that lands on one on its way up
+    the page was changing when the phone stays quiet, and keeping the page
+    from scrolling besides — written on touch-down, as the first build had
+    them. Now a tap sets where the finger lifts; a drag takes the control
+    once it is plainly sideways; a drag that goes up or down is the page's,
+    and changes nothing.
+
+    **What did not change, and why.** No theme, accent or icon picker (S18's
+    "not here"). No haptics for any of the new controls: §9.3 names
+    selection ticks as unwanted (I25). No join date and no count on You: a
+    person's page says who they are and what they kept, never how much.
+    Android keeps Material's switch and slider (A18, A29: structure is
+    Material's, paint is Ribbon's) and gains the slider's two A's and its
+    spoken size; iOS draws its switch and slider as well (I41).
+
+    **Two ideas left for the owner, on purpose.** A paper light mode — §16.1
+    says "no light mode" is not shippable past phase two, and Text is where
+    the switch would live, but the light palette is still undecided. And
+    the display face: Literata stands in for Cesso (§16.12), and Fraunces —
+    the brief's own choice, and free to embed — would give the titles and
+    your name the warmth the brief describes. Both change the whole app,
+    and neither is mine to decide in a pass about one screen.
+
+    The release says so in six pictures, made of the page's own type and
+    inks: the ribbons laying in under a name, embers rising onto a shelf,
+    a ribbon moving between two versions, a page setting itself the
+    reader's way (A68), a switch turning on and its sentence writing itself
+    in, and the night drawing itself onto the band.
+
+A68. **The page, the way you read it (2026-10-flyleaf).** Owner, after A67:
+    *"Can we also add more customization for the text?"*
+
+    S20's anatomy was four things: the version, the size, three steps of
+    spacing, red letter. It gains three, in the same group, and one wider
+    range. Every one of them is off, or at Book, until the reader moves it,
+    so — with the system's Bold Text off — the page is exactly the page it
+    was. With Bold Text on, it is now heavier on its own, on purpose (below):
+
+    - **Weight: Lighter, Book, Heavier.** Literata is a variable face, and
+      its own weight axis carries the change, so no file is added: 350,
+      400, 470. Book is today's 400, set by today's path. Heavier stops at
+      470 because Medium (500) already means something on its own: in the
+      original words' panel it is how a word another version says
+      differently is brought forward (A62), and the page's heaviest letter
+      must not be mistaken for that. Lighter stops at 350, because thinner
+      strokes than that break up at 16 points on a dark ground.
+    - **The system's Bold Text adds 150** to whichever weight is chosen, on
+      the page and the preview: a real weight on the axis, never a smeared
+      bold. Until now iOS ignored Bold Text on the page altogether, and
+      Android drew a synthetic bold over the 400.
+    - **A new line for every verse.** In a prose paragraph each numbered
+      verse begins its own line; the paragraph's first line keeps its
+      indent, or its space after a break, so paragraphs can still be seen,
+      and poetry, psalm titles and stanza breaks are left exactly as they
+      are. Easier to find your place, and to study by. The break is never
+      a character of any verse: marks, phrase marks (A41g, A60), selection
+      (A62), the number's tap, landing and following all count in a verse's
+      own text, and that text is the same in both settings. Two phones in
+      one room can disagree about it, as they already disagree about size;
+      following counts words, not points. A tap in the blank beside a
+      line's end now belongs, on both phones, to the verse whose words end
+      there: Android gave it to the next verse, whose number begins where a
+      paragraph ends, and the iPhone to nobody, and a verse to a line puts
+      that blank beside every verse.
+    - **Clearer verse numbers.** The numbers sit at 45%, as S02 sets them,
+      which is 4.1:1 on the ground: quiet, and a little under what small
+      text should have. Clearer is 70%, 8.6:1. Nothing moves. Hiding them
+      instead was the other way, and it is not offered: A62's owner choice
+      was to take a whole verse by its number, and the room speaks in
+      addresses — *Ruth left you a note at Mark 4:12*.
+    - **The size reaches 28,** where it stopped at 24. At 28 a phone line
+      holds about twenty-five characters, which is what S02 already plans
+      for at the largest Dynamic Type.
+
+    The steps, the weights, the alphas and the size's range are one table in
+    both cores (`PageType`), and so is the rule for where a verse begins a
+    line (`ScriptureBlock.verseLineStarts()`), with the same tests on both.
+    The page and the Text screen's preview ask the same functions, so the
+    preview cannot show a different page from the one the reader gets.
+
+    Text settings stay on the phone, as they always have: "Yours alone.
+    Nobody else's page moves." Nothing is sent and the server has no column
+    for them.
+
+    **On Android, the page keeps its verse when a setting changes.** The
+    book stays composed under the menu, and a chapter set again by a new
+    size or spacing rose with a different verse on the reading line, which
+    the next save then kept. That was already so for size and spacing; a
+    verse to a line would have made it a page or more. Once the chapter is
+    measured again, the page lands back on the reader's verse, with no
+    animation. iOS needs nothing: there the book is closed while You is
+    open, and opens on the saved verse.
+
+    **Not offered, and why.** A second typeface: the brief's type stack is
+    settled, and Scripture in Literata "must never feel like an interface",
+    which Alegreya Sans, the interface's face, would. Margins: the gutter
+    keeps its width (S02) and the right edge belongs to the presence form.
+    Section headings: the data leaves them out on purpose ("Scripture, not
+    apparatus"), and the World English has none. A drop cap or a chapter
+    numeral: the two phones cannot set one alike without touching a verse's
+    own text. A softer ink for night: a tenth softer already fails the 4.5:1
+    floor over stacked washes, and the system's Reduce White Point and Extra
+    Dim dim everything evenly. Justified text with hyphenation: at about
+    thirty-five characters a line it needs hyphens, and hyphenation is slow
+    on Android while the note carve sets the chapter again on every frame;
+    it waits for Psalm 119 to be timed on both phones.
+
+    **Found on the way, and left for the owner,** because each changes
+    every reader's page:
+    - a verse number can end a line with its verse starting on the next
+      (the thin space after it allows a break), which puts that verse's
+      gutter mark, landing and follow a line high; a word joiner after the
+      thin space would keep them together;
+    - a stanza break before poetry is dropped on both phones — thousands
+      of them in the Berean;
+    - LORD could be set in Literata's own small capitals (`c2sc`), which
+      changes no offset, rather than the plain capitals A64 settled for;
+    - the two phones' line spacing differs: iOS multiplies Literata's own
+      line (1.485 em), so Book is about 2.55 em there, and Android
+      multiplies the em, so Book is 1.72 em. Look at both side by side
+      before changing either.
+
+A69. **Sliders with the page in view, and five typefaces (2026-10-flyleaf).**
+    Owner, on the day #47 was to merge: *"sliders for text adjustment with
+    preview are important customization and maybe aditional fonts"*; asked
+    whether to merge first, *"Add to #47 first"*; asked which fonts, *"just
+    add em all"*; asked which settings become sliders, all four offered,
+    and *"careful with margin so that it doesnt effect the presence
+    feature"*.
+
+    This reverses three things on the record, and only these: A68's "Not
+    offered" for a second typeface and for margins, S20's "line spacing,
+    three steps", and `PageType`'s note that every choice is kept as a step.
+    Until a reader moves something the page is exactly A68's page.
+
+    - **Five typefaces, chosen by reading them.** Literata stays the page's
+      own and the default; Source Serif 4, EB Garamond, Alegreya and
+      Atkinson Hyperlegible Next join it, each OFL, each a variable face on
+      its own weight axis, each shown in Text with your verse set in it and
+      a ribbon on the one you read (A67's idiom). Each is set at the size
+      that has Literata's x-height (`PageType.pointSize`: Garamond's 19 is
+      23.8), so the size slider means one thing in every face and a line
+      holds about as many letters; and at the weight whose ink matches
+      Literata's (`faceWeight`: Garamond's Book is 440). Garamond and
+      Alegreya have nothing under 400, so their Lighter is their regular.
+      Only the page, Text's strip and the typeface rows take the face:
+      the original words' panel keeps Literata and its Medium (A62), the
+      Greek stays Literata's and the Hebrew Noto's, the numbers and running
+      heads stay Alegreya Sans SC. The colophon names the face you read.
+      Atkinson Hyperlegible is a sans, which the brief keeps off the page;
+      it is here as the reader's choice for legibility, at the owner's word,
+      not as the house's.
+    - **Sliders for the page.** Line spacing and Weight become sliders, and
+      Letter spacing and Margins join them; each has thirteen positions,
+      evenly spaced, from a scale in both cores. Spacing keeps Close, Book
+      and Open exactly (1.55, 1.72, 1.90) among them, weight keeps 350, 400
+      and 470 and still stops short of Medium, letter spacing runs from
+      none to 0.06 em, margins from none to 48 either side. A mark on the
+      track shows Book. A screen reader hears a measure of type, never an
+      axis number: "1.72, Book", "2 steps heavier than Book", "0.025 em
+      wider", "24 point margins". Values are stored as integers under keys
+      of their own, and the old step is written beside each, so an older
+      build opens on the nearest page it knows; old files read their steps
+      as before.
+    - **The page in view.** Over the page's controls is a strip of the page
+      itself, edge to edge, at the page's own width, insets and margins, so
+      its lines break where the page's do. It keeps one height whatever is
+      set, so nothing under a finger moves while a slider is dragged; and
+      while a slider further down is held, a copy of it is pinned under the
+      bar, and stays a moment after. A slider is written once, when the
+      finger lifts.
+    - **Margins, and presence.** The left edge is the notes': the margin
+      goes outside the gutter, which keeps its width, so a note's mark stays
+      beside its words. The right edge is the people's: the margin is room
+      between the words and that edge, and the presence form — lozenge,
+      panel, the follow thread — is where it was and its files are
+      untouched. On Android the panel still asks the column for its room;
+      the margin is worked out from what is left, so opening the panel
+      takes the margin first and never the words. The words keep at least
+      thirteen ems of Literata at the size Dynamic Type or the font scale
+      makes them, so at the largest sizes the margins give way altogether,
+      as the slider's line says. Presence and following speak in verses
+      and words, never in points, so a margin moves them no more than a
+      text size does; on Android the page set again on standby lands back
+      on its verse for a face, a spacing or a margin as for a size.
+    - **What's New** gains a seventh picture in this release: John 1:1's
+      first words in each face, a ribbon walking down them and resting on
+      the last.
+
+    **Still not offered.** Word spacing (neither phone's text system has
+    it), hiding the verse numbers (A68), a font list or a picker by name, and
+    any face that cannot draw the weights the page asks for.
+
+    **Left as it was found.** The two phones' line spacing still differs
+    (A68): iOS multiplies each face's own line, Android the em. The core
+    keeps every face's pitch equal to Literata's on each phone, so a face
+    changes nothing about the difference; looking at both side by side is
+    still owed before changing either.
+
 ## iOS (phase four): the second pass
 
 Android took a design pass of its own (A18–A51) and the two platforms
@@ -4618,7 +4904,7 @@ I16. **Sign-in failures are told apart (A44).** A 4xx on the code is "That
     because sending someone back to retype a code into the same silence is
     the wrong instruction.
 
-I17. **State salvage (A43).** A `state.json` this build cannot decode whole
+I17. **State salvage (A44).** A `state.json` this build cannot decode whole
     is kept beside the new one as `state.json.unreadable`, and the settings,
     the three asked-once flags and the two invite sets are read out of it
     field by field. `notifiedThrough` is deliberately not salvaged: after a
@@ -5221,6 +5507,132 @@ I40. **The page goes to the verse: the moves inside a chapter are made on
     Android needs none of this and is unchanged. Written without Xcode:
     `swiftc -parse` passes and CI compiles it; nothing here has run on a
     phone.
+
+I41. **The front of the book, on iOS (A67): the last of the system's
+    controls, drawn.** The decisions are A67's; what is only iOS's:
+
+    - **The switch is drawn, the Toggle kept.** `SettingSwitch` is still a
+      `Toggle`, so what VoiceOver says — a switch, its name, on or off — is
+      the system's own; only its picture is ours, through
+      `RibbonToggleStyle`: a 46 × 28 well with a paper knob that goes dark
+      and crosses as the well fills with the accent. The whole tile takes
+      the tap, margins included, where the system's switch took only its
+      own pill. Android keeps Material's switch (A18, A29): there the
+      structure is Material's by decision, and here the default is Apple's,
+      which is somebody else's app.
+    - **The size slider is drawn**: a well with a small A and a large one,
+      the accent up to a paper thumb, which follows the finger with nothing
+      easing it. To VoiceOver it is one adjustable element, said as a size
+      ("19 point") and moved by half a point. Its drag, and the band's, run
+      alongside the page's scroll (`simultaneousGesture`) and act only once
+      a finger has gone 10 points and gone sideways; a tap is a separate
+      gesture, which a scroll cancels (A67). If a phone shows a scroll that
+      starts on either still held, the next step is a pan recognizer that
+      begins only on sideways velocity.
+    - **Quiet hours lost their wheels.** The two `DatePicker` wheels that
+      opened under their rows are the band (`QuietHoursBandView`), and
+      `SettingRow` lost `active`, which only ever lit the row whose wheel
+      was open. Each handle is its own adjustable element, the beginning
+      read first. The times are formatted on a fixed day rather than today,
+      so a time inside an hour the clocks skip is not read as the hour
+      after. The three hours under the band grow with Dynamic Type up to
+      AX3 and stop there, where three still fit side by side on the
+      narrowest phone; past it they would run into one another.
+    - **The Text screen reads a licensed chapter once.** It was read and
+      decoded from disk on every pass of the body — twice for your own
+      version — and the body runs on every step of the size. It is read
+      once for a book and chapter, off the main thread, and kept on the
+      screen with the place it was read for; a bundled book is the store's
+      and decoded once, as before. The rows that gain a verse that way
+      take it on `arrive`, as the original words' panel takes a licensed
+      version.
+    - **No haptics** on any of them (I25).
+    - **An ember opened from You** is pushed inside You's own stack, and a
+      portrait in it opens its person there too (the stack gained
+      `PersonRoute`), so nothing in it is a link that goes nowhere. A
+      verse in it goes to its room by the same road a notification takes
+      (`pendingDestination`); in a room you have left, the record's verses
+      are quotations and not buttons.
+    - **Written without Xcode, compiled by CI on the first push.** Every
+      file passes `swiftc -parse` here, and the band's and the shelf's
+      rules (24 tests) run on Linux. The app has not run. What to look at
+      on a phone: a custom-styled `Toggle` should still read as a switch
+      and toggle once on a double-tap; whether a drag that starts on the
+      band or the slider still lets the page scroll; the ribbon under the
+      first row's large top corner; the embers' shared baseline through
+      their buttons; the flyleaf's ribbons laying in while the menu's
+      cover is still rising.
+
+I42. **The page, the way you read it, on iOS (A68), and settings that
+    survive the next update.**
+
+    - **A new settings field no longer resets the app.** `AppSettings` used
+      Swift's generated decoder, which ignores a property's default and
+      throws when a key is missing. Any new field would have made every
+      state file written by the build before it fail to decode. The
+      salvage that follows (A44, I17) keeps only what nothing else knows, and
+      the settings would have failed there the same way; the person, their
+      rooms, notes, highlights, positions and every write still owed to the
+      server would have gone with them, and the update would have opened on
+      onboarding as if newly installed. `AppSettings` and `RoomNotificationPrefs` now live in
+      RibbonCore, with their keys spelled out and a decoder that reads each
+      field on its own: a missing or unreadable field costs only itself.
+      They are in the core so the rule has tests, which run on Linux; the
+      app has no test target. Android's settings stay in the app, where
+      they use kotlinx-datetime, and its decoder already took defaults for
+      missing keys (StateSurvivesAnUpdateTest).
+    - **Weight on the axis.** The page asks Core Text for Literata with its
+      current variation, the weight axis changed and the optical size left
+      out, then scales it through `UIFontMetrics` as before. The optical
+      size is left out on purpose: copied, it would hold at the unscaled
+      size once Dynamic Type scales the font, and Lighter or Heavier would
+      then be cut for a different size than Book at any type size but the
+      default; left out, Core Text chooses it, as it does for Book. Book
+      takes today's path, unchanged. Literata's named instances have no
+      PostScript names, so "Literata-Medium" was never an option.
+    - **A verse to a line** is a LINE SEPARATOR (U+2028) before the number,
+      outside every verse's own text: one paragraph still, so the first
+      line's indent and the paragraph's space are not repeated, and the
+      page's debug assertion that its verse text is the chapter's own still
+      holds.
+    - **Bold Text** is read from `legibilityWeight` where the page's theme is
+      built, so turning it on sets the page again.
+    - **The three-stop control is one group.** `Segments` was a plain
+      container, so the label its caller gave it was handed to each stop:
+      VoiceOver read Line spacing's three as "Line spacing", told apart only
+      by "selected", and Weight's would have been the same. It now contains
+      its stops, each saying its own word, under the control's name. Its
+      words also give way in size, to 0.6, before they are cut: "Heavier"
+      is wider than a third of the control at AX3 on a narrow phone. Android's
+      segments do the same at its largest font scale.
+
+I43. **Sliders and typefaces, on iOS (A69).**
+
+    - **Faces on the axis.** Every face is found by its PostScript name,
+      then its family, and moved along its weight axis the way Literata is
+      (I42): the variation copied, 'wght' set, 'opsz' left to Core Text.
+      Literata at Book takes today's path, unchanged; a face that cannot be
+      found sets the page in Literata rather than the system's. The page's
+      size stays Literata's — the face is set at `pointSize`, and the
+      numbers, indents and running head keep to Literata's size.
+    - **One pitch whatever the face.** `lineHeightMultiple` multiplies a
+      face's own line, so another face takes the multiple that keeps
+      Literata's pitch (`naturalLineMultiple`). The strip in Text adds the
+      page's leading to SwiftUI's natural line (`extraLeading`), where the
+      old preview added a share of the size and was a seventh tighter than
+      the page.
+    - **Letter spacing** is a kern on the words' runs alone, in each run's
+      own points; no character a mark or a selection counts in moves.
+    - **Margins** follow the page in `updateUIView` as well as at creation,
+      and the gutter's marks, the fetching chapter, the open note and the
+      passage end's rule move with them.
+    - **The drawn slider moves through positions.** `RibbonSlider` takes an
+      index and a count, a Book mark, and pictures for its two ends from the
+      caller; the size slider moves to it. While a finger is down the
+      position is its own and only shown; it is written when the finger
+      lifts, or at once for a tap or a VoiceOver step. A drag the scroll
+      takes away is written all the same. `Segments` had no caller left
+      and is gone.
 
 ## Licensed translations (decided: API.Bible)
 

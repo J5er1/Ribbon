@@ -15,6 +15,14 @@ struct ReadingTheme: Equatable {
     var fontSize: CGFloat
     var lineHeightMultiple: CGFloat
     var redLetter: Bool
+    /// A point on Literata's weight axis (A68): the reader's Lighter, Book
+    /// or Heavier, with the system's Bold Text folded in. 400 is Book, the
+    /// page as it always was.
+    var weight: Int = 400
+    /// In prose, each numbered verse starts its own line (A68).
+    var versePerLine: Bool = false
+    /// The verse numbers' ink: S02's quiet 45%, or clearer (A68).
+    var verseNumberAlpha: CGFloat = 0.45
     /// Carried so a system type-size change re-sets the page (the fonts
     /// themselves scale through UIFontMetrics).
     var dynamicTypeSize: DynamicTypeSize = .large
@@ -22,6 +30,62 @@ struct ReadingTheme: Equatable {
     /// its width at every type size (§08).
     var gutterWidth: CGFloat = 28
     var trailingMargin: CGFloat = 26
+    /// The reader's typeface (A69). `fontSize` stays Literata's size: the
+    /// face is set at the size that looks the same (`PageType.pointSize`),
+    /// and the verse numbers, the indents and the running head keep to it.
+    var face: PageFace = PageFaces.literata
+    /// Room between the letters, in thousandths of an em (A69): on the
+    /// words only, never on a verse number.
+    var letterSpacing: Int = 0
+    /// The margin the page gives either side at this width and size (A69):
+    /// outside the gutter on the left, so notes stay beside their words,
+    /// and beside the trailing edge on the right, which the presence form
+    /// keeps as it always has.
+    var margin: CGFloat = 0
+}
+
+extension ReadingTheme {
+    /// The reader's page, from their settings (S20, A68). The book and the
+    /// Text screen's preview of it are both set from here, so the preview
+    /// cannot show a page the reader will not get. Bold Text is passed in
+    /// by whoever reads it from the environment, so that turning it on sets
+    /// the page again.
+    ///
+    /// `columnWidth` is the width the page is set in, which the margin
+    /// gives way to (A69); with none, the page has no margin.
+    init(_ settings: AppSettings, boldText: Bool, dynamicTypeSize: DynamicTypeSize, columnWidth: CGFloat = 0) {
+        self.init(
+            fontSize: settings.scriptureSize,
+            lineHeightMultiple: settings.lineHeightMultiple,
+            redLetter: settings.redLetter,
+            weight: settings.weight(boldText: boldText),
+            versePerLine: settings.versePerLine,
+            verseNumberAlpha: settings.verseNumberAlpha,
+            dynamicTypeSize: dynamicTypeSize,
+            face: settings.face,
+            letterSpacing: settings.letterSpacingThousandths)
+        margin = Self.margin(
+            requested: settings.marginRequested, columnWidth: columnWidth, fontSize: fontSize,
+            gutterWidth: gutterWidth, trailingMargin: trailingMargin)
+    }
+
+    /// The margin a column this wide can give at this size (A69): what the
+    /// reader asked for, less whatever would leave the words narrower than
+    /// thirteen ems of Literata at the size Dynamic Type makes it.
+    static func margin(
+        requested: Double, columnWidth: CGFloat, fontSize: CGFloat,
+        gutterWidth: CGFloat = 28, trailingMargin: CGFloat = 26
+    ) -> CGFloat {
+        guard requested > 0, columnWidth > 0 else { return 0 }
+        let size = Double(RibbonType.uiScripture(fontSize).pointSize)
+        let textWidth = Double(columnWidth - gutterWidth - 8 - trailingMargin)
+        return CGFloat(PageType.margin(requested: requested, textWidth: textWidth, size: size))
+    }
+
+    /// Where the words begin and end inside the text view.
+    var textInsets: UIEdgeInsets {
+        UIEdgeInsets(top: 0, left: margin + gutterWidth + 8, bottom: 0, right: trailingMargin + margin)
+    }
 }
 
 /// A highlight, as the page needs it: which verse, which stretch of its own
@@ -576,8 +640,7 @@ struct ChapterTextView: UIViewRepresentable {
         view.delegate = context.coordinator
         view.isScrollEnabled = false
         view.backgroundColor = .clear
-        view.textContainerInset = UIEdgeInsets(
-            top: 0, left: theme.gutterWidth + 8, bottom: 0, right: theme.trailingMargin)
+        view.textContainerInset = theme.textInsets
         view.adjustsFontForContentSizeCategory = true
 
         // Ours, beside the system's own: it reads the touch before the
@@ -601,6 +664,11 @@ struct ChapterTextView: UIViewRepresentable {
     }
 
     func updateUIView(_ view: UITextView, context: Context) {
+        // The margin follows the reader's setting and the page's width (A69).
+        if view.textContainerInset != theme.textInsets {
+            view.textContainerInset = theme.textInsets
+            view.invalidateIntrinsicContentSize()
+        }
         context.coordinator.parent = self
         handle.textView = view
         handle.coordinator = context.coordinator
@@ -1082,7 +1150,17 @@ struct ChapterTextView: UIViewRepresentable {
                 for: inContainer, in: view.textContainer,
                 fractionOfDistanceBetweenInsertionPoints: nil)
             guard index < text.length else { return nil }
-            return text.attribute(.ribbonVerse, at: index, effectiveRange: nil) as? Int
+            if let verse = text.attribute(.ribbonVerse, at: index, effectiveRange: nil) as? Int {
+                return verse
+            }
+            // A tap in the blank beside a line's end lands on what ends the
+            // line — a block's newline, or the separator a verse to a line
+            // puts there (A68) — which is no verse's own. It belongs to the
+            // verse whose words end there, as it does on Android; a title's
+            // or the running head's end stays nobody's.
+            let unit = (text.string as NSString).character(at: index)
+            guard index > 0, unit == 0x0A || unit == 0x2028 else { return nil }
+            return text.attribute(.ribbonVerse, at: index - 1, effectiveRange: nil) as? Int
         }
 
         // MARK: Layout
@@ -1301,12 +1379,21 @@ struct ChapterTextView: UIViewRepresentable {
         let result = NSMutableAttributedString()
         var page = ChapterPage()
         let ivory = UIColor(Palette.text)
-        let bodyFont = RibbonType.uiScripture(theme.fontSize)
+        // The reader's weight is the page's: its words, a psalm's title and
+        // the newline that closes a block (A68). The numbers and the running
+        // head are Alegreya Sans's, and keep their own.
+        let bodyFont = RibbonType.uiScripture(theme.fontSize, weight: theme.weight, face: theme.face)
+        let titleFont = RibbonType.uiScripture(theme.fontSize * 0.82, weight: theme.weight, face: theme.face)
+        // Letter spacing (A69): a kern on the words alone, in each run's own
+        // points, which moves no character a mark or a selection counts in.
+        let spacing = CGFloat(PageType.letterSpacingEm(theme.letterSpacing))
         let em = theme.fontSize
 
         func paragraphStyle(_ style: BlockStyle, isFirstBlock: Bool, afterBreak: Bool) -> NSParagraphStyle {
             let p = NSMutableParagraphStyle()
-            p.lineHeightMultiple = theme.lineHeightMultiple
+            // Multiplies the face's own line, so a face other than
+            // Literata takes the multiple that keeps Literata's pitch (A69).
+            p.lineHeightMultiple = CGFloat(PageType.naturalLineMultiple(Double(theme.lineHeightMultiple), face: theme.face))
             switch style {
             case .p:
                 // A printed page: first-line indent, except the paragraph
@@ -1367,27 +1454,38 @@ struct ChapterTextView: UIViewRepresentable {
 
             let blockText = NSMutableAttributedString()
             let blockStart = result.length
-            for span in block.x {
+            // A verse to a line (A68, I42): where the core says a verse in
+            // prose starts a line, a LINE SEPARATOR goes in ahead of its
+            // number. One paragraph still, so its first line keeps its
+            // indent and its space before; and never verse text, so it is
+            // not handed to `page.append`, and every mark, selection,
+            // number and landing counts in the verse's own text as before.
+            let lineStarts: Set<Int> = theme.versePerLine ? Set(block.verseLineStarts()) : []
+            for (index, span) in block.x.enumerated() {
                 if let verse = span.v { runningVerse = verse }
+                if lineStarts.contains(index) {
+                    blockText.append(NSAttributedString(
+                        string: "\u{2028}",
+                        attributes: [.paragraphStyle: style, .font: bodyFont]))
+                }
                 if let verse = span.v, verse != 1 {
-                    // The verse number: small caps superscript, ~45%. Where
-                    // it is set is kept, for a tap on it (A62).
+                    // The verse number: small caps superscript, ~45%, or
+                    // clearer (A68). Where it is set is kept, for a tap on
+                    // it (A62).
                     let number = "\(verse)\u{2009}"
                     page.number(verse, at: blockStart + blockText.length, length: (number as NSString).length)
                     blockText.append(NSAttributedString(
                         string: number,
                         attributes: [
                             .font: RibbonType.uiSmallCaps(theme.fontSize * 0.62),
-                            .foregroundColor: ivory.withAlphaComponent(0.45),
+                            .foregroundColor: ivory.withAlphaComponent(theme.verseNumberAlpha),
                             .baselineOffset: theme.fontSize * 0.3,
                             .ribbonVerse: verse,
                             .paragraphStyle: style,
                         ]))
                 }
                 var attributes: [NSAttributedString.Key: Any] = [
-                    .font: block.s == .d
-                        ? RibbonType.uiScripture(theme.fontSize * 0.82)
-                        : bodyFont,
+                    .font: block.s == .d ? titleFont : bodyFont,
                     .foregroundColor: block.s == .d
                         ? UIColor(Palette.muted)
                         : (span.isRedLetter && theme.redLetter
@@ -1395,6 +1493,9 @@ struct ChapterTextView: UIViewRepresentable {
                             : ivory),
                     .paragraphStyle: style,
                 ]
+                if spacing > 0 {
+                    attributes[.kern] = spacing * (block.s == .d ? titleFont : bodyFont).pointSize
+                }
                 if let verse = runningVerse, block.s != .d {
                     attributes[.ribbonVerse] = verse
                     // Where this run sits in the verse's own text and on

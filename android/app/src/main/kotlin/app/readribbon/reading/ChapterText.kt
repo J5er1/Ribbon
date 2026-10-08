@@ -65,7 +65,9 @@ import androidx.compose.ui.text.Placeholder
 import androidx.compose.ui.text.PlaceholderVerticalAlign
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.font.FontSynthesis
 import androidx.compose.ui.text.style.BaselineShift
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextIndent
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Density
@@ -73,10 +75,14 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import app.readribbon.app.Copy
 import app.readribbon.core.BlockStyle
 import app.readribbon.core.Ink
+import app.readribbon.core.PageFace
+import app.readribbon.core.PageFaces
+import app.readribbon.core.PageType
 import app.readribbon.core.ScriptureChapter
 import app.readribbon.core.VerseRange
 import app.readribbon.design.LocalRoomColours
@@ -141,7 +147,51 @@ data class ReadingTheme(
      */
     val gutterWidth: Dp = 28.dp,
     val trailingMargin: Dp = 26.dp,
+    /**
+     * Literata's weight on its own axis, with the system's Bold Text already
+     * folded in (A68): 400 is the page as it has always been set. The page
+     * takes no synthesized bold on top of it, so what Bold Text asks for is
+     * drawn by the face and only by the face.
+     */
+    val weight: Int = 400,
+    /** In prose, each numbered verse starts a line of its own (A68). */
+    val versePerLine: Boolean = false,
+    /** The verse numbers' ink: S02's quiet 45%, or clearer (A68). Nothing moves either way. */
+    val verseNumberAlpha: Float = 0.45f,
+    /**
+     * The reader's typeface (A69). [fontSize] stays Literata's: the face is
+     * set at the size that looks the same (`PageType.pointSize`), and the
+     * verse numbers, the indents and the line height keep to Literata's.
+     */
+    val face: PageFace = PageFaces.literata,
+    /** Room between the letters, in thousandths of an em (A69): on the words only. */
+    val letterSpacing: Int = 0,
+    /** The margin the reader asked for either side, in dp (A69), before it gives way. */
+    val marginRequested: Float = 0f,
+    /**
+     * The margin the page gives at its width (A69, [marginIn]): outside the
+     * gutter, so notes stay beside their words, and beside the trailing
+     * edge, which the presence panel keeps as it always has.
+     */
+    val margin: Dp = 0.dp,
 )
+
+/**
+ * The margin a column [columnWidth] wide gives the page at this size (A69):
+ * what the reader asked for, less whatever would leave the words narrower
+ * than thirteen ems of Literata at the size the font scale makes it. The
+ * column is what is left once the presence panel has taken its room, so the
+ * panel opening takes the margin first and never the words.
+ */
+fun ReadingTheme.marginIn(columnWidth: Dp, fontScale: Float): Dp {
+    if (marginRequested <= 0f || columnWidth <= 0.dp) return 0.dp
+    val textWidth = (columnWidth - gutterWidth - 8.dp - trailingMargin).value.toDouble()
+    return PageType.margin(
+        requested = marginRequested.toDouble(),
+        textWidth = textWidth,
+        size = (fontSize * fontScale).toDouble(),
+    ).toFloat().dp
+}
 
 /** Where each verse's marks and geometry ended up, for the overlay above. */
 data class ChapterLayout(
@@ -354,8 +404,24 @@ fun ChapterText(
     // The faces, resolved once at this size. Literata is variable on its
     // optical-size axis, so the descriptor's smaller setting is a genuinely
     // different letterform rather than the body face scaled down.
-    val bodyStyle = RibbonType.scripture(theme.fontSize)
-    val descriptorStyle = RibbonType.scripture(theme.fontSize * 0.82f)
+    //
+    // And on its weight axis, so the reader's weight is drawn too (A68) —
+    // and only drawn. Bold Text asks the platform for 300 more on every
+    // weight a style names, and with no heavier face to give it smears a
+    // bold over the one it has; the theme's weight has Bold Text in it
+    // already, so the page takes no synthesis at all. Its small caps — the
+    // running head, the numbers — inherit that from the text's own style,
+    // and under Bold Text are Alegreya's real Medium rather than a smeared
+    // one. At 400, with Bold Text off, there was never anything to
+    // synthesize, and the page is the page it was.
+    //
+    // In the reader's typeface (A69), with its letter spacing on the words
+    // alone: the numbers set their own, 0.
+    val spacing = PageType.letterSpacingEm(theme.letterSpacing).toFloat()
+    val bodyStyle = RibbonType.scripture(theme.fontSize, theme.weight, theme.face)
+        .copy(fontSynthesis = FontSynthesis.None, letterSpacing = if (spacing > 0f) spacing.em else TextUnit.Unspecified)
+    val descriptorStyle = RibbonType.scripture(theme.fontSize * 0.82f, theme.weight, theme.face)
+        .copy(fontSynthesis = FontSynthesis.None, letterSpacing = if (spacing > 0f) spacing.em else TextUnit.Unspecified)
 
     // The carve animates open and closed. S04 asks for the line height to
     // open over 400 ms; the placeholder's height is an ordinary measured
@@ -523,9 +589,9 @@ fun ChapterText(
 
     Box(
         modifier = modifier.padding(
-            // iOS: textContainerInset = (0, gutterWidth + 8, 0, trailingMargin).
-            start = theme.gutterWidth + 8.dp,
-            end = theme.trailingMargin,
+            // iOS: textContainerInset = (0, margin + gutterWidth + 8, 0, trailingMargin + margin).
+            start = theme.margin + theme.gutterWidth + 8.dp,
+            end = theme.trailingMargin + theme.margin,
         ),
     ) {
         CompositionLocalProvider(
@@ -576,7 +642,7 @@ fun ChapterText(
                                     currentTapNumber(number)
                                     return@awaitEachGesture
                                 }
-                                page.verseAt(result.getOffsetForPosition(up.position))
+                                page.verseAt(tappedOffset(result, up.position))
                                     ?.let(currentTap)
                             }
                         }
@@ -1665,6 +1731,9 @@ private fun buildChapterPage(
 
     var paragraphOpen = false
 
+    /** Where the open paragraph began, so an empty one is never closed for another. */
+    var paragraphFrom = 0
+
     fun endParagraph() {
         if (paragraphOpen) {
             builder.pop()
@@ -1676,6 +1745,7 @@ private fun buildChapterPage(
         endParagraph()
         builder.pushStyle(style)
         paragraphOpen = true
+        paragraphFrom = builder.length
     }
 
     /** A measured band of empty page — iOS's paragraph spacing. */
@@ -1803,8 +1873,34 @@ private fun buildChapterPage(
         )
         var opened = false
         var wrote = false
+        // A new line for every verse (A68): the spans the core says a verse
+        // starts a line before — in prose, and only there.
+        val lineStarts = if (theme.versePerLine) block.verseLineStarts() else emptyList()
 
-        for (span in block.x) {
+        /**
+         * A paragraph of this block, opened at span [from], keeping its
+         * leading wherever it meets a verse's line (A68). Compose trims the
+         * leading off a paragraph's first line and its last, which is right
+         * at a block's edges, where the page's own spacing takes over, and
+         * wrong between two verses of one block: they would sit closer
+         * together than the lines of either. Kept on both sides, the two
+         * lines are one line's height apart, as the lines inside a verse
+         * are. Without verse lines nothing is kept, and the style is the
+         * one it always was.
+         */
+        fun leading(style: ParagraphStyle, from: Int, opensAVerseLine: Boolean): ParagraphStyle {
+            val trimTop = !opensAVerseLine
+            val trimBottom = lineStarts.none { it > from }
+            if (trimTop && trimBottom) return style
+            val trim = when {
+                trimTop -> LineHeightStyle.Trim.FirstLineTop
+                trimBottom -> LineHeightStyle.Trim.LastLineBottom
+                else -> LineHeightStyle.Trim.None
+            }
+            return style.copy(lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Proportional, trim))
+        }
+
+        for ((index, span) in block.x.withIndex()) {
             val v = span.v
             if (v != null) runningVerse = v
 
@@ -1817,14 +1913,30 @@ private fun buildChapterPage(
                 opened = false
             }
             if (!opened) {
-                beginParagraph(if (wrote) continuation else paragraph)
+                // After the carve, a paragraph that starts a verse's line
+                // keeps that line's leading, as it would with no note open —
+                // so the carve opens and closes with nothing below it hopping
+                // by half a line.
+                val opensAVerseLine = wrote && index in lineStarts
+                beginParagraph(leading(if (wrote) continuation else paragraph, index, opensAVerseLine))
                 opened = true
+            } else if (index in lineStarts && builder.length > paragraphFrom) {
+                // The verse's line is a paragraph of its own, on the
+                // continuation's indent, as the line after the carve is.
+                // Compose sets paragraphs apart with no character between
+                // them, so the break is outside every verse, as a block's own
+                // is: no verse's text, no word's place on the page and no
+                // number's offset moves. Never a second start on top of one
+                // just made — after the carve, the paragraph it opened is the
+                // verse's line already.
+                beginParagraph(leading(continuation, index, opensAVerseLine = true))
             }
 
             if (v != null && v != 1) {
-                // The verse number: small caps superscript, ~45%.
+                // The verse number: small caps superscript, ~45% — or the
+                // reader's clearer ink (A68), which moves nothing.
                 val numberSpan = RibbonType.smallCaps(em * 0.62f).toSpanStyle().copy(
-                    color = ivory.copy(alpha = 0.45f),
+                    color = ivory.copy(alpha = theme.verseNumberAlpha),
                     // iOS lifts it by 0.3 em of the body size; as a fraction
                     // of the number's own 0.62 em size that is 0.484.
                     baselineShift = BaselineShift(0.484f),
@@ -1937,4 +2049,23 @@ private fun paragraphStyle(
     BlockStyle.d -> ParagraphStyle(lineHeight = lineHeight)
 
     BlockStyle.b -> ParagraphStyle(lineHeight = lineHeight)
+}
+
+/**
+ * The offset a tap stands on, kept to the line it was on.
+ *
+ * A tap in the blank beside a line's end is given that line's end, and where
+ * the line ends a paragraph that offset is where the next paragraph begins —
+ * the next verse's number, since paragraphs on this page carry no character
+ * between them. Asked for its verse, the page would answer with the next
+ * one. With a line for every verse (A68) every verse ends a paragraph, so a
+ * tap beside any verse's last line would open the verse after it. Kept to its
+ * own line, a tap beside a line's end belongs to the verse whose words end
+ * there, as it does on iPhone.
+ */
+internal fun tappedOffset(result: TextLayoutResult, at: Offset): Int {
+    val offset = result.getOffsetForPosition(at)
+    val line = result.getLineForVerticalPosition(at.y)
+    val start = result.getLineStart(line)
+    return if (offset > start && offset >= result.getLineEnd(line)) offset - 1 else offset
 }

@@ -453,7 +453,9 @@ enum Copy {
     // MARK: Settings (S18–S22)
 
     // What each settings door leads to, under its title (ledger A23).
-    static let textSub = "Translation, size, spacing, red letter"
+    /// S20 (A68): what Text is about, now that the page has more to set
+    /// than a subtitle can list.
+    static let textSub = "Translation, typeface, and how the page is set"
     static let notificationsSub = "Per room, and your quiet hours"
     @MainActor static var downloadsSub: String { "What Scripture is held on this \(deviceNoun)" }
     static let planSub = "What your room has"
@@ -468,17 +470,24 @@ enum Copy {
     static let planLede = "What your room has, and when Ribbon asks."
     @MainActor static var downloadsLede: String { "What is on this \(deviceNoun), and what isn't." }
     static let thePage = "The page"
+    static let typeface = "Typeface"
     static let notesLeftForYouSub = "When they leave one at a verse."
     static let cardsOpenSub = "When everyone has answered."
     static let whenTheyOpenTheBookSub = "So you can read at the same time."
     static let thinkingOfYouSub = "A touch on the shoulder. No words."
     static let textSizeSub = "Scripture only. Everything else stays where it is."
     static let lineSpacingSub = "How much air between the lines."
+    /// S20 (A68): Literata's own weight, drawn, never a bold laid on top.
+    static let weightSub = "How much ink each letter carries."
+    static let letterSpacingSub = "Room between the letters. A line holds fewer of them."
+    static let marginsSub = "Room either side of the words. At the largest sizes the words keep it."
+    /// S20 (A68): prose only; a poem is already set line by line.
+    static let verseLinesSub = "Easier to find your place. Poetry keeps its own lines."
+    /// S20 (A68): only the numbers' ink changes, so nothing on the page moves.
+    static let clearNumbersSub = "Brighter, so a verse is quick to find."
     static let redLetterSub = "Where the text marks them."
     @MainActor static var bundledSub: String { "On this \(deviceNoun) already, whole." }
     @MainActor static var streamsSub: String { "Streams. The book you are in stays on the \(deviceNoun)." }
-    static let quietHoursFrom = "From"
-    static let quietHoursUntil = "Until"
     /// iOS isn't passing these on (S19): the switch lives in Settings, and
     /// the app can only point at it.
     static let iOSIsNotPassingTheseOn = "iOS isn't passing these on."
@@ -493,6 +502,14 @@ enum Copy {
     static let translation = "Translation"
     static let textSize = "Text size"
     static let lineSpacing = "Line spacing"
+    /// S20 (A68): the weight control's title, and its name to a screen reader.
+    static let weight = "Weight"
+    static let letterSpacing = "Letter spacing"
+    static let margins = "Margins"
+    /// S20 (A68): says what happens, in the page's own terms.
+    static let verseLines = "A new line for every verse"
+    /// S20 (A68): the numbers, not the verses, are what change.
+    static let clearNumbers = "Clearer verse numbers"
     static let redLetter = "Words of Jesus in red"
     static let notesLeftForYou = "Notes left for you"
     static let cardsOpen = "The cards open"
@@ -509,8 +526,27 @@ enum Copy {
     static let lineSpacingClose = "Close"
     static let lineSpacingBook = "Book"
     static let lineSpacingOpen = "Open"
-    /// Between the two ends of quiet hours (S19).
-    static let quietHoursTo = "to"
+    /// S20 (A68): the three stops of the weight control, Book in the middle
+    /// as it is for line spacing: the weight the page has always had.
+    static let weightLighter = "Lighter"
+    static let weightBook = "Book"
+    static let weightHeavier = "Heavier"
+    /// Text (A69): each typeface in a line of its own.
+    static let typefaceLiterataSub = "Drawn for long reading on a screen."
+    static let typefaceSourceSerifSub = "Crisp and open, a little sturdier."
+    static let typefaceGaramondSub = "The Garamond of printed Bibles."
+    static let typefaceAlegreyaSub = "Warm, with the movement of a pen."
+    static let typefaceAtkinsonSub = "Every letter distinct, for low vision."
+    static func typefaceSub(_ id: String) -> String? {
+        switch id {
+        case PageFaces.literata.id: typefaceLiterataSub
+        case PageFaces.sourceSerif.id: typefaceSourceSerifSub
+        case PageFaces.ebGaramond.id: typefaceGaramondSub
+        case PageFaces.alegreya.id: typefaceAlegreyaSub
+        case PageFaces.atkinson.id: typefaceAtkinsonSub
+        default: nil
+        }
+    }
     /// What quiet hours do not silence (S19): the one notification that is
     /// a touch rather than a sentence, said plainly so nobody is surprised
     /// by it.
@@ -537,6 +573,99 @@ enum Copy {
     /// as quietly.
     static let originalCredit =
         "Hebrew and Greek: the Berean Standard Bible translation tables and the Westminster Leningrad Codex, public domain. Definitions: Strong’s Exhaustive Concordance (1890), public domain. Hebrew set in Noto Serif Hebrew (SIL Open Font License)."
+
+    // MARK: The front of the book (A67) — You opens the way a Bible does:
+    // the name on the flyleaf, a ribbon for each room, the shelf, and a
+    // colophon at the end. Nothing here is a count.
+
+    /// The flyleaf (A67): the section of ribbons under your name.
+    static let yourRibbons = "Your ribbons"
+    /// The flyleaf (A67): what the ribbons are, said once under them.
+    static let yourRibbonsFootnote = "One for each room you read in, left where that room left it."
+    /// The flyleaf (A67): a room's ribbon with no book open in that room.
+    static let betweenBooks = "between books"
+    /// The flyleaf (A67): one ribbon, spoken — the room, where its ribbon
+    /// lies, and your ink there when ink is who you are in it.
+    static func ribbonSpoken(_ room: String, _ place: String, ink: String?) -> String {
+        guard let ink else { return "\(room). \(place)." }
+        return "\(room). \(place). Your ink there is \(ink)."
+    }
+    /// The flyleaf (A67): what touching a ribbon does.
+    static let goesToThatRoom = "Goes to that room"
+    /// Your shelf (A67): every book you have finished, in every room.
+    static let yourShelf = "Your shelf"
+    /// Your shelf (A67): who a book was read with, by first name, the rest
+    /// as "others" — never a number.
+    static func shelfWith(_ names: [String], andOthers: Bool) -> String {
+        "with " + listed(andOthers ? names + ["others"] : names)
+    }
+    /// Your shelf (A67): a room of three or more, said by its own name.
+    static func shelfWithRoom(_ name: String) -> String { "with \(name)" }
+    /// Your shelf (A67): one ember, spoken.
+    static func emberSpoken(_ book: String, _ company: String?) -> String {
+        guard let company else { return book }
+        return "\(book), \(company)"
+    }
+    /// The colophon (A67): what the book is set in, the way a book's last
+    /// page says it — your page's typeface (A69).
+    static func colophonSetIn(_ face: String) -> String { "Set in \(face) and Alegreya Sans." }
+    /// Text (A67): the verse every version is shown at.
+    static func specimenAt(_ reference: String) -> String { "Each one shows \(reference) in its own words." }
+    /// Text (A69): the verse every typeface is shown at.
+    static func typefaceSpecimenAt(_ reference: String) -> String { "Each one sets \(reference) in its own letters." }
+    /// Text (A67): the size, spoken — a measure of type, not of a person.
+    static func textSizeValue(_ size: Double) -> String {
+        let whole = size.rounded() == size
+        return (whole ? String(Int(size)) : String(format: "%.1f", size)) + " point"
+    }
+    /// Text (A69): line spacing, spoken — the multiple, with its old name on
+    /// one of the three stops it had.
+    static func lineSpacingValue(_ hundredths: Int) -> String {
+        let number = String(format: "%.2f", Double(hundredths) / 100)
+        switch hundredths {
+        case PageType.lineSpacingNamed[0]: return "\(number), \(lineSpacingClose)"
+        case PageType.lineSpacingNamed[1]: return "\(number), \(lineSpacingBook)"
+        case PageType.lineSpacingNamed[2]: return "\(number), \(lineSpacingOpen)"
+        default: return number
+        }
+    }
+    /// Text (A69): weight, spoken — never an axis number: the nearest of the
+    /// three stops it had, and how many steps from it.
+    static func weightValue(_ reading: NamedReading) -> String {
+        let stop = [weightLighter, weightBook, weightHeavier][min(max(reading.index, 0), 2)]
+        guard reading.offset != 0 else { return stop }
+        let steps = abs(reading.offset) == 1 ? "1 step" : "\(abs(reading.offset)) steps"
+        return "\(steps) \(reading.offset > 0 ? "heavier" : "lighter") than \(stop)"
+    }
+    /// Text (A69): letter spacing, spoken, in ems.
+    static func letterSpacingValue(_ thousandths: Int) -> String {
+        guard thousandths != 0 else { return "As set" }
+        var number = String(format: "%.3f", Double(thousandths) / 1000)
+        while number.hasSuffix("0") { number.removeLast() }
+        return "\(number) em wider"
+    }
+    /// Text (A69): the margins, spoken.
+    static func marginValue(_ points: Int) -> String {
+        points == 0 ? "As set" : "\(points) point margins"
+    }
+    /// Notifications (A67): the words a switch's notification will use,
+    /// spoken.
+    static func notificationExampleSpoken(_ sentence: String) -> String { "It reads: \(sentence)" }
+    /// Notifications (A67): the cards, in a room of two.
+    static func cardsOpenSubNamed(_ name: String) -> String { "When you and \(name) have both answered." }
+    /// Notifications (A67): the book opened, in a room of two.
+    static func whenNameOpensTheBook(_ name: String) -> String { "When \(name) opens the book" }
+    /// Notifications (A67): thinking of you, in a room of two.
+    static func thinkingOfYouSubNamed(_ name: String) -> String { "A touch on the shoulder from \(name). No words." }
+    /// Quiet hours (A67): the band's two ends, said as one line.
+    static func quietHoursFromUntil(_ from: String, _ until: String) -> String { "From \(from) until \(until)" }
+    /// Quiet hours (A67): both ends on the same minute.
+    static let noQuietHours = "No quiet hours"
+    /// Quiet hours (A67): what the band is for.
+    static let quietHoursBandSub = "Drag either end of the night."
+    /// Quiet hours (A67): the band's two handles, spoken.
+    static let quietHoursBegin = "Quiet hours begin"
+    static let quietHoursEnd = "Quiet hours end"
     /// Megabytes on this device (S21) — a count about a device, not about a
     /// person, which is the one honest exception to Law 2 and the same
     /// boundary `noRoomOnPhone` states.
@@ -597,6 +726,7 @@ enum Copy {
         switch releaseID {
         case "2026-10-original": return "The words under the words"
         case "2026-10-following": return "Staying on the same page"
+        case "2026-10-flyleaf": return "The front of the book"
         default: return whatsNewHeading
         }
     }
@@ -669,6 +799,41 @@ enum Copy {
     static let whatsNewRowSub = "What each update brought"
     /// What's new, read again (A65): the way back to You, at the foot.
     static let whatsNewHistoryDone = "Done"
+    /// What's new (A67): You opens like the front of a Bible.
+    static let whatsNewFlyleafTitle = "Your name in the front of the book"
+    /// What's new (A67): the flyleaf and its ribbons.
+    static let whatsNewFlyleafBody =
+        "Tap your face and the page opens the way a Bible does: your name, then a ribbon for each room you read in, left where that room left it."
+    /// What's new (A67): your shelf, across your rooms.
+    static let whatsNewShelfTitle = "Every book you have finished, on one shelf"
+    /// What's new (A67): what is on it.
+    static let whatsNewShelfBody =
+        "Under your ribbons, an ember for each book you finished in any of your rooms, and who you read it with."
+    /// What's new (A67): versions shown in their own words.
+    static let whatsNewVersionsTitle = "Choose a version by reading it"
+    /// What's new (A67): the specimens, the ribbon, and the page.
+    static let whatsNewVersionsBody =
+        "Each version shows your verse in its own words, and a ribbon marks the one you read. The size you choose is set on a real page."
+    /// What's new (A68): the page, set the way you read it.
+    static let whatsNewPageTitle = "The page, the way you read it"
+    /// What's new (A68): where it is, and what it does.
+    static let whatsNewPageBody =
+        "In Text, sliders set the size, the spacing, the weight, the room between letters and the margins, with the page in view while you move them. Each verse can start a line of its own, and the verse numbers can be clearer."
+    /// What's new (A69): five typefaces.
+    static let whatsNewTypefaceTitle = "Set in the type you read best"
+    /// What's new (A69): where it is, and what it does.
+    static let whatsNewTypefaceBody =
+        "In Text, the page can be set in Literata, Source Serif, EB Garamond, Alegreya or Atkinson Hyperlegible. Each shows your verse in its own letters, at a size that matches."
+    /// What's new (A67): the switches say who.
+    static let whatsNewNotificationsTitle = "Notifications say who"
+    /// What's new (A67): in a room of two.
+    static let whatsNewNotificationsBody =
+        "In a room of two, the switches use their name, and while a book is open, two of them show what your phone will say, with their face."
+    /// What's new (A67): quiet hours as one band.
+    static let whatsNewQuietHoursTitle = "Quiet hours, drawn as the night"
+    /// What's new (A67): how it is set.
+    static let whatsNewQuietHoursBody =
+        "One band from noon to noon. Drag either end of the dark stretch. Thinking of you still arrives, as a touch."
 }
 
 /// The first word of a name, for the places that say it in passing. Kept

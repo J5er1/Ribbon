@@ -11,6 +11,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.expandVertically
@@ -24,6 +25,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -73,6 +75,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -82,17 +85,21 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -107,14 +114,24 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import app.readribbon.app.AppModel
 import app.readribbon.app.Copy
+import app.readribbon.app.firstName
 import app.readribbon.core.Bible
+import app.readribbon.core.Reading
 import app.readribbon.core.Room
+import app.readribbon.core.ShelfCompany
+import app.readribbon.core.VerseAddress
+import app.readribbon.core.YourShelf
 import app.readribbon.design.Air
 import app.readribbon.design.BackChevron
 import app.readribbon.design.Chevron
+import app.readribbon.design.ChoiceRibbon
+import app.readribbon.design.FadesUnderReduceMotion
 import app.readribbon.design.Flows
+import app.readribbon.design.HairlineRule
+import app.readribbon.design.HangingRibbon
 import app.readribbon.design.LocalAppearance
 import app.readribbon.design.LocalFlowLayer
+import app.readribbon.design.LocalFlowRoot
 import app.readribbon.design.Palette
 import app.readribbon.design.PortraitView
 import app.readribbon.design.QuietControl
@@ -127,6 +144,9 @@ import app.readribbon.design.Setting
 import app.readribbon.design.SettingValue
 import app.readribbon.design.SettingsGroup
 import app.readribbon.design.SmallCaps
+import app.readribbon.design.TextInset
+import app.readribbon.design.WaveMark
+import app.readribbon.design.color
 import app.readribbon.design.flows
 import app.readribbon.design.flowsAsWords
 import app.readribbon.design.grain
@@ -139,12 +159,15 @@ import app.readribbon.design.rememberBackPeel
 import app.readribbon.design.rememberReduceMotion
 import app.readribbon.design.room
 import app.readribbon.fire.CampfireGlyph
+import app.readribbon.fire.EmberView
+import app.readribbon.services.Destination
 import app.readribbon.services.Passkeys
 import app.readribbon.services.UpdateState
 import kotlin.math.roundToInt
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -214,7 +237,29 @@ private object MenuRoute {
     const val TOKEN = "token"
 
     fun join(token: Uuid): String = "join/$token"
+
+    /**
+     * One ember on your shelf (A67): the book's record, pushed inside You
+     * rather than over the room.
+     */
+    const val EMBER_PATTERN = "ember/{readingID}"
+    const val READING_ID = "readingID"
+
+    fun ember(readingID: Uuid): String = "ember/$readingID"
+
+    /**
+     * A face in that record, and the person it is (S12) — the same push the
+     * room's own record makes, so the portraits there go somewhere here too.
+     */
+    const val PERSON_PATTERN = "person/{personID}/{roomID}"
+    const val PERSON_ID = "personID"
+    const val ROOM_ID = "roomID"
+
+    fun person(personID: Uuid, roomID: Uuid): String = "person/$personID/$roomID"
 }
+
+/** A route's id segment, read back; anything that is not one is no id. */
+private fun String?.asUuid(): Uuid? = this?.let { runCatching { Uuid.parse(it) }.getOrNull() }
 
 /** `.padding(.horizontal, 24)` down the whole menu. */
 private val Margin = 24.dp
@@ -241,9 +286,46 @@ private val QuietControlInset = (-8).dp
 private val UpdateCardRadius = 8.dp
 private val UpdateBarHeight = 4.dp
 
-/** The chartreuse hairline that marks the current room (S14). */
+/**
+ * Where the hairline that marked the current room (S14) used to stand, kept
+ * as clear space so a room's name is still read from where it always was.
+ */
 private val MarkWidth = 2.dp
 private val MarkHeight = 34.dp
+
+/**
+ * The ribbon laid into the current room's tile (A67), the chosen version's
+ * mark a size smaller: hung from the tile's top edge, this far in from its
+ * leading edge — over the space the hairline left, clear of the name.
+ */
+private val CurrentRibbonWidth = 8.dp
+private val CurrentRibbonLength = 20.dp
+private val CurrentRibbonInset = 12.dp
+
+/**
+ * Your ribbons on You (A67): each room's column, the ribbon's width, and its
+ * length — no two neighbours alike, because two ribbons of slightly
+ * different length read as two people (brief §5), and six of one length
+ * would be a fringe rather than six rooms.
+ */
+private val RibbonColumnWidth = 92.dp
+private val RibbonWidth = 14.dp
+private val RibbonLengths = listOf(56.dp, 48.dp, 62.dp, 52.dp, 58.dp, 46.dp)
+
+/** How far behind its left-hand neighbour each ribbon is laid in. */
+private const val RIBBON_STAGGER_MS = 80
+
+/**
+ * Your shelf on You (A67): the gap between embers, as on a room's shelf,
+ * and the width the words under each are set in — enough for "with the
+ * Thursday study" on two lines under the smallest ember.
+ */
+private val ShelfSpacing = 18.dp
+private val ShelfWords = 104.dp
+
+/** The colophon (A67): its air from what is above it, and the Wave's size. */
+private val ColophonAir = 28.dp
+private val ColophonMark = 22.dp
 
 /** The members' portraits on a room row, overlapped, and the face on You. */
 private val RowPortrait = 18.dp
@@ -437,6 +519,7 @@ fun MenuScreen(
                         model = model,
                         onOpen = { route -> navController.navigate(route) },
                         onDismiss = { close() },
+                        onSwitch = onSwitch,
                     )
                 }
             }
@@ -476,6 +559,100 @@ fun MenuScreen(
             composable(MenuRoute.PLAN) {
                 CompositionLocalProvider(LocalFlowLayer provides this) {
                     PlanScreen(model = model, onBack = { navController.popBackStack() })
+                }
+            }
+            composable(
+                MenuRoute.EMBER_PATTERN,
+                arguments = listOf(navArgument(MenuRoute.READING_ID) { type = NavType.StringType }),
+            ) { entryArgs ->
+                val readingID = entryArgs.arguments?.getString(MenuRoute.READING_ID).asUuid()
+                val reading = model.state.readings.firstOrNull { it.id == readingID }
+                // No flow from the shelf on You into this record, and none
+                // out of it. The record names its ember and its book with the
+                // same keys the room's own shelf uses, and that shelf is
+                // composed under the menu the whole time it is open: two live
+                // halves of one key with neither leaving is the ambiguity
+                // design/Flow.kt keeps out of the menu, and the layout that
+                // never settles (A47). So this push is a plain one.
+                CompositionLocalProvider(LocalFlowRoot provides null) {
+                    if (reading == null) {
+                        Box(Modifier.fillMaxSize().room())
+                    } else {
+                        // The record the room's shelf opens (S11), with one
+                        // thing left off: reading the book again belongs to
+                        // the room it was read in, not to you (A67).
+                        // A room you have left keeps its books on your
+                        // shelf (§6.8) but has no page to open them on, and
+                        // one opened over another room would be read and
+                        // written as that room's — nor a person screen for
+                        // its faces. There the record quotes and shows,
+                        // and offers nothing it cannot do.
+                        val stillYours = model.room(reading.roomID) != null
+                        EmberRecordScreen(
+                            model = model,
+                            reading = reading,
+                            onOpenVerse = if (stillYours) {
+                                { verse ->
+                                    // By the road a tapped notification
+                                    // takes: the room it was read in, the
+                                    // book open at that verse, and the menu
+                                    // out of the way.
+                                    model.pendingDestination = Destination.Verse(
+                                        roomID = reading.roomID,
+                                        readingID = reading.id,
+                                        verse = verse,
+                                    )
+                                    close()
+                                }
+                            } else {
+                                null
+                            },
+                            onOpenPerson = if (stillYours) {
+                                { personID, roomID ->
+                                    navController.navigate(MenuRoute.person(personID, roomID))
+                                }
+                            } else {
+                                null
+                            },
+                            // Reading the book again belongs to the room
+                            // it was read in, not to you (A67).
+                            onReadAgain = null,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                }
+            }
+            composable(
+                MenuRoute.PERSON_PATTERN,
+                arguments = listOf(
+                    navArgument(MenuRoute.PERSON_ID) { type = NavType.StringType },
+                    navArgument(MenuRoute.ROOM_ID) { type = NavType.StringType },
+                ),
+            ) { entryArgs ->
+                val personID = entryArgs.arguments?.getString(MenuRoute.PERSON_ID).asUuid()
+                val personRoom = entryArgs.arguments?.getString(MenuRoute.ROOM_ID).asUuid()
+                    ?.let { model.room(it) }
+                // Plain, for the record's reason: the person's face shares
+                // its key with their seat at the hearth under the menu.
+                CompositionLocalProvider(LocalFlowRoot provides null) {
+                    if (personID == null || personRoom == null) {
+                        Box(Modifier.fillMaxSize().room())
+                    } else {
+                        PersonScreen(
+                            model = model,
+                            personID = personID,
+                            room = personRoom,
+                            onOpenVerse = { verse, readingID ->
+                                model.pendingDestination = Destination.Verse(
+                                    roomID = personRoom.id,
+                                    readingID = readingID,
+                                    verse = verse,
+                                )
+                                close()
+                            },
+                            onDismiss = { navController.popBackStack() },
+                        )
+                    }
                 }
             }
             composable(MenuRoute.JOIN_WITH_INVITE) {
@@ -666,12 +843,22 @@ private fun RoomMenu(
  * translation and text size are personal by §2.6, the wallpaper's colours are
  * a property of the phone, and the downloads are megabytes on it. Nothing on
  * this screen is about a room, which is the whole point of there being two.
+ *
+ * Set as the front of a Bible (A67): your name on the flyleaf, a ribbon for
+ * each room you read in, the books you have finished, then the settings, and
+ * at the very end a colophon — what the book is, what it is set in, and where
+ * its words come from. The ribbons are about rooms only as places you have
+ * left a ribbon; they are yours.
+ *
+ * @param onSwitch the room's book is put down before a ribbon takes you to
+ *   another room, as a room row's switch does.
  */
 @Composable
 private fun YouMenu(
     model: AppModel,
     onOpen: (String) -> Unit,
     onDismiss: () -> Unit,
+    onSwitch: (Uuid) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -704,6 +891,33 @@ private fun YouMenu(
     ) {
         YouIdentity(model = model)
         Air(SectionGap)
+
+        if (model.state.rooms.isNotEmpty()) {
+            YourRibbonsSection(
+                model = model,
+                // The road a room row takes: the book put down, the room
+                // switched, the menu closed behind you (S14).
+                onGo = { room ->
+                    onSwitch(room.id)
+                    model.switchRoom(room.id)
+                    onDismiss()
+                },
+            )
+            Air(SectionGap)
+        }
+
+        // The shelf is there once there is something on it: an empty shelf on
+        // the front page would be a space waiting to be filled, and nothing
+        // here asks for anything (S10's own rule, for a room's shelf).
+        val embers = YourShelf.embers(model.state.readings)
+        if (embers.isNotEmpty()) {
+            YourShelfSection(
+                model = model,
+                embers = embers,
+                onOpen = { reading -> onOpen(MenuRoute.ember(reading.id)) },
+            )
+            Air(SectionGap)
+        }
 
         // Grouped by what each thing is *about*, rather than by which screen
         // it happens to open. Translation and text size are how Scripture
@@ -761,44 +975,9 @@ private fun YouMenu(
         // worse than no heading — see [AccountSection].
         AccountSection(model = model, onDelete = { confirmDelete = true })
 
-        Air(SectionGap)
         UpdateSection(model = model)
 
-        // Tapping the version checks for one, and the line says so while it
-        // looks. The words cross-fade rather than swap: the check is usually
-        // over in well under a second, and a line that flicked to "checking"
-        // and back would read as a glitch rather than as an answer. The
-        // control is the box around them, so the target does not move as they
-        // change.
-        Box(
-            modifier = Modifier
-                .padding(top = 18.dp)
-                .clickable(role = Role.Button) { model.checkForUpdates() },
-        ) {
-            AnimatedContent(
-                targetState = if (model.updateState is UpdateState.Checking) {
-                    Copy.CHECKING_FOR_UPDATES
-                } else {
-                    Copy.versionLine(version)
-                },
-                transitionSpec = {
-                    fadeIn(RibbonMotion.arrive(reduceMotion)) togetherWith
-                        fadeOut(RibbonMotion.arrive(reduceMotion))
-                },
-                label = "the-version",
-            ) { line ->
-                SmallCaps(line, size = 11f, color = Palette.muted.copy(alpha = 0.7f))
-            }
-        }
-        // Where the original words come from (A60): a credit owed, said as
-        // quietly as the version above it. A sentence, so set as one rather
-        // than in small caps.
-        Text(
-            text = Copy.ORIGINAL_CREDIT,
-            style = RibbonType.ui(12f),
-            color = Palette.muted.copy(alpha = 0.7f),
-            modifier = Modifier.padding(top = 6.dp),
-        )
+        Colophon(model = model, version = version, reduceMotion = reduceMotion)
     }
 
     if (confirmDelete) {
@@ -918,6 +1097,10 @@ private fun MenuRow(
  * name is added here: with more than one room the fires are the same object
  * drawn small, and what a room is *reading* is the thing that tells them
  * apart at a glance. A book's name is an address, not a score (Law 2).
+ *
+ * The room you are in has a ribbon laid into it from the tile's top edge, as
+ * the chosen version has (A67) — a shape, where it was a 2 dp line of the
+ * accent.
  */
 @Composable
 private fun MenuRoomRow(
@@ -928,81 +1111,99 @@ private fun MenuRoomRow(
     val isCurrent = room.id == model.currentRoom?.id
     val reading = model.openReading(room)
 
-    Row(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .sizeIn(minHeight = 64.dp)
             .pressablePaper(RibbonShape.rowShape, role = Role.Button, onClick = onClick)
-            // The chartreuse mark is the only drawn sign of which room you
-            // are in, and colour is never the only signal (§11), so the same
-            // fact is carried in the row's state for a screen reader — which
-            // announces it as selected, and says no number about it.
-            .semantics { selected = isCurrent }
-            .padding(end = 16.dp, top = 10.dp, bottom = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            // The ribbon is a shape and a colour, and neither is heard (§11),
+            // so the same fact is carried in the row's state for a screen
+            // reader — which announces it as selected, and says no number
+            // about it.
+            .semantics { selected = isCurrent },
+        contentAlignment = Alignment.CenterStart,
     ) {
-        Box(
-            Modifier
-                .padding(start = 8.dp)
-                .width(MarkWidth)
-                .height(MarkHeight)
-                .clip(RoundedCornerShape(MarkWidth / 2))
-                .background(if (isCurrent) Palette.accent else Color.Transparent),
-        )
-
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(3.dp),
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(end = 16.dp, top = 10.dp, bottom = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = model.displayName(room),
-                style = RibbonType.ui(16f),
-                color = Palette.text,
+            // Where the hairline was, kept as clear space, so the room's
+            // name has not moved from where it was read.
+            Spacer(
+                Modifier
+                    .padding(start = 8.dp)
+                    .width(MarkWidth)
+                    .height(MarkHeight),
             )
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
             ) {
-                // Who is in it, as portraits. Rows, never a count (Law 2):
-                // the faces are the answer to "who", and there is no
-                // "+2 more".
-                Row(horizontalArrangement = Arrangement.spacedBy(RowPortraitOverlap)) {
-                    model.members(room).forEach { membership ->
-                        PortraitView(
-                            person = model.person(membership.personID),
-                            ink = membership.ink,
-                            size = RowPortrait,
-                            image = model.portrait(membership.personID),
-                        )
+                Text(
+                    text = model.displayName(room),
+                    style = RibbonType.ui(16f),
+                    color = Palette.text,
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    // Who is in it, as portraits. Rows, never a count (Law 2):
+                    // the faces are the answer to "who", and there is no
+                    // "+2 more".
+                    Row(horizontalArrangement = Arrangement.spacedBy(RowPortraitOverlap)) {
+                        model.members(room).forEach { membership ->
+                            PortraitView(
+                                person = model.person(membership.personID),
+                                ink = membership.ink,
+                                size = RowPortrait,
+                                image = model.portrait(membership.personID),
+                            )
+                        }
+                    }
+                    reading?.let { open ->
+                        Bible.book(open.bookID)?.let { book -> SmallCaps(book.name, size = 11f) }
                     }
                 }
-                reading?.let { open ->
-                    Bible.book(open.bookID)?.let { book -> SmallCaps(book.name, size = 11f) }
+            }
+
+            if (room.isPaused) {
+                SmallCaps(Copy.PAUSED, size = 11f)
+            }
+
+            reading?.let { open ->
+                val state = model.fireState(open)
+                // The glyph clears its own semantics everywhere else, because
+                // it always sits beside the words it illustrates; on a room
+                // row there are no such words, so the box around it says the
+                // state — a state, never a number (Law 2, §11).
+                Box(Modifier.semantics { contentDescription = Copy.fireIs(state.displayName) }) {
+                    // A paused room's fire is drawn in whatever state it
+                    // actually holds — never banked by a lapse (S14).
+                    CampfireGlyph(
+                        state = state,
+                        scale = open.handiwork.scale,
+                        height = 22.dp,
+                    )
                 }
             }
         }
 
-        if (room.isPaused) {
-            SmallCaps(Copy.PAUSED, size = 11f)
-        }
-
-        reading?.let { open ->
-            val state = model.fireState(open)
-            // The glyph clears its own semantics everywhere else, because it
-            // always sits beside the words it illustrates; on a room row
-            // there are no such words, so the box around it says the state —
-            // a state, never a number (Law 2, §11).
-            Box(Modifier.semantics { contentDescription = Copy.fireIs(state.displayName) }) {
-                // A paused room's fire is drawn in whatever state it actually
-                // holds — never banked by a lapse (S14).
-                CampfireGlyph(
-                    state = state,
-                    scale = open.handiwork.scale,
-                    height = 22.dp,
-                )
-            }
-        }
+        // Laid over the tile's paper rather than in the row, so it hangs from
+        // the tile's own top edge and not from the padding inside it.
+        ChoiceRibbon(
+            laid = isCurrent,
+            color = Palette.accent,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(start = CurrentRibbonInset),
+            width = CurrentRibbonWidth,
+            length = CurrentRibbonLength,
+        )
     }
 }
 
@@ -1260,6 +1461,377 @@ private fun YouIdentity(model: AppModel) {
             color = Palette.muted,
         )
         }
+    }
+}
+
+// MARK: The front of the book (A67)
+
+/**
+ * Your ribbons (A67): one for each room you read in, hanging from a hairline
+ * across the page the way a Bible's ribbons hang from its binding, each left
+ * where that room left it. A ribbon is a place, never a measure (A30): it
+ * says which chapter, not how far.
+ *
+ * Touching one goes to that room. In your ink there when ink is who you are
+ * in it, and in the accent where it is not — a room of two, where nobody's
+ * ink is theirs.
+ *
+ * @param onGo that room, by the road a room row takes.
+ */
+@Composable
+private fun YourRibbonsSection(
+    model: AppModel,
+    onGo: (Room) -> Unit,
+) {
+    // Laid in once each time You is opened, and not again on the way back
+    // from a page it pushed: You is a NavHost destination here, so a push
+    // disposes it and the pop composes it afresh — saveable, for the reason
+    // the name being edited above is. iOS keeps its root composed under a
+    // push and needs none of this.
+    var laidAlready by rememberSaveable { mutableStateOf(false) }
+    val layingIn = !laidAlready
+    LaunchedEffect(Unit) { laidAlready = true }
+
+    val accent = Palette.accent
+
+    SectionLabel(Copy.YOUR_RIBBONS)
+    Air(10.dp)
+    Box(Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                // Compose draws no scroll indicators, which is what the row
+                // asks for.
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = TextInset),
+            verticalAlignment = Alignment.Top,
+        ) {
+            model.state.rooms.forEachIndexed { index, room ->
+                key(room.id) {
+                    val ink = model.myMembership(room)?.ink
+                    RoomRibbon(
+                        name = model.displayName(room),
+                        place = ribbonPlace(model, room),
+                        ink = ink?.displayName,
+                        color = ink?.color ?: accent,
+                        length = RibbonLengths[index % RibbonLengths.size],
+                        // Laid in from the binding one after another, from
+                        // the left.
+                        layInDelayMillis = if (layingIn) index * RIBBON_STAGGER_MS else null,
+                        onGo = { onGo(room) },
+                    )
+                }
+            }
+        }
+        // The binding: the full width of the row, still while the ribbons
+        // scroll under it, and drawn over their top edges so each reads as
+        // tucked into it.
+        HairlineRule(Modifier.align(Alignment.TopStart))
+    }
+    Text(
+        text = Copy.YOUR_RIBBONS_FOOTNOTE,
+        style = RibbonType.ui(14f),
+        color = Palette.muted,
+        modifier = Modifier.padding(start = TextInset, end = TextInset, top = 12.dp),
+    )
+}
+
+/**
+ * One room's ribbon, and under it the room and where its ribbon lies.
+ *
+ * One control, said as one sentence — the room, the place, your ink there —
+ * with what touching it does as its click label. The drawing is hidden: the
+ * sentence is what it is a picture of.
+ */
+@Composable
+private fun RoomRibbon(
+    name: String,
+    place: String,
+    ink: String?,
+    color: Color,
+    length: Dp,
+    layInDelayMillis: Int?,
+    onGo: () -> Unit,
+) {
+    val spoken = Copy.ribbonSpoken(name, place, ink)
+
+    // The words come with their ribbon. A change of light rather than a
+    // movement, so it stays a fade under reduce motion too.
+    val words = remember { Animatable(if (layInDelayMillis == null) 1f else 0f) }
+    LaunchedEffect(Unit) {
+        if (layInDelayMillis == null) return@LaunchedEffect
+        delay(layInDelayMillis.toLong())
+        withContext(FadesUnderReduceMotion) { words.animateTo(1f, RibbonMotion.arrive()) }
+    }
+
+    // The words' column grows with the reader's type, so that at the largest
+    // sizes a room's name wraps rather than ending in an ellipsis; the row
+    // scrolls, so a wider column only scrolls further. The ribbon is drawing,
+    // not type, and stays as it is.
+    val fontScale = LocalDensity.current.fontScale
+    Column(
+        modifier = Modifier
+            .width(RibbonColumnWidth * fontScale)
+            .sizeIn(minHeight = MinTarget)
+            .pressable(role = Role.Button, onClickLabel = Copy.GOES_TO_THAT_ROOM, onClick = onGo)
+            .clearAndSetSemantics {
+                contentDescription = spoken
+                role = Role.Button
+                onClick(label = Copy.GOES_TO_THAT_ROOM) {
+                    onGo()
+                    true
+                }
+            }
+            // Air on the trailing side, so one room's words stop short of
+            // the next room's ribbon.
+            .padding(end = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        HangingRibbon(
+            color = color,
+            width = RibbonWidth,
+            length = length,
+            layInDelayMillis = layInDelayMillis,
+        )
+        Column(
+            modifier = Modifier.graphicsLayer { alpha = words.value },
+            verticalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            Text(
+                text = name,
+                style = RibbonType.ui(14f),
+                color = Palette.text,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            SmallCaps(place, size = 11f)
+        }
+    }
+}
+
+/**
+ * Where a room's ribbon lies (A30), as a chapter — "Mark 4" — or, before
+ * anyone has set the book down having moved, the book; and with no book
+ * open, between books.
+ */
+private fun ribbonPlace(model: AppModel, room: Room): String {
+    val reading = model.openReading(room) ?: return Copy.BETWEEN_BOOKS
+    val left = model.ribbon(reading)
+    if (left != null) {
+        return VerseAddress(
+            bookID = reading.bookID,
+            chapter = left.chapter,
+            verse = left.verse,
+        ).chapterFormatted
+    }
+    return Bible.book(reading.bookID)?.name ?: reading.bookID
+}
+
+/**
+ * Your shelf (A67): every book you have finished, in every room you have
+ * read in — the books of a room you have left among them, as leaving
+ * promises (§6.8) — first finished first. Embers on one baseline with no
+ * shelf drawn (S10), each with its book and who it was read with. Never a
+ * count: a row of objects, not a tally.
+ *
+ * @param onOpen that book's record, pushed inside You.
+ */
+@Composable
+private fun YourShelfSection(
+    model: AppModel,
+    embers: List<Reading>,
+    onOpen: (Reading) -> Unit,
+) {
+    SectionLabel(Copy.YOUR_SHELF)
+    Air(10.dp)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = TextInset),
+        horizontalArrangement = Arrangement.spacedBy(ShelfSpacing),
+    ) {
+        embers.forEach { reading ->
+            key(reading.id) {
+                ShelfEmberOnYou(
+                    reading = reading,
+                    company = companyLine(model, reading),
+                    onOpen = { onOpen(reading) },
+                    // Every column on the first baseline of its book's name,
+                    // which sits the same distance under every ember — so
+                    // the embers stand on one line whether or not a second
+                    // line of company follows (S10's shared baseline).
+                    modifier = Modifier.alignByBaseline(),
+                )
+            }
+        }
+    }
+}
+
+/** One finished book on You: its ember, its name, and who it was read with. */
+@Composable
+private fun ShelfEmberOnYou(
+    reading: Reading,
+    company: String?,
+    onOpen: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val book = Bible.book(reading.bookID)?.name ?: reading.bookID
+    val spoken = Copy.emberSpoken(book, company)
+    Column(
+        modifier = modifier
+            .sizeIn(minWidth = MinTarget, minHeight = MinTarget)
+            // An ember takes a press the way a tile does.
+            .pressable(role = Role.Button, onClick = onOpen)
+            .clearAndSetSemantics {
+                contentDescription = spoken
+                role = Role.Button
+                onClick {
+                    onOpen()
+                    true
+                }
+            },
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        // No flow on this ember. The record it opens is pushed inside the
+        // menu, and the room's own shelf — composed under the menu — already
+        // holds this ember's key; see the record's route in [MenuScreen].
+        EmberView(scale = reading.handiwork.scale)
+        // Grows with the reader's type, as the ribbons' words do.
+        Column(
+            modifier = Modifier.width(ShelfWords * LocalDensity.current.fontScale),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = book,
+                style = RibbonType.smallCaps(12f),
+                color = Palette.text.copy(alpha = 0.8f),
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            if (company != null) {
+                Text(
+                    text = company,
+                    style = RibbonType.smallCaps(11f),
+                    color = Palette.muted,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Who a book was read with: first names, "and others" for the rest, or a
+ * named room of three or more by its name. A book read alone, or in a room
+ * you have since left, is said by nothing.
+ */
+private fun companyLine(model: AppModel, reading: Reading): String? =
+    when (
+        val company = YourShelf.company(
+            reading = reading,
+            rooms = model.state.rooms,
+            memberships = model.state.memberships,
+            me = model.me?.id,
+        )
+    ) {
+        is ShelfCompany.Alone -> null
+        is ShelfCompany.People -> {
+            val names = company.people.mapNotNull { model.person(it)?.name }.map { firstName(it) }
+            if (names.isEmpty() && !company.andOthers) {
+                null
+            } else {
+                Copy.shelfWith(names, company.andOthers)
+            }
+        }
+        is ShelfCompany.Room -> Copy.shelfWithRoom(company.name)
+    }
+
+/**
+ * The colophon (A67): the book's last page, where a book says what it is,
+ * what it is set in, and whose words it borrows — the Wave, the version, the
+ * typefaces, and the credit for the original words (A60). Set small and
+ * centred, as a colophon is, after the last thing that can be done here.
+ */
+@Composable
+private fun Colophon(model: AppModel, version: String, reduceMotion: Boolean) {
+    val quiet = Palette.muted.copy(alpha = 0.7f)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = TextInset, end = TextInset, top = ColophonAir),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        // Faded as a whole rather than drawn in a faded ink: the Wave's
+        // knockout is the ground stroked over the back ribbon, and in a
+        // translucent ink the front would darken where it crosses the back.
+        // Laid in a layer and faded there, the two ribbons are one ink and
+        // the knockout stays the ground.
+        WaveMark(
+            size = ColophonMark,
+            tint = Palette.muted,
+            ground = Palette.ground,
+            modifier = Modifier
+                .clearAndSetSemantics {}
+                .graphicsLayer { alpha = 0.6f },
+        )
+
+        // Tapping the version checks for one, and the line says so while it
+        // looks. The words cross-fade rather than swap: the check is usually
+        // over in well under a second, and a line that flicked to "checking"
+        // and back would read as a glitch rather than as an answer. The
+        // control is the box around them, so the target does not move as they
+        // change — a whole target tall, so a finger and TalkBack's focus have
+        // more than the small capitals to land on. Its own height is the air
+        // either side of it, which is why the column has no spacing of its
+        // own here.
+        Box(
+            modifier = Modifier
+                .sizeIn(minWidth = MinTarget, minHeight = MinTarget)
+                .clickable(role = Role.Button) { model.checkForUpdates() },
+            contentAlignment = Alignment.Center,
+        ) {
+            AnimatedContent(
+                targetState = if (model.updateState is UpdateState.Checking) {
+                    Copy.CHECKING_FOR_UPDATES
+                } else {
+                    Copy.versionLine(version)
+                },
+                // Centred while the box eases between the two lines' widths,
+                // as the column around it is.
+                contentAlignment = Alignment.Center,
+                transitionSpec = {
+                    fadeIn(RibbonMotion.arrive(reduceMotion)) togetherWith
+                        fadeOut(RibbonMotion.arrive(reduceMotion))
+                },
+                label = "the-version",
+            ) { line ->
+                SmallCaps(line, size = 11f, color = quiet)
+            }
+        }
+
+        // Sentences, so set as sentences rather than in small caps: the
+        // typefaces the book is set in, and where the original words come
+        // from (A60).
+        Text(
+            text = Copy.colophonSetIn(model.settings.face.name),
+            style = RibbonType.ui(12f),
+            color = quiet,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(10.dp))
+        Text(
+            text = Copy.ORIGINAL_CREDIT,
+            style = RibbonType.ui(12f),
+            color = quiet,
+            textAlign = TextAlign.Center,
+        )
     }
 }
 
@@ -1602,25 +2174,31 @@ private fun UpdateSection(model: AppModel) {
         var shown by remember { mutableStateOf(state) }
         LaunchedEffect(state) { if (hasNews) shown = state }
 
-        UpdateCard(
-            state = shown,
-            reduceMotion = reduceMotion,
-            onSkip = {
-                if (shown is UpdateState.Error) {
-                    model.dismissUpdateError()
-                } else {
-                    model.dismissUpdate()
-                }
-            },
-            onUpdate = {
-                if (shown is UpdateState.Error) {
-                    model.dismissUpdateError()
-                    model.checkForUpdates()
-                } else {
-                    model.triggerUpdate(context)
-                }
-            },
-        )
+        // The card's air is the card's own, and comes and goes with it: with
+        // nothing to say there is nothing here at all, and the colophon keeps
+        // its own measure from whatever is above it (A67).
+        Column {
+            Air(SectionGap)
+            UpdateCard(
+                state = shown,
+                reduceMotion = reduceMotion,
+                onSkip = {
+                    if (shown is UpdateState.Error) {
+                        model.dismissUpdateError()
+                    } else {
+                        model.dismissUpdate()
+                    }
+                },
+                onUpdate = {
+                    if (shown is UpdateState.Error) {
+                        model.dismissUpdateError()
+                        model.checkForUpdates()
+                    } else {
+                        model.triggerUpdate(context)
+                    }
+                },
+            )
+        }
     }
 }
 

@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import app.readribbon.app.AppModel
 import app.readribbon.app.Copy
@@ -107,23 +108,27 @@ class SettingsFlowSettlesTest {
         compose.waitForIdle()
     }
 
+    // Each row is scrolled to before it is tapped: your ribbons, and your
+    // shelf once a book is finished, now stand between your name and these
+    // rows (A67), so where they fall depends on the phone.
+
     @Test fun openingAppearanceSettles() {
         openTheMenu(MenuEntry.YOU)
-        compose.onNodeWithText(Copy.APPEARANCE).performClick()
+        compose.onNodeWithText(Copy.APPEARANCE).performScrollTo().performClick()
         compose.waitForIdle()
     }
 
     /** The same flow key, the same bar, a different door. */
     @Test fun openingTextSettles() {
         openTheMenu(MenuEntry.YOU)
-        compose.onNodeWithText(Copy.TEXT_AND_TRANSLATION).performClick()
+        compose.onNodeWithText(Copy.TEXT_AND_TRANSLATION).performScrollTo().performClick()
         compose.waitForIdle()
     }
 
     /** And coming back, which is the half the report was actually about. */
     @Test fun comingBackFromAppearanceSettles() {
         openTheMenu(MenuEntry.YOU)
-        compose.onNodeWithText(Copy.APPEARANCE).performClick()
+        compose.onNodeWithText(Copy.APPEARANCE).performScrollTo().performClick()
         compose.waitForIdle()
         compose.onNodeWithContentDescriptionOrLabel(Copy.BACK).performClick()
         compose.waitForIdle()

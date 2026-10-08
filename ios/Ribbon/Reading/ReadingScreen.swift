@@ -18,6 +18,10 @@ enum ReadingPlace: Equatable {
 struct ReadingScreen: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    /// Bold Text, which adds weight to the page on Literata's own axis
+    /// (A68). Read here, where the page's theme is built, so that turning
+    /// it on or off sets the page again.
+    @Environment(\.legibilityWeight) private var legibilityWeight
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
     let room: Room
@@ -39,6 +43,8 @@ struct ReadingScreen: View {
     /// a handle crossing a word redraws the toolbar over it, and nothing
     /// else — not the page, not every chapter's marks.
     @State private var selection = PageSelection()
+    /// The page column's width (A69).
+    @State private var columnWidth: CGFloat = 0
     /// The verse a note is being written or spoken on, drawn held while the
     /// composer has the focus and the page's selection has let go (S05).
     @State private var heldVerse: VerseAddress?
@@ -246,6 +252,15 @@ struct ReadingScreen: View {
     /// sits below the scroll view's top when the book opens.
     private static let pageTop: CGFloat = 26
 
+    /// The margin the page gives either side (A69): outside the gutter, so
+    /// notes stay beside their words, and never under the presence form,
+    /// which keeps the trailing edge as it always has.
+    private var pageMargin: CGFloat {
+        ReadingTheme.margin(
+            requested: model.settings.marginRequested, columnWidth: columnWidth,
+            fontSize: CGFloat(model.settings.scriptureSize))
+    }
+
     private var book: BibleBook? { Bible.book(id: reading.bookID) }
     /// Your own version, open book or finished (A60, reversing A42): a
     /// mark follows its original words into whatever each of you reads.
@@ -312,6 +327,7 @@ struct ReadingScreen: View {
                         if n < (book?.chapterCount ?? 1) {
                             PassageEndView(
                                 reading: reading,
+                                margin: pageMargin,
                                 chapter: n,
                                 copyright: chapterContent(n)?.copyright,
                                 nextChapterTitle: book?.chapterHeading(n + 1) ?? "\(n + 1)",
@@ -332,6 +348,9 @@ struct ReadingScreen: View {
                     finishingSection
                 }
                 .padding(.top, Self.pageTop)
+                // The width the page is set in, which its margin gives way
+                // to (A69).
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { columnWidth = $0 }
                 // Behind the stack, where it can find the scroll view that
                 // backs the page: the moves inside a chapter are made on it
                 // (I40).
@@ -667,10 +686,8 @@ struct ReadingScreen: View {
                     translation: translation,
                     runningHead: book?.chapterHeading(n) ?? "\(reading.bookID) \(n)",
                     theme: ReadingTheme(
-                        fontSize: model.settings.scriptureSize,
-                        lineHeightMultiple: model.settings.lineHeightMultiple,
-                        redLetter: model.settings.redLetter,
-                        dynamicTypeSize: dynamicTypeSize),
+                        model.settings, boldText: legibilityWeight == .bold,
+                        dynamicTypeSize: dynamicTypeSize, columnWidth: columnWidth),
                     marks: marks(chapter: n),
                     justMarked: justMarked,
                     heldVerse: heldVerse?.chapter == n ? heldVerse?.verse : nil,
@@ -728,8 +745,8 @@ struct ReadingScreen: View {
                     Spacer().frame(height: 320)
                 }
             }
-            .padding(.leading, 36)
-            .padding(.trailing, 26)
+            .padding(.leading, 36 + pageMargin)
+            .padding(.trailing, 26 + pageMargin)
             .task(id: "\(licensed.id.rawValue)/\(chapterAttempts[n, default: 0])") {
                 let address = VerseAddress(bookID: reading.bookID, chapter: n, verse: 1)
                 if let chapter = await model.scripture.ensureRemoteChapter(address, translation: licensed) {
@@ -837,7 +854,7 @@ struct ReadingScreen: View {
                 GutterStack(notes: stack, roomID: room.id) {
                     toggleNote(at: VerseAddress(bookID: reading.bookID, chapter: chapter, verse: verse))
                 }
-                .position(x: 14, y: y)
+                .position(x: pageMargin + 14, y: y)
                 // A note opening above moves the verses under it down over
                 // 400 ms (S04, I32), and their marks go with them rather
                 // than arriving first.
@@ -912,8 +929,8 @@ struct ReadingScreen: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.leading, 36)
-            .padding(.trailing, 26)
+            .padding(.leading, 36 + pageMargin)
+            .padding(.trailing, 26 + pageMargin)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
                 if abs(height - noteCardHeight) > 1 { noteCardHeight = height }
             }
@@ -2453,6 +2470,8 @@ struct EditionCopyright: View {
 struct PassageEndView: View {
     @Environment(AppModel.self) private var model
     let reading: Reading
+    /// The page's margin (A69), so the rule keeps to the words' width.
+    var margin: CGFloat = 0
     let chapter: Int
     var copyright: String?
     let nextChapterTitle: String
@@ -2464,8 +2483,8 @@ struct PassageEndView: View {
             Spacer().frame(height: 34)
             EditionCopyright(text: copyright)
             HairlineRule()
-                .padding(.leading, 36)
-                .padding(.trailing, 26)
+                .padding(.leading, 36 + margin)
+                .padding(.trailing, 26 + margin)
 
             if let room = model.room(of: reading) {
                 let card = model.card(for: reading, chapter: chapter)

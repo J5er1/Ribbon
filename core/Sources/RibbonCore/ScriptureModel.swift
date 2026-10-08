@@ -48,6 +48,21 @@ public struct ScriptureBlock: Codable, Hashable, Sendable {
         self.s = s
         self.x = x
     }
+
+    /// Where a page set verse by verse starts a new line (A68): the indices
+    /// of the spans it breaks before. Only prose does (`p`, `m`), and only
+    /// before a span that begins a verse; never before a block's first span,
+    /// which starts a line already. Poetry keeps its own lines, and a title
+    /// or a stanza break is not a verse's to break.
+    ///
+    /// It adds no characters to any verse's own text (`ownTexts()`): a
+    /// verse always starts a fresh span, so every break falls on a span
+    /// boundary, and the page builders put it outside the verse's text, as
+    /// they do a block's own newline.
+    public func verseLineStarts() -> [Int] {
+        guard s == .p || s == .m else { return [] }
+        return x.indices.filter { $0 > 0 && x[$0].v != nil }
+    }
 }
 
 public struct ScriptureChapter: Codable, Hashable, Sendable {

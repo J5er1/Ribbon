@@ -39,6 +39,10 @@
 		<string>AlegreyaSansSC-Regular.ttf</string>
 		<string>AlegreyaSansSC-Medium.ttf</string>
 		<string>NotoSerifHebrew[wdth,wght].ttf</string>
+		<string>SourceSerif4[opsz,wght].ttf</string>
+		<string>EBGaramond[wght].ttf</string>
+		<string>Alegreya[wght].ttf</string>
+		<string>AtkinsonHyperlegibleNext[wght].ttf</string>
 	</array>
 	<key>UIBackgroundModes</key>
 	<array>

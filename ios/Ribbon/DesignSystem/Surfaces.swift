@@ -1,4 +1,5 @@
 import SwiftUI
+import RibbonCore
 
 // Paper and wells (build book §9.2, ledger A20/A23).
 //
@@ -217,12 +218,30 @@ struct RowText: View {
     var title: String
     var subtitle: String?
     var titleColor: Color = Palette.text
+    /// A few words of Scripture between the title and the subtitle — a
+    /// version shown by what it says (S20, A67). Set as the page sets
+    /// Scripture, a shade under ivory, and never more than three lines.
+    var specimen: String? = nil
+    /// The face the specimen is set in: Literata for a version, each
+    /// typeface for itself (A69), at the size that looks like Literata's 16.
+    var specimenFace: PageFace = PageFaces.literata
+    /// The weight the specimen is set at, Literata's terms: Book, or Book
+    /// with Bold Text (A69).
+    var specimenWeight: Int = 400
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title)
                 .font(RibbonType.ui(17))
                 .foregroundStyle(titleColor)
+            if let specimen {
+                Text(specimen)
+                    .font(RibbonType.scripture(16, weight: specimenWeight, face: specimenFace))
+                    .foregroundStyle(Palette.text.opacity(0.86))
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.vertical, 2)
+            }
             if let subtitle {
                 Text(subtitle)
                     .font(RibbonType.ui(14))
@@ -241,17 +260,13 @@ struct SettingRow: View {
     var subtitle: String?
     var value: String?
     var chevron = true
-    /// The row whose value is being set right now, in a picker opened
-    /// beneath it: its value lights, so the picker says whose it is.
-    var active = false
     var action: () -> Void
 
-    init(_ title: String, subtitle: String? = nil, value: String? = nil, chevron: Bool = true, active: Bool = false, action: @escaping () -> Void) {
+    init(_ title: String, subtitle: String? = nil, value: String? = nil, chevron: Bool = true, action: @escaping () -> Void) {
         self.title = title
         self.subtitle = subtitle
         self.value = value
         self.chevron = chevron
-        self.active = active
         self.action = action
     }
 
@@ -261,8 +276,7 @@ struct SettingRow: View {
                 RowText(title: title, subtitle: subtitle)
                 Spacer(minLength: 8)
                 if let value {
-                    SmallCaps(value, size: 13, color: active ? Palette.chartreuse : Palette.muted)
-                        .animation(RibbonMotion.arrive, value: active)
+                    SmallCaps(value, size: 13, color: Palette.muted)
                 }
                 if chevron {
                     Chevron()
@@ -276,30 +290,37 @@ struct SettingRow: View {
         }
         .buttonStyle(.pressable)
         .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(active ? .isSelected : [])
     }
 }
 
-/// A row with a switch on it.
+/// A row with a switch on it — the drawn one (I41), and the whole row
+/// takes the tap. Under the title, where a room of two makes it possible,
+/// an example of the notification the switch lets through (A67).
 struct SettingSwitch: View {
     var title: String
     var subtitle: String?
+    var example: SettingExample?
     @Binding var isOn: Bool
 
-    init(_ title: String, subtitle: String? = nil, isOn: Binding<Bool>) {
+    init(_ title: String, subtitle: String? = nil, example: SettingExample? = nil, isOn: Binding<Bool>) {
         self.title = title
         self.subtitle = subtitle
+        self.example = example
         self._isOn = isOn
     }
 
     var body: some View {
         Toggle(isOn: $isOn) {
-            RowText(title: title, subtitle: subtitle)
+            VStack(alignment: .leading, spacing: 10) {
+                RowText(title: title, subtitle: subtitle)
+                if let example {
+                    SettingExampleView(example: example)
+                }
+            }
         }
-        .tint(Palette.chartreuse)
-        .padding(.horizontal, RibbonShape.textInset)
-        .padding(.vertical, 12)
-        .frame(maxWidth: .infinity, minHeight: subtitle == nil ? RibbonShape.rowHeight : RibbonShape.tallRowHeight, alignment: .leading)
+        .toggleStyle(RibbonToggleStyle(
+            insets: EdgeInsets(top: 12, leading: RibbonShape.textInset, bottom: 12, trailing: RibbonShape.textInset),
+            minHeight: subtitle == nil ? RibbonShape.rowHeight : RibbonShape.tallRowHeight))
         .tile()
     }
 }
@@ -374,49 +395,60 @@ struct SettingControl<Control: View>: View {
     }
 }
 
-/// One of several: a row that is chosen or not, with a drawn check when it
-/// is. The group is the radio; each row reports its state.
+/// One of several: a row that is chosen or not, with a ribbon laid into
+/// it from its top edge when it is (A67) — the place kept, as a ribbon
+/// keeps a place in a book. The group is the radio; each row reports its
+/// state, so the ribbon is never the only signal (§11).
+///
+/// A version's row can carry a specimen: the verse you are at, in that
+/// version's words, so a version is chosen by reading it (S20).
 struct SettingChoice: View {
     var title: String
     var subtitle: String?
+    var specimen: String?
+    var specimenFace: PageFace
+    var specimenWeight: Int
     var chosen: Bool
     var action: () -> Void
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    init(_ title: String, subtitle: String? = nil, chosen: Bool, action: @escaping () -> Void) {
+    init(
+        _ title: String, subtitle: String? = nil, specimen: String? = nil,
+        specimenFace: PageFace = PageFaces.literata, specimenWeight: Int = 400,
+        chosen: Bool, action: @escaping () -> Void
+    ) {
         self.title = title
         self.subtitle = subtitle
+        self.specimen = specimen
+        self.specimenFace = specimenFace
+        self.specimenWeight = specimenWeight
         self.chosen = chosen
         self.action = action
     }
 
+    private static let ribbonWidth: CGFloat = 10
+
     var body: some View {
         Button(action: action) {
             HStack(spacing: 12) {
-                RowText(title: title, subtitle: subtitle)
+                RowText(
+                    title: title, subtitle: subtitle, specimen: specimen,
+                    specimenFace: specimenFace, specimenWeight: specimenWeight)
                 Spacer(minLength: 8)
-                ZStack {
-                    Circle().strokeBorder(chosen ? Palette.chartreuse : Palette.rule, lineWidth: 1.5)
-                    // The check draws itself in the way a pen would, and
-                    // lifts off the same way when the choice moves on — a
-                    // dot moving down a list, on the fingertip's spring.
-                    // Under reduce motion it is simply there, fading.
-                    Path { p in
-                        p.move(to: CGPoint(x: 5, y: 10))
-                        p.addLine(to: CGPoint(x: 8.5, y: 13.5))
-                        p.addLine(to: CGPoint(x: 15, y: 7))
-                    }
-                    .trim(from: 0, to: chosen || reduceMotion ? 1 : 0)
-                    .stroke(Palette.chartreuse, style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round))
-                    .opacity(chosen ? 1 : 0)
-                }
-                .frame(width: 20, height: 20)
-                .animation(reduceMotion ? RibbonMotion.arrive : RibbonMotion.touched, value: chosen)
-                .accessibilityHidden(true)
+                // The ribbon's column, kept clear on every row, chosen or
+                // not, so no line of text runs under a ribbon and nothing
+                // reflows when the choice moves.
+                Color.clear
+                    .frame(width: Self.ribbonWidth, height: 0)
             }
             .padding(.horizontal, RibbonShape.textInset)
             .padding(.vertical, 12)
             .frame(maxWidth: .infinity, minHeight: subtitle == nil ? RibbonShape.rowHeight : RibbonShape.tallRowHeight, alignment: .leading)
+            // From the tile's top edge, over the column kept for it, its
+            // right edge where the text's margin is.
+            .overlay(alignment: .topTrailing) {
+                ChoiceRibbon(laid: chosen, width: Self.ribbonWidth)
+                    .padding(.trailing, RibbonShape.textInset)
+            }
             .contentShape(Rectangle())
             .tile()
         }

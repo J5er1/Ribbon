@@ -8,32 +8,9 @@ import RibbonCore
 // small, the shape churns less, and a person's whole shelf can be exported
 // by encoding this struct (§13).
 
-/// Per-room notification switches (S19). Defaults per the build book: notes
-/// on, cards on, "when they open the book" off — the killer feature for
-/// couples and the creepiest one for a study, so opt-in per room is the
-/// only defensible default.
-struct RoomNotificationPrefs: Codable, Hashable {
-    var notesLeft = true
-    var cardsOpen = true
-    var whenTheyOpenTheBook = false
-    var thinkingOfYou = true
-}
-
-struct AppSettings: Codable, Hashable {
-    var scriptureSize: Double = 19
-    /// 0, 1, 2 → line-height multiples 1.55, 1.72, 1.9 (S20's three steps).
-    var lineSpacingStep: Int = 1
-    var redLetter = false
-    /// One per person, applying to every room (S19). Minutes from midnight,
-    /// local. Default 10 p.m. – 6 a.m.
-    var quietHoursStart = 22 * 60
-    var quietHoursEnd = 6 * 60
-    var roomNotifications: [UUID: RoomNotificationPrefs] = [:]
-
-    var lineHeightMultiple: Double {
-        [1.55, 1.72, 1.9][max(0, min(2, lineSpacingStep))]
-    }
-}
+// The reader's settings, `AppSettings` and `RoomNotificationPrefs`, are
+// RibbonCore's (I42): there they decode a field at a time, so a field
+// added in one build cannot make the last build's file unreadable.
 
 /// A write this phone still owes the backend (A36): the row is looked up
 /// by id at replay, so nothing but the intent is stored. Persisted, because
@@ -183,7 +160,7 @@ actor LocalStore {
         return salvage(data)
     }
 
-    /// A state file this build cannot read whole (ledger A43).
+    /// A state file this build cannot read whole (ledger A44, I17).
     ///
     /// The room's content is the backend's and comes back on the next pull;
     /// what would not come back is what only this phone knows — the

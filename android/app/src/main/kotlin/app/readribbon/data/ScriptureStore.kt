@@ -39,6 +39,14 @@ class ScriptureStore(context: Context) {
     fun chapter(address: VerseAddress, translation: TranslationID): ScriptureChapter? =
         book(address.bookID, translation)?.chapter(address.chapter)
 
+    /**
+     * A chapter only if its book is already parsed — never a file read, so
+     * it can be asked in composition for a first frame that must not wait.
+     * Null says "not yet", not "not there"; [chapter] is the answer to that.
+     */
+    fun parsedChapter(address: VerseAddress, translation: TranslationID): ScriptureChapter? =
+        cache["${translation.rawValue}/${address.bookID}"]?.chapter(address.chapter)
+
     fun verseText(address: VerseAddress, translation: TranslationID): String? =
         chapter(address, translation)?.text(address.verse)
 

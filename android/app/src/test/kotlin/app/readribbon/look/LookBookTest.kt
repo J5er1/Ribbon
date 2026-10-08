@@ -7,24 +7,30 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import app.readribbon.R
@@ -42,6 +48,8 @@ import app.readribbon.core.Ink
 import app.readribbon.core.Membership
 import app.readribbon.core.Note
 import app.readribbon.core.NoteKind
+import app.readribbon.core.PageFaces
+import app.readribbon.core.PageType
 import app.readribbon.core.Person
 import app.readribbon.core.Reading
 import app.readribbon.core.ReadingPosition
@@ -55,6 +63,7 @@ import app.readribbon.core.TranslationID
 import app.readribbon.core.VerseAddress
 import app.readribbon.core.VerseRange
 import app.readribbon.core.displayName
+import app.readribbon.data.AppSettings
 import app.readribbon.data.AppState
 import app.readribbon.data.LocalStore
 import app.readribbon.design.Appearance
@@ -68,22 +77,22 @@ import app.readribbon.design.room
 import app.readribbon.reading.ChapterText
 import app.readribbon.reading.ChaptersContent
 import app.readribbon.reading.HeldWord
-import app.readribbon.reading.OriginalPanel
-import app.readribbon.reading.originalReadingOf
-import app.readribbon.reading.originalUnderLift
-import app.readribbon.reading.rememberSelected
-import app.readribbon.reading.RoomPerson
-import app.readribbon.reading.RoomSaid
-import app.readribbon.reading.RoomSection
-import app.readribbon.reading.roomSayingOnPhone
-import app.readribbon.reading.roomSection
-import app.readribbon.reading.roomSectionOf
 import app.readribbon.reading.LeaveToolbar
+import app.readribbon.reading.OriginalPanel
 import app.readribbon.reading.ReadingScreen
 import app.readribbon.reading.ReadingTheme
 import app.readribbon.reading.ReflectionCardView
+import app.readribbon.reading.RoomPerson
+import app.readribbon.reading.RoomSaid
+import app.readribbon.reading.RoomSection
 import app.readribbon.reading.VerseMark
 import app.readribbon.reading.WriteComposer
+import app.readribbon.reading.originalReadingOf
+import app.readribbon.reading.originalUnderLift
+import app.readribbon.reading.rememberSelected
+import app.readribbon.reading.roomSayingOnPhone
+import app.readribbon.reading.roomSection
+import app.readribbon.reading.roomSectionOf
 import app.readribbon.screens.AppearanceScreen
 import app.readribbon.screens.BookChooserContent
 import app.readribbon.screens.InviteContent
@@ -91,6 +100,7 @@ import app.readribbon.screens.MenuEntry
 import app.readribbon.screens.MenuScreen
 import app.readribbon.screens.NotificationSettingsScreen
 import app.readribbon.screens.OnboardingFlow
+import app.readribbon.screens.PAGE_STRIP_TAG
 import app.readribbon.screens.PersonScreen
 import app.readribbon.screens.PreviewStep
 import app.readribbon.screens.RoomScreen
@@ -394,6 +404,86 @@ class LookBookTest {
         }
     }
 
+    // The page, the way you read it (A68): the three new ways it is set, and
+    // the size at its largest under the system's largest type.
+
+    /**
+     * The book open on the page, set however [settings] say, at [at] — the
+     * same screen `theBook` photographs, for a page set another way.
+     */
+    private fun shootThePage(name: String, book: String, at: VerseAddress, settings: AppSettings) {
+        val open = reading(book, FireScale.medium)
+        val state = AppState(
+            me = me,
+            people = mapOf(me.id to me, ruth.id to ruth),
+            rooms = listOf(room),
+            memberships = listOf(membership(me, Ink.teal), membership(ruth, Ink.crimson)),
+            readings = listOf(open),
+            positions = listOf(
+                ReadingPosition(
+                    readingID = open.id, personID = me.id,
+                    chapter = at.chapter, verse = at.verse, updatedAt = now - 6.hours,
+                ),
+            ),
+            currentRoomID = room.id,
+            settings = settings,
+        )
+        val m = model(state)
+        shoot(name) {
+            val sheet = rememberBookSheet()
+            LaunchedEffect(sheet) { sheet.animate(open = true) }
+            ReadingScreen(
+                model = m,
+                room = m.state.rooms.first(),
+                reading = open,
+                sheet = sheet,
+                onClose = {},
+                onDismissed = {},
+                onFinished = {},
+                onStartAnother = {},
+            )
+        }
+    }
+
+    /**
+     * Mark 1 a verse to a line, its numbers clear: the prose of the opening
+     * paragraphs broken at every number, and Isaiah's words, which are
+     * poetry, keeping the lines they had.
+     */
+    @Test fun theBookVerseByVerse() {
+        shootThePage(
+            "reading-verse-by-verse",
+            book = "MRK",
+            at = VerseAddress(bookID = "MRK", chapter = 1, verse = 1),
+            settings = AppSettings(versePerLine = true, clearVerseNumbers = true),
+        )
+    }
+
+    /** John 1 at 24, Heavier: Literata's own 470, drawn rather than thickened. */
+    @Test fun theBookHeavier() {
+        shootThePage(
+            "reading-heavier",
+            book = "JHN",
+            at = VerseAddress(bookID = "JHN", chapter = 1, verse = 1),
+            settings = AppSettings(scriptureSize = 24.0, weightStep = 2),
+        )
+    }
+
+    /**
+     * The size at its new end, 28, under the system's largest type (font
+     * scale 2): Psalm 119, the longest chapter, its hanging indents and its
+     * gutter still holding at the size a reader with low vision would set.
+     */
+    @Test @Config(sdk = [34], qualifiers = "w411dp-h891dp-xhdpi", fontScale = 2f)
+    fun theBookLargest() {
+        shootThePage(
+            "reading-largest",
+            book = "PSA",
+            at = VerseAddress(bookID = "PSA", chapter = 119, verse = 1),
+            settings = AppSettings(scriptureSize = PageType.sizeMax),
+        )
+    }
+
     /** Everywhere else in the book, and the ribbon at the top of it (A31). */
     @Test fun theChapters() {
         val open = reading("MRK", FireScale.medium)
@@ -509,9 +599,17 @@ class LookBookTest {
         }
     }
 
+    /**
+     * You, as the front of the book (A67): your name, a ribbon for each room
+     * — one left at a chapter, one between books — and the shelf, with a
+     * book read in company and one read alone standing on one baseline.
+     */
     @Test fun theMenu() {
         val open = reading("MRK", FireScale.medium)
         val second = Room(name = "Thursday", createdAt = now - 200.hours)
+        val ruthRead = reading("RUT", FireScale.small).copy(finishedAt = now - 20.hours)
+        val johnRead = reading("JHN", FireScale.medium)
+            .copy(roomID = second.id, finishedAt = now - 100.hours)
         val state = AppState(
             me = me,
             people = mapOf(me.id to me, ruth.id to ruth),
@@ -526,7 +624,16 @@ class LookBookTest {
                     joinedAt = now - 200.hours,
                 ),
             ),
-            readings = listOf(open),
+            readings = listOf(johnRead, ruthRead, open),
+            ribbons = listOf(
+                Ribbon(
+                    readingID = open.id,
+                    personID = ruth.id,
+                    chapter = 4,
+                    verse = 12,
+                    placedAt = now - 3.hours,
+                ),
+            ),
             currentRoomID = room.id,
         )
         val m = model(state)
@@ -678,6 +785,135 @@ class LookBookTest {
         shoot("settings-text") { TextSettingsScreen(model = m, onBack = {}) }
     }
 
+    /**
+     * The page's group scrolled to (A68): the weight at Heavier, a line for
+     * every verse and clearer numbers both on, and the piece of page under
+     * the size set so — John 1:1 and 1:2, which share a paragraph, now on a
+     * line each.
+     */
+    @Test fun textSettingsThePage() {
+        val state = AppState(
+            me = me,
+            people = mapOf(me.id to me),
+            rooms = listOf(room),
+            memberships = listOf(membership(me, null)),
+            currentRoomID = room.id,
+            settings = AppSettings(weightStep = 2, versePerLine = true, clearVerseNumbers = true),
+        )
+        val m = model(state)
+        val appearance = Appearance(ApplicationProvider.getApplicationContext())
+        appearance.wallpaperColour = true
+        compose.setContent {
+            RibbonTheme(appearance = appearance) {
+                Box(Modifier.fillMaxSize()) { TextSettingsScreen(model = m, onBack = {}) }
+            }
+        }
+        // The versions' words, and the piece of page, are read off the main
+        // thread.
+        compose.waitUntil(timeoutMillis = 10_000) {
+            compose.onAllNodesWithText(Copy.specimenAt("John 1:1")).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNode(hasScrollAction()).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 900f) }
+        capture("settings-text-the-page")
+        compose.onNode(hasScrollAction()).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 100_000f) }
+        capture("settings-text-the-page-foot")
+        appearance.wallpaperColour = false
+        capture("settings-text-the-page-foot-ribbon")
+    }
+
+    /**
+     * Text with the page set another way (A69): the typefaces, the strip of
+     * the page over the sliders, the sliders moved, and the strip pinned
+     * under the bar while a slider far below it is held.
+     */
+    @Test fun textSettingsSlidersAndTypefaces() {
+        val state = AppState(
+            me = me,
+            people = mapOf(me.id to me),
+            rooms = listOf(room),
+            memberships = listOf(membership(me, null)),
+            currentRoomID = room.id,
+            settings = AppSettings(
+                typeface = PageFaces.ebGaramond.id,
+                lineHeightHundredths = 184,
+                pageWeight = 420,
+                letterSpacingThousandths = 15,
+                marginPoints = 24,
+            ),
+        )
+        val m = model(state)
+        val appearance = Appearance(ApplicationProvider.getApplicationContext())
+        appearance.wallpaperColour = false
+        compose.setContent {
+            RibbonTheme(appearance = appearance) {
+                Box(Modifier.fillMaxSize()) { TextSettingsScreen(model = m, onBack = {}) }
+            }
+        }
+        compose.waitUntil(timeoutMillis = 10_000) {
+            compose.onAllNodesWithText(Copy.specimenAt("John 1:1")).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText(PageFaces.literata.name).performScrollTo()
+        capture("settings-text-typefaces-ribbon")
+        compose.onNodeWithTag(PAGE_STRIP_TAG).performScrollTo()
+        capture("settings-text-strip-ribbon")
+        compose.onNode(hasScrollAction()).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 100_000f) }
+        capture("settings-text-sliders-ribbon")
+        // A finger held on Margins, far below the strip: the strip comes
+        // pinned under the bar while it is held.
+        compose.onNodeWithContentDescription(Copy.MARGINS).performTouchInput {
+            down(centerLeft + Offset(width * 0.5f, 0f))
+            moveBy(Offset(width * 0.3f, 0f))
+        }
+        compose.mainClock.advanceTimeBy(600)
+        capture("settings-text-pinned-ribbon")
+        compose.onNodeWithContentDescription(Copy.MARGINS).performTouchInput { up() }
+    }
+
+    @Test fun theBookInSourceSerif() {
+        shootThePage(
+            "reading-in-source-serif",
+            book = "JHN",
+            at = VerseAddress(bookID = "JHN", chapter = 1, verse = 1),
+            settings = AppSettings(typeface = PageFaces.sourceSerif.id),
+        )
+    }
+
+    @Test fun theBookInGaramond() {
+        shootThePage(
+            "reading-in-garamond",
+            book = "JHN",
+            at = VerseAddress(bookID = "JHN", chapter = 1, verse = 1),
+            settings = AppSettings(typeface = PageFaces.ebGaramond.id),
+        )
+    }
+
+    @Test fun theBookInAlegreya() {
+        shootThePage(
+            "reading-in-alegreya",
+            book = "JHN",
+            at = VerseAddress(bookID = "JHN", chapter = 1, verse = 1),
+            settings = AppSettings(typeface = PageFaces.alegreya.id),
+        )
+    }
+
+    @Test fun theBookInAtkinson() {
+        shootThePage(
+            "reading-in-atkinson",
+            book = "JHN",
+            at = VerseAddress(bookID = "JHN", chapter = 1, verse = 1),
+            settings = AppSettings(typeface = PageFaces.atkinson.id),
+        )
+    }
+
+    @Test fun theBookWithMargins() {
+        shootThePage(
+            "reading-margins",
+            book = "JHN",
+            at = VerseAddress(bookID = "JHN", chapter = 1, verse = 1),
+            settings = AppSettings(marginPoints = 48, letterSpacingThousandths = 25),
+        )
+    }
+
     @Test fun notificationSettings() {
         val open = reading("MRK", FireScale.medium)
         val state = AppState(
@@ -690,6 +926,26 @@ class LookBookTest {
         )
         val m = model(state)
         shoot("settings-notifications") { NotificationSettingsScreen(model = m, onBack = {}) }
+    }
+
+    /**
+     * Notifications in a room of two (A67): the switches say who — Ruth's
+     * name in their titles, and under the two that arrive as sentences, the
+     * sentence the phone will use, with her face. The shot above is a room
+     * of one, which says none of it.
+     */
+    @Test fun notificationSettingsInARoomOfTwo() {
+        val open = reading("MRK", FireScale.medium)
+        val state = AppState(
+            me = me,
+            people = mapOf(me.id to me, ruth.id to ruth),
+            rooms = listOf(room),
+            memberships = listOf(membership(me, Ink.teal), membership(ruth, Ink.crimson)),
+            readings = listOf(open),
+            currentRoomID = room.id,
+        )
+        val m = model(state)
+        shoot("settings-notifications-two") { NotificationSettingsScreen(model = m, onBack = {}) }
     }
 
     /**
@@ -1910,6 +2166,34 @@ class LookBookTest {
     }
 
     /**
+     * The page's picture (A68), by itself and beat by beat: one paragraph;
+     * half set again a verse to a line; a verse to a line; the numbers clear;
+     * half-way heavier; and as reduce motion holds it, every change made.
+     */
+    @Test fun theWhatsNewPage() {
+        val appearance = Appearance(ApplicationProvider.getApplicationContext())
+        appearance.wallpaperColour = true
+        val release = app.readribbon.core.WhatsNew.releases.first()
+            .copy(items = listOf(app.readribbon.core.WhatsNewItem.yourPage))
+        var frozen by mutableStateOf(0L)
+        compose.setContent {
+            RibbonTheme(appearance = appearance) {
+                CompositionLocalProvider(app.readribbon.design.LocalReduceMotion provides false) {
+                    Box(Modifier.fillMaxSize()) {
+                        WhatsNewScreen(release = release, onLeave = {}, frozenAt = frozen)
+                    }
+                }
+            }
+        }
+        for (at in listOf(0L, 640L, 1_000L, 1_800L, 2_320L, 3_600L)) {
+            frozen = at
+            capture("whats-new-page-at-$at")
+        }
+        appearance.wallpaperColour = false
+        capture("whats-new-page-at-3600-ribbon")
+    }
+
+    /**
      * What's new, read again from You (A65): every release, newest first,
      * each under its day and its own title, page by page to the foot — under
      * reduce motion, so each picture is the frame it ends on, and once at
@@ -1954,8 +2238,10 @@ class LookBookTest {
     @Test fun theWhatsNewHebrewOnItsGround() {
         val appearance = Appearance(ApplicationProvider.getApplicationContext())
         appearance.wallpaperColour = true
-        val latest = app.readribbon.core.WhatsNew.releases.first()
-        val release = latest.copy(items = listOf(app.readribbon.core.WhatsNewItem.originalReadable))
+        // The release that told it, under its own title — not whichever
+        // release is newest, which is now the front of the book's.
+        val following = app.readribbon.core.WhatsNew.releases.single { it.id == "2026-10-following" }
+        val release = following.copy(items = listOf(app.readribbon.core.WhatsNewItem.originalReadable))
         var still by mutableStateOf(false)
         var at by mutableStateOf<Long?>(0L)
         compose.setContent {

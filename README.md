@@ -46,8 +46,9 @@ docs/        docs/deviations.md — every knowing departure from the build
 ## Building the iOS app
 
 Open `ios/Ribbon.xcodeproj` in Xcode 26 or newer, select your team under
-Signing, and run. Everything is vendored: fonts (Literata, Alegreya Sans,
-Alegreya Sans SC — all OFL), both launch translations (Berean Standard and
+Signing, and run. Everything is vendored: fonts (Literata, Source Serif 4,
+EB Garamond, Alegreya, Atkinson Hyperlegible Next, Alegreya Sans, Alegreya
+Sans SC, Noto Serif Hebrew — all OFL), both launch translations (Berean Standard and
 World English, public domain, one JSON per book), the grain, the icon.
 There are no third-party package dependencies; the one local package is
 `core/`.

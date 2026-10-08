@@ -100,6 +100,75 @@ final class ScriptureModelTests: XCTestCase {
         XCTAssertEqual(chapter.ownTexts(), [1: "Thus declares the LORD.", 2: "Behold. "])
     }
 
+    // MARK: A new line for every verse (A68)
+
+    func testVerseLinesBreakBeforeEachVerseInProse() {
+        let block = ScriptureBlock(s: .m, x: [
+            ScriptureSpan(v: 1, t: "The beginning of the Good News. "),
+            ScriptureSpan(v: 2, t: "As it is written. "),
+            ScriptureSpan(v: 3, t: "He said. "),
+        ])
+        XCTAssertEqual(block.verseLineStarts(), [1, 2])
+        // An indented paragraph breaks the same way.
+        XCTAssertEqual(ScriptureBlock(s: .p, x: block.x).verseLineStarts(), [1, 2])
+    }
+
+    func testVerseLinesNeverBreakBeforeABlocksFirstSpan() {
+        // A paragraph that opens in the middle of a verse breaks only where
+        // the next verse begins: its first line is already a line.
+        let midVerse = ScriptureBlock(s: .p, x: [
+            ScriptureSpan(t: "who will prepare your way. "),
+            ScriptureSpan(v: 5, t: "He said. "),
+        ])
+        XCTAssertEqual(midVerse.verseLineStarts(), [1])
+        // A span with no number continues its verse, red letter or not.
+        let words = ScriptureBlock(s: .p, x: [
+            ScriptureSpan(v: 3, t: "He said,"),
+            ScriptureSpan(t: " ", w: false),
+            ScriptureSpan(v: 4, t: "\u{201C}Come.\u{201D}", w: true),
+        ])
+        XCTAssertEqual(words.verseLineStarts(), [2])
+        XCTAssertEqual(ScriptureBlock(s: .m, x: [ScriptureSpan(v: 1, t: "One verse.")]).verseLineStarts(), [])
+        XCTAssertEqual(ScriptureBlock(s: .m, x: []).verseLineStarts(), [])
+    }
+
+    func testVerseLinesLeavePoetryAndTitlesAlone() {
+        let spans = [ScriptureSpan(v: 1, t: "O LORD, "), ScriptureSpan(v: 2, t: "how many rise up!")]
+        for style in [BlockStyle.q1, .q2, .d, .b] {
+            XCTAssertEqual(ScriptureBlock(s: style, x: spans).verseLineStarts(), [], "\(style)")
+        }
+    }
+
+    func testVerseLinesInBundledMark1() throws {
+        // The Berean Standard's Mark 1, as the page is given it: verses 1
+        // and 2 share a paragraph, Isaiah's words follow as poetry with
+        // verse 3 opening a line of it, and 6–8 share another paragraph.
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("ios/Ribbon/Resources/Scripture/bsb/MRK.json")
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            throw XCTSkip("converted Scripture not present")
+        }
+        let text = try JSONDecoder().decode(ScriptureBookText.self, from: Data(contentsOf: url))
+        let blocks = try XCTUnwrap(text.chapter(1)).blocks
+        func numbersStartingLines(_ block: ScriptureBlock) -> [Int?] {
+            block.verseLineStarts().map { block.x[$0].v }
+        }
+
+        XCTAssertEqual(blocks[0].s, .m)
+        XCTAssertEqual(numbersStartingLines(blocks[0]), [2])
+        let baptist = try XCTUnwrap(blocks.first { $0.x.first?.v == 6 })
+        XCTAssertEqual(numbersStartingLines(baptist), [7, 8])
+        // Poetry keeps its own lines, the one verse 3 opens among them.
+        XCTAssertTrue(blocks.contains { $0.s == .q1 && $0.x.first?.v == 3 })
+        for block in blocks where block.s == .q1 || block.s == .q2 {
+            XCTAssertEqual(block.verseLineStarts(), [])
+        }
+    }
+
     func testBundledOwnTextLengths() throws {
         // The own text is what a mark's offsets and the bundled word links
         // count in, so two known lengths pin it to the committed text.

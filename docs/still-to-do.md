@@ -191,6 +191,116 @@ two, since one is on iOS 27:
   fling is ended by setting the offset where it is, and if iOS keeps
   reporting it as decelerating the follow would wait.
 
+The front of the book (A67, I41), on both phones — compiled by CI, never
+yet run on a phone:
+
+- Your face → You: under your name, a ribbon for each room you are in,
+  hanging from a hairline, of different lengths, each in your ink there
+  (or the accent in a room of two). Under each, the room and "Mark 4", the
+  book, or "between books". Touch one: the menu closes on that room.
+- Finish a book, or open You on a phone that has one: its ember is under
+  your ribbons with who you read it with. Touch it: its record opens inside
+  You, with no "Read it again"; touch a verse in it: the book opens there,
+  in its own room. Leave a room that has an ember: the ember stays, with no
+  name under it.
+- At the foot, the colophon: the Wave, the version, "Set in Literata and
+  Alegreya Sans.", the credit. On Android, touching the version still
+  checks for an update.
+- Text: each version shows the verse you are at in its own words; a
+  licensed one only once its chapter has come. Move the size: the page
+  under it grows, with its verse numbers. The World English in a Gospel,
+  red letter on: the words of Jesus turn red in the preview.
+- The chosen version, the room you are in, and onboarding's choice are
+  marked by a ribbon laid into the top of the tile. In a room of three, the
+  ink picker's inks are ribbons, yours the longest.
+- Notifications in a room of two: their faces over the switches, "When
+  Ruth opens the book", and the sentence the phone will say under "Notes
+  left for you". Quiet hours: drag either end of the band; tap the band
+  and the nearer end comes there; set both ends to the same time and it
+  says "No quiet hours".
+- A scroll that starts on the band, or on iPhone on the size, moves the
+  page and changes nothing. A drag sideways still moves them.
+- Text, opened with no book open on a phone just started: the versions'
+  verses fade in under their names, rather than jumping in; with reduce
+  motion on, they still fade.
+- At the largest text size: the room names under the ribbons and the
+  books under the embers wrap rather than ending in "…"; on iPhone the
+  three hours under the band do not run into each other.
+- Android with a keyboard: Tab reaches each end of the band, which is
+  ringed, and the arrows move it a quarter hour.
+- With VoiceOver and TalkBack: each end of the band moves a quarter hour
+  at a time and says its time; each ribbon says its room, its place and
+  your ink there; the chosen version is said as selected.
+- iPhone only (I41): the switches, the size and the band are drawn. With
+  VoiceOver a switch is still a switch, on or off, and the size moves by
+  half a point and says "19 point".
+- What's new: update over an older build and open the app — "The front of
+  the book", six pictures moving; reduce motion holds each still.
+
+The page, the way you read it (A68, I42), on both phones:
+
+- Update from the build before this one, with a text size, quiet hours and
+  one room's switches changed first: everything is kept, and the app opens
+  on the room, not on onboarding (I42's whole point on iPhone).
+- With Bold Text off, Text → Weight at Book: the page looks exactly as it
+  did. With Bold Text on before the update, the page is heavier after it,
+  cleanly and on purpose (Book is 550 then). Lighter and Heavier change the
+  letters, and only on the page and the preview — the
+  original words' panel, the room and the cards keep their weight. On
+  iPhone check the optical size has not changed with the weight.
+- Bold Text on (iOS Accessibility → Display & Text Size; Android
+  Accessibility → Display size and text): the page grows heavier at every
+  weight, cleanly, with no smeared bold.
+- A new line for every verse, on Mark 1 and Psalm 119: each verse in a
+  paragraph starts its own line, the paragraph's first line keeps its
+  indent, and poetry is unchanged. Mark a phrase, select across two verses,
+  tap a number, open a note: all as before. Follow someone who has it off.
+- Clearer verse numbers: brighter, and nothing moves.
+- With a verse to a line, tap the blank beside the end of a verse's last
+  line: that verse opens, not the next one.
+- iPhone with VoiceOver: Line spacing and Weight read each stop by its own
+  word (Close, Book, Open; Lighter, Book, Heavier), the chosen one as
+  selected.
+- The largest text size on the narrowest phone (iPhone AX3–AX5; Android
+  200%): "Lighter" and "Heavier" are whole words on one line, a little
+  smaller, never cut.
+- With a verse to a line, open a note under a verse and close it again:
+  nothing below the note jumps.
+- Size at 28 with the largest text the phone allows: Psalm 119's indented
+  lines still wrap and nothing is clipped.
+- Android: with a book open behind You, change the size or a verse to a
+  line, close You and raise the book with the fire: the same verse is on
+  the reading line.
+
+Sliders and typefaces (A69, I43), on both phones:
+
+- With nothing moved, the page is exactly as it was, in Literata.
+- Text → Typeface: each row shows your verse in its own letters; pick each
+  in turn and read John 1 and Psalm 119 at 16, at 19 and at 28. The size
+  looks the same in every face, nothing is clipped, Psalm 119's indents
+  hold. On iPhone check Core Text found each face (not Literata standing
+  in) and that Heavier is heavier in every one.
+- Bold Text on: every face heavier, cleanly, no smeared bold. Garamond and
+  Alegreya: Lighter is their regular, a little lighter than their Book.
+- Hold a word on the page in each face: the original words' panel is still
+  in Literata, its differing words in Medium.
+- Drag each slider: the strip at the top changes as you drag, nothing under
+  your finger moves, and the setting is written when you lift. Scrolled
+  down to Margins, hold the slider: the strip appears under the bar, and
+  goes a moment after you let go. No haptics anywhere.
+- With VoiceOver or TalkBack each slider says a measure ("1.72, Book",
+  "2 steps heavier than Book", "As set") and moves one position a swipe.
+- Margins at the end, in a room with someone present: the note marks stay
+  beside the words; open the presence panel — it is where it always was,
+  never over a word, and the margin gives way before the words do. Follow
+  someone with no margins: you land on the same words.
+- Letter spacing at the end: words are still words; on Android look at
+  "fi" and "fl" (ligatures may drop).
+- Android: change the face or a margin with the book down under You, raise
+  it: the same verse on the reading line.
+- What's new: "Set in the type you read best", the ribbon walking the five
+  faces; reduce motion holds it on the last.
+
 A mark following its words (A60, I37) — compiled on both platforms by CI,
 never yet run on a phone:
 

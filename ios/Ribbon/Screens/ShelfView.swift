@@ -137,8 +137,15 @@ struct EmberRecordScreen: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     let reading: Reading
-    var onOpenVerse: (VerseAddress) -> Void
-    var onReadAgain: (String) -> Void
+    /// Opening a quoted verse in its book. Nil for a book whose room you
+    /// have left (A67): its embers stay on your shelf (§6.8), but there is
+    /// no room any more to open them in, so their verses are quoted rather
+    /// than offered — a control that does nothing is not drawn (§6.1).
+    var onOpenVerse: ((VerseAddress) -> Void)?
+    /// Starting the book again, in the room it was read in. Nil where the
+    /// record is opened from your own shelf on You (A67): reading a book
+    /// again belongs to the room, not to you, so there it is not offered.
+    var onReadAgain: ((String) -> Void)? = nil
 
     private var book: BibleBook? { Bible.book(id: reading.bookID) }
     private var notes: [Note] { model.notes(in: reading) }
@@ -180,16 +187,24 @@ struct EmberRecordScreen: View {
                         size: 13)
                     HStack(spacing: -6) {
                         // Who read it, as portraits — and a portrait goes
-                        // to its person (S12).
+                        // to its person (S12), while the room is still
+                        // yours. A room you have left has no person screen
+                        // to go to (A67), so there the faces are only faces.
+                        let linked = model.room(reading.roomID) != nil
                         ForEach(model.members(of: Room(id: reading.roomID, createdAt: .now))) { membership in
-                            NavigationLink(value: PersonRoute(personID: membership.personID, roomID: reading.roomID)) {
-                                PortraitView(
-                                    person: model.person(membership.personID),
-                                    ink: membership.ink,
-                                    size: 30,
-                                    image: model.portrait(membership.personID))
+                            let face = PortraitView(
+                                person: model.person(membership.personID),
+                                ink: membership.ink,
+                                size: 30,
+                                image: model.portrait(membership.personID))
+                            if linked {
+                                NavigationLink(value: PersonRoute(personID: membership.personID, roomID: reading.roomID)) {
+                                    face
+                                }
+                                .buttonStyle(.pressable)
+                            } else {
+                                face
                             }
-                            .buttonStyle(.pressable)
                         }
                     }
                     .padding(.top, 6)
@@ -224,8 +239,10 @@ struct EmberRecordScreen: View {
                 }
 
                 VStack(spacing: 14) {
-                    QuietControl(title: Copy.readItAgain) {
-                        onReadAgain(reading.bookID)
+                    if let onReadAgain {
+                        QuietControl(title: Copy.readItAgain) {
+                            onReadAgain(reading.bookID)
+                        }
                     }
                     // "Make this a book" arrives with the printed keepsake
                     // (§15 horizon).
@@ -243,7 +260,7 @@ private struct EmberNoteRow: View {
     @Environment(AppModel.self) private var model
     let note: Note
     let roomID: UUID
-    var onOpenVerse: (VerseAddress) -> Void
+    var onOpenVerse: ((VerseAddress) -> Void)?
 
     @State private var open = false
 
@@ -290,28 +307,37 @@ private struct EmberNoteRow: View {
 private struct QuotedHighlight: View {
     @Environment(AppModel.self) private var model
     let highlight: Highlight
-    var onOpenVerse: (VerseAddress) -> Void
+    var onOpenVerse: ((VerseAddress) -> Void)?
 
     var body: some View {
-        Button {
-            onOpenVerse(highlight.range.start)
-        } label: {
-            VStack(alignment: .leading, spacing: 4) {
-                if let reading = model.state.readings.first(where: { $0.id == highlight.readingID }),
-                   let text = model.scripture.verseText(highlight.range.start, translation: model.words(room: model.room(of: reading))) {
-                    Text(text)
-                        .font(RibbonType.scripture(15))
-                        .foregroundStyle(Palette.text)
-                        .multilineTextAlignment(.leading)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(10)
-                        .background(highlight.ink.color.opacity(Palette.highlightWash), in: RoundedRectangle(cornerRadius: 6))
-                }
-                SmallCaps(highlight.range.formatted, size: 11)
+        if let onOpenVerse {
+            Button {
+                onOpenVerse(highlight.range.start)
+            } label: {
+                quote
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+        } else {
+            quote
+                .accessibilityElement(children: .combine)
         }
-        .buttonStyle(.plain)
+    }
+
+    private var quote: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let reading = model.state.readings.first(where: { $0.id == highlight.readingID }),
+               let text = model.scripture.verseText(highlight.range.start, translation: model.words(room: model.room(of: reading))) {
+                Text(text)
+                    .font(RibbonType.scripture(15))
+                    .foregroundStyle(Palette.text)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(10)
+                    .background(highlight.ink.color.opacity(Palette.highlightWash), in: RoundedRectangle(cornerRadius: 6))
+            }
+            SmallCaps(highlight.range.formatted, size: 11)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
     }
 }

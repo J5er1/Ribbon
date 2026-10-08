@@ -38,6 +38,23 @@ public enum WhatsNewItem: String, Codable, Hashable, Sendable, CaseIterable {
     /// The held word's line, readable over the page: on glass of its own,
     /// the Hebrew larger and at full strength (A66).
     case originalReadable
+    /// You opens like the front of a Bible: your name, your face, a ribbon
+    /// for every room you read in, and a colophon at the foot (A67).
+    case flyleaf
+    /// Every book you have finished, with whoever, on one shelf (A67).
+    case yourShelf
+    /// Each version is shown in its own words, and a ribbon marks yours (A67).
+    case versionsByReading
+    /// The page, the way you read it: a new line for every verse, a lighter
+    /// or heavier letter, clearer verse numbers, and a larger size (A68).
+    case yourPage
+    /// The notification switches say who, in the words the phone will use (A67).
+    case notificationsByName
+    /// Quiet hours are one band, the night, rather than two wheels (A67).
+    case quietHoursNight
+    /// The page can be set in one of five typefaces, each at a size that
+    /// matches Literata's (A69).
+    case typeface
 }
 
 /// A release worth telling someone about. The id is a name, not a version
@@ -62,6 +79,9 @@ public enum WhatsNew {
     /// skipped three releases hears about the one they are on, and the rest
     /// are simply how the app is now — there for the reading, from You.
     public static let releases: [WhatsNewRelease] = [
+        WhatsNewRelease(
+            id: "2026-10-flyleaf", released: "2026-10-08",
+            items: [.flyleaf, .yourShelf, .versionsByReading, .yourPage, .typeface, .notificationsByName, .quietHoursNight]),
         WhatsNewRelease(
             id: "2026-10-following", released: "2026-10-06",
             items: [.followingStays, .nativeSelection, .roomGroups, .lordReadsLord, .originalReadable]),
