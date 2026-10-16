@@ -319,6 +319,29 @@ never yet run on a phone:
 - With VoiceOver or TalkBack: "the original words" on a verse opens the
   panel, and each word is read as its sound, its rendering and its grammar.
 
+A room of twelve (A70), on both phones:
+
+- Twelve people in one room (or a room seeded with twelve memberships):
+  the faces round the fire sit in two rows of six, each a finger's width,
+  no names, nothing counted. Seven sit as four and three. A thirteenth's
+  invite says the room is full, in the app and in the browser.
+- At six and below the seats are exactly as before, in one row.
+- Someone joins a room of six: the row becomes two, and the faces move
+  rather than jump; a person who leaves fades from their seat.
+- The ink picker in a room of three or more: twelve ribbons on two rules,
+  six each, round the wheel; yours hangs longest, one somebody holds is
+  short and faint. On the narrowest phone every column is still a finger
+  wide, and on the iPhone nothing is cut at the foot of the sheet.
+- Bronze, jade, sky and iris on the page, as marks and as wash, beside
+  the eight: each told apart from its neighbours at a glance, and in the
+  gutter as a 6pt dot.
+- A phone on the build before this one, in a room where someone picked
+  jade: their face is a monogram and their marks are ochre there, and
+  nothing else goes wrong.
+- What's new: update over an older build and open the app — "Room for more
+  of you", the faces seating from six to twelve and the four inks laid in;
+  reduce motion holds the room full and all twelve hanging.
+
 ## 7. The New King James's usage reporting, and its proxy
 
 API.Bible asks apps to report each chapter shown (FUMS) with the
@@ -331,3 +354,19 @@ built.
 `supabase/functions/bible-proxy` now answers `cache-control: private,
 no-store`. Redeploy it for that to apply; the apps no longer rely on it.
 
+## 8. A room of twelve — the migration, not yet applied
+
+`supabase/migrations/20261016120000_ribbon_a_room_of_twelve.sql` raises the
+ceiling to twelve and lets every ink check accept the four new inks (A70).
+It is **not on the live project yet**. Until it is:
+
+- a seventh person still cannot join (the server says `room_full` at six),
+  which is what every shipped build expects; and
+- a phone on the new build that picks bronze, jade, sky or iris, or marks
+  with one, has that row refused by the database, so the choice stays on
+  that phone.
+
+So apply the migration **before** the build that carries A70 reaches
+phones. It changes no data: it replaces three check constraints with wider
+ones and redefines `accept_invite` and `invite_preview`, unchanged but for
+the number. Rehearse it in a transaction first, as §1 was.

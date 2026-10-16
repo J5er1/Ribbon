@@ -221,7 +221,7 @@ private struct RoomMenuScreen: View {
             VStack(alignment: .leading, spacing: 28) {
                 if model.isFull(room) {
                     // S15's full state, said where the invite would have been.
-                    SettingNote(Copy.roomHoldsSix)
+                    SettingNote(Copy.roomHoldsTwelve)
                 } else if model.remote != nil {
                     // The link resolves through the backend, so without one
                     // there is nothing to hand out and no row for it.

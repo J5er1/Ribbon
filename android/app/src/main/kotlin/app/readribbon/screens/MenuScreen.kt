@@ -758,7 +758,7 @@ private fun RoomMenu(
             if (model.isFull(room)) {
                 // S15's full state, said where the invite would have been.
                 Text(
-                    text = Copy.ROOM_HOLDS_SIX,
+                    text = Copy.ROOM_HOLDS_TWELVE,
                     style = RibbonType.ui(15f),
                     color = Palette.muted,
                     modifier = Modifier.padding(bottom = 10.dp),

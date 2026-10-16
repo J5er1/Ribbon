@@ -169,10 +169,11 @@ private struct LeftNoteTile: View {
 }
 
 /// Picking an ink when colour is identity (§4.5, §6.7) — an invitation, not
-/// an interruption. The eight inks are eight ribbons hanging from a rule
-/// (A67), each in a 44 point column: yours pulled further down than the
-/// rest, one somebody else holds drawn short and faint. Which is yours is
-/// said by a ribbon's length, a shape, and not by its colour or a ring.
+/// an interruption. The twelve inks are ribbons hanging from two rules, six
+/// to a rule and round the wheel (A67, A70), each in a 44 point column:
+/// yours pulled further down than the rest, one somebody else holds drawn
+/// short and faint. Which is yours is said by a ribbon's length, a shape,
+/// and not by its colour or a ring.
 struct InkPickerSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -186,6 +187,13 @@ struct InkPickerSheet: View {
     private static let free: CGFloat = 44
     /// An ink somebody else holds: short, and faint besides.
     private static let held: CGFloat = 30
+    /// Six to a rule, so every column keeps the 44 points a finger is owed
+    /// on the narrowest phone (A70).
+    private static let rows: [[Ink]] = stride(from: 0, to: Ink.allCases.count, by: 6).map {
+        Array(Ink.allCases[$0..<min($0 + 6, Ink.allCases.count)])
+    }
+    /// From the foot of one rule's longest ribbon to the next rule.
+    private static let between: CGFloat = 18
 
     var body: some View {
         VStack(spacing: 26) {
@@ -194,43 +202,48 @@ struct InkPickerSheet: View {
                 .accessibilityAddTraits(.isHeader)
             let taken = model.members(of: room).compactMap(\.ink)
             let mine = model.myMembership(in: room)?.ink
-            HStack(spacing: 0) {
-                ForEach(Ink.allCases, id: \.self) { ink in
-                    let isTaken = taken.contains(ink) && ink != mine
-                    Button {
-                        guard !isTaken, !choosing else { return }
-                        choosing = true
-                        model.pickInk(ink, in: room)
-                        // The ribbon is pulled down to its new length before
-                        // the sheet goes, so the choice is seen to be taken.
-                        // The hand's spring has all but arrived by then.
-                        DispatchQueue.main.asyncAfter(deadline: .now() + RibbonMotion.arriveDuration) {
-                            dismiss()
+            VStack(spacing: Self.between) {
+                ForEach(Self.rows, id: \.self) { row in
+                    HStack(spacing: 0) {
+                        ForEach(row, id: \.self) { ink in
+                            let isTaken = taken.contains(ink) && ink != mine
+                            Button {
+                                guard !isTaken, !choosing else { return }
+                                choosing = true
+                                model.pickInk(ink, in: room)
+                                // The ribbon is pulled down to its new length
+                                // before the sheet goes, so the choice is seen
+                                // to be taken. The hand's spring has all but
+                                // arrived by then.
+                                DispatchQueue.main.asyncAfter(deadline: .now() + RibbonMotion.arriveDuration) {
+                                    dismiss()
+                                }
+                            } label: {
+                                // Lengths change on the hand's spring, the
+                                // old ribbon of yours rising as the new one is
+                                // pulled; under reduce motion one length fades
+                                // into the other (`HangingRibbon`).
+                                HangingRibbon(
+                                    color: ink.color.opacity(isTaken ? 0.2 : 1),
+                                    width: 18,
+                                    length: ink == mine ? Self.yours : (isTaken ? Self.held : Self.free))
+                                .frame(width: 44, height: Self.yours, alignment: .top)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.pressable)
+                            .disabled(isTaken)
+                            .accessibilityLabel(Copy.inkSwatchSpoken(ink.displayName, yours: ink == mine, taken: isTaken))
+                            .accessibilityAddTraits(ink == mine ? [.isSelected] : [])
                         }
-                    } label: {
-                        // Lengths change on the hand's spring, the old
-                        // ribbon of yours rising as the new one is pulled;
-                        // under reduce motion one length fades into the
-                        // other (`HangingRibbon`).
-                        HangingRibbon(
-                            color: ink.color.opacity(isTaken ? 0.2 : 1),
-                            width: 18,
-                            length: ink == mine ? Self.yours : (isTaken ? Self.held : Self.free))
-                        .frame(width: 44, height: Self.yours, alignment: .top)
-                        .contentShape(Rectangle())
                     }
-                    .buttonStyle(.pressable)
-                    .disabled(isTaken)
-                    .accessibilityLabel(Copy.inkSwatchSpoken(ink.displayName, yours: ink == mine, taken: isTaken))
-                    .accessibilityAddTraits(ink == mine ? [.isSelected] : [])
+                    // The rule the ribbons hang from, drawn over their top
+                    // edges so each reads as tucked under it.
+                    .overlay(alignment: .top) {
+                        HairlineRule()
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                    }
                 }
-            }
-            // The rule the ribbons hang from, drawn over their top edges
-            // so each reads as tucked under it.
-            .overlay(alignment: .top) {
-                HairlineRule()
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
             }
             .frame(maxWidth: .infinity)
             .padding(.horizontal, 12)
@@ -240,9 +253,10 @@ struct InkPickerSheet: View {
         .room()
         .presentationBackground(Palette.ground)
         // Sixteen points taller than the circles needed: each column is
-        // now as long as your ribbon hangs.
-        .presentationDetents([.height(236)])
-        // iPad ignores detents; without this the eight swatches sit at
+        // now as long as your ribbon hangs; and a second rule of six below
+        // the first, a ribbon's length and the space between them (A70).
+        .presentationDetents([.height(236 + Self.yours + Self.between)])
+        // iPad ignores detents; without this the twelve swatches sit at
         // the top of a vast empty form sheet.
         .presentationSizing(.fitted)
     }

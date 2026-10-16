@@ -475,7 +475,8 @@ private struct UnlitHearth: View {
 
 /// Everybody in the room, as faces around the fire — present ones ringed
 /// in the accent, idle ones with a half ring — and an open seat when
-/// somebody is expected. A face goes to its person (S12).
+/// somebody is expected. A face goes to its person (S12). Up to six sit in
+/// one row; a room of seven to twelve sits in two (`Seating`, A70).
 private struct Seats: View {
     @Environment(AppModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -487,7 +488,12 @@ private struct Seats: View {
         let present = room.isPaused ? Set<UUID>() : Set(model.presentPeople.map(\.id))
         let idle = room.isPaused ? Set<UUID>() : Set(model.presentPeople.filter(\.isIdle).map(\.id))
         let seatKept = model.somebodyIsExpected(room)
-        let places = min(members.count, Room.capacity) + (seatKept ? 1 : 0)
+        let seated = Array(members.prefix(Room.capacity))
+        let places = seated.count + (seatKept ? 1 : 0)
+        let rows = Seating.rows(places: places)
+        // The widest row sets the size of every seat, so the two rows of a
+        // large room hold faces of one size.
+        let widest = rows.max() ?? 1
         // A face taking its seat comes in from a little smaller; under
         // reduce motion it only fades in (§11).
         let seating = reduceMotion
@@ -495,30 +501,37 @@ private struct Seats: View {
             : AnyTransition.opacity.combined(with: .scale(scale: 0.82))
 
         GeometryReader { proxy in
-            let touch: CGFloat = places <= 1
+            let touch: CGFloat = widest <= 1
                 ? RoomMetrics.seatTouch
-                : ((proxy.size.width - RoomMetrics.seatGap * CGFloat(places - 1)) / CGFloat(places))
+                : ((proxy.size.width - RoomMetrics.seatGap * CGFloat(widest - 1)) / CGFloat(widest))
                     .clamped(to: RoomMetrics.seatMinTouch...RoomMetrics.seatTouch)
             let face = RoomMetrics.seat * (touch / RoomMetrics.seatTouch)
-            HStack(spacing: RoomMetrics.seatGap) {
-                ForEach(members.prefix(Room.capacity)) { membership in
-                    Seat(
-                        room: room, personID: membership.personID,
-                        present: present.contains(membership.personID),
-                        idle: idle.contains(membership.personID),
-                        touch: touch, face: face)
-                    .transition(seating)
-                }
-                if seatKept {
-                    OpenSeat(touch: touch, face: face, onInvite: onInvite)
-                        .transition(seating)
+            VStack(spacing: RoomMetrics.seatGap) {
+                ForEach(Array(rows.enumerated()), id: \.offset) { row, count in
+                    let start = min(rows.prefix(row).reduce(0, +), seated.count)
+                    let end = min(start + count, seated.count)
+                    HStack(spacing: RoomMetrics.seatGap) {
+                        ForEach(seated[start..<end]) { membership in
+                            Seat(
+                                room: room, personID: membership.personID,
+                                present: present.contains(membership.personID),
+                                idle: idle.contains(membership.personID),
+                                touch: touch, face: face)
+                            .transition(seating)
+                        }
+                        if seatKept && row == rows.count - 1 {
+                            OpenSeat(touch: touch, face: face, onInvite: onInvite)
+                                .transition(seating)
+                        }
+                    }
                 }
             }
             .frame(maxWidth: .infinity)
             .animation(RibbonMotion.arrive, value: members.map(\.personID))
             .animation(RibbonMotion.arrive, value: seatKept)
         }
-        .frame(height: RoomMetrics.seatTouch)
+        .frame(height: RoomMetrics.seatTouch * CGFloat(max(rows.count, 1))
+            + RoomMetrics.seatGap * CGFloat(max(rows.count - 1, 0)))
     }
 }
 

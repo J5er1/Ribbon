@@ -98,6 +98,7 @@ import app.readribbon.core.Ink
 import app.readribbon.core.PageFaces
 import app.readribbon.core.PageType
 import app.readribbon.core.QuietHoursBand
+import app.readribbon.core.Seating
 import app.readribbon.core.TranslationID
 import app.readribbon.core.WhatsNew
 import app.readribbon.core.WhatsNewItem
@@ -488,6 +489,8 @@ internal val WhatsNewItem.title: String
         WhatsNewItem.typeface -> Copy.WHATS_NEW_TYPEFACE_TITLE
         WhatsNewItem.notificationsByName -> Copy.WHATS_NEW_NOTIFICATIONS_TITLE
         WhatsNewItem.quietHoursNight -> Copy.WHATS_NEW_QUIET_HOURS_TITLE
+        WhatsNewItem.roomOfTwelve -> Copy.WHATS_NEW_TWELVE_TITLE
+        WhatsNewItem.fourInks -> Copy.WHATS_NEW_INKS_TITLE
     }
 
 internal val WhatsNewItem.body: String
@@ -507,6 +510,8 @@ internal val WhatsNewItem.body: String
         WhatsNewItem.typeface -> Copy.WHATS_NEW_TYPEFACE_BODY
         WhatsNewItem.notificationsByName -> Copy.WHATS_NEW_NOTIFICATIONS_BODY
         WhatsNewItem.quietHoursNight -> Copy.WHATS_NEW_QUIET_HOURS_BODY
+        WhatsNewItem.roomOfTwelve -> Copy.WHATS_NEW_TWELVE_BODY
+        WhatsNewItem.fourInks -> Copy.WHATS_NEW_INKS_BODY
     }
 
 // MARK: - The clock
@@ -560,6 +565,7 @@ internal val WhatsNewItem.timeline: Timeline
         WhatsNewItem.yourShelf,
         WhatsNewItem.versionsByReading,
         WhatsNewItem.notificationsByName,
+        WhatsNewItem.fourInks,
         -> Timeline(LOOP_MS, STILL_AT)
         WhatsNewItem.followingStays -> Timeline(LONG_LOOP_MS, STAYS_STILL_AT)
         WhatsNewItem.nativeSelection -> Timeline(LONG_LOOP_MS, SELECTION_STILL_AT)
@@ -567,6 +573,7 @@ internal val WhatsNewItem.timeline: Timeline
         WhatsNewItem.quietHoursNight -> Timeline(LONG_LOOP_MS, NIGHT_STILL_AT)
         WhatsNewItem.yourPage -> Timeline(LONG_LOOP_MS, PAGE_STILL_AT)
         WhatsNewItem.typeface -> Timeline(LONG_LOOP_MS, TYPEFACE_STILL_AT)
+        WhatsNewItem.roomOfTwelve -> Timeline(LONG_LOOP_MS, TWELVE_STILL_AT)
     }
 
 /** Where a loop of [loopMs] is, [elapsedMs] after the screen appeared and [startAfter] late. */
@@ -1096,6 +1103,14 @@ private fun Vignette(item: WhatsNewItem, startAfter: Long, frozenAt: Long?, modi
         WhatsNewItem.quietHoursNight -> Modifier.drawWithCache {
             val page = layOutTheNight(measurer, inks)
             onDrawBehind { drawNight(page, inks, grain, nightFrame(clock.longValue.toInt())) }
+        }
+        WhatsNewItem.roomOfTwelve -> Modifier.drawWithCache {
+            val page = layOutTheTwelve(measurer)
+            onDrawBehind { drawTheTwelve(page, inks, roomOfTwelveFrame(clock.longValue.toInt())) }
+        }
+        WhatsNewItem.fourInks -> Modifier.drawWithCache {
+            val page = layOutTheInks()
+            onDrawBehind { drawTheInks(page, inks, fourInksFrame(clock.longValue.toInt())) }
         }
     }
     Box(modifier.then(drawing))
@@ -3063,4 +3078,153 @@ private fun DrawScope.drawThePage(page: ThePage, frame: PageFrame) {
             drawNumbers(page.verseByVerse, lerp(quiet, clear, frame.clear))
         },
     )
+}
+
+// MARK: - A room holds twelve (A70)
+
+/** The room of twelve: everybody seated, before the newcomers fade. */
+internal const val TWELVE_STILL_AT = 4400
+
+/**
+ * A room holds twelve: six faces in a row, then a seventh to a twelfth
+ * arriving one at a time ([arrivals]), the rows giving way to each other as
+ * they come, by the room's own rule (`Seating`). After a while the newcomers
+ * fade and the six move back into one row ([leave]).
+ */
+internal data class RoomOfTwelveFrame(val arrivals: List<Float>, val leave: Float)
+
+internal fun roomOfTwelveFrame(t: Int): RoomOfTwelveFrame = RoomOfTwelveFrame(
+    // An arrival's length and a little air between each.
+    arrivals = (0 until TWELVE_ARRIVING).map { beat(t, at = 400 + it * 480, ms = 320) },
+    leave = beat(t, at = 5000, ms = 400),
+)
+
+/** The six already seated, and the six who come. */
+private const val TWELVE_SEATED = 6
+private const val TWELVE_ARRIVING = 6
+private val TWELVE_FACE = 22.dp
+
+/** Centre to centre, across and down: the face and the room's gap. */
+private val TWELVE_PITCH = 30.dp
+private const val TWELVE_MONOGRAMS = "RAJMESPTLDNC"
+
+/** The faces' initials, each in its own ink, and the picture's middle. */
+private class TheTwelve(
+    val centre: Offset,
+    val pitch: Float,
+    val radius: Float,
+    val initials: List<TextLayoutResult>,
+)
+
+private fun CacheDrawScope.layOutTheTwelve(measurer: TextMeasurer): TheTwelve = TheTwelve(
+    centre = Offset(size.width / 2f, size.height / 2f),
+    pitch = TWELVE_PITCH.toPx(),
+    radius = TWELVE_FACE.toPx() / 2f,
+    initials = TWELVE_MONOGRAMS.mapIndexed { i, letter ->
+        measurer.measure(
+            AnnotatedString(letter.toString()),
+            monogram(TWELVE_FACE).copy(color = Ink.entries[i].color),
+            softWrap = false,
+            maxLines = 1,
+            density = this,
+        )
+    },
+)
+
+/**
+ * Where face [index] sits when [seated] are in the room: its row and its
+ * place in it, the rows centred. A face not yet seated waits where it will
+ * sit.
+ */
+private fun TheTwelve.seat(index: Int, seated: Int): Offset {
+    val rows = Seating.rows(if (index < seated) seated else index + 1)
+    var row = 0
+    var first = 0
+    while (row < rows.lastIndex && index >= first + rows[row]) {
+        first += rows[row]
+        row += 1
+    }
+    val across = (index - first) - (rows[row] - 1) / 2f
+    val down = row - (rows.size - 1) / 2f
+    return Offset(centre.x + across * pitch, centre.y + down * pitch)
+}
+
+private fun between(from: Offset, to: Offset, f: Float): Offset =
+    Offset(from.x + (to.x - from.x) * f, from.y + (to.y - from.y) * f)
+
+private fun DrawScope.drawTheTwelve(page: TheTwelve, inks: VignetteInks, frame: RoomOfTwelveFrame) {
+    // How many have come, and how far the latest is through coming.
+    val started = frame.arrivals.count { it > 0f }
+    val coming = frame.arrivals.getOrElse(started - 1) { 1f }
+    val seated = TWELVE_SEATED + started
+    for (index in 0 until TWELVE_SEATED + TWELVE_ARRIVING) {
+        val newcomer = index - TWELVE_SEATED
+        val shown = if (newcomer < 0) 1f else frame.arrivals[newcomer] * (1f - frame.leave)
+        if (shown <= 0f) continue
+        val arriving = between(page.seat(index, seated - 1), page.seat(index, seated), coming)
+        val at = between(arriving, page.seat(index, TWELVE_SEATED), frame.leave)
+        // A face taking its seat comes in from a little smaller, as the
+        // room's do.
+        val r = page.radius * (if (newcomer < 0) 1f else 0.82f + 0.18f * frame.arrivals[newcomer])
+        faded(shown) {
+            drawCircle(inks.raised, radius = r, center = at)
+            val initial = page.initials[index]
+            drawText(initial, topLeft = at - Offset(initial.size.width / 2f, initial.size.height / 2f))
+        }
+    }
+}
+
+// MARK: - Four new inks (A70)
+
+/**
+ * Four new inks: the ink picker's ribbons, six to a rule and round the
+ * wheel, the brief's eight hanging, and bronze, jade, sky and iris laid in
+ * at their places one at a time ([laid]). They rest, and lift out together
+ * ([lift]).
+ */
+internal data class FourInksFrame(val laid: List<Float>, val lift: Float)
+
+internal fun fourInksFrame(t: Int): FourInksFrame = FourInksFrame(
+    // Each on the open curve, an arrival's length behind the one before.
+    laid = FOUR_INKS.indices.map { beat(t, at = 400 + it * 320, ms = 480) },
+    lift = beat(t, at = 3640, ms = 400),
+)
+
+private val FOUR_INKS = listOf(Ink.bronze, Ink.jade, Ink.sky, Ink.iris)
+private val INKS_COLUMN = 26.dp
+private val INKS_RIBBON = 10.dp
+private val INKS_LENGTH = 34.dp
+private val INKS_RULES_BETWEEN = 14.dp
+
+/** Two rules, and a place under one of them for each of the twelve. */
+private class TheInks(val rules: List<Rect>, val ribbons: List<Offset>, val width: Float, val length: Float)
+
+private fun CacheDrawScope.layOutTheInks(): TheInks {
+    val column = INKS_COLUMN.toPx()
+    val width = INKS_RIBBON.toPx()
+    val length = INKS_LENGTH.toPx()
+    val between = INKS_RULES_BETWEEN.toPx()
+    val hair = 1.dp.toPx()
+    val rows = Ink.entries.chunked(6)
+    val left = (size.width - column * 6) / 2f
+    val top = (size.height - (length * rows.size + between * (rows.size - 1))) / 2f
+    val rules = rows.indices.map { r ->
+        val y = top + r * (length + between)
+        Rect(left, y, left + column * rows[r].size, y + hair)
+    }
+    val ribbons = Ink.entries.indices.map { i ->
+        val rule = rules[i / 6]
+        Offset(left + column * (i % 6) + (column - width) / 2f, rule.top)
+    }
+    return TheInks(rules, ribbons, width, length)
+}
+
+private fun DrawScope.drawTheInks(page: TheInks, inks: VignetteInks, frame: FourInksFrame) {
+    Ink.entries.forEachIndexed { i, ink ->
+        val new = FOUR_INKS.indexOf(ink)
+        val laid = if (new < 0) 1f else frame.laid[new] * (1f - frame.lift)
+        laidRibbon(ink.color, page.ribbons[i], page.width, page.length, laid)
+    }
+    // The rules over the ribbons' top edges, so each reads as tucked under.
+    for (rule in page.rules) drawRect(inks.rule, topLeft = rule.topLeft, size = rule.size)
 }

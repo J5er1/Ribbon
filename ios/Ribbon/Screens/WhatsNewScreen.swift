@@ -244,6 +244,8 @@ private struct WhatsNewItemView: View {
         case .typeface: TypefaceVignette(startsAfter: startsAfter)
         case .notificationsByName: NotificationsByNameVignette(startsAfter: startsAfter)
         case .quietHoursNight: QuietHoursNightVignette(startsAfter: startsAfter)
+        case .roomOfTwelve: RoomOfTwelveVignette(startsAfter: startsAfter)
+        case .fourInks: FourInksVignette(startsAfter: startsAfter)
         }
     }
 
@@ -264,6 +266,8 @@ private struct WhatsNewItemView: View {
         case .typeface: return Copy.whatsNewTypefaceTitle
         case .notificationsByName: return Copy.whatsNewNotificationsTitle
         case .quietHoursNight: return Copy.whatsNewQuietHoursTitle
+        case .roomOfTwelve: return Copy.whatsNewTwelveTitle
+        case .fourInks: return Copy.whatsNewInksTitle
         }
     }
 
@@ -284,6 +288,8 @@ private struct WhatsNewItemView: View {
         case .typeface: return Copy.whatsNewTypefaceBody
         case .notificationsByName: return Copy.whatsNewNotificationsBody
         case .quietHoursNight: return Copy.whatsNewQuietHoursBody
+        case .roomOfTwelve: return Copy.whatsNewTwelveBody
+        case .fourInks: return Copy.whatsNewInksBody
         }
     }
 }
@@ -2351,6 +2357,150 @@ private struct TypefaceVignette: View {
             }
             guard await beat(RibbonMotion.settleDuration + Vignette.rest) else { return }
             withAnimation(RibbonMotion.settle) { chosen = 0 }
+            guard await beat(RibbonMotion.settleDuration + Vignette.breath) else { return }
+        }
+    }
+}
+
+// MARK: 16. A room holds twelve
+
+/// The room's faces, monograms each in their own ink, seated by the room's
+/// own rule (`Seating`, A70): six in a row, and then, one at a time, a
+/// seventh to a twelfth, the rows giving way to each other as they come
+/// exactly as the hearth's do. After a while the newcomers fade and the
+/// six sit in one row again.
+private struct RoomOfTwelveVignette: View {
+    let startsAfter: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// How many are seated.
+    @State private var seated = 6
+
+    private static let face: CGFloat = 22
+    /// Centre to centre, across and down: the face and the room's gap.
+    private static let pitch: CGFloat = 30
+    private static let monograms = Array("RAJMESPTLDNC")
+
+    var body: some View {
+        GeometryReader { proxy in
+            let rows = Seating.rows(places: seated)
+            ZStack {
+                ForEach(0..<Room.capacity, id: \.self) { index in
+                    face(index)
+                        .scaleEffect(index < seated || reduceMotion ? 1 : 0.82)
+                        .opacity(index < seated ? 1 : 0)
+                        .position(place(index, rows: rows, in: proxy.size))
+                }
+            }
+        }
+        .padding(.horizontal, 22)
+        .task(id: reduceMotion) { await play() }
+    }
+
+    /// A face as the room draws one with no portrait: its initial, in its
+    /// ink, on the raised ground.
+    private func face(_ index: Int) -> some View {
+        ZStack {
+            Circle().fill(Palette.raised)
+            Text(verbatim: String(Self.monograms[index]))
+                .font(RibbonType.uiMedium(Self.face * 0.42))
+                .foregroundStyle(Ink.allCases[index].color)
+        }
+        .frame(width: Self.face, height: Self.face)
+    }
+
+    /// Where a face sits: its row and its place in it, the rows centred on
+    /// the picture. A face not yet seated waits where it will sit.
+    private func place(_ index: Int, rows: [Int], in size: CGSize) -> CGPoint {
+        let target = index < seated ? rows : Seating.rows(places: index + 1)
+        var row = 0
+        var first = 0
+        while row < target.count - 1 && index >= first + target[row] {
+            first += target[row]
+            row += 1
+        }
+        let across = CGFloat(index - first) - CGFloat(target[row] - 1) / 2
+        let down = CGFloat(row) - CGFloat(target.count - 1) / 2
+        return CGPoint(x: size.width / 2 + across * Self.pitch,
+                       y: size.height / 2 + down * Self.pitch)
+    }
+
+    private func play() async {
+        // How it stands under reduce motion: the room full.
+        guard !reduceMotion else {
+            seated = Room.capacity
+            return
+        }
+        seated = 6
+        guard await beat(startsAfter) else { return }
+        while true {
+            for count in 7...Room.capacity {
+                withAnimation(RibbonMotion.arrive) { seated = count }
+                guard await beat(RibbonMotion.arriveDuration + 0.16) else { return }
+            }
+            guard await beat(Vignette.rest) else { return }
+            withAnimation(RibbonMotion.settle) { seated = 6 }
+            guard await beat(RibbonMotion.settleDuration + Vignette.breath) else { return }
+        }
+    }
+}
+
+// MARK: 17. Four new inks
+
+/// The ink picker's ribbons, six to a rule and round the wheel (A70): the
+/// brief's eight hanging, and bronze, jade, sky and iris laid in at their
+/// places one at a time. They rest, lift out together, and come again.
+private struct FourInksVignette: View {
+    let startsAfter: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// How many of the new four are laid in, in the wheel's order.
+    @State private var laid = 0
+
+    private static let added: [Ink] = [.bronze, .jade, .sky, .iris]
+    private static let column: CGFloat = 26
+    private static let width: CGFloat = 10
+    private static let length: CGFloat = 34
+    private static let rows: [[Ink]] = [Array(Ink.allCases.prefix(6)), Array(Ink.allCases.dropFirst(6))]
+
+    var body: some View {
+        VStack(spacing: 14) {
+            ForEach(Array(Self.rows.enumerated()), id: \.offset) { _, row in
+                HStack(alignment: .top, spacing: 0) {
+                    ForEach(row, id: \.self) { ink in
+                        VignetteRibbon(color: ink.color, width: Self.width, length: Self.length, down: hangs(ink))
+                            .frame(width: Self.column, height: Self.length, alignment: .top)
+                    }
+                }
+                .overlay(alignment: .top) {
+                    HairlineRule().accessibilityHidden(true)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .task(id: reduceMotion) { await play() }
+    }
+
+    private func hangs(_ ink: Ink) -> Bool {
+        guard let new = Self.added.firstIndex(of: ink) else { return true }
+        return new < laid
+    }
+
+    private func play() async {
+        // How it stands under reduce motion: all twelve hanging.
+        guard !reduceMotion else {
+            laid = Self.added.count
+            return
+        }
+        laid = 0
+        guard await beat(startsAfter) else { return }
+        while true {
+            for count in 1...Self.added.count {
+                withAnimation(RibbonMotion.open) { laid = count }
+                guard await beat(RibbonMotion.arriveDuration) else { return }
+            }
+            guard await beat(RibbonMotion.openDuration + Vignette.rest) else { return }
+            withAnimation(RibbonMotion.settle) { laid = 0 }
             guard await beat(RibbonMotion.settleDuration + Vignette.breath) else { return }
         }
     }

@@ -42,10 +42,13 @@ public struct Person: Codable, Hashable, Identifiable, Sendable {
     }
 }
 
-/// 2–6 people. The app's root. A person may hold several rooms; they never
-/// interact — nothing crosses between them (§2.4).
+/// 2–12 people (§2.3, raised from six by A70). The app's root. A person
+/// may hold several rooms; they never interact — nothing crosses between
+/// them (§2.4).
 public struct Room: Codable, Hashable, Identifiable, Sendable {
-    public static let capacity = 6
+    /// Twelve, and there are twelve inks, so everyone in a full room has
+    /// one of their own (A70).
+    public static let capacity = 12
 
     public var id: UUID
     /// Optional. When empty, the interface derives a name from members'

@@ -336,7 +336,7 @@ enum Copy {
     /// (S15). The control says exactly what happens.
     static let sendTheInvite = "Send the invite"
     static let nameThisRoom = "Name this room"
-    static let roomHoldsSix = "A room holds six. Start another for the rest."
+    static let roomHoldsTwelve = "A room holds twelve. Start another for the rest."
     /// The same fact, said to the person arriving — "the rest" are the
     /// inviter's people, not theirs.
     static let roomFullForJoiner = "This room is full. Ask them to start another."
@@ -401,7 +401,7 @@ enum Copy {
     static let tapToChange = "Tap to change"
     /// Inviting someone to the room you are already in (S15). The room
     /// screen's own line only appears while a room of one still has its
-    /// first invite out; this is the way in from two members to six.
+    /// first invite out; this is the way in from two members to twelve.
     static let inviteSomeone = "Invite someone"
     /// Accepting an invite to another room when you already have one (S16).
     /// The tapped link does this by itself; this is the same door, for a
@@ -727,6 +727,7 @@ enum Copy {
         case "2026-10-original": return "The words under the words"
         case "2026-10-following": return "Staying on the same page"
         case "2026-10-flyleaf": return "The front of the book"
+        case "2026-10-twelve": return "Room for more of you"
         default: return whatsNewHeading
         }
     }
@@ -834,6 +835,16 @@ enum Copy {
     /// What's new (A67): how it is set.
     static let whatsNewQuietHoursBody =
         "One band from noon to noon. Drag either end of the dark stretch. Thinking of you still arrives, as a touch."
+    /// What's new (A70): a room holds twelve.
+    static let whatsNewTwelveTitle = "A room holds twelve now"
+    /// What's new (A70): who can come, and where they sit.
+    static let whatsNewTwelveBody =
+        "Invite up to twelve people into one room. Past six, the faces round the fire sit in two rows."
+    /// What's new (A70): four new inks.
+    static let whatsNewInksTitle = "Four new inks"
+    /// What's new (A70): which, and why.
+    static let whatsNewInksBody =
+        "Bronze, jade, sky and iris join the eight, so everyone in a room of twelve has an ink of their own."
 }
 
 /// The first word of a name, for the places that say it in passing. Kept

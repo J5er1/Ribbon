@@ -4675,6 +4675,93 @@ A69. **Sliders with the page in view, and five typefaces (2026-10-flyleaf).**
     changes nothing about the difference; looking at both side by side is
     still owed before changing either.
 
+A70. **A room of twelve, and twelve inks (2026-10-twelve; amends §6.7,
+    the brief's §8 and A19).** Owner, asked what the social side of
+    Ribbon should mean first: *"Finish groups"*, *"Cards the room
+    writes"* and *"Reaching outside a room"*; asked whether the six-person
+    ceiling should change, having pictured a room of eleven in A62:
+    *"Raise to 12"*; asked what happens past eight when every ink is
+    taken: *"Add four inks"* (offered beside sharing inks, and ink ceasing
+    to be identity past eight). This is the first piece: a room holds
+    twelve, and everyone in a full room has an ink of their own.
+
+    This reverses, on the record: §6.7's "six is the ceiling" and its
+    reasons (presence past six faces, and eight inks), the brief's
+    "eight is deliberate" and its settled palette, and A19's "capped at six"
+    for the seats round the fire. The brief's eight are unchanged.
+
+    - **The ceiling is twelve on the server.**
+      `20261016120000_ribbon_a_room_of_twelve.sql` has `accept_invite`
+      refuse the thirteenth (`room_full`, under the same row lock) and
+      `invite_preview` call a room full at twelve. `Room.capacity` is 12 in
+      both cores. "A room holds six" reads "A room holds twelve" on both
+      phones; the full-room copy for a joiner is unchanged.
+    - **Four inks: bronze, jade, sky and iris.** Chosen by measurement, not
+      by eye: a search over CIELAB for the four colours furthest (CIEDE2000)
+      from the eight, from each other, from chartreuse, the lamp, the muted
+      ink and ivory, at the eight's own lightness and chroma, with light
+      values at 4.5:1 or better on the paper. Each sits at least as far from
+      its nearest neighbour as plum already sits from rose (ΔE 10.9, the
+      closest pair the brief chose): bronze ≥ 15, jade 11.4, sky ≥ 14,
+      iris ≥ 16. Jade was taken over the search's own fourth pick, a dusty
+      pink 13 from rose and crimson, because a fourth reddish ink would read
+      as a cousin of two people already in the room rather than as somebody
+      new. "Bronze" and not "olive", which the book uses for the proposed
+      paper accent (§16.1).
+
+      | Ink | Dark | Light |
+      |---|---|---|
+      | bronze | `#98853B` | `#5E5435` |
+      | jade | `#52B88D` | `#0A7959` |
+      | sky | `#21A8CE` | `#27728F` |
+      | iris | `#BA95E9` | `#805BA1` |
+
+      They are listed round the wheel — crimson, clay, ochre, bronze, moss,
+      jade, teal, sky, indigo, iris, plum, rose — which is the order every
+      picker shows them in; the brief's eight keep their order among
+      themselves, and nothing anywhere reads an ink by its position. Every
+      ink check in the schema (memberships, highlights, room_inks) accepts
+      the twelve. **Older builds** read an ink as text and fall back
+      quietly: a membership's unknown ink is no ink (a monogram, and on
+      that phone the waiting row), a highlight's is ochre. Nothing crashes
+      and nothing is written back.
+    - **The seats round the fire.** A19 kept six faces in one row, giving up
+      a few points each rather than wrap, because a wrapped row of faces
+      reads as a list. Up to six that is unchanged. Twelve faces cannot keep
+      the 44 points a finger is owed in one row, and Android's fallback, a
+      row that scrolls, would hide half the room; so past six they sit in
+      two rows, as evenly as they go, the longer nearer the fire
+      (`Seating.rows`, in both cores, tested case for case). Still no names,
+      no overflow marker, nothing counted.
+    - **The ink picker** hangs its twelve ribbons from two rules of six,
+      round the wheel, each in its 44 point column; the iPhone's sheet is a
+      ribbon's length and a gap taller. The toolbar's free palette in a room
+      of two already scrolled beside pinned verbs (A26) and is unchanged.
+    - **What's new** for this release, "Room for more of you": the room's
+      faces seated by `Seating` from six to twelve, and the picker's
+      ribbons with the four new inks laid in at their places.
+
+    **Corrections to the record.** Deviations 9a, 11 and 15 say the
+    invitation row for an ink (S01, "Colour is a person now. Pick your
+    ink.") is not built. It is, on both phones (A37a), and so is the picker.
+    What is still not built from §6.7 is the moment itself: a newcomer to a
+    room of three or more is not asked for an ink while joining, and gets
+    the same row as everyone else.
+
+    **Not in this piece, and next.** Closing a room (§6.8: everyone agrees,
+    or thirty days of silence and one request) with an export of the shelf
+    exists nowhere, not in either app or the backend. Then cards the room
+    writes (§16.4), and reaching outside a room: sharing a verse out, a
+    one-to-one room started from a group, the people you read with across
+    rooms, and — which reverses §3's "no strangers, no discovery" and is
+    owed a conversation before any of it is built — public profiles.
+
+    **The migration is not yet on the live project.** Until it is, a
+    thirteenth person cannot join (the server still says six), and an ink
+    from the new four is refused by the database, so a build that offers
+    them must not reach phones before the migration does
+    (docs/still-to-do.md §8).
+
 ## iOS (phase four): the second pass
 
 Android took a design pass of its own (A18–A51) and the two platforms

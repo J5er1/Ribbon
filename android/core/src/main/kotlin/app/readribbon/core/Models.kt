@@ -56,8 +56,9 @@ data class Person(
 }
 
 /**
- * 2–6 people. The app's root. A person may hold several rooms; they never
- * interact — nothing crosses between them (§2.4).
+ * 2–12 people (§2.3, raised from six by A70). The app's root. A person
+ * may hold several rooms; they never interact — nothing crosses between
+ * them (§2.4).
  */
 @Serializable
 data class Room(
@@ -87,7 +88,9 @@ data class Room(
     companion object {
         // Swift declares this above the stored properties; in Kotlin a
         // type-level constant has to live in the companion, below them.
-        const val capacity = 6
+        // Twelve, and there are twelve inks, so everyone in a full room has
+        // one of their own (A70).
+        const val capacity = 12
     }
 }
 

@@ -16,7 +16,7 @@ struct InviteSheet: View {
         VStack(spacing: 22) {
             Spacer()
             if model.isFull(room) {
-                Text(Copy.roomHoldsSix)
+                Text(Copy.roomHoldsTwelve)
                     .font(RibbonType.ui(16))
                     .foregroundStyle(Palette.text)
                     .multilineTextAlignment(.center)
