@@ -22,7 +22,9 @@ import kotlin.math.pow
  * thing that can happen on the reading surface, two people marking the same
  * verse, drew a hole in the page. See deviations A41b.
  *
- * So the check lives here instead, and runs on every build.
+ * So the check lives here instead, and runs on every build. A room of twelve
+ * has twelve inks (A70), so the 28 pairs are now 66, and every one is held to
+ * the same rule.
  */
 class HighlightWashTest {
 
@@ -32,7 +34,7 @@ class HighlightWashTest {
     /** Ivory: Scripture itself, which has to stay readable over any of it. */
     private val scripture = Brand.text
 
-    @Test fun everyOneOfTheTwentyEightPairsIsBrighterThanEitherInk() {
+    @Test fun everyPairOfInksIsBrighterThanEitherInk() {
         val inks = Ink.entries
         var pairs = 0
         for (i in inks.indices) {
@@ -49,7 +51,8 @@ class HighlightWashTest {
                 )
             }
         }
-        assertTrue("S06 names 28 pairs; found $pairs", pairs == 28)
+        // S06 named 28 pairs for the brief's eight; twelve inks make 66.
+        assertTrue("twelve inks make 66 pairs; found $pairs", pairs == 66)
     }
 
     /**
