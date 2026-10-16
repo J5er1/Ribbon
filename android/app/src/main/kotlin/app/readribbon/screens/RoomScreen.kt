@@ -1078,6 +1078,8 @@ private fun Seats(
             each.coerceIn(SEAT_MIN_TOUCH, SEAT_TOUCH)
         }
         val face = SEAT * (touch / SEAT_TOUCH)
+        // Read here: inside the column the box's scope is not the receiver.
+        val across = maxWidth
 
         Column(
             modifier = Modifier.fillMaxWidth(),
@@ -1093,7 +1095,7 @@ private fun Seats(
                     modifier = Modifier
                         .fillMaxWidth()
                         .then(
-                            if (touch * count + SEAT_GAP * (count - 1) > maxWidth) {
+                            if (touch * count + SEAT_GAP * (count - 1) > across) {
                                 Modifier.horizontalScroll(rememberScrollState())
                             } else {
                                 Modifier
