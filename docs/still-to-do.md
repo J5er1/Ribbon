@@ -354,19 +354,15 @@ built.
 `supabase/functions/bible-proxy` now answers `cache-control: private,
 no-store`. Redeploy it for that to apply; the apps no longer rely on it.
 
-## 8. A room of twelve — the migration, not yet applied
+## 8. A room of twelve — the migration, applied on 16 October
 
-`supabase/migrations/20261016120000_ribbon_a_room_of_twelve.sql` raises the
-ceiling to twelve and lets every ink check accept the four new inks (A70).
-It is **not on the live project yet**. Until it is:
+`supabase/migrations/20261016120000_ribbon_a_room_of_twelve.sql` is on the
+live project (recorded as `20261016014142`; docs/deviations.md A70). It
+was rehearsed first in a transaction that was rolled back. Afterwards the
+three ink checks are `memberships_ink_is_an_ink`, `highlights_ink_is_an_ink`
+and `room_inks_ink_is_an_ink`, each accepting the twelve; `accept_invite`
+refuses the thirteenth; `invite_preview` is still callable signed out and
+`accept_invite` only signed in.
 
-- a seventh person still cannot join (the server says `room_full` at six),
-  which is what every shipped build expects; and
-- a phone on the new build that picks bronze, jade, sky or iris, or marks
-  with one, has that row refused by the database, so the choice stays on
-  that phone.
-
-So apply the migration **before** the build that carries A70 reaches
-phones. It changes no data: it replaces three check constraints with wider
-ones and redefines `accept_invite` and `invite_preview`, unchanged but for
-the number. Rehearse it in a transaction first, as §1 was.
+Shipped builds are unaffected: they still stop the invite sheet at six on
+the phone, and they read the four new inks as no ink or ochre (A70).

@@ -467,7 +467,7 @@ enum Copy {
     static let translationIsYours = "Yours alone. A mark lands on the same words in theirs."
     static let thePageIsYours = "Yours alone. Nobody else's page moves."
     static let notificationsLede = "Every room asks for something different. These are per room."
-    static let planLede = "What your room has, and when Ribbon asks."
+    static let planLede = "What your room has."
     @MainActor static var downloadsLede: String { "What is on this \(deviceNoun), and what isn't." }
     static let thePage = "The page"
     static let typeface = "Typeface"
@@ -517,7 +517,8 @@ enum Copy {
     static let thinkingOfYou = "Thinking of you"
     static let quietHours = "Quiet hours"
     static let startTheRoomAgain = "Start the room again"
-    static let firstBookFree = "The first book is free, all the way through."
+    /// S22 (A71): free for now, every room and every book.
+    static let freeForNow = "Ribbon is free for now: every room, of two or of twelve, and every book."
     static let manageInStore = "Manage in the App Store"
 
     /// The three stops of the line-spacing control (S20). "Close" here is a
@@ -555,10 +556,10 @@ enum Copy {
     /// read stays on the device and the rest doesn't — its license, not our
     /// design — so the row says what it does instead of a size.
     static let streams = "streams"
-    /// Where the ask lives, said once (S22). A non-paying member never sees
-    /// a price and never learns who pays.
-    static let theAskComesOnce =
-        "When your room's first ember is on the shelf, Ribbon will ask — there, and only there."
+    /// S22 (A71): free for now, so there is no ask to place. What would
+    /// change it is said where it would be said, and nowhere else.
+    static let ifThatChanges =
+        "If that ever changes, it will be said here, plainly. Scripture is never locked."
     /// Deleting the account asks §6.8's question — `leaveNotesQuestion` —
     /// and these are its two answers. Neither is the quiet one: deleting is
     /// deliberate either way, and the notes were left for the other person.

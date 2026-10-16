@@ -1094,7 +1094,7 @@ object Copy {
      * a lede promising one is the app volunteering the single fact that
      * member is meant never to learn, and then failing to deliver it.
      */
-    const val PLAN_LEDE = "What your room has, and when Ribbon asks."
+    const val PLAN_LEDE = "What your room has."
     fun downloadsLede(context: Context) = "What is on this ${deviceNoun(context)}, and what isn't."
 
     /** The two groups on the text screen. */
@@ -1159,7 +1159,8 @@ object Copy {
     const val THINKING_OF_YOU = "Thinking of you"
     const val QUIET_HOURS = "Quiet hours"
     const val START_THE_ROOM_AGAIN = "Start the room again"
-    const val FIRST_BOOK_FREE = "The first book is free, all the way through."
+    /** S22 (A71): free for now, every room and every book. */
+    const val FREE_FOR_NOW = "Ribbon is free for now: every room, of two or of twelve, and every book."
     const val MANAGE_IN_STORE = "Manage in Google Play"
 
     /**
@@ -1213,11 +1214,11 @@ object Copy {
     const val STREAMS = "streams"
 
     /**
-     * Where the ask lives, said once (S22). Swift writes it inline. A
-     * non-paying member never sees a price and never learns who pays.
+     * S22 (A71): free for now, so there is no ask to place. What would
+     * change it is said where it would be said, and nowhere else.
      */
-    const val THE_ASK_COMES_ONCE =
-        "When your room's first ember is on the shelf, Ribbon will ask — there, and only there."
+    const val IF_THAT_CHANGES =
+        "If that ever changes, it will be said here, plainly. Scripture is never locked."
 
     /**
      * Deleting the account asks §6.8's question — [LEAVE_NOTES_QUESTION] —

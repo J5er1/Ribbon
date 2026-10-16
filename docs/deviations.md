@@ -4756,11 +4756,35 @@ A70. **A room of twelve, and twelve inks (2026-10-twelve; amends §6.7,
     rooms, and — which reverses §3's "no strangers, no discovery" and is
     owed a conversation before any of it is built — public profiles.
 
-    **The migration is not yet on the live project.** Until it is, a
-    thirteenth person cannot join (the server still says six), and an ink
-    from the new four is refused by the database, so a build that offers
-    them must not reach phones before the migration does
-    (docs/still-to-do.md §8).
+    **The migration is on the live project** (16 October 2026, recorded as
+    `20261016014142`), with the owner's go-ahead: *"Yeah, you can apply
+    the migrations."* It was rehearsed first in a transaction that was
+    rolled back; the live `accept_invite` and `invite_preview` were read
+    beforehand and matched the files but for the number, and their grants
+    are unchanged (the preview callable signed out, joining only signed
+    in).
+
+A71. **Free, for now (amends §14 and S22).** Owner: *"Pricing will be
+    free for a while. I'm going to just cover everything."* Every room, of
+    two or of twelve, and every book, costs nothing; there is no trial and
+    no first-book rule to explain.
+
+    - **S22, the plan,** says so on both phones: "Ribbon is free for now:
+      every room, of two or of twelve, and every book." Its footnote, which
+      promised the ask after the first ember, now says what a change would
+      look like: "If that ever changes, it will be said here, plainly.
+      Scripture is never locked." The lede no longer says "when Ribbon
+      asks". The paused room's two rows are kept, because a room can still
+      be paused, and StoreKit is still not built (deviation 11).
+    - **The site's pricing section** is one table of "Free, for now", and
+      youth ministry's "Quiet billing" says there is none yet.
+    - **Nothing in §14 is thrown away.** The first free book, the price of
+      a pair, the ask in exactly two places, a paused room keeping every
+      word: those are what pricing will be built from when it comes, and
+      that will be its own decision.
+    - **No What's New item.** Billing was never built, so nobody has been
+      asked for anything; what a reader meets is unchanged but for one
+      line on the plan screen.
 
 ## iOS (phase four): the second pass
 
