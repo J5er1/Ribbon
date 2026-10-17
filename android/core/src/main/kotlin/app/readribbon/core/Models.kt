@@ -82,7 +82,12 @@ data class Room(
      * ([TranslationChoice.page]) and nothing reads this for display. It is
      * still decoded and written because shipped clients read and write it.
      */
-    val translation: TranslationID = TranslationID.bsb
+    val translation: TranslationID = TranslationID.bsb,
+    /**
+     * One line about the room for people who find it (A72). Null until
+     * somebody in it writes one.
+     */
+    val line: String? = null,
 ) {
 
     companion object {
@@ -108,7 +113,12 @@ data class Membership(
      * freely, per highlight) or while an ink pick is still waiting (§4.5).
      */
     val ink: Ink? = null,
-    val joinedAt: Instant
+    val joinedAt: Instant,
+    /**
+     * Whether this person has said yes to the room being found (A72). The
+     * room is found only while everyone has ([RoomOpenness]).
+     */
+    val wouldOpen: Boolean = false,
 )
 
 /** A book, in a room. The active unit. A room has one open reading at a time. */
