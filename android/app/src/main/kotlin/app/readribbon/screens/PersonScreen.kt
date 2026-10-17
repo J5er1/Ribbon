@@ -596,12 +596,14 @@ fun ConfirmChoice(
  * Picking an ink when color is identity (§4.5, §6.7) — an invitation, not
  * an interruption.
  *
- * The eight inks are eight ribbons hanging from a rule (A67), each in a
- * 44 dp column: yours pulled further down than the rest, one somebody else
- * holds drawn short and faint.
+ * The twelve inks are ribbons hanging from two rules, six to a rule and
+ * round the wheel (A67, A70), each in a 44 dp column: yours pulled further
+ * down than the rest, one somebody else holds drawn short and faint. Six to
+ * a rule, so every column keeps the 44 dp a finger is owed on the narrowest
+ * phone.
  *
  * Swift asks for a fixed detent and `.presentationSizing(.fitted)` so an
- * iPad does not float eight swatches at the top of a vast form sheet; a
+ * iPad does not float twelve swatches at the top of a vast form sheet; a
  * modal bottom sheet is already the height of what it holds, on every size
  * of screen, so there is nothing to pin — the longer column is simply a
  * taller sheet.
@@ -652,32 +654,37 @@ fun InkPickerSheet(
                 val mine = model.myMembership(room)?.ink
                 // Read here: a draw lambda is not a composition (A18).
                 val rule = Palette.rule
-                Row(
-                    modifier = Modifier
-                        .padding(
-                            bottom = 34.dp +
-                                WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(),
-                        )
-                        // The rule the ribbons hang from, the row's own width
-                        // and drawn over their top edges, so each reads as
-                        // tucked under it — the binding your ribbons hang
-                        // from on You.
-                        .drawWithContent {
-                            drawContent()
-                            drawRect(color = rule, size = Size(size.width, 1.dp.toPx()))
-                        },
-                    verticalAlignment = Alignment.Top,
+                Column(
+                    modifier = Modifier.padding(
+                        bottom = 34.dp +
+                            WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(),
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(INK_RULES_BETWEEN),
                 ) {
-                    Ink.entries.forEach { ink ->
-                        val isTaken = taken.contains(ink) && ink != mine
-                        InkPickerSwatch(
-                            ink = ink,
-                            isMine = ink == mine,
-                            isTaken = isTaken,
+                    Ink.entries.chunked(INKS_TO_A_RULE).forEach { row ->
+                        Row(
+                            // The rule the ribbons hang from, the row's own
+                            // width and drawn over their top edges, so each
+                            // reads as tucked under it — the binding your
+                            // ribbons hang from on You.
+                            modifier = Modifier.drawWithContent {
+                                drawContent()
+                                drawRect(color = rule, size = Size(size.width, 1.dp.toPx()))
+                            },
+                            verticalAlignment = Alignment.Top,
                         ) {
-                            if (!isTaken) {
-                                model.pickInk(ink, room)
-                                leave(onDismiss)
+                            row.forEach { ink ->
+                                val isTaken = taken.contains(ink) && ink != mine
+                                InkPickerSwatch(
+                                    ink = ink,
+                                    isMine = ink == mine,
+                                    isTaken = isTaken,
+                                ) {
+                                    if (!isTaken) {
+                                        model.pickInk(ink, room)
+                                        leave(onDismiss)
+                                    }
+                                }
                             }
                         }
                     }
@@ -686,6 +693,12 @@ fun InkPickerSheet(
         }
     }
 }
+
+/** Six inks to a rule (A70). */
+private const val INKS_TO_A_RULE = 6
+
+/** From the foot of one rule's longest ribbon to the next rule. */
+private val INK_RULES_BETWEEN = 18.dp
 
 /**
  * One ink to choose: a ribbon in a 44 dp column, pulled down when it is

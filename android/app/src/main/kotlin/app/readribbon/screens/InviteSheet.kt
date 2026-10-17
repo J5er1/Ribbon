@@ -201,7 +201,7 @@ fun InviteContent(
         ) {
             if (full) {
                 Text(
-                    text = Copy.ROOM_HOLDS_SIX,
+                    text = Copy.ROOM_HOLDS_TWELVE,
                     style = RibbonType.ui(16f),
                     color = Palette.text,
                     textAlign = TextAlign.Center,

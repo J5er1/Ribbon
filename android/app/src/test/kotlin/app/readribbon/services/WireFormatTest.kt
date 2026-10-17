@@ -263,7 +263,11 @@ class WireFormatTest {
     fun testEnumRawValuesSatisfyTheSchemaChecks() {
         val inks = app.readribbon.core.Ink.entries.map { it.name }.toSet()
         assertEquals(
-            setOf("crimson", "clay", "ochre", "moss", "teal", "indigo", "plum", "rose"),
+            // The twelve 20261016120000_ribbon_a_room_of_twelve.sql accepts.
+            setOf(
+                "crimson", "clay", "ochre", "bronze", "moss", "jade",
+                "teal", "sky", "indigo", "iris", "plum", "rose",
+            ),
             inks,
         )
         // fires.state_at_last_fuel permits three of the four states; banked

@@ -77,12 +77,12 @@ struct LeaveToolbar: View {
                     Rectangle().fill(Palette.rule).frame(width: 1, height: 20)
                         .transition(.opacity)
                 }
-                // Two people: eight swatches, pick per highlight, last-used
+                // Two people: every ink, pick per highlight, last-used
                 // pre-selected. Three or more: one swatch — yours (§4.5).
                 // Paused: only highlight shows, greyed and inert — the room
                 // reads everything and writes nothing (S02, §08).
                 //
-                // Only the inks scroll (A26): on a narrow phone eight
+                // Only the inks scroll (A26): on a narrow phone twelve
                 // swatches at a finger's width will not fit beside the
                 // verbs, and the verbs are the ones that must never leave
                 // the screen.

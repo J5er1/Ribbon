@@ -16,6 +16,7 @@ import app.readribbon.screens.LOOP_MS
 import app.readribbon.screens.STILL_AT
 import app.readribbon.screens.body
 import app.readribbon.screens.flyleafFrame
+import app.readribbon.screens.fourInksFrame
 import app.readribbon.screens.followingFrame
 import app.readribbon.screens.loopTime
 import app.readribbon.screens.lordFrame
@@ -27,6 +28,7 @@ import app.readribbon.screens.readableFrame
 import app.readribbon.screens.pageFrame
 import app.readribbon.screens.typefaceFrame
 import app.readribbon.screens.roomGroupsFrame
+import app.readribbon.screens.roomOfTwelveFrame
 import app.readribbon.screens.selectionFrame
 import app.readribbon.screens.shelfFrame
 import app.readribbon.screens.staysFrame
@@ -382,6 +384,39 @@ class WhatsNewOnLaunchTest {
         }
     }
 
+    // The fourth release's two (A70).
+
+    @Test fun reduceMotionHoldsTheRoomFullAndEveryInkHanging() {
+        val twelve = roomOfTwelveFrame(WhatsNewItem.roomOfTwelve.timeline.stillAt)
+        assertTrue("everyone seated", twelve.arrivals.all { it == 1f })
+        assertEquals("and nobody leaving", 0f, twelve.leave, 0f)
+
+        val inks = fourInksFrame(WhatsNewItem.fourInks.timeline.stillAt)
+        assertTrue("all four new inks laid in", inks.laid.all { it == 1f })
+        assertEquals("and none lifting", 0f, inks.lift, 0f)
+    }
+
+    @Test fun eachTwelveLoopBeginsAndEndsAtRest() {
+        for (t in listOf(0, WhatsNewItem.roomOfTwelve.timeline.loopMs - 1)) {
+            val twelve = roomOfTwelveFrame(t)
+            assertEquals("only the six seated", 0f, twelve.arrivals.sum() * (1f - twelve.leave), 0.001f)
+        }
+        for (t in listOf(0, WhatsNewItem.fourInks.timeline.loopMs - 1)) {
+            val inks = fourInksFrame(t)
+            assertEquals("only the brief's eight", 0f, inks.laid.sum() * (1f - inks.lift), 0.001f)
+        }
+    }
+
+    /** The newcomers, and the new inks, come one after another — never a later one ahead. */
+    @Test fun theNewcomersAndTheNewInksComeInTurn() {
+        for (t in 0 until LONG_LOOP_MS step 10) {
+            val arrivals = roomOfTwelveFrame(t).arrivals
+            assertEquals("the newcomers at $t", arrivals.sortedDescending(), arrivals)
+            val laid = fourInksFrame(t).laid
+            assertEquals("the inks at $t", laid.sortedDescending(), laid)
+        }
+    }
+
     /** Your rooms' ribbons, and the embers on the shelf, come one after another — never a later one ahead. */
     @Test fun theRibbonsAndTheEmbersComeInTurn() {
         for (t in 0 until LOOP_MS step 10) {
@@ -454,6 +489,8 @@ class WhatsNewOnLaunchTest {
             WhatsNewItem.quietHoursNight to ::nightFrame,
             WhatsNewItem.yourPage to ::pageFrame,
             WhatsNewItem.typeface to ::typefaceFrame,
+            WhatsNewItem.roomOfTwelve to ::roomOfTwelveFrame,
+            WhatsNewItem.fourInks to ::fourInksFrame,
         )) {
             val timeline = item.timeline
             val breath = stillFor(timeline.loopMs, timeline.stillAt, frame)
@@ -477,6 +514,7 @@ class WhatsNewOnLaunchTest {
         }
         assertEquals("6 October 2026", Copy.whatsNewReleased("2026-10-06"))
         assertEquals("7 October 2026", Copy.whatsNewReleased("2026-10-07"))
+        assertEquals("Room for more of you", Copy.whatsNewTitle("2026-10-twelve"))
         assertEquals("The front of the book", Copy.whatsNewTitle("2026-10-flyleaf"))
         assertEquals("Staying on the same page", Copy.whatsNewTitle("2026-10-following"))
         assertEquals("The words under the words", Copy.whatsNewTitle("2026-10-original"))

@@ -56,8 +56,9 @@ data class Person(
 }
 
 /**
- * 2–6 people. The app's root. A person may hold several rooms; they never
- * interact — nothing crosses between them (§2.4).
+ * 2–12 people (§2.3, raised from six by A70). The app's root. A person
+ * may hold several rooms; they never interact — nothing crosses between
+ * them (§2.4).
  */
 @Serializable
 data class Room(
@@ -81,13 +82,20 @@ data class Room(
      * ([TranslationChoice.page]) and nothing reads this for display. It is
      * still decoded and written because shipped clients read and write it.
      */
-    val translation: TranslationID = TranslationID.bsb
+    val translation: TranslationID = TranslationID.bsb,
+    /**
+     * One line about the room for people who find it (A72). Null until
+     * somebody in it writes one.
+     */
+    val line: String? = null,
 ) {
 
     companion object {
         // Swift declares this above the stored properties; in Kotlin a
         // type-level constant has to live in the companion, below them.
-        const val capacity = 6
+        // Twelve, and there are twelve inks, so everyone in a full room has
+        // one of their own (A70).
+        const val capacity = 12
     }
 }
 
@@ -105,7 +113,12 @@ data class Membership(
      * freely, per highlight) or while an ink pick is still waiting (§4.5).
      */
     val ink: Ink? = null,
-    val joinedAt: Instant
+    val joinedAt: Instant,
+    /**
+     * Whether this person has said yes to the room being found (A72). The
+     * room is found only while everyone has ([RoomOpenness]).
+     */
+    val wouldOpen: Boolean = false,
 )
 
 /** A book, in a room. The active unit. A room has one open reading at a time. */

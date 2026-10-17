@@ -755,7 +755,7 @@ object Copy {
      */
     const val SEND_THE_INVITE = "Send the invite"
     const val NAME_THIS_ROOM = "Name this room"
-    const val ROOM_HOLDS_SIX = "A room holds six. Start another for the rest."
+    const val ROOM_HOLDS_TWELVE = "A room holds twelve. Start another for the rest."
 
     /** The same fact, said to the person arriving — "the rest" are the
      *  inviter's people, not theirs. */
@@ -886,7 +886,7 @@ object Copy {
     /**
      * Inviting someone to the room you are already in (S15). The room
      * screen's own line only appears while a room of one still has its first
-     * invite out; this is the way in from two members to six.
+     * invite out; this is the way in from two members to twelve.
      */
     const val INVITE_SOMEONE = "Invite someone"
 
@@ -1094,7 +1094,7 @@ object Copy {
      * a lede promising one is the app volunteering the single fact that
      * member is meant never to learn, and then failing to deliver it.
      */
-    const val PLAN_LEDE = "What your room has, and when Ribbon asks."
+    const val PLAN_LEDE = "What your room has."
     fun downloadsLede(context: Context) = "What is on this ${deviceNoun(context)}, and what isn't."
 
     /** The two groups on the text screen. */
@@ -1110,7 +1110,7 @@ object Copy {
     const val NOTES_LEFT_FOR_YOU_SUB = "When they leave one at a verse."
 
     /**
-     * "Both" was wrong from three people up, and §2.3 says a room holds six.
+     * "Both" was wrong from three people up, and a room holds up to twelve.
      * A card opens when *everyone* has answered (§4.6), which is also the
      * word the card's own waiting line uses — so the switch and the card now
      * describe the same event in the same word.
@@ -1159,7 +1159,8 @@ object Copy {
     const val THINKING_OF_YOU = "Thinking of you"
     const val QUIET_HOURS = "Quiet hours"
     const val START_THE_ROOM_AGAIN = "Start the room again"
-    const val FIRST_BOOK_FREE = "The first book is free, all the way through."
+    /** S22 (A71): free for now, every room and every book. */
+    const val FREE_FOR_NOW = "Ribbon is free for now: every room, of two or of twelve, and every book."
     const val MANAGE_IN_STORE = "Manage in Google Play"
 
     /**
@@ -1213,11 +1214,11 @@ object Copy {
     const val STREAMS = "streams"
 
     /**
-     * Where the ask lives, said once (S22). Swift writes it inline. A
-     * non-paying member never sees a price and never learns who pays.
+     * S22 (A71): free for now, so there is no ask to place. What would
+     * change it is said where it would be said, and nowhere else.
      */
-    const val THE_ASK_COMES_ONCE =
-        "When your room's first ember is on the shelf, Ribbon will ask — there, and only there."
+    const val IF_THAT_CHANGES =
+        "If that ever changes, it will be said here, plainly. Scripture is never locked."
 
     /**
      * Deleting the account asks §6.8's question — [LEAVE_NOTES_QUESTION] —
@@ -1485,6 +1486,7 @@ object Copy {
         "2026-10-original" -> "The words under the words"
         "2026-10-following" -> "Staying on the same page"
         "2026-10-flyleaf" -> "The front of the book"
+        "2026-10-twelve" -> "Room for more of you"
         else -> WHATS_NEW_HEADING
     }
 
@@ -1635,6 +1637,20 @@ object Copy {
     const val WHATS_NEW_QUIET_HOURS_BODY =
         "One band from noon to noon. Drag either end of the dark stretch. " +
             "Thinking of you still arrives, as a touch."
+
+    /** What's new (A70): a room holds twelve. */
+    const val WHATS_NEW_TWELVE_TITLE = "A room holds twelve now"
+
+    /** What's new (A70): who can come, and where they sit. */
+    const val WHATS_NEW_TWELVE_BODY =
+        "Invite up to twelve people into one room. Past six, the faces round the fire sit in two rows."
+
+    /** What's new (A70): four new inks. */
+    const val WHATS_NEW_INKS_TITLE = "Four new inks"
+
+    /** What's new (A70): which, and why. */
+    const val WHATS_NEW_INKS_BODY =
+        "Bronze, jade, sky and iris join the eight, so everyone in a room of twelve has an ink of their own."
 }
 
 /** First names only, everywhere a person is addressed in a line of copy. */

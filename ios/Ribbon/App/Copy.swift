@@ -336,7 +336,7 @@ enum Copy {
     /// (S15). The control says exactly what happens.
     static let sendTheInvite = "Send the invite"
     static let nameThisRoom = "Name this room"
-    static let roomHoldsSix = "A room holds six. Start another for the rest."
+    static let roomHoldsTwelve = "A room holds twelve. Start another for the rest."
     /// The same fact, said to the person arriving — "the rest" are the
     /// inviter's people, not theirs.
     static let roomFullForJoiner = "This room is full. Ask them to start another."
@@ -401,7 +401,7 @@ enum Copy {
     static let tapToChange = "Tap to change"
     /// Inviting someone to the room you are already in (S15). The room
     /// screen's own line only appears while a room of one still has its
-    /// first invite out; this is the way in from two members to six.
+    /// first invite out; this is the way in from two members to twelve.
     static let inviteSomeone = "Invite someone"
     /// Accepting an invite to another room when you already have one (S16).
     /// The tapped link does this by itself; this is the same door, for a
@@ -467,7 +467,7 @@ enum Copy {
     static let translationIsYours = "Yours alone. A mark lands on the same words in theirs."
     static let thePageIsYours = "Yours alone. Nobody else's page moves."
     static let notificationsLede = "Every room asks for something different. These are per room."
-    static let planLede = "What your room has, and when Ribbon asks."
+    static let planLede = "What your room has."
     @MainActor static var downloadsLede: String { "What is on this \(deviceNoun), and what isn't." }
     static let thePage = "The page"
     static let typeface = "Typeface"
@@ -517,7 +517,8 @@ enum Copy {
     static let thinkingOfYou = "Thinking of you"
     static let quietHours = "Quiet hours"
     static let startTheRoomAgain = "Start the room again"
-    static let firstBookFree = "The first book is free, all the way through."
+    /// S22 (A71): free for now, every room and every book.
+    static let freeForNow = "Ribbon is free for now: every room, of two or of twelve, and every book."
     static let manageInStore = "Manage in the App Store"
 
     /// The three stops of the line-spacing control (S20). "Close" here is a
@@ -555,10 +556,10 @@ enum Copy {
     /// read stays on the device and the rest doesn't — its license, not our
     /// design — so the row says what it does instead of a size.
     static let streams = "streams"
-    /// Where the ask lives, said once (S22). A non-paying member never sees
-    /// a price and never learns who pays.
-    static let theAskComesOnce =
-        "When your room's first ember is on the shelf, Ribbon will ask — there, and only there."
+    /// S22 (A71): free for now, so there is no ask to place. What would
+    /// change it is said where it would be said, and nowhere else.
+    static let ifThatChanges =
+        "If that ever changes, it will be said here, plainly. Scripture is never locked."
     /// Deleting the account asks §6.8's question — `leaveNotesQuestion` —
     /// and these are its two answers. Neither is the quiet one: deleting is
     /// deliberate either way, and the notes were left for the other person.
@@ -727,6 +728,7 @@ enum Copy {
         case "2026-10-original": return "The words under the words"
         case "2026-10-following": return "Staying on the same page"
         case "2026-10-flyleaf": return "The front of the book"
+        case "2026-10-twelve": return "Room for more of you"
         default: return whatsNewHeading
         }
     }
@@ -834,6 +836,16 @@ enum Copy {
     /// What's new (A67): how it is set.
     static let whatsNewQuietHoursBody =
         "One band from noon to noon. Drag either end of the dark stretch. Thinking of you still arrives, as a touch."
+    /// What's new (A70): a room holds twelve.
+    static let whatsNewTwelveTitle = "A room holds twelve now"
+    /// What's new (A70): who can come, and where they sit.
+    static let whatsNewTwelveBody =
+        "Invite up to twelve people into one room. Past six, the faces round the fire sit in two rows."
+    /// What's new (A70): four new inks.
+    static let whatsNewInksTitle = "Four new inks"
+    /// What's new (A70): which, and why.
+    static let whatsNewInksBody =
+        "Bronze, jade, sky and iris join the eight, so everyone in a room of twelve has an ink of their own."
 }
 
 /// The first word of a name, for the places that say it in passing. Kept

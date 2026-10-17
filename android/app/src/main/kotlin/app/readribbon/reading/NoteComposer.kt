@@ -303,7 +303,7 @@ fun LeaveToolbar(
                 }
             }
 
-            // Two people: eight swatches, pick per highlight, last-used
+            // Two people: every ink, pick per highlight, last-used
             // pre-selected. Three or more: one swatch — yours (§4.5).
             // Paused: only highlight shows, greyed and inert — the room
             // reads everything and writes nothing (S02, §08).
@@ -342,7 +342,7 @@ fun LeaveToolbar(
                         .horizontalScroll(rememberScrollState()),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    // The eight sit in touchable columns that include the gap
+                    // The inks sit in touchable columns that include the gap
                     // between them, so the drawn 20 dp swatch keeps its
                     // spacing while the finger gets a column the full height
                     // of the bar to hit (§11 — a control only a stylus can

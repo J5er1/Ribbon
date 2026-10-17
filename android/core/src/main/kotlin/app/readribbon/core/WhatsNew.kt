@@ -86,6 +86,15 @@ enum class WhatsNewItem {
      * matches Literata's (A69).
      */
     typeface,
+
+    /** A room holds twelve, and past six its faces sit in two rows (A70). */
+    roomOfTwelve,
+
+    /**
+     * Bronze, jade, sky and iris: an ink for everyone in a room of twelve
+     * (A70).
+     */
+    fourInks,
 }
 
 /**
@@ -107,6 +116,11 @@ object WhatsNew {
      * are simply how the app is now — there for the reading, from You.
      */
     val releases: List<WhatsNewRelease> = listOf(
+        WhatsNewRelease(
+            id = "2026-10-twelve",
+            released = "2026-10-16",
+            items = listOf(WhatsNewItem.roomOfTwelve, WhatsNewItem.fourInks),
+        ),
         WhatsNewRelease(
             id = "2026-10-flyleaf",
             released = "2026-10-08",
