@@ -68,11 +68,38 @@ class BibleTest {
     }
 
     @Test
-    fun testInkPaletteIsEightAndExcludesChartreuse() {
-        assertEquals(8, Ink.entries.size)
+    fun testInkPaletteIsTwelveAndExcludesChartreuse() {
+        assertEquals(12, Ink.entries.size)
         // Chartreuse is the brand's, not the user's.
         assertFalse(Ink.entries.any { it.darkHex.uppercase() == "D6E45C" })
         val taken: List<Ink> = listOf(Ink.teal, Ink.ochre)
-        assertEquals(6, Ink.remaining(taken = taken).size)
+        assertEquals(10, Ink.remaining(taken = taken).size)
+    }
+
+    @Test
+    fun testTheInksGoRoundTheWheel() {
+        // The order every picker shows them in (A70). The brief's eight keep
+        // their order among themselves; the four new ones sit between them.
+        assertEquals(
+            listOf(
+                "crimson", "clay", "ochre", "bronze", "moss", "jade",
+                "teal", "sky", "indigo", "iris", "plum", "rose",
+            ),
+            Ink.entries.map { it.name },
+        )
+    }
+
+    @Test
+    fun testEveryInkIsItsOwnColourOnBothGrounds() {
+        assertEquals(Ink.entries.size, Ink.entries.map { it.darkHex }.toSet().size)
+        assertEquals(Ink.entries.size, Ink.entries.map { it.lightHex }.toSet().size)
+    }
+
+    @Test
+    fun testAFullRoomHasAnInkForEveryone() {
+        assertEquals(12, Room.capacity)
+        assertTrue(Ink.entries.size >= Room.capacity)
+        val elevenTaken = Ink.entries.dropLast(1)
+        assertEquals(listOf(Ink.rose), Ink.remaining(taken = elevenTaken))
     }
 }

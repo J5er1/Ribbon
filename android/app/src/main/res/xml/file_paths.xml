@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
     <cache-path name="updates" path="updates" />
+    <!-- A closed room's shelf, written to hand on (A73). -->
+    <cache-path name="shelves" path="shelves" />
 </paths>

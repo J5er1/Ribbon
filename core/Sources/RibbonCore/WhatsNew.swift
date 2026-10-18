@@ -55,6 +55,19 @@ public enum WhatsNewItem: String, Codable, Hashable, Sendable, CaseIterable {
     /// The page can be set in one of five typefaces, each at a size that
     /// matches Literata's (A69).
     case typeface
+    /// A room holds twelve, and past six its faces sit in two rows (A70).
+    case roomOfTwelve
+    /// Bronze, jade, sky and iris: an ink for everyone in a room of twelve
+    /// (A70).
+    case fourInks
+    /// A room whose people all say yes can be found, and asked into (A72).
+    case findARoom
+    /// You can be found too, by your name, your face and one line — off
+    /// until you turn it on (A72).
+    case beingFound
+    /// A room can close when everyone agrees, and everyone keeps the shelf
+    /// as a file (A73).
+    case closingARoom
 }
 
 /// A release worth telling someone about. The id is a name, not a version
@@ -79,6 +92,15 @@ public enum WhatsNew {
     /// skipped three releases hears about the one they are on, and the rest
     /// are simply how the app is now — there for the reading, from You.
     public static let releases: [WhatsNewRelease] = [
+        WhatsNewRelease(
+            id: "2026-10-closing", released: "2026-10-18",
+            items: [.closingARoom]),
+        WhatsNewRelease(
+            id: "2026-10-found", released: "2026-10-18",
+            items: [.findARoom, .beingFound]),
+        WhatsNewRelease(
+            id: "2026-10-twelve", released: "2026-10-16",
+            items: [.roomOfTwelve, .fourInks]),
         WhatsNewRelease(
             id: "2026-10-flyleaf", released: "2026-10-08",
             items: [.flyleaf, .yourShelf, .versionsByReading, .yourPage, .typeface, .notificationsByName, .quietHoursNight]),

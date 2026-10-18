@@ -319,6 +319,56 @@ never yet run on a phone:
 - With VoiceOver or TalkBack: "the original words" on a verse opens the
   panel, and each word is read as its sound, its rendering and its grammar.
 
+A room of twelve (A70), on both phones:
+
+- Twelve people in one room (or a room seeded with twelve memberships):
+  the faces round the fire sit in two rows of six, each a finger's width,
+  no names, nothing counted. Seven sit as four and three. A thirteenth's
+  invite says the room is full, in the app and in the browser.
+- At six and below the seats are exactly as before, in one row.
+- Someone joins a room of six: the row becomes two, and the faces move
+  rather than jump; a person who leaves fades from their seat.
+- The ink picker in a room of three or more: twelve ribbons on two rules,
+  six each, round the wheel; yours hangs longest, one somebody holds is
+  short and faint. On the narrowest phone every column is still a finger
+  wide, and on the iPhone nothing is cut at the foot of the sheet.
+- Bronze, jade, sky and iris on the page, as marks and as wash, beside
+  the eight: each told apart from its neighbours at a glance, and in the
+  gutter as a 6pt dot.
+- A phone on the build before this one, in a room where someone picked
+  jade: their face is a monogram and their marks are ochre there, and
+  nothing else goes wrong.
+- What's new: update over an older build and open the app — "Room for more
+  of you", the faces seating from six to twelve and the four inks laid in;
+  reduce motion holds the room full and all twelve hanging.
+
+Being found (A72), on both phones (the migration is on the live project):
+
+- Before it is applied: no "Find a room" row, no "Let this room be
+  found", no Being found in You. After it, and a pull: all three appear
+  without a reinstall.
+- Being found starts at "I'm thirteen or older"; once said, the switch.
+  Your line, typed and left, is kept; emptied, it is gone.
+- Two rooms of two, A and B. Everyone in B says yes: B is found from A's
+  account by its name, by its line, and by "mark" or "Mark 4" while it
+  reads Mark. Until the last person in B says yes it is not found, and
+  the switch says "You said yes. It opens once everyone has." without
+  naming anyone.
+- Someone not findable opens a found room: "To ask, let yourself be found
+  first", and the row goes to Being found. Findable, they ask with a line:
+  "You asked." and the tile says "asked". Taking it back clears both.
+- In B, the ask is at the top of the room's menu with the asker's face and
+  line. "Let them in": they arrive in the room on both phones (theirs on
+  its next pull). "Not now": it goes, and the asker is told nothing.
+- Block the asker from their face: the ask goes, they stop appearing in
+  any search, and they cannot find B. Being found lists them by name;
+  "Unblock" undoes it.
+- Report a room and a person: "Thank you. It has been passed on." The
+  rows are in `public.reports`, visible in the dashboard only.
+- Delete an account that was findable: it can no longer be found.
+- What's new: "A door, if you want one", the fourth face let in and the
+  switch with its line; reduce motion holds both at their ends.
+
 ## 7. The New King James's usage reporting, and its proxy
 
 API.Bible asks apps to report each chapter shown (FUMS) with the
@@ -331,3 +381,56 @@ built.
 `supabase/functions/bible-proxy` now answers `cache-control: private,
 no-store`. Redeploy it for that to apply; the apps no longer rely on it.
 
+## 8. A room of twelve — the migration, applied on 16 October
+
+`supabase/migrations/20261016120000_ribbon_a_room_of_twelve.sql` is on the
+live project (recorded as `20261016014142`; docs/deviations.md A70). It
+was rehearsed first in a transaction that was rolled back. Afterwards the
+three ink checks are `memberships_ink_is_an_ink`, `highlights_ink_is_an_ink`
+and `room_inks_ink_is_an_ink`, each accepting the twelve; `accept_invite`
+refuses the thirteenth; `invite_preview` is still callable signed out and
+`accept_invite` only signed in.
+
+Shipped builds are unaffected: they still stop the invite sheet at six on
+the phone, and they read the four new inks as no ink or ochre (A70).
+
+## 9. Being found — the migration, applied on 18 October
+
+`supabase/migrations/20261016180000_ribbon_being_found.sql`
+(docs/deviations.md A72) is on the live project: eight pieces recorded as
+`ribbon_being_found_*`, and `let_in`, which the owner ran in the SQL
+editor. The behaviour was checked afterwards in a rolled-back transaction
+(A72 lists what). Still to do by hand, in the dashboard: look at
+`reports` there, and run the advisors (the new tables all have row-level
+security on).
+
+**Follow-up, found while writing it.** The `keep_in_place` repair covers
+memberships and invites. Other tables carry a room or reading id that an
+update policy checks only by author — notes, positions, quiet days,
+ribbons, cards and their answers among them. Moving one of those rows
+needs the id of a reading in a room you are not in, which nothing hands
+out today (finding gives room ids, not reading ids), so it is not urgent;
+but each should either pin its parent id the same way or check membership
+on the new row as well as the old.
+
+## 10. Closing a room — the migration, applied on 18 October
+
+`supabase/migrations/20261018120000_ribbon_closing_a_room.sql`
+(docs/deviations.md A73) is on the live project, in five pieces recorded
+as `ribbon_closing_*`, rehearsed beforehand in a rolled-back transaction
+(A73 lists what). Seen on a phone, both platforms:
+
+- The room menu shows "Close this room" under "Leave this room" only once
+  the phone has refreshed against the project. In a room of two, one yes
+  reads "You asked to close this room…" with "Take it back"; the other
+  person's yes closes it, and their phone offers the shelf at once.
+- The first person's phone, on its next refresh, moves the room out of
+  the list and into "Rooms that have closed" in the room menu; "Keep the
+  shelf" there hands on the file. Open the file in Files / a text editor
+  and read it through: books, notes, marks, cards.
+- Closing the last room you are in: the menu leaves for the first-run
+  door after the share sheet, not before it.
+- An invite link to a closed room says it has expired.
+- A quiet room: hard to make by hand; the rehearsal covered it on the
+  server. If one exists, the question should read "…quiet for a month,
+  so it closes now…".

@@ -755,7 +755,7 @@ object Copy {
      */
     const val SEND_THE_INVITE = "Send the invite"
     const val NAME_THIS_ROOM = "Name this room"
-    const val ROOM_HOLDS_SIX = "A room holds six. Start another for the rest."
+    const val ROOM_HOLDS_TWELVE = "A room holds twelve. Start another for the rest."
 
     /** The same fact, said to the person arriving — "the rest" are the
      *  inviter's people, not theirs. */
@@ -823,6 +823,90 @@ object Copy {
      */
     const val START_A_ROOM_INSTEAD = "Start a room instead"
 
+    // Being found (A72) — a room that everyone in it has opened, a person who
+    // chose to be seen, and a stranger asking. Nobody walks in, nobody is
+    // told no, and nothing here is ever a number. Copy.swift's, line for
+    // line.
+    const val FIND_A_ROOM = "Find a room"
+    const val FIND_A_ROOM_LEDE = "Rooms whose people have chosen to be found. Ask, and anyone inside can let you in."
+    const val FIND_PROMPT = "A book, or a room's name"
+    const val NO_ROOM_IS_OPEN_YET = "No room is open to be found yet."
+    const val NOTHING_OPEN_MATCHES = "Nothing open matches that."
+    const val PEOPLE = "People"
+    const val OPEN_ROOMS = "Open rooms"
+
+    /**
+     * A found room with no name, called by the people in it who chose to be
+     * found — "Ruth, Ann and Sam" — or, with nobody, by what it is.
+     */
+    fun roomOf(names: List<String>): String = when (names.size) {
+        0 -> "A room with no name"
+        1 -> names[0]
+        else -> names.dropLast(1).joinToString(", ") + " and " + names.last()
+    }
+    fun readingBook(book: String) = "Reading $book"
+    const val ASK_TO_JOIN = "Ask to join"
+
+    /** A found room you have asked into, marked on its tile in small caps. */
+    const val ASKED = "asked"
+    const val ASK_LINE_PROMPT = "Say something, if you like"
+    const val ASK = "Ask"
+    const val YOU_ASKED = "You asked. Anyone in the room can let you in."
+    const val TAKE_BACK_YOUR_ASK = "Take back your ask"
+    const val FOUND_ROOM_IS_FULL = "This room is full."
+    const val ROOM_IS_NOT_OPEN = "This room isn't open any more."
+    const val ASK_NEEDS_BEING_FOUND = "To ask, let yourself be found first, so the room can see who is asking."
+    const val ASKED_ENOUGH = "You have asks waiting already. Take one back to ask here."
+    const val BEING_FOUND = "Being found"
+    const val BEING_FOUND_SUB = "Whether people outside your rooms can find you"
+
+    /** Being found's state on its row in You, in small caps. */
+    const val ON = "on"
+    const val OFF = "off"
+    const val BEING_FOUND_LEDE = "Off unless you turn it on. When it is on, anyone on Ribbon can find your name, your face and one line in your own words. Nothing else: not your rooms, not your notes."
+    const val LET_PEOPLE_FIND_YOU = "Let people find you"
+    const val THIRTEEN_OR_OLDER_QUESTION = "Being found is for people thirteen or older."
+    const val I_AM_THIRTEEN_OR_OLDER = "I'm thirteen or older"
+    const val YOUR_LINE = "Your line"
+    const val YOUR_LINE_PROMPT = "One line in your own words"
+    const val PEOPLE_YOUVE_BLOCKED = "People you've blocked"
+    const val UNBLOCK = "Unblock"
+
+    /**
+     * The room's own switch (A72). A yes alone opens nothing: the room opens
+     * once everyone in it has said yes, and who has not is never named.
+     */
+    const val LET_THIS_ROOM_BE_FOUND = "Let this room be found"
+    const val ROOM_OPENS_WHEN_EVERYONE = "Found only once everyone in it says yes."
+    const val YOU_SAID_YES_WAITING = "You said yes. It opens once everyone has."
+    const val ROOM_IS_OPEN = "Open. People can find it and ask to join."
+    const val A_LINE_ABOUT_THIS_ROOM = "A line about this room"
+    const val ROOM_LINE_PROMPT = "What you're reading, and who is welcome"
+    fun askedToJoin(name: String) = "$name asked to join."
+    const val LET_THEM_IN = "Let them in"
+    const val NOT_NOW = "Not now"
+    const val ROOMS_THEYVE_OPENED = "Rooms they're in"
+    const val BLOCK = "Block"
+    fun blockQuestion(name: String) =
+        "Block $name? You stop seeing each other outside the rooms you share. Neither of you is told."
+    const val REPORT = "Report"
+    const val REPORT_THIS_ROOM = "Report this room"
+    const val REPORT_QUESTION = "Tell the people who run Ribbon about this? Nobody else sees it."
+    const val REPORTED = "Thank you. It has been passed on."
+
+    // Closing a room (§6.8, A73) — everyone agrees, or a month of quiet and
+    // one person asks. No retention offer, no "are you sure? you'll lose
+    // everything": nothing is lost, and everyone keeps the shelf.
+    const val CLOSE_THIS_ROOM = "Close this room"
+    const val CLOSE_QUESTION = "Close this room? It closes once everyone in it has said yes, and everyone keeps the whole shelf as a file."
+    const val CLOSE_QUESTION_QUIET = "This room has been quiet for a month, so it closes now, for everyone. Everyone keeps the whole shelf as a file."
+    const val CLOSE_QUESTION_NOW = "Everyone else in this room has said yes, so it closes now, for everyone. Everyone keeps the whole shelf as a file."
+    const val YOU_ASKED_TO_CLOSE = "You asked to close this room. It closes once everyone has."
+    const val TAKE_IT_BACK = "Take it back"
+    const val CLOSED_ROOMS = "Rooms that have closed"
+    const val KEEP_THE_SHELF = "Keep the shelf"
+    const val KEEP_THE_SHELF_SUB = "Every book, note, mark and card, as a file"
+
     // The menu (S14 + S18, one screen — see docs/deviations.md 14). Three
     // section heads, so the rooms, the room you are in, and you are three
     // things rather than one pile.
@@ -886,7 +970,7 @@ object Copy {
     /**
      * Inviting someone to the room you are already in (S15). The room
      * screen's own line only appears while a room of one still has its first
-     * invite out; this is the way in from two members to six.
+     * invite out; this is the way in from two members to twelve.
      */
     const val INVITE_SOMEONE = "Invite someone"
 
@@ -1094,7 +1178,7 @@ object Copy {
      * a lede promising one is the app volunteering the single fact that
      * member is meant never to learn, and then failing to deliver it.
      */
-    const val PLAN_LEDE = "What your room has, and when Ribbon asks."
+    const val PLAN_LEDE = "What your room has."
     fun downloadsLede(context: Context) = "What is on this ${deviceNoun(context)}, and what isn't."
 
     /** The two groups on the text screen. */
@@ -1110,7 +1194,7 @@ object Copy {
     const val NOTES_LEFT_FOR_YOU_SUB = "When they leave one at a verse."
 
     /**
-     * "Both" was wrong from three people up, and §2.3 says a room holds six.
+     * "Both" was wrong from three people up, and a room holds up to twelve.
      * A card opens when *everyone* has answered (§4.6), which is also the
      * word the card's own waiting line uses — so the switch and the card now
      * describe the same event in the same word.
@@ -1159,7 +1243,8 @@ object Copy {
     const val THINKING_OF_YOU = "Thinking of you"
     const val QUIET_HOURS = "Quiet hours"
     const val START_THE_ROOM_AGAIN = "Start the room again"
-    const val FIRST_BOOK_FREE = "The first book is free, all the way through."
+    /** S22 (A71): free for now, every room and every book. */
+    const val FREE_FOR_NOW = "Ribbon is free for now: every room, of two or of twelve, and every book."
     const val MANAGE_IN_STORE = "Manage in Google Play"
 
     /**
@@ -1213,11 +1298,11 @@ object Copy {
     const val STREAMS = "streams"
 
     /**
-     * Where the ask lives, said once (S22). Swift writes it inline. A
-     * non-paying member never sees a price and never learns who pays.
+     * S22 (A71): free for now, so there is no ask to place. What would
+     * change it is said where it would be said, and nowhere else.
      */
-    const val THE_ASK_COMES_ONCE =
-        "When your room's first ember is on the shelf, Ribbon will ask — there, and only there."
+    const val IF_THAT_CHANGES =
+        "If that ever changes, it will be said here, plainly. Scripture is never locked."
 
     /**
      * Deleting the account asks §6.8's question — [LEAVE_NOTES_QUESTION] —
@@ -1485,6 +1570,9 @@ object Copy {
         "2026-10-original" -> "The words under the words"
         "2026-10-following" -> "Staying on the same page"
         "2026-10-flyleaf" -> "The front of the book"
+        "2026-10-closing" -> "When a room is done"
+        "2026-10-found" -> "A door, if you want one"
+        "2026-10-twelve" -> "Room for more of you"
         else -> WHATS_NEW_HEADING
     }
 
@@ -1635,6 +1723,44 @@ object Copy {
     const val WHATS_NEW_QUIET_HOURS_BODY =
         "One band from noon to noon. Drag either end of the dark stretch. " +
             "Thinking of you still arrives, as a touch."
+
+    /** What's new (A70): a room holds twelve. */
+    const val WHATS_NEW_TWELVE_TITLE = "A room holds twelve now"
+
+    /** What's new (A70): who can come, and where they sit. */
+    const val WHATS_NEW_TWELVE_BODY =
+        "Invite up to twelve people into one room. Past six, the faces round the fire sit in two rows."
+
+    /** What's new (A70): four new inks. */
+    const val WHATS_NEW_INKS_TITLE = "Four new inks"
+
+    /** What's new (A70): which, and why. */
+    const val WHATS_NEW_INKS_BODY =
+        "Bronze, jade, sky and iris join the eight, so everyone in a room of twelve has an ink of their own."
+
+    /** What's new (A72): a room that can be found. */
+    const val WHATS_NEW_FIND_TITLE = "Rooms that can be found"
+
+    /** What's new (A72): who decides, and how someone comes in. */
+    const val WHATS_NEW_FIND_BODY =
+        "When everyone in a room says yes, people can find it and ask to join. Anyone inside can let them in, and nobody is ever told no."
+
+    /** What's new (A72): you, found. */
+    const val WHATS_NEW_BEING_FOUND_TITLE = "Being found, if you choose"
+
+    /** What's new (A72): what is seen, and that it starts off. */
+    const val WHATS_NEW_BEING_FOUND_BODY =
+        "Turn it on in You, and people can find your name, your face and one line in your own words. It stays off until you do."
+
+    /** What's new (A72): the line under a face in the picture, as someone would write it. */
+    const val WHATS_NEW_BEING_FOUND_LINE = "Reading Mark, slowly."
+
+    /** What's new (A73): a room closed by everyone. */
+    const val WHATS_NEW_CLOSING_TITLE = "Closing a room, together"
+
+    /** What's new (A73): how, and what everyone keeps. */
+    const val WHATS_NEW_CLOSING_BODY =
+        "When everyone in a room says so, or it has been quiet for a month and one of you asks, the room closes. Everyone keeps the whole shelf as a file: every book, note, mark and card."
 }
 
 /** First names only, everywhere a person is addressed in a line of copy. */

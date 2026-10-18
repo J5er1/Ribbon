@@ -1353,9 +1353,9 @@ fun PlanScreen(
     ) {
         SettingsGroup(
             count = if (paused) 2 else 1,
-            footnote = Copy.THE_ASK_COMES_ONCE,
+            footnote = Copy.IF_THAT_CHANGES,
         ) {
-            SettingNote(Copy.FIRST_BOOK_FREE)
+            SettingNote(Copy.FREE_FOR_NOW)
             if (paused) {
                 // S22's anatomy is "Start the room again if paused · manage
                 // in the store", and the restore half needs billing that does

@@ -86,6 +86,27 @@ enum class WhatsNewItem {
      * matches Literata's (A69).
      */
     typeface,
+
+    /** A room holds twelve, and past six its faces sit in two rows (A70). */
+    roomOfTwelve,
+
+    /**
+     * Bronze, jade, sky and iris: an ink for everyone in a room of twelve
+     * (A70).
+     */
+    fourInks,
+
+    /** A room whose people all say yes can be found, and asked into (A72). */
+    findARoom,
+
+    /**
+     * You can be found too, by your name, your face and one line — off until
+     * you turn it on (A72).
+     */
+    beingFound,
+
+    /** A room can close when everyone agrees, and everyone keeps the shelf as a file (A73). */
+    closingARoom,
 }
 
 /**
@@ -107,6 +128,21 @@ object WhatsNew {
      * are simply how the app is now — there for the reading, from You.
      */
     val releases: List<WhatsNewRelease> = listOf(
+        WhatsNewRelease(
+            id = "2026-10-closing",
+            released = "2026-10-18",
+            items = listOf(WhatsNewItem.closingARoom),
+        ),
+        WhatsNewRelease(
+            id = "2026-10-found",
+            released = "2026-10-18",
+            items = listOf(WhatsNewItem.findARoom, WhatsNewItem.beingFound),
+        ),
+        WhatsNewRelease(
+            id = "2026-10-twelve",
+            released = "2026-10-16",
+            items = listOf(WhatsNewItem.roomOfTwelve, WhatsNewItem.fourInks),
+        ),
         WhatsNewRelease(
             id = "2026-10-flyleaf",
             released = "2026-10-08",

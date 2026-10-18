@@ -4675,6 +4675,295 @@ A69. **Sliders with the page in view, and five typefaces (2026-10-flyleaf).**
     changes nothing about the difference; looking at both side by side is
     still owed before changing either.
 
+A70. **A room of twelve, and twelve inks (2026-10-twelve; amends §6.7,
+    the brief's §8 and A19).** Owner, asked what the social side of
+    Ribbon should mean first: *"Finish groups"*, *"Cards the room
+    writes"* and *"Reaching outside a room"*; asked whether the six-person
+    ceiling should change, having pictured a room of eleven in A62:
+    *"Raise to 12"*; asked what happens past eight when every ink is
+    taken: *"Add four inks"* (offered beside sharing inks, and ink ceasing
+    to be identity past eight). This is the first piece: a room holds
+    twelve, and everyone in a full room has an ink of their own.
+
+    This reverses, on the record: §6.7's "six is the ceiling" and its
+    reasons (presence past six faces, and eight inks), the brief's
+    "eight is deliberate" and its settled palette, and A19's "capped at six"
+    for the seats round the fire. The brief's eight are unchanged.
+
+    - **The ceiling is twelve on the server.**
+      `20261016120000_ribbon_a_room_of_twelve.sql` has `accept_invite`
+      refuse the thirteenth (`room_full`, under the same row lock) and
+      `invite_preview` call a room full at twelve. `Room.capacity` is 12 in
+      both cores. "A room holds six" reads "A room holds twelve" on both
+      phones; the full-room copy for a joiner is unchanged.
+    - **Four inks: bronze, jade, sky and iris.** Chosen by measurement, not
+      by eye: a search over CIELAB for the four colours furthest (CIEDE2000)
+      from the eight, from each other, from chartreuse, the lamp, the muted
+      ink and ivory, at the eight's own lightness and chroma, with light
+      values at 4.5:1 or better on the paper. Each sits at least as far from
+      its nearest neighbour as plum already sits from rose (ΔE 10.9, the
+      closest pair the brief chose): bronze ≥ 15, jade 11.4, sky ≥ 14,
+      iris ≥ 16. Jade was taken over the search's own fourth pick, a dusty
+      pink 13 from rose and crimson, because a fourth reddish ink would read
+      as a cousin of two people already in the room rather than as somebody
+      new. "Bronze" and not "olive", which the book uses for the proposed
+      paper accent (§16.1).
+
+      | Ink | Dark | Light |
+      |---|---|---|
+      | bronze | `#98853B` | `#5E5435` |
+      | jade | `#52B88D` | `#0A7959` |
+      | sky | `#21A8CE` | `#27728F` |
+      | iris | `#BA95E9` | `#805BA1` |
+
+      They are listed round the wheel — crimson, clay, ochre, bronze, moss,
+      jade, teal, sky, indigo, iris, plum, rose — which is the order every
+      picker shows them in; the brief's eight keep their order among
+      themselves, and nothing anywhere reads an ink by its position. Every
+      ink check in the schema (memberships, highlights, room_inks) accepts
+      the twelve. **Older builds** read an ink as text and fall back
+      quietly: a membership's unknown ink is no ink (a monogram, and on
+      that phone the waiting row), a highlight's is ochre. Nothing crashes
+      and nothing is written back.
+    - **The seats round the fire.** A19 kept six faces in one row, giving up
+      a few points each rather than wrap, because a wrapped row of faces
+      reads as a list. Up to six that is unchanged. Twelve faces cannot keep
+      the 44 points a finger is owed in one row, and Android's fallback, a
+      row that scrolls, would hide half the room; so past six they sit in
+      two rows, as evenly as they go, the longer nearer the fire
+      (`Seating.rows`, in both cores, tested case for case). Still no names,
+      no overflow marker, nothing counted.
+    - **The ink picker** hangs its twelve ribbons from two rules of six,
+      round the wheel, each in its 44 point column; the iPhone's sheet is a
+      ribbon's length and a gap taller. The toolbar's free palette in a room
+      of two already scrolled beside pinned verbs (A26) and is unchanged.
+    - **What's new** for this release, "Room for more of you": the room's
+      faces seated by `Seating` from six to twelve, and the picker's
+      ribbons with the four new inks laid in at their places.
+
+    **Corrections to the record.** Deviations 9a, 11 and 15 say the
+    invitation row for an ink (S01, "Colour is a person now. Pick your
+    ink.") is not built. It is, on both phones (A37a), and so is the picker.
+    What is still not built from §6.7 is the moment itself: a newcomer to a
+    room of three or more is not asked for an ink while joining, and gets
+    the same row as everyone else.
+
+    **Not in this piece, and next.** Closing a room (§6.8: everyone agrees,
+    or thirty days of silence and one request) with an export of the shelf
+    exists nowhere, not in either app or the backend. Then cards the room
+    writes (§16.4), and reaching outside a room: sharing a verse out, a
+    one-to-one room started from a group, the people you read with across
+    rooms, and — which reverses §3's "no strangers, no discovery" and is
+    owed a conversation before any of it is built — public profiles.
+
+    **The migration is on the live project** (16 October 2026, recorded as
+    `20261016014142`), with the owner's go-ahead: *"Yeah, you can apply
+    the migrations."* It was rehearsed first in a transaction that was
+    rolled back; the live `accept_invite` and `invite_preview` were read
+    beforehand and matched the files but for the number, and their grants
+    are unchanged (the preview callable signed out, joining only signed
+    in).
+
+A71. **Free, for now (amends §14 and S22).** Owner: *"Pricing will be
+    free for a while. I'm going to just cover everything."* Every room, of
+    two or of twelve, and every book, costs nothing; there is no trial and
+    no first-book rule to explain.
+
+    - **S22, the plan,** says so on both phones: "Ribbon is free for now:
+      every room, of two or of twelve, and every book." Its footnote, which
+      promised the ask after the first ember, now says what a change would
+      look like: "If that ever changes, it will be said here, plainly.
+      Scripture is never locked." The lede no longer says "when Ribbon
+      asks". The paused room's two rows are kept, because a room can still
+      be paused, and StoreKit is still not built (deviation 11).
+    - **The site's pricing section** is one table of "Free, for now", and
+      youth ministry's "Quiet billing" says there is none yet. The line
+      under the hero's way in, which promised the first book free, says
+      the same as the pricing heading: "Free, for now. Every room, every
+      book."
+    - **Nothing in §14 is thrown away.** The first free book, the price of
+      a pair, the ask in exactly two places, a paused room keeping every
+      word: those are what pricing will be built from when it comes, and
+      that will be its own decision.
+    - **No What's New item.** Billing was never built, so nobody has been
+      asked for anything; what a reader meets is unchanged but for one
+      line on the plan screen.
+
+A72. **Being found (2026-10-found; reverses §3's "no strangers, no
+    discovery", amends §6.8 and S12).** Owner, asked how far reaching
+    outside a room should go: *"Share a verse out"*, *"Bring someone in"*,
+    *"People across rooms"* and *"Public profiles / discovery"*; and then,
+    of the last: *"public profiles and discovery: just build it out how
+    you'd like, and then work on what's next as you wish."* A70 said this
+    was owed a conversation before it was built; that was it, and the
+    shape below is the one chosen with the owner's leave. Until now a
+    person was visible only to the people they share a room with, and a
+    room only to its members. This opens exactly two doors, each from the
+    inside, and nobody walks through either uninvited.
+
+    - **A person may be findable**: their name, their face and one line in
+      their own words (140 characters, `OwnLine`), seen by anyone signed
+      in. Off unless they turn it on, in You → Being found, and only once
+      they have said "I'm thirteen or older" — the store age gate is not
+      enough for something strangers can see, and the server holds it too
+      (`profiles_findable_said_thirteen`). Nothing else about them is ever
+      shown: not their rooms' words, not their notes, not a count of
+      anything.
+    - **A room may be open**: found by anyone signed in, by its name, its
+      line or the book it is reading ("mark", "1 cor" and "Mark 4" all find
+      Mark, `BookSearch`), and asked into. A room is open only while
+      *everyone* in it has said yes (`memberships.would_open`), the way
+      closing a room asks everyone (§6.8): one person's switch never
+      exposes the others. Each person's switch is in the room's menu, "Let
+      this room be found", and under it where the room stands — closed,
+      "You said yes. It opens once everyone has.", or open. Who has not
+      said yes is never named. A found room shows its name (or the first
+      names of the people in it who are findable), its line, its book and
+      its fire — never how many are in it, and never anyone who has not
+      chosen to be found.
+    - **Nobody walks in.** A stranger asks, with a line if they like (280
+      characters), and must be findable to ask, so the room can see who is
+      asking. The ask waits at the top of the room's menu, with their face
+      and what they said; anyone in the room can "Let them in" or say "Not
+      now". Nobody is told no: "Not now" sets the ask down silently, an ask
+      lapses after fourteen days, and the asker can take it back. Someone
+      let in arrives having already said yes to the room being found,
+      because that is how they found it. A person holds at most five asks
+      at once, and the message for it is not a number: "You have asks
+      waiting already."
+    - **Blocks and reports.** Two people who block each other stop seeing
+      each other in every list, cannot ask into each other's rooms, and
+      their asks disappear; neither is told, and who has blocked you is
+      never asked. The rooms they share are untouched — leaving is still
+      how you leave. Blocked people are listed in Being found by the name
+      you knew them by (the server no longer shows you their profile).
+      Reports go to a table nobody signed in can read, for the people who
+      run Ribbon through the dashboard.
+    - **Deleting your account** turns finding off and takes your line
+      with it, as well as emptying the profile (A40).
+
+    **The server half** is `20261016180000_ribbon_being_found.sql`. New
+    columns (`profiles.findable`, `line`, `thirteen_or_older_at`;
+    `rooms.line`; `memberships.would_open`), three tables (`blocks`,
+    `knocks`, `reports`), and the functions the phones call: `find_rooms`,
+    `find_people`, `ask_to_join`, `let_in`. Who may see a profile is now
+    `can_see_person` — yourself, anyone you share a room with, and, unless
+    either of you has blocked the other, anyone findable and anyone asking
+    into a room of yours — and a portrait follows its person. Nothing is
+    dropped: existing policies are altered in place and triggers created
+    or replaced.
+
+    **A repair, found on the way.** Memberships and invites could be
+    updated into another room: their update policies check whose row it
+    is, not where it points, so a member could move their own membership
+    row into any room whose id they knew — which this feature hands to
+    strangers. Both now keep their place (`keep_in_place`: `room_id` and
+    `person_id` on a membership, `room_id` and `created_by` on an invite).
+    The same shape is possible, in principle, on other tables that carry a
+    room or reading id; they are listed in still-to-do rather than changed
+    here.
+
+    **On the live project** (18 October 2026), with the owner's
+    go-ahead: *"go ahead and apply the migration"*. The database tool
+    timed out on the whole file, so the same file went up in nine pieces
+    in its own order, each its own transaction and recorded as
+    `ribbon_being_found_*`: keep_in_place, people_and_blocks, open_rooms,
+    knocks, who_can_see, find_rooms, asking, reports — and let_in, which
+    the tool would not take (it holds anything with `delete` in it for an
+    approval this session cannot show), so the owner ran it in the
+    dashboard's SQL editor, unchanged from the file. Afterwards, in a
+    transaction that rolled back, as three real profiles: a closed room
+    refuses an ask and is not found; one yes of two is still closed; both
+    yeses open it, and the ask is marked; a member sees the ask and the
+    asker; a membership cannot be moved into another room; `let_in` seats
+    the asker with `would_open` and clears the ask; a block is invisible to
+    the blocked; reports are unreadable; a blocked findable person is not
+    found; and signed out, no profile is visible. The phones learn the
+    tables are there on their next refresh: before, nothing about finding
+    appeared (§6.1, no dead control), and new fields are only ever written
+    by their own requests, so a phone on a project without them behaves as
+    it did.
+
+    **What's new**, "A door, if you want one": a fourth face waiting past
+    the room's edge and then let in, the row making room; and Being found's
+    own switch turning on with a face and its line written in under it.
+
+A73. **Closing a room (2026-10-closing; builds §6.8, which had no way to
+    do it).** Owner: *"work on what's next as you wish."* §6.8 asks for it
+    in its own words: *"Requires everyone to agree, or 30 days of silence
+    plus one member's request. On close, every member gets an export of
+    the whole shelf — notes, highlights, cards — as a readable file. No
+    dark pattern, no retention offer."* This is that, as the book has it.
+
+    - **Each person says yes**, in the room's menu under "Leave this room",
+      as quietly as leaving: "Close this room", asked once. The question
+      says what the yes will do: wait for the others ("It closes once
+      everyone in it has said yes…"), close it now because everyone else
+      has, or close it now because the room has been quiet for a month.
+      Once you have said yes and it is waiting: "You asked to close this
+      room. It closes once everyone has." and "Take it back". Who has not
+      said yes is never named, and nobody is told that anyone has asked —
+      the same rule as a room being found (A72).
+    - **Quiet** is thirty days in which nobody arrived, read, wrote a note,
+      laid a mark or answered a card (`room_last_heard`). The phone
+      reckons it from what it holds, to choose the question; the server
+      decides.
+    - **A yes already given closes the room when it can** by being said
+      again: the menu offers "Close this room" again, in place of "Take it
+      back", once the room has gone quiet or the last person who had not
+      said yes has said it or left (`RoomClosing.closesOnYourYes`). The
+      server does not close a room on its own when someone leaves; a
+      closing is always somebody's request.
+    - **Closing is not undone.** A closed room leaves the room list, and
+      its rows stay where they are: nothing is deleted. It is listed in the
+      room menu under "Rooms that have closed", where its shelf can be
+      kept again at any time. It can no longer be found, joined by an
+      invite (which reads as expired, as shipped builds already say), or
+      asked into; no membership can be written into it by any door.
+    - **The shelf as a file** (`ShelfExport`, both cores, the same text to
+      the character): plain text, so it opens anywhere and still reads in
+      twenty years. The room's name and the day it was kept; then each
+      book in the order it was begun — when it was read, its notes in
+      verse order with who and when, its marks, and the cards the room
+      opened with everyone's answers. Sealed cards are left out: their
+      answers were nobody's to read (§4.6). It is handed on the moment the
+      room closes on your request (the share sheet; Android's chooser),
+      and the others keep theirs from "Rooms that have closed" — nobody's
+      shelf depends on being there when it closed. No retention offer, no
+      second question, no "are you sure you want to lose…".
+
+    **The server half** is `20261018120000_ribbon_closing_a_room.sql`:
+    `rooms.closed_at`, `memberships.would_close`, `room_last_heard`,
+    `close_room` (answers "closed" or "waiting"); a trigger so that only
+    `close_room` sets `closed_at` (any member may update the room row,
+    which would otherwise let one person close it for everyone); a closed
+    room is not open (A72), its invite previews as expired and
+    `accept_invite` refuses it; and a trigger refuses any membership into
+    a closed room, which covers `let_in` too.
+
+    **On the live project** (18 October 2026), in five pieces recorded as
+    `ribbon_closing_*`, after the owner's go-ahead for migrations
+    (*"Yeah, you can apply the migrations."*). Rehearsed first, the whole
+    file and its checks in one transaction that rolled back, as three real
+    profiles: one yes of two waits; a member cannot set `closed_at` by
+    hand, and can still rename the room; the second yes closes it; a
+    closed room is not open; its invite previews as expired, and a third
+    person accepting it is refused; and a room whose every row is forty
+    days old closes on one request. Afterwards the columns, the four
+    functions, both triggers and the closed check in `accept_invite` were
+    each confirmed on the live project.
+
+    **Older builds** know nothing of closing. They never offer it, and a
+    person on one never says yes, so a room with someone on an older
+    build closes only once it has been quiet for a month — or once they
+    update. A room that has closed stays in an older build's list as it
+    was, and what is written there still lands (the server does not refuse
+    notes or marks in a closed room); it is in the shelf the others keep
+    from then on.
+
+    **What's new**, "When a room is done": three faces in a row quieten
+    together, and a sheet rises under them with the shelf's lines on it.
+
 ## iOS (phase four): the second pass
 
 Android took a design pass of its own (A18–A51) and the two platforms

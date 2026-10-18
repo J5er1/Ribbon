@@ -3,13 +3,21 @@
 package app.readribbon.services
 
 import android.content.Context
+import app.readribbon.core.BeingFound
+import app.readribbon.core.FireScale
+import app.readribbon.core.FireState
 import app.readribbon.core.FuelEvent
+import app.readribbon.core.Handiwork
 import app.readribbon.core.Highlight
 import app.readribbon.core.Ink
 import app.readribbon.core.Invite
 import app.readribbon.core.Membership
+import app.readribbon.core.Knock
 import app.readribbon.core.Note
+import app.readribbon.core.OpenRoom
+import app.readribbon.core.OwnLine
 import app.readribbon.core.Person
+import app.readribbon.core.PublicFace
 import app.readribbon.core.QuietDay
 import app.readribbon.core.Reading
 import app.readribbon.core.ReadingPosition
@@ -40,6 +48,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import kotlin.time.Instant
 import kotlin.uuid.ExperimentalUuidApi
@@ -82,6 +91,12 @@ data class RoomGraph(
     val ribbons: List<RemoteSync.RibbonRow> = emptyList(),
     val cards: List<RemoteSync.CardRow> = emptyList(),
     val cardAnswers: List<RemoteSync.CardAnswerRow> = emptyList(),
+    /**
+     * Strangers asking into these rooms (A72), with who is asking. Empty
+     * against a project without the table, which is every project until the
+     * migration lands.
+     */
+    val knocks: List<RemoteSync.KnockRow> = emptyList(),
     /**
      * Whether the notes and highlights in this graph are the *whole* of what
      * the backend holds for these readings.
@@ -596,6 +611,18 @@ class RemoteSync(
                 )
             }
         }
+        // Nobody can find someone who has gone (A72). Its own write, so a
+        // project without the columns still empties the rest.
+        runCatching {
+            withAuthRetry {
+                client.upsert(
+                    table = "profiles",
+                    rowsJson = beingFoundRow(
+                        id = userID, name = neutralName,
+                        translation = TranslationID.bsb.rawValue,
+                        beingFound = BeingFound()))
+            }
+        }
     }
 
     /** A marked quiet day banks the fire for the room — on every device. */
@@ -778,6 +805,244 @@ class RemoteSync(
         }
     }
 
+    // MARK: - Being found (A72)
+
+    /**
+     * Whether you can be found, and the line people see. Written whole, with
+     * the name and version a profile must carry, because an absent line has
+     * to reach the database as no line rather than as nothing said — and the
+     * coder here leaves nulls out, so the row is built by hand.
+     */
+    suspend fun push(beingFound: BeingFound, profile: Person) {
+        withAuthRetry {
+            client.upsert(
+                table = "profiles",
+                rowsJson = beingFoundRow(
+                    id = profile.id, name = profile.name,
+                    translation = profile.translation.rawValue,
+                    beingFound = beingFound))
+        }
+    }
+
+    private fun beingFoundRow(id: Uuid, name: String, translation: String, beingFound: BeingFound): String =
+        JsonArray(listOf(buildJsonObject {
+            put("id", id.lowercased())
+            put("name", name)
+            put("translation", translation)
+            put("findable", beingFound.findable)
+            put("line", OwnLine.clean(beingFound.line)?.let { JsonPrimitive(it) } ?: JsonNull)
+            put("thirteen_or_older_at", beingFound.saidThirteenAt?.toString()?.let { JsonPrimitive(it) } ?: JsonNull)
+        })).toString()
+
+    /**
+     * Whether the project has the tables finding runs on (A72): your own
+     * asks, read with nothing asked for. Null when the network could not
+     * say; a build talking to a project without them shows none of it.
+     */
+    suspend fun findingIsThere(): Boolean? {
+        val userID = userID ?: return null
+        return try {
+            withAuthRetry {
+                client.select(
+                    table = "knocks",
+                    query = listOf("person_id" to "eq.${userID.lowercased()}", "limit" to "1"))
+            }
+            true
+        } catch (e: SupabaseError.Http) {
+            if (e.status in 400..499) false else null
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            null
+        }
+    }
+
+    /** Your yes to the room being found, or your no. */
+    suspend fun push(wouldOpen: Boolean, membership: Membership) {
+        withAuthRetry {
+            client.upsert(
+                table = "memberships",
+                rowsJson = JsonArray(listOf(buildJsonObject {
+                    put("id", membership.id.lowercased())
+                    put("room_id", membership.roomID.lowercased())
+                    put("person_id", membership.personID.lowercased())
+                    put("joined_at", membership.joinedAt.toString())
+                    put("would_open", wouldOpen)
+                })).toString(),
+                onConflict = "room_id,person_id")
+        }
+    }
+
+    // MARK: - Closing a room (A73)
+
+    /** Whether the project can close rooms: the column, read with nothing asked for. Null when the network could not say. */
+    suspend fun closingIsThere(): Boolean? {
+        if (userID == null) return null
+        return try {
+            withAuthRetry {
+                client.select(table = "rooms", query = listOf("select" to "closed_at", "limit" to "1"))
+            }
+            true
+        } catch (e: SupabaseError.Http) {
+            if (e.status in 400..499) false else null
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            null
+        }
+    }
+
+    /** Your request to close the room. True when it closed — now, or already — and false while somebody has not asked yet. */
+    suspend fun closeRoom(room: Uuid): Boolean {
+        val data = withAuthRetry {
+            client.rpc("close_room", body = mapOf("target_room" to room.lowercased()))
+        }
+        return SupabaseClient.json.decodeFromString<String>(data) == "closed"
+    }
+
+    /** Your request to close, taken back. */
+    suspend fun takeBackClosing(membership: Membership) {
+        withAuthRetry {
+            client.upsert(
+                table = "memberships",
+                rowsJson = JsonArray(listOf(buildJsonObject {
+                    put("id", membership.id.lowercased())
+                    put("room_id", membership.roomID.lowercased())
+                    put("person_id", membership.personID.lowercased())
+                    put("joined_at", membership.joinedAt.toString())
+                    put("would_close", false)
+                })).toString(),
+                onConflict = "room_id,person_id")
+        }
+    }
+
+    /** The room's one line, or none. */
+    suspend fun push(roomLine: String?, room: Room) {
+        withAuthRetry {
+            client.upsert(
+                table = "rooms",
+                rowsJson = JsonArray(listOf(buildJsonObject {
+                    put("id", room.id.lowercased())
+                    put("is_paused", room.isPaused)
+                    put("created_at", room.createdAt.toString())
+                    put("line", OwnLine.clean(roomLine)?.let { JsonPrimitive(it) } ?: JsonNull)
+                })).toString())
+        }
+    }
+
+    /**
+     * Open rooms: by what was typed (its words, and the books they could
+     * mean), by a person in them, or one room by its id.
+     */
+    suspend fun findRooms(
+        words: String? = null,
+        books: List<String>? = null,
+        person: Uuid? = null,
+        room: Uuid? = null,
+    ): List<OpenRoom> {
+        val body = buildJsonObject {
+            OwnLine.clean(words)?.let { put("words", it) }
+            if (!books.isNullOrEmpty()) putJsonArray("books") { books.forEach { add(JsonPrimitive(it)) } }
+            person?.let { put("person", it.lowercased()) }
+            room?.let { put("room", it.lowercased()) }
+        }.toString()
+        val data = withAuthRetry { client.rpcJson("find_rooms", body) }
+        return SupabaseClient.json.decodeFromString<List<FoundRoomRow>>(data).map { it.openRoom() }
+    }
+
+    /** Findable people whose name has these words in it. */
+    suspend fun findPeople(words: String): List<PublicFace> {
+        val data = withAuthRetry { client.rpc("find_people", body = mapOf("words" to words)) }
+        return SupabaseClient.json.decodeFromString<List<FaceRow>>(data).map { it.face() }
+    }
+
+    /**
+     * Asking into an open room, with a line if there is one. The database
+     * says why it would not, in a word the caller turns into a sentence.
+     */
+    suspend fun askToJoin(room: Uuid, said: String?) {
+        val body = buildJsonObject {
+            put("target_room", room.lowercased())
+            OwnLine.clean(said, limit = OwnLine.askLimit)?.let { put("said", it) }
+        }.toString()
+        withAuthRetry { client.rpcJson("ask_to_join", body) }
+    }
+
+    /** Taking your own ask back. Silent: the room is not told. */
+    suspend fun takeBackAsk(room: Uuid) {
+        val userID = userID ?: return
+        withAuthRetry {
+            client.delete(
+                table = "knocks",
+                query = listOf(
+                    "room_id" to "eq.${room.lowercased()}",
+                    "person_id" to "eq.${userID.lowercased()}",
+                ))
+        }
+    }
+
+    /** Letting someone who asked into a room you are in. */
+    suspend fun letIn(room: Uuid, person: Uuid) {
+        withAuthRetry {
+            client.rpc(
+                "let_in",
+                body = mapOf("target_room" to room.lowercased(), "person" to person.lowercased()))
+        }
+    }
+
+    /** "Not now": the ask is set down, and the asker is not told. */
+    suspend fun setDownAsk(room: Uuid, person: Uuid) {
+        withAuthRetry {
+            client.delete(
+                table = "knocks",
+                query = listOf(
+                    "room_id" to "eq.${room.lowercased()}",
+                    "person_id" to "eq.${person.lowercased()}",
+                ))
+        }
+    }
+
+    /** The people you have blocked. Who has blocked you is never asked. */
+    suspend fun blocked(): List<Uuid> {
+        val userID = userID ?: return emptyList()
+        val rows = withAuthRetry {
+            SupabaseClient.json.decodeFromString<List<BlockRow>>(
+                client.select(table = "blocks", query = listOf("blocker" to "eq.${userID.lowercased()}")))
+        }
+        return rows.map { it.blocked }
+    }
+
+    suspend fun block(person: Uuid) {
+        val userID = userID ?: return
+        withAuthRetry {
+            client.insert(
+                table = "blocks",
+                rowsJson = SupabaseClient.json.encodeToString(listOf(BlockRow(blocker = userID, blocked = person))),
+                ignoringDuplicates = true)
+        }
+    }
+
+    suspend fun unblock(person: Uuid) {
+        val userID = userID ?: return
+        withAuthRetry {
+            client.delete(
+                table = "blocks",
+                query = listOf(
+                    "blocker" to "eq.${userID.lowercased()}",
+                    "blocked" to "eq.${person.lowercased()}",
+                ))
+        }
+    }
+
+    /** A report, read by the people who run Ribbon and nobody else. */
+    suspend fun report(person: Uuid?, room: Uuid?) {
+        val userID = userID ?: return
+        withAuthRetry {
+            client.insert(
+                table = "reports",
+                rowsJson = SupabaseClient.json.encodeToString(
+                    listOf(ReportRow(reporter = userID, personId = person, roomId = room))))
+        }
+    }
+
     // MARK: - Pull: every room I'm in
 
     suspend fun pullRooms(): RoomGraph {
@@ -807,6 +1072,20 @@ class RemoteSync(
         // already out there.
         val invites = runCatching { selectAll<InviteRow>("invites", "room_id", roomIDs) }
             .getOrDefault(emptyList())
+        // Asks into these rooms, each with the asker's face. Best-effort: the
+        // table is new (A72), and a phone talking to a project without it
+        // must pull exactly what it did before.
+        val knocks = runCatching {
+            withAuthRetry {
+                SupabaseClient.json.decodeFromString<List<KnockRow>>(
+                    client.select(
+                        table = "knocks",
+                        query = listOf(
+                            "select" to "room_id,person_id,line,created_at,profiles(id,name,line,portrait_path)",
+                            "room_id" to "in.(${roomIDs.joinToString(",") { it.lowercased() }})",
+                        )))
+            }
+        }.getOrDefault(emptyList())
         val readingIDs = readings.map { it.id }
         var fires: List<FireRow> = emptyList()
         var fuelEvents: List<FuelEventRow> = emptyList()
@@ -864,7 +1143,7 @@ class RemoteSync(
         return RoomGraph(
             rooms = rooms, memberships = memberships, profiles = profiles,
             readings = readings, fires = fires, fuelEvents = fuelEvents,
-            quietDays = quietDays, invites = invites, notes = notes,
+            quietDays = quietDays, invites = invites, knocks = knocks, notes = notes,
             noteFounds = noteFounds, highlights = highlights,
             positions = positions, ribbons = ribbons, cards = cards, cardAnswers = cardAnswers,
             notesComplete = notesComplete, highlightsComplete = highlightsComplete)
@@ -961,6 +1240,89 @@ class RemoteSync(
         val name: String,
         val portraitPath: String? = null,
         val translation: String,
+        /**
+         * Being found (A72). Null from a project without the columns, and
+         * never sent from here: a null is left out of the row, so a profile
+         * push cannot undo a choice made on this screen or another phone.
+         * [push] with a [BeingFound] writes them.
+         */
+        val findable: Boolean? = null,
+        val line: String? = null,
+        val thirteenOrOlderAt: Instant? = null,
+    )
+
+    /** A face as `find_rooms`, `find_people` and an embedded profile give it. */
+    @Serializable
+    data class FaceRow(
+        val id: Uuid,
+        val name: String,
+        val line: String? = null,
+        val portraitPath: String? = null,
+    ) {
+        fun face(): PublicFace = PublicFace(id = id, name = name, line = line, portraitPath = portraitPath)
+    }
+
+    @Serializable
+    data class FoundRoomRow(
+        val roomId: Uuid,
+        val name: String? = null,
+        val line: String? = null,
+        val full: Boolean,
+        val asked: Boolean,
+        val bookId: String? = null,
+        val scale: String? = null,
+        val coalDepth: Double? = null,
+        val lastFuelAt: Instant? = null,
+        val restartAt: Instant? = null,
+        val stateAtLastFuel: String? = null,
+        val faces: List<FaceRow> = emptyList(),
+    ) {
+        fun openRoom(): OpenRoom {
+            val fireScale = FireScale.entries.firstOrNull { it.name == scale }
+            val fireState = FireState.entries.firstOrNull { it.name == stateAtLastFuel }
+            val fire = if (fireScale != null && fireState != null) {
+                Handiwork(
+                    scale = fireScale, coalDepth = coalDepth ?: 0.0, lastFuelAt = lastFuelAt,
+                    restartAt = restartAt, stateAtLastFuel = fireState)
+            } else {
+                null
+            }
+            return OpenRoom(
+                id = roomId, name = name, line = line, full = full, asked = asked,
+                bookID = bookId, fire = fire, faces = faces.map { it.face() })
+        }
+    }
+
+    @Serializable
+    data class KnockRow(
+        val roomId: Uuid,
+        val personId: Uuid,
+        val line: String? = null,
+        val createdAt: Instant,
+        /**
+         * The asker, as the room is allowed to see them. Null when the
+         * profile is not visible — someone blocked, or a race with a
+         * deletion — and such an ask is not shown.
+         */
+        val profiles: FaceRow? = null,
+    ) {
+        fun knock(): Knock? {
+            val face = profiles?.face() ?: return null
+            return Knock(roomID = roomId, person = face, line = line, askedAt = createdAt)
+        }
+    }
+
+    @Serializable
+    data class BlockRow(
+        val blocker: Uuid,
+        val blocked: Uuid,
+    )
+
+    @Serializable
+    data class ReportRow(
+        val reporter: Uuid,
+        val personId: Uuid? = null,
+        val roomId: Uuid? = null,
     )
 
     @Serializable
@@ -980,6 +1342,10 @@ class RemoteSync(
          *  from it (A42); this one reads each person's own (A60). Null from
          *  a client that predates the column. */
         val translation: String? = null,
+        /** The room's line (A72). Read, never sent from here: see [push] with a line. */
+        val line: String? = null,
+        /** When the room closed (A73). Read, never sent: only `close_room` closes a room. */
+        val closedAt: Instant? = null,
     )
 
     @Serializable
@@ -989,6 +1355,13 @@ class RemoteSync(
         val personId: Uuid,
         val ink: String? = null,
         val joinedAt: Instant,
+        /**
+         * This person's yes to the room being found (A72). Read, never sent
+         * from here: see [push] with `wouldOpen`.
+         */
+        val wouldOpen: Boolean? = null,
+        /** This person's request to close the room (A73). Set by [closeRoom], cleared by [takeBackClosing]. */
+        val wouldClose: Boolean? = null,
     )
 
     @Serializable

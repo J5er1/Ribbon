@@ -325,6 +325,20 @@ actor SupabaseClient {
         _ = try await run(request)
     }
 
+    /// Insert rows that are never updated in place (A72): a report, a
+    /// block. `ignoringDuplicates` makes a second insert of the same key a
+    /// quiet no-op rather than an update, which those tables do not allow.
+    func insert(into table: String, rows: some Encodable, ignoringDuplicates: Bool = false) async throws {
+        var request = URLRequest(url: base.appending(path: "rest/v1/\(table)"))
+        request.httpMethod = "POST"
+        request.httpBody = try Self.encoder.encode(rows)
+        try apply(headers: &request)
+        request.setValue(
+            ignoringDuplicates ? "resolution=ignore-duplicates,return=minimal" : "return=minimal",
+            forHTTPHeaderField: "Prefer")
+        _ = try await run(request)
+    }
+
     func delete(from table: String, query: [URLQueryItem]) async throws {
         var components = URLComponents(
             url: base.appending(path: "rest/v1/\(table)"), resolvingAgainstBaseURL: false)!

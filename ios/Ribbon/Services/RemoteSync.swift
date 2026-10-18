@@ -38,6 +38,10 @@ struct RoomGraph {
     var cards: [RemoteSync.CardRow] = []
     var cardAnswers: [RemoteSync.CardAnswerRow] = []
     var ribbons: [RemoteSync.RibbonRow] = []
+    /// Strangers asking into these rooms (A72), with who is asking. Empty
+    /// against a project without the table, which is every project until
+    /// the migration lands.
+    var knocks: [RemoteSync.KnockRow] = []
     /// Whether the notes and highlights above are the whole of what the
     /// backend holds, or a query failed on the way. Local rows are pruned
     /// against a complete answer only (ledger A36): an empty list from a
@@ -441,6 +445,15 @@ final class RemoteSync {
                 ProfileRow(id: userID, name: neutralName, portraitPath: nil, translation: TranslationID.bsb.rawValue)
             ])
         }
+        // Nobody can find someone who has gone (A72). Its own write, so a
+        // project without the columns still empties the rest.
+        try? await withAuthRetry {
+            try await self.client.upsert(into: "profiles", rows: [
+                BeingFoundRow(
+                    id: userID, name: neutralName, translation: TranslationID.bsb.rawValue,
+                    findable: false, line: nil, thirteenOrOlderAt: nil)
+            ])
+        }
     }
 
     /// Everything one person authored in one reading's notes — the
@@ -625,6 +638,221 @@ final class RemoteSync {
         }
     }
 
+    // MARK: - Being found (A72)
+
+    /// Whether you can be found, and the line people see. Written whole,
+    /// with the name and version a profile must carry, because an absent
+    /// line has to reach the database as no line rather than as nothing
+    /// said.
+    func push(beingFound: BeingFound, profile: Person) async throws {
+        try await withAuthRetry {
+            try await self.client.upsert(into: "profiles", rows: [
+                BeingFoundRow(
+                    id: profile.id, name: profile.name,
+                    translation: profile.translation.rawValue,
+                    findable: beingFound.findable,
+                    line: OwnLine.clean(beingFound.line),
+                    thirteenOrOlderAt: beingFound.saidThirteenAt)
+            ])
+        }
+    }
+
+    /// Whether the project has the tables finding runs on (A72): your own
+    /// asks, read with nothing asked for. Nil when the network could not
+    /// say; a build talking to a project without them shows none of it.
+    func findingIsThere() async -> Bool? {
+        guard let userID else { return nil }
+        do {
+            _ = try await withAuthRetry {
+                try await self.client.select(
+                    [KnockRow].self, from: "knocks",
+                    query: [
+                        URLQueryItem(name: "person_id", value: "eq.\(userID.uuidString.lowercased())"),
+                        URLQueryItem(name: "limit", value: "1"),
+                    ])
+            }
+            return true
+        } catch SupabaseError.http(let status, _) where (400..<500).contains(status) {
+            return false
+        } catch {
+            return nil
+        }
+    }
+
+    /// Your yes to the room being found, or your no.
+    func push(wouldOpen: Bool, membership: Membership) async throws {
+        try await withAuthRetry {
+            try await self.client.upsert(
+                into: "memberships",
+                rows: [WouldOpenRow(
+                    id: membership.id, roomId: membership.roomID, personId: membership.personID,
+                    joinedAt: membership.joinedAt, wouldOpen: wouldOpen)],
+                onConflict: "room_id,person_id")
+        }
+    }
+
+    // MARK: - Closing a room (A73)
+
+    /// Whether the project can close rooms: the column, read with nothing
+    /// asked for. Nil when the network could not say.
+    func closingIsThere() async -> Bool? {
+        guard userID != nil else { return nil }
+        do {
+            _ = try await withAuthRetry {
+                try await self.client.select(
+                    [ClosedAtRow].self, from: "rooms",
+                    query: [
+                        URLQueryItem(name: "select", value: "closed_at"),
+                        URLQueryItem(name: "limit", value: "1"),
+                    ])
+            }
+            return true
+        } catch SupabaseError.http(let status, _) where (400..<500).contains(status) {
+            return false
+        } catch {
+            return nil
+        }
+    }
+
+    /// Your request to close the room. True when it closed — now, or
+    /// already — and false while somebody has not asked yet.
+    func closeRoom(_ room: UUID) async throws -> Bool {
+        let data = try await withAuthRetry {
+            try await self.client.rpc("close_room", body: ["target_room": room.uuidString.lowercased()])
+        }
+        return try JSONDecoder().decode(String.self, from: data) == "closed"
+    }
+
+    /// Your request to close, taken back.
+    func takeBackClosing(_ membership: Membership) async throws {
+        try await withAuthRetry {
+            try await self.client.upsert(
+                into: "memberships",
+                rows: [WouldCloseRow(
+                    id: membership.id, roomId: membership.roomID, personId: membership.personID,
+                    joinedAt: membership.joinedAt, wouldClose: false)],
+                onConflict: "room_id,person_id")
+        }
+    }
+
+    /// The room's one line, or none.
+    func push(roomLine: String?, room: Room) async throws {
+        try await withAuthRetry {
+            try await self.client.upsert(into: "rooms", rows: [
+                RoomLineRow(
+                    id: room.id, isPaused: room.isPaused, createdAt: room.createdAt,
+                    line: OwnLine.clean(roomLine))
+            ])
+        }
+    }
+
+    /// Open rooms: by what was typed (its words, and the books they could
+    /// mean), by a person in them, or one room by its id.
+    func findRooms(
+        words: String? = nil, books: [String]? = nil, person: UUID? = nil, room: UUID? = nil
+    ) async throws -> [OpenRoom] {
+        var body: [String: Any] = [:]
+        if let words = OwnLine.clean(words) { body["words"] = words }
+        if let books, !books.isEmpty { body["books"] = books }
+        if let person { body["person"] = person.uuidString.lowercased() }
+        if let room { body["room"] = room.uuidString.lowercased() }
+        let json = try JSONSerialization.data(withJSONObject: body)
+        let data = try await withAuthRetry {
+            try await self.client.rpc("find_rooms", json: json)
+        }
+        return try SupabaseClient.decoder.decode([FoundRoomRow].self, from: data).map(\.openRoom)
+    }
+
+    /// Findable people whose name has these words in it.
+    func findPeople(words: String) async throws -> [PublicFace] {
+        let data = try await withAuthRetry {
+            try await self.client.rpc("find_people", body: ["words": words])
+        }
+        return try SupabaseClient.decoder.decode([FaceRow].self, from: data).map(\.face)
+    }
+
+    /// Asking into an open room, with a line if there is one. The database
+    /// says why it would not, in a word the caller turns into a sentence.
+    func askToJoin(room: UUID, said: String?) async throws {
+        var body: [String: Any] = ["target_room": room.uuidString.lowercased()]
+        if let said = OwnLine.clean(said, limit: OwnLine.askLimit) { body["said"] = said }
+        let json = try JSONSerialization.data(withJSONObject: body)
+        _ = try await withAuthRetry {
+            try await self.client.rpc("ask_to_join", json: json)
+        }
+    }
+
+    /// Taking your own ask back. Silent: the room is not told.
+    func takeBackAsk(room: UUID) async throws {
+        guard let userID else { return }
+        try await withAuthRetry {
+            try await self.client.delete(from: "knocks", query: [
+                URLQueryItem(name: "room_id", value: "eq.\(room.uuidString.lowercased())"),
+                URLQueryItem(name: "person_id", value: "eq.\(userID.uuidString.lowercased())"),
+            ])
+        }
+    }
+
+    /// Letting someone who asked into a room you are in.
+    func letIn(room: UUID, person: UUID) async throws {
+        _ = try await withAuthRetry {
+            try await self.client.rpc("let_in", body: [
+                "target_room": room.uuidString.lowercased(),
+                "person": person.uuidString.lowercased(),
+            ])
+        }
+    }
+
+    /// "Not now": the ask is set down, and the asker is not told.
+    func setDownAsk(room: UUID, person: UUID) async throws {
+        try await withAuthRetry {
+            try await self.client.delete(from: "knocks", query: [
+                URLQueryItem(name: "room_id", value: "eq.\(room.uuidString.lowercased())"),
+                URLQueryItem(name: "person_id", value: "eq.\(person.uuidString.lowercased())"),
+            ])
+        }
+    }
+
+    /// The people you have blocked. Who has blocked you is never asked.
+    func blocked() async throws -> [UUID] {
+        guard let userID else { return [] }
+        let rows: [BlockRow] = try await withAuthRetry {
+            try await self.client.select(
+                [BlockRow].self, from: "blocks",
+                query: [URLQueryItem(name: "blocker", value: "eq.\(userID.uuidString.lowercased())")])
+        }
+        return rows.map(\.blocked)
+    }
+
+    func block(_ person: UUID) async throws {
+        guard let userID else { return }
+        try await withAuthRetry {
+            try await self.client.insert(into: "blocks", rows: [
+                BlockRow(blocker: userID, blocked: person)
+            ], ignoringDuplicates: true)
+        }
+    }
+
+    func unblock(_ person: UUID) async throws {
+        guard let userID else { return }
+        try await withAuthRetry {
+            try await self.client.delete(from: "blocks", query: [
+                URLQueryItem(name: "blocker", value: "eq.\(userID.uuidString.lowercased())"),
+                URLQueryItem(name: "blocked", value: "eq.\(person.uuidString.lowercased())"),
+            ])
+        }
+    }
+
+    /// A report, read by the people who run Ribbon and nobody else.
+    func report(person: UUID?, room: UUID?) async throws {
+        guard let userID else { return }
+        try await withAuthRetry {
+            try await self.client.insert(into: "reports", rows: [
+                ReportRow(reporter: userID, personId: person, roomId: room)
+            ])
+        }
+    }
+
     // MARK: - Pull: every room I'm in
 
     func pullRooms() async throws -> RoomGraph {
@@ -654,6 +882,21 @@ final class RemoteSync {
         // find and mints another rather than re-offering the one that is
         // already out there.
         graph.invites = (try? await selectAll(InviteRow.self, from: "invites", where: "room_id", in: roomIDs)) ?? []
+        // Asks into these rooms, each with the asker's face. Best-effort:
+        // the table is new (A72), and a phone talking to a project without
+        // it must pull exactly what it did before.
+        graph.knocks = (try? await withAuthRetry {
+            try await self.client.select(
+                [KnockRow].self, from: "knocks",
+                query: [
+                    URLQueryItem(
+                        name: "select",
+                        value: "room_id,person_id,line,created_at,profiles(id,name,line,portrait_path)"),
+                    URLQueryItem(
+                        name: "room_id",
+                        value: "in.(\(roomIDs.map { $0.uuidString.lowercased() }.joined(separator: ",")))"),
+                ])
+        }) ?? []
         let readingIDs = graph.readings.map(\.id)
         if readingIDs.isEmpty {
             graph.notesComplete = true
@@ -779,6 +1022,143 @@ final class RemoteSync {
         var name: String
         var portraitPath: String?
         var translation: String
+        /// Being found (A72). Nil from a project without the columns, and
+        /// never sent from here: an optional left nil is left out of the
+        /// row, so a profile push cannot undo a choice made on this screen
+        /// or another phone. `push(beingFound:)` writes them.
+        var findable: Bool? = nil
+        var line: String? = nil
+        var thirteenOrOlderAt: Date? = nil
+    }
+
+    /// A profile's being-found fields, with the name and version a new
+    /// profile row needs. Nil is written as null: no line is a line taken
+    /// away.
+    struct BeingFoundRow: Encodable {
+        var id: UUID
+        var name: String
+        var translation: String
+        var findable: Bool
+        var line: String?
+        var thirteenOrOlderAt: Date?
+
+        enum CodingKeys: String, CodingKey {
+            case id, name, translation, findable, line, thirteenOrOlderAt
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encode(id, forKey: .id)
+            try c.encode(name, forKey: .name)
+            try c.encode(translation, forKey: .translation)
+            try c.encode(findable, forKey: .findable)
+            try c.encode(line, forKey: .line)
+            try c.encode(thirteenOrOlderAt, forKey: .thirteenOrOlderAt)
+        }
+    }
+
+    struct ClosedAtRow: Decodable {
+        var closedAt: Date?
+    }
+
+    struct WouldCloseRow: Encodable {
+        var id: UUID
+        var roomId: UUID
+        var personId: UUID
+        var joinedAt: Date
+        var wouldClose: Bool
+    }
+
+    struct WouldOpenRow: Encodable {
+        var id: UUID
+        var roomId: UUID
+        var personId: UUID
+        var joinedAt: Date
+        var wouldOpen: Bool
+    }
+
+    /// The room's line, with what a new room row needs. Nil is written as
+    /// null, for the same reason as a profile's.
+    struct RoomLineRow: Encodable {
+        var id: UUID
+        var isPaused: Bool
+        var createdAt: Date
+        var line: String?
+
+        enum CodingKeys: String, CodingKey { case id, isPaused, createdAt, line }
+
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encode(id, forKey: .id)
+            try c.encode(isPaused, forKey: .isPaused)
+            try c.encode(createdAt, forKey: .createdAt)
+            try c.encode(line, forKey: .line)
+        }
+    }
+
+    /// A face as `find_rooms`, `find_people` and an embedded profile give it.
+    struct FaceRow: Decodable {
+        var id: UUID
+        var name: String
+        var line: String?
+        var portraitPath: String?
+
+        var face: PublicFace { PublicFace(id: id, name: name, line: line, portraitPath: portraitPath) }
+    }
+
+    struct FoundRoomRow: Decodable {
+        var roomId: UUID
+        var name: String?
+        var line: String?
+        var full: Bool
+        var asked: Bool
+        var bookId: String?
+        var scale: String?
+        var coalDepth: Double?
+        var lastFuelAt: Date?
+        var restartAt: Date?
+        var stateAtLastFuel: String?
+        var faces: [FaceRow]
+
+        var openRoom: OpenRoom {
+            var fire: Handiwork?
+            if let scale = scale.flatMap(FireScale.init(rawValue:)),
+               let state = stateAtLastFuel.flatMap(FireState.init(rawValue:)) {
+                fire = Handiwork(
+                    scale: scale, coalDepth: coalDepth ?? 0, lastFuelAt: lastFuelAt,
+                    restartAt: restartAt, stateAtLastFuel: state)
+            }
+            return OpenRoom(
+                id: roomId, name: name, line: line, full: full, asked: asked,
+                bookID: bookId, fire: fire, faces: faces.map(\.face))
+        }
+    }
+
+    struct KnockRow: Decodable {
+        var roomId: UUID
+        var personId: UUID
+        var line: String?
+        var createdAt: Date
+        /// The asker, as the room is allowed to see them. Nil when the
+        /// profile is not visible — someone blocked, or a race with a
+        /// deletion — and such an ask is not shown.
+        var profiles: FaceRow?
+
+        var knock: Knock? {
+            guard let face = profiles?.face else { return nil }
+            return Knock(roomID: roomId, person: face, line: line, askedAt: createdAt)
+        }
+    }
+
+    struct BlockRow: Codable {
+        var blocker: UUID
+        var blocked: UUID
+    }
+
+    struct ReportRow: Encodable {
+        var reporter: UUID
+        var personId: UUID?
+        var roomId: UUID?
     }
 
     struct RoomInkRow: Codable {
@@ -793,6 +1173,12 @@ final class RemoteSync {
         var isPaused: Bool
         var createdAt: Date
         var translation: String?
+        /// The room's line (A72). Read, never sent from here: see
+        /// `push(roomLine:room:)`.
+        var line: String? = nil
+        /// When the room closed (A73). Read, never sent: only `close_room`
+        /// closes a room.
+        var closedAt: Date? = nil
     }
 
     struct MembershipRow: Codable {
@@ -801,6 +1187,12 @@ final class RemoteSync {
         var personId: UUID
         var ink: String?
         var joinedAt: Date
+        /// This person's yes to the room being found (A72). Read, never
+        /// sent from here: see `push(wouldOpen:membership:)`.
+        var wouldOpen: Bool? = nil
+        /// This person's request to close the room (A73). Set by
+        /// `closeRoom`, cleared by `takeBackClosing`.
+        var wouldClose: Bool? = nil
     }
 
     struct InviteRow: Codable {

@@ -98,6 +98,7 @@ import app.readribbon.core.Ink
 import app.readribbon.core.PageFaces
 import app.readribbon.core.PageType
 import app.readribbon.core.QuietHoursBand
+import app.readribbon.core.Seating
 import app.readribbon.core.TranslationID
 import app.readribbon.core.WhatsNew
 import app.readribbon.core.WhatsNewItem
@@ -488,6 +489,11 @@ internal val WhatsNewItem.title: String
         WhatsNewItem.typeface -> Copy.WHATS_NEW_TYPEFACE_TITLE
         WhatsNewItem.notificationsByName -> Copy.WHATS_NEW_NOTIFICATIONS_TITLE
         WhatsNewItem.quietHoursNight -> Copy.WHATS_NEW_QUIET_HOURS_TITLE
+        WhatsNewItem.roomOfTwelve -> Copy.WHATS_NEW_TWELVE_TITLE
+        WhatsNewItem.fourInks -> Copy.WHATS_NEW_INKS_TITLE
+        WhatsNewItem.findARoom -> Copy.WHATS_NEW_FIND_TITLE
+        WhatsNewItem.beingFound -> Copy.WHATS_NEW_BEING_FOUND_TITLE
+        WhatsNewItem.closingARoom -> Copy.WHATS_NEW_CLOSING_TITLE
     }
 
 internal val WhatsNewItem.body: String
@@ -507,6 +513,11 @@ internal val WhatsNewItem.body: String
         WhatsNewItem.typeface -> Copy.WHATS_NEW_TYPEFACE_BODY
         WhatsNewItem.notificationsByName -> Copy.WHATS_NEW_NOTIFICATIONS_BODY
         WhatsNewItem.quietHoursNight -> Copy.WHATS_NEW_QUIET_HOURS_BODY
+        WhatsNewItem.roomOfTwelve -> Copy.WHATS_NEW_TWELVE_BODY
+        WhatsNewItem.fourInks -> Copy.WHATS_NEW_INKS_BODY
+        WhatsNewItem.findARoom -> Copy.WHATS_NEW_FIND_BODY
+        WhatsNewItem.beingFound -> Copy.WHATS_NEW_BEING_FOUND_BODY
+        WhatsNewItem.closingARoom -> Copy.WHATS_NEW_CLOSING_BODY
     }
 
 // MARK: - The clock
@@ -560,6 +571,10 @@ internal val WhatsNewItem.timeline: Timeline
         WhatsNewItem.yourShelf,
         WhatsNewItem.versionsByReading,
         WhatsNewItem.notificationsByName,
+        WhatsNewItem.fourInks,
+        WhatsNewItem.findARoom,
+        WhatsNewItem.beingFound,
+        WhatsNewItem.closingARoom,
         -> Timeline(LOOP_MS, STILL_AT)
         WhatsNewItem.followingStays -> Timeline(LONG_LOOP_MS, STAYS_STILL_AT)
         WhatsNewItem.nativeSelection -> Timeline(LONG_LOOP_MS, SELECTION_STILL_AT)
@@ -567,6 +582,7 @@ internal val WhatsNewItem.timeline: Timeline
         WhatsNewItem.quietHoursNight -> Timeline(LONG_LOOP_MS, NIGHT_STILL_AT)
         WhatsNewItem.yourPage -> Timeline(LONG_LOOP_MS, PAGE_STILL_AT)
         WhatsNewItem.typeface -> Timeline(LONG_LOOP_MS, TYPEFACE_STILL_AT)
+        WhatsNewItem.roomOfTwelve -> Timeline(LONG_LOOP_MS, TWELVE_STILL_AT)
     }
 
 /** Where a loop of [loopMs] is, [elapsedMs] after the screen appeared and [startAfter] late. */
@@ -1096,6 +1112,30 @@ private fun Vignette(item: WhatsNewItem, startAfter: Long, frozenAt: Long?, modi
         WhatsNewItem.quietHoursNight -> Modifier.drawWithCache {
             val page = layOutTheNight(measurer, inks)
             onDrawBehind { drawNight(page, inks, grain, nightFrame(clock.longValue.toInt())) }
+        }
+        WhatsNewItem.roomOfTwelve -> Modifier.drawWithCache {
+            val page = layOutTheTwelve(measurer)
+            onDrawBehind { drawTheTwelve(page, inks, roomOfTwelveFrame(clock.longValue.toInt())) }
+        }
+        WhatsNewItem.fourInks -> Modifier.drawWithCache {
+            val page = layOutTheInks()
+            onDrawBehind { drawTheInks(page, inks, fourInksFrame(clock.longValue.toInt())) }
+        }
+        WhatsNewItem.findARoom -> Modifier.drawWithCache {
+            val page = layOutTheDoor(measurer)
+            onDrawBehind { drawTheDoor(page, inks, findARoomFrame(clock.longValue.toInt())) }
+        }
+        WhatsNewItem.beingFound -> Modifier.drawWithCache {
+            val page = layOutTheSwitch(
+                measurer, inks, ui,
+                title = Copy.LET_PEOPLE_FIND_YOU,
+                sentence = Copy.WHATS_NEW_BEING_FOUND_LINE,
+            )
+            onDrawBehind { drawNotifications(page, inks, grain, beingFoundFrame(clock.longValue.toInt())) }
+        }
+        WhatsNewItem.closingARoom -> Modifier.drawWithCache {
+            val page = layOutTheClosing(measurer)
+            onDrawBehind { drawTheClosing(page, inks, grain, closingFrame(clock.longValue.toInt())) }
         }
     }
     Box(modifier.then(drawing))
@@ -2548,6 +2588,10 @@ private fun CacheDrawScope.layOutTheSwitch(
     measurer: TextMeasurer,
     inks: VignetteInks,
     ui: TextStyle,
+    // The row's title and the words in its well: notifications' by
+    // default, and Being found's own for its picture (A72).
+    title: String = Copy.NOTES_LEFT_FOR_YOU,
+    sentence: String = Copy.notifNoteLeft(READER, NOTED_AT),
 ): TheSwitch {
     val inset = INSET.toPx()
     val left = inset
@@ -2559,25 +2603,25 @@ private fun CacheDrawScope.layOutTheSwitch(
     val wordsLeft = left + padX
     val wordsRoom = (right - padX - trackWidth - 10.dp.toPx() - wordsLeft).coerceAtLeast(1f)
 
-    val title = fitted(measurer, AnnotatedString(Copy.NOTES_LEFT_FOR_YOU), ui.copy(color = inks.text), wordsRoom)
+    val titleLine = fitted(measurer, AnnotatedString(title), ui.copy(color = inks.text), wordsRoom)
 
     val wellX = 8.dp.toPx()
     val wellY = 6.dp.toPx()
     val face = NOTE_FACE.toPx()
     val faceGap = 6.dp.toPx()
-    val sentence = fitted(
+    val sentenceLine = fitted(
         measurer,
-        AnnotatedString(Copy.notifNoteLeft(READER, NOTED_AT)),
+        AnnotatedString(sentence),
         RibbonType.ui(13f).copy(color = inks.text.copy(alpha = 0.8f)),
         (wordsRoom - wellX * 2 - face - faceGap).coerceAtLeast(1f),
     )
-    val wellHeight = wellY * 2 + maxOf(face, sentence.size.height.toFloat())
-    val wellWidth = wellX * 2 + face + faceGap + sentence.size.width
+    val wellHeight = wellY * 2 + maxOf(face, sentenceLine.size.height.toFloat())
+    val wellWidth = wellX * 2 + face + faceGap + sentenceLine.size.width
 
     val under = 8.dp.toPx()
-    val height = padY * 2 + title.size.height + under + wellHeight
+    val height = padY * 2 + titleLine.size.height + under + wellHeight
     val top = ((size.height - height) / 2f).coerceAtLeast(0f)
-    val wellTop = top + padY + title.size.height + under
+    val wellTop = top + padY + titleLine.size.height + under
     val faceAt = Offset(wordsLeft + wellX + face / 2f, wellTop + wellHeight / 2f)
     val initial = measurer.measure(
         AnnotatedString(READER.take(1)),
@@ -2590,15 +2634,15 @@ private fun CacheDrawScope.layOutTheSwitch(
 
     return TheSwitch(
         shape = rounded(Rect(left, top, right, top + height), RibbonShape.row.toPx()),
-        title = title,
+        title = titleLine,
         titleAt = Offset(wordsLeft, top + padY),
         well = rounded(Rect(wordsLeft, wellTop, wordsLeft + wellWidth, wellTop + wellHeight), RibbonShape.small.toPx()),
         face = faceAt,
         faceRadius = face / 2f,
         initial = initial,
         initialAt = faceAt - Offset(initial.size.width / 2f, initial.size.height / 2f),
-        sentence = sentence,
-        sentenceAt = Offset(faceAt.x + face / 2f + faceGap, wellTop + (wellHeight - sentence.size.height) / 2f),
+        sentence = sentenceLine,
+        sentenceAt = Offset(faceAt.x + face / 2f + faceGap, wellTop + (wellHeight - sentenceLine.size.height) / 2f),
         track = Rect(right - padX - trackWidth, trackTop, right - padX, trackTop + trackHeight),
         thumbOff = THUMB_OFF.toPx(),
         thumbOn = THUMB_ON.toPx(),
@@ -3063,4 +3107,352 @@ private fun DrawScope.drawThePage(page: ThePage, frame: PageFrame) {
             drawNumbers(page.verseByVerse, lerp(quiet, clear, frame.clear))
         },
     )
+}
+
+// MARK: - A room holds twelve (A70)
+
+/** The room of twelve: everybody seated, before the newcomers fade. */
+internal const val TWELVE_STILL_AT = 4400
+
+/**
+ * A room holds twelve: six faces in a row, then a seventh to a twelfth
+ * arriving one at a time ([arrivals]), the rows giving way to each other as
+ * they come, by the room's own rule (`Seating`). After a while the newcomers
+ * fade and the six move back into one row ([leave]).
+ */
+internal data class RoomOfTwelveFrame(val arrivals: List<Float>, val leave: Float)
+
+internal fun roomOfTwelveFrame(t: Int): RoomOfTwelveFrame = RoomOfTwelveFrame(
+    // An arrival's length and a little air between each.
+    arrivals = (0 until TWELVE_ARRIVING).map { beat(t, at = 400 + it * 480, ms = 320) },
+    leave = beat(t, at = 5000, ms = 400),
+)
+
+/** The six already seated, and the six who come. */
+private const val TWELVE_SEATED = 6
+private const val TWELVE_ARRIVING = 6
+private val TWELVE_FACE = 22.dp
+
+/** Centre to centre, across and down: the face and the room's gap. */
+private val TWELVE_PITCH = 30.dp
+private const val TWELVE_MONOGRAMS = "RAJMESPTLDNC"
+
+/** The faces' initials, each in its own ink, and the picture's middle. */
+private class TheTwelve(
+    val centre: Offset,
+    val pitch: Float,
+    val radius: Float,
+    val initials: List<TextLayoutResult>,
+)
+
+private fun CacheDrawScope.layOutTheTwelve(measurer: TextMeasurer): TheTwelve = TheTwelve(
+    centre = Offset(size.width / 2f, size.height / 2f),
+    pitch = TWELVE_PITCH.toPx(),
+    radius = TWELVE_FACE.toPx() / 2f,
+    initials = TWELVE_MONOGRAMS.mapIndexed { i, letter ->
+        measurer.measure(
+            AnnotatedString(letter.toString()),
+            monogram(TWELVE_FACE).copy(color = Ink.entries[i].color),
+            softWrap = false,
+            maxLines = 1,
+            density = this,
+        )
+    },
+)
+
+/**
+ * Where face [index] sits when [seated] are in the room: its row and its
+ * place in it, the rows centred. A face not yet seated waits where it will
+ * sit.
+ */
+private fun TheTwelve.seat(index: Int, seated: Int): Offset {
+    val rows = Seating.rows(if (index < seated) seated else index + 1)
+    var row = 0
+    var first = 0
+    while (row < rows.lastIndex && index >= first + rows[row]) {
+        first += rows[row]
+        row += 1
+    }
+    val across = (index - first) - (rows[row] - 1) / 2f
+    val down = row - (rows.size - 1) / 2f
+    return Offset(centre.x + across * pitch, centre.y + down * pitch)
+}
+
+private fun between(from: Offset, to: Offset, f: Float): Offset =
+    Offset(from.x + (to.x - from.x) * f, from.y + (to.y - from.y) * f)
+
+private fun DrawScope.drawTheTwelve(page: TheTwelve, inks: VignetteInks, frame: RoomOfTwelveFrame) {
+    // How many have come, and how far the latest is through coming.
+    val started = frame.arrivals.count { it > 0f }
+    val coming = frame.arrivals.getOrElse(started - 1) { 1f }
+    val seated = TWELVE_SEATED + started
+    for (index in 0 until TWELVE_SEATED + TWELVE_ARRIVING) {
+        val newcomer = index - TWELVE_SEATED
+        val shown = if (newcomer < 0) 1f else frame.arrivals[newcomer] * (1f - frame.leave)
+        if (shown <= 0f) continue
+        val arriving = between(page.seat(index, seated - 1), page.seat(index, seated), coming)
+        val at = between(arriving, page.seat(index, TWELVE_SEATED), frame.leave)
+        // A face taking its seat comes in from a little smaller, as the
+        // room's do.
+        val r = page.radius * (if (newcomer < 0) 1f else 0.82f + 0.18f * frame.arrivals[newcomer])
+        faded(shown) {
+            drawCircle(inks.raised, radius = r, center = at)
+            val initial = page.initials[index]
+            drawText(initial, topLeft = at - Offset(initial.size.width / 2f, initial.size.height / 2f))
+        }
+    }
+}
+
+// MARK: - Four new inks (A70)
+
+/**
+ * Four new inks: the ink picker's ribbons, six to a rule and round the
+ * wheel, the brief's eight hanging, and bronze, jade, sky and iris laid in
+ * at their places one at a time ([laid]). They rest, and lift out together
+ * ([lift]).
+ */
+internal data class FourInksFrame(val laid: List<Float>, val lift: Float)
+
+internal fun fourInksFrame(t: Int): FourInksFrame = FourInksFrame(
+    // Each on the open curve, an arrival's length behind the one before.
+    laid = FOUR_INKS.indices.map { beat(t, at = 400 + it * 320, ms = 480) },
+    lift = beat(t, at = 3640, ms = 400),
+)
+
+private val FOUR_INKS = listOf(Ink.bronze, Ink.jade, Ink.sky, Ink.iris)
+private val INKS_COLUMN = 26.dp
+private val INKS_RIBBON = 10.dp
+private val INKS_LENGTH = 34.dp
+private val INKS_RULES_BETWEEN = 14.dp
+
+/** Two rules, and a place under one of them for each of the twelve. */
+private class TheInks(val rules: List<Rect>, val ribbons: List<Offset>, val width: Float, val length: Float)
+
+private fun CacheDrawScope.layOutTheInks(): TheInks {
+    val column = INKS_COLUMN.toPx()
+    val width = INKS_RIBBON.toPx()
+    val length = INKS_LENGTH.toPx()
+    val between = INKS_RULES_BETWEEN.toPx()
+    val hair = 1.dp.toPx()
+    val rows = Ink.entries.chunked(6)
+    val left = (size.width - column * 6) / 2f
+    val top = (size.height - (length * rows.size + between * (rows.size - 1))) / 2f
+    val rules = rows.indices.map { r ->
+        val y = top + r * (length + between)
+        Rect(left, y, left + column * rows[r].size, y + hair)
+    }
+    val ribbons = Ink.entries.indices.map { i ->
+        val rule = rules[i / 6]
+        Offset(left + column * (i % 6) + (column - width) / 2f, rule.top)
+    }
+    return TheInks(rules, ribbons, width, length)
+}
+
+private fun DrawScope.drawTheInks(page: TheInks, inks: VignetteInks, frame: FourInksFrame) {
+    Ink.entries.forEachIndexed { i, ink ->
+        val new = FOUR_INKS.indexOf(ink)
+        val laid = if (new < 0) 1f else frame.laid[new] * (1f - frame.lift)
+        laidRibbon(ink.color, page.ribbons[i], page.width, page.length, laid)
+    }
+    // The rules over the ribbons' top edges, so each reads as tucked under.
+    for (rule in page.rules) drawRect(inks.rule, topLeft = rule.topLeft, size = rule.size)
+}
+
+// MARK: - Rooms that can be found (A72)
+
+/**
+ * Three faces seated in a row, and past a hairline — the room's edge — a
+ * fourth, asking, fainter ([ask]). Then the edge goes and the fourth takes a
+ * place in the row, the row making room as the hearth's does ([enter]).
+ * After a while the fourth goes and the edge comes back ([leave]).
+ */
+internal data class FindARoomFrame(val ask: Float, val enter: Float, val leave: Float)
+
+internal fun findARoomFrame(t: Int): FindARoomFrame = FindARoomFrame(
+    ask = beat(t, at = 400, ms = 400),
+    enter = beat(t, at = 1200, ms = 480),
+    leave = beat(t, at = 3660, ms = 400),
+)
+
+private const val DOOR_MONOGRAMS = "RAJS"
+private val DOOR_INKS = listOf(Ink.teal, Ink.ochre, Ink.plum, Ink.sky)
+
+/** The faces' initials, each in its own ink, the picture's middle, and the edge's width. */
+private class TheDoor(
+    val centre: Offset,
+    val pitch: Float,
+    val radius: Float,
+    val edge: Float,
+    val initials: List<TextLayoutResult>,
+)
+
+private fun CacheDrawScope.layOutTheDoor(measurer: TextMeasurer): TheDoor = TheDoor(
+    centre = Offset(size.width / 2f, size.height / 2f),
+    pitch = TWELVE_PITCH.toPx(),
+    radius = TWELVE_FACE.toPx() / 2f,
+    edge = 1.dp.toPx(),
+    initials = DOOR_MONOGRAMS.mapIndexed { i, letter ->
+        measurer.measure(
+            AnnotatedString(letter.toString()),
+            monogram(TWELVE_FACE).copy(color = DOOR_INKS[i].color),
+            softWrap = false,
+            maxLines = 1,
+            density = this,
+        )
+    },
+)
+
+/** Face [index] in a row of [seated], centred on the picture. */
+private fun TheDoor.seat(index: Int, seated: Int): Offset =
+    Offset(centre.x + (index - (seated - 1) / 2f) * pitch, centre.y)
+
+private fun DrawScope.drawTheDoor(page: TheDoor, inks: VignetteInks, frame: FindARoomFrame) {
+    // How far the fourth is in the room, and so how much room the row makes.
+    val inside = frame.enter * (1f - frame.leave)
+    val edgeX = page.centre.x + 2.1f * page.pitch
+    faded(1f - inside) {
+        drawRect(
+            inks.rule,
+            topLeft = Offset(edgeX - page.edge / 2f, page.centre.y - page.radius * 1.5f),
+            size = Size(page.edge, page.radius * 3f),
+        )
+    }
+    for (index in 0 until DOOR_MONOGRAMS.length) {
+        val newcomer = index == DOOR_MONOGRAMS.length - 1
+        val at = if (newcomer) {
+            between(Offset(page.centre.x + 3f * page.pitch, page.centre.y), page.seat(index, 4), frame.enter)
+        } else {
+            between(page.seat(index, 3), page.seat(index, 4), inside)
+        }
+        val shown = if (newcomer) frame.ask * (0.6f + 0.4f * frame.enter) * (1f - frame.leave) else 1f
+        if (shown <= 0f) continue
+        // The one asking is a little smaller until it is in, as a face
+        // taking its seat at the hearth is.
+        val r = if (newcomer) page.radius * (0.82f + 0.18f * frame.enter) else page.radius
+        faded(shown) {
+            drawCircle(inks.raised, radius = r, center = at)
+            val initial = page.initials[index]
+            drawText(initial, topLeft = at - Offset(initial.size.width / 2f, initial.size.height / 2f))
+        }
+    }
+}
+
+// MARK: - Being found, if you choose (A72)
+
+/**
+ * Being found's own switch, and under its title, in a small well, what
+ * people see once it is on: a face and one line, written in as the switch
+ * turns. Notifications' picture saying a different thing, on the same beats.
+ */
+internal fun beingFoundFrame(t: Int): NotificationsFrame = notificationsFrame(t)
+
+// MARK: - Closing a room, together (A73)
+
+/**
+ * Three faces in a row, the room as it was; they quieten together ([dim]),
+ * and under them a sheet rises with the shelf's lines on it — what each of
+ * them keeps ([kept]). Then the room comes back and the sheet goes.
+ */
+internal data class ClosingFrame(val dim: Float, val kept: Float)
+
+internal fun closingFrame(t: Int): ClosingFrame {
+    val back = 1f - beat(t, at = 3660, ms = 400)
+    return ClosingFrame(
+        dim = beat(t, at = 400, ms = 400) * back,
+        kept = beat(t, at = 1000, ms = 480) * back,
+    )
+}
+
+private const val CLOSING_MONOGRAMS = "RAJ"
+private val CLOSING_INKS = listOf(Ink.teal, Ink.ochre, Ink.plum)
+/** The shelf's lines: a book's name, and what was written in it. */
+private val CLOSING_LINES = listOf(0.5f, 0.86f, 0.72f)
+private val CLOSING_GAP = 16.dp
+private val CLOSING_LINE_WIDTH = 96.dp
+private val CLOSING_LINE_GAP = 9.dp
+private val CLOSING_INSET_X = 14.dp
+private val CLOSING_INSET_Y = 12.dp
+private val CLOSING_RISE = 10.dp
+
+/** The faces, their initials, and the sheet with its lines, as they stand once kept. */
+private class TheClosing(
+    val faces: List<Offset>,
+    val radius: Float,
+    val initials: List<TextLayoutResult>,
+    val sheet: Rect,
+    val corner: Float,
+    val lines: List<Rect>,
+    val rise: Float,
+    val edge: Float,
+)
+
+private fun CacheDrawScope.layOutTheClosing(measurer: TextMeasurer): TheClosing {
+    val face = TWELVE_FACE.toPx()
+    val pitch = TWELVE_PITCH.toPx()
+    val lineWidth = CLOSING_LINE_WIDTH.toPx()
+    val insetX = CLOSING_INSET_X.toPx()
+    val insetY = CLOSING_INSET_Y.toPx()
+    val lineGap = CLOSING_LINE_GAP.toPx()
+    val heavy = 2.dp.toPx()
+    val hair = 1.dp.toPx()
+    val sheetHeight = insetY * 2 + heavy + 2 * (lineGap + hair)
+    val whole = face + CLOSING_GAP.toPx() + sheetHeight
+    val top = (size.height - whole) / 2f
+    val mid = size.width / 2f
+    val sheet = Rect(
+        left = mid - lineWidth / 2f - insetX,
+        top = top + face + CLOSING_GAP.toPx(),
+        right = mid + lineWidth / 2f + insetX,
+        bottom = top + whole,
+    )
+    var y = sheet.top + insetY
+    val lines = CLOSING_LINES.mapIndexed { i, length ->
+        val height = if (i == 0) heavy else hair
+        val line = Rect(sheet.left + insetX, y, sheet.left + insetX + lineWidth * length, y + height)
+        y += height + lineGap
+        line
+    }
+    return TheClosing(
+        faces = (0 until 3).map { Offset(mid + (it - 1) * pitch, top + face / 2f) },
+        radius = face / 2f,
+        initials = CLOSING_MONOGRAMS.mapIndexed { i, letter ->
+            measurer.measure(
+                AnnotatedString(letter.toString()),
+                monogram(TWELVE_FACE).copy(color = CLOSING_INKS[i].color),
+                softWrap = false,
+                maxLines = 1,
+                density = this,
+            )
+        },
+        sheet = sheet,
+        corner = ROW_CORNER.toPx(),
+        lines = lines,
+        rise = CLOSING_RISE.toPx(),
+        edge = SHEET_EDGE.toPx(),
+    )
+}
+
+private fun DrawScope.drawTheClosing(page: TheClosing, inks: VignetteInks, grain: Brush, frame: ClosingFrame) {
+    faded(1f - 0.6f * frame.dim) {
+        page.faces.forEachIndexed { i, at ->
+            drawCircle(inks.raised, radius = page.radius, center = at)
+            val initial = page.initials[i]
+            drawText(initial, topLeft = at - Offset(initial.size.width / 2f, initial.size.height / 2f))
+        }
+    }
+    if (frame.kept <= 0f) return
+    faded(frame.kept) {
+        translate(top = page.rise * (1f - frame.kept)) {
+            val edge = if (inks.sheetsNeedEdges) inks.rule else null
+            sheet(rounded(page.sheet, page.corner), inks.raised, grain, edge, page.edge)
+            page.lines.forEachIndexed { i, line ->
+                drawRoundRect(
+                    if (i == 0) inks.text.copy(alpha = 0.7f) else inks.rule,
+                    topLeft = line.topLeft,
+                    size = line.size,
+                    cornerRadius = CornerRadius(line.height / 2f),
+                )
+            }
+        }
+    }
 }
