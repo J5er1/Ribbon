@@ -435,16 +435,18 @@ as `ribbon_closing_*`, rehearsed beforehand in a rolled-back transaction
   server. If one exists, the question should read "…quiet for a month,
   so it closes now…".
 
-## 11. Cards the room writes — the migration, applied on 18 October but for one trigger
+## 11. Cards the room writes — the migration, applied on 18 October
 
 `supabase/migrations/20261019120000_ribbon_cards_the_room_writes.sql`
 (docs/deviations.md A74) is on the live project as
 `ribbon_cards_the_room_writes`, rehearsed first (A74 lists the thirteen
-checks). **One piece is left to run by hand**, because the database tool
-will not take anything that names a delete: the trigger that opens the
-cards a person was holding up when they leave a room. In the dashboard's
-SQL editor, run the last section of the file as it stands — from
-"when someone leaves" to the end:
+checks). The last piece — the trigger that opens the cards a person was
+holding up when they leave a room — the database tool would not take,
+because it names a delete, so the owner ran it in the dashboard's SQL
+editor on 18 October; it is confirmed there. It is the one part not
+rehearsed: seen on a phone, a room of three where two have answered and
+the third leaves should open the card for the two. For the record, what
+was run:
 
 ```sql
 create or replace function public.cards_after_someone_left() returns trigger

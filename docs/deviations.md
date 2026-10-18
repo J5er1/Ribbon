@@ -5042,7 +5042,8 @@ A74. **Cards the room writes (2026-10-cards; settles §16.4, amends §4.6).**
 
     **On the live project** (18 October 2026), with the owner's standing
     go-ahead for migrations (*"Yeah, you can apply the migrations."*),
-    recorded as `ribbon_cards_the_room_writes`, all but the last trigger.
+    recorded as `ribbon_cards_the_room_writes`, all but the last trigger,
+    which the owner ran (below).
     Rehearsed first, the whole of it and its checks in one transaction that
     rolled back, as three real profiles: a card sent open arrives sealed;
     a second card from Ribbon at a chapter is refused; a card in someone
@@ -5057,13 +5058,14 @@ A74. **Cards the room writes (2026-10-cards; settles §16.4, amends §4.6).**
     Afterwards the columns, indexes, triggers, check and policy were each
     confirmed on the live project.
 
-    **Someone leaving** (`memberships_cards_after_someone_left`) is in the
-    file and not yet on the live project: the database tool holds anything
-    that names a delete for an approval this session cannot show (as with
-    `let_in`, A72). Until it is run, a card whose last missing answer was
-    someone who left stays sealed until someone still in the room answers
-    it again (changing an answer is enough). still-to-do §11 has it to run
-    in the dashboard's SQL editor.
+    **Someone leaving** (`memberships_cards_after_someone_left`): the
+    database tool holds anything that names a delete for an approval this
+    session cannot show (as with `let_in`, A72), so the owner ran it in the
+    dashboard's SQL editor, unchanged from the file: *"done, I ran it in
+    the SQL editor"*. Afterwards the trigger was confirmed on
+    `memberships`, running as its owner, and its function not callable by
+    anyone signed in. It was not rehearsed, since a rehearsal would have to
+    remove a membership, which the tool will not do.
 
     **Older builds** gain the opening at once: they show an open card's
     answers already, and a card now opens for them. They know one card a
