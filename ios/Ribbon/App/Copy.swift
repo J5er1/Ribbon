@@ -243,7 +243,7 @@ enum Copy {
     /// says the selection as yours does.
     static let roomAllAgree = "Everyone here reads these words as you do."
     /// S06 · the original (A60): a licensed version somebody here reads
-    /// that has not streamed to this device. S11 says it too (A70), in a
+    /// that has not streamed to this device. S11 says it too (A74), in a
     /// highlight's quote on a finished book's record, when its chapter in
     /// your licensed version is not here and will not come.
     @MainActor static var originalNotOnThisPhone: String { "Not on this \(deviceNoun) yet." }
@@ -338,7 +338,7 @@ enum Copy {
     /// (S15). The control says exactly what happens.
     static let sendTheInvite = "Send the invite"
     static let nameThisRoom = "Name this room"
-    static let roomHoldsSix = "A room holds six. Start another for the rest."
+    static let roomHoldsTwelve = "A room holds twelve. Start another for the rest."
     /// The same fact, said to the person arriving — "the rest" are the
     /// inviter's people, not theirs.
     static let roomFullForJoiner = "This room is full. Ask them to start another."
@@ -374,6 +374,85 @@ enum Copy {
     /// in the join thread (S16/S17) — never a step without a way out.
     static let startARoomInstead = "Start a room instead"
 
+    // MARK: Being found (A72) — a room that everyone in it has opened, a
+    // person who chose to be seen, and a stranger asking. Nobody walks in,
+    // nobody is told no, and nothing here is ever a number.
+    static let findARoom = "Find a room"
+    static let findARoomLede = "Rooms whose people have chosen to be found. Ask, and anyone inside can let you in."
+    static let findPrompt = "A book, or a room's name"
+    static let noRoomIsOpenYet = "No room is open to be found yet."
+    static let nothingOpenMatches = "Nothing open matches that."
+    static let people = "People"
+    static let openRooms = "Open rooms"
+    /// A found room with no name, called by the people in it who chose to
+    /// be found — "Ruth, Ann and Sam" — or, with nobody, by what it is.
+    static func roomOf(_ names: [String]) -> String {
+        switch names.count {
+        case 0: return "A room with no name"
+        case 1: return names[0]
+        default: return names.dropLast().joined(separator: ", ") + " and " + names[names.count - 1]
+        }
+    }
+    static func readingBook(_ book: String) -> String { "Reading \(book)" }
+    static let askToJoin = "Ask to join"
+    /// A found room you have asked into, marked on its tile in small caps.
+    static let asked = "asked"
+    static let askLinePrompt = "Say something, if you like"
+    static let ask = "Ask"
+    static let youAsked = "You asked. Anyone in the room can let you in."
+    static let takeBackYourAsk = "Take back your ask"
+    static let foundRoomIsFull = "This room is full."
+    static let roomIsNotOpen = "This room isn't open any more."
+    static let askNeedsBeingFound = "To ask, let yourself be found first, so the room can see who is asking."
+    static let askedEnough = "You have asks waiting already. Take one back to ask here."
+    static let beingFound = "Being found"
+    static let beingFoundSub = "Whether people outside your rooms can find you"
+    /// Being found's state on its row in You, in small caps.
+    static let on = "on"
+    static let off = "off"
+    static let beingFoundLede = "Off unless you turn it on. When it is on, anyone on Ribbon can find your name, your face and one line in your own words. Nothing else: not your rooms, not your notes."
+    static let letPeopleFindYou = "Let people find you"
+    static let thirteenOrOlderQuestion = "Being found is for people thirteen or older."
+    static let iAmThirteenOrOlder = "I'm thirteen or older"
+    static let yourLine = "Your line"
+    static let yourLinePrompt = "One line in your own words"
+    static let peopleYouveBlocked = "People you've blocked"
+    static let unblock = "Unblock"
+    /// The room's own switch (A72). A yes alone opens nothing: the room
+    /// opens once everyone in it has said yes, and who has not is never
+    /// named.
+    static let letThisRoomBeFound = "Let this room be found"
+    static let roomOpensWhenEveryone = "Found only once everyone in it says yes."
+    static let youSaidYesWaiting = "You said yes. It opens once everyone has."
+    static let roomIsOpen = "Open. People can find it and ask to join."
+    static let aLineAboutThisRoom = "A line about this room"
+    static let roomLinePrompt = "What you're reading, and who is welcome"
+    static func askedToJoin(_ name: String) -> String { "\(name) asked to join." }
+    static let letThemIn = "Let them in"
+    static let notNow = "Not now"
+    static let roomsTheyveOpened = "Rooms they're in"
+    static let block = "Block"
+    static func blockQuestion(_ name: String) -> String {
+        "Block \(name)? You stop seeing each other outside the rooms you share. Neither of you is told."
+    }
+    static let report = "Report"
+    static let reportThisRoom = "Report this room"
+    static let reportQuestion = "Tell the people who run Ribbon about this? Nobody else sees it."
+    static let reported = "Thank you. It has been passed on."
+
+    // MARK: Closing a room (§6.8, A73) — everyone agrees, or a month of
+    // quiet and one person asks. No retention offer, no "are you sure?
+    // you'll lose everything": nothing is lost, and everyone keeps the shelf.
+    static let closeThisRoom = "Close this room"
+    static let closeQuestion = "Close this room? It closes once everyone in it has said yes, and everyone keeps the whole shelf as a file."
+    static let closeQuestionQuiet = "This room has been quiet for a month, so it closes now, for everyone. Everyone keeps the whole shelf as a file."
+    static let closeQuestionNow = "Everyone else in this room has said yes, so it closes now, for everyone. Everyone keeps the whole shelf as a file."
+    static let youAskedToClose = "You asked to close this room. It closes once everyone has."
+    static let takeItBack = "Take it back"
+    static let closedRooms = "Rooms that have closed"
+    static let keepTheShelf = "Keep the shelf"
+    static let keepTheShelfSub = "Every book, note, mark and card, as a file"
+
     // MARK: The chapter list and the ribbon (ledger A30/A31)
     static let chapters = "Chapters"
     static let goThere = "Go there"
@@ -403,7 +482,7 @@ enum Copy {
     static let tapToChange = "Tap to change"
     /// Inviting someone to the room you are already in (S15). The room
     /// screen's own line only appears while a room of one still has its
-    /// first invite out; this is the way in from two members to six.
+    /// first invite out; this is the way in from two members to twelve.
     static let inviteSomeone = "Invite someone"
     /// Accepting an invite to another room when you already have one (S16).
     /// The tapped link does this by itself; this is the same door, for a
@@ -469,7 +548,7 @@ enum Copy {
     static let translationIsYours = "Yours alone. A mark lands on the same words in theirs."
     static let thePageIsYours = "Yours alone. Nobody else's page moves."
     static let notificationsLede = "Every room asks for something different. These are per room."
-    static let planLede = "What your room has, and when Ribbon asks."
+    static let planLede = "What your room has."
     @MainActor static var downloadsLede: String { "What is on this \(deviceNoun), and what isn't." }
     static let thePage = "The page"
     static let typeface = "Typeface"
@@ -519,7 +598,8 @@ enum Copy {
     static let thinkingOfYou = "Thinking of you"
     static let quietHours = "Quiet hours"
     static let startTheRoomAgain = "Start the room again"
-    static let firstBookFree = "The first book is free, all the way through."
+    /// S22 (A71): free for now, every room and every book.
+    static let freeForNow = "Ribbon is free for now: every room, of two or of twelve, and every book."
     static let manageInStore = "Manage in the App Store"
 
     /// The three stops of the line-spacing control (S20). "Close" here is a
@@ -557,10 +637,10 @@ enum Copy {
     /// read stays on the device and the rest doesn't — its license, not our
     /// design — so the row says what it does instead of a size.
     static let streams = "streams"
-    /// Where the ask lives, said once (S22). A non-paying member never sees
-    /// a price and never learns who pays.
-    static let theAskComesOnce =
-        "When your room's first ember is on the shelf, Ribbon will ask — there, and only there."
+    /// S22 (A71): free for now, so there is no ask to place. What would
+    /// change it is said where it would be said, and nowhere else.
+    static let ifThatChanges =
+        "If that ever changes, it will be said here, plainly. Scripture is never locked."
     /// Deleting the account asks §6.8's question — `leaveNotesQuestion` —
     /// and these are its two answers. Neither is the quiet one: deleting is
     /// deliberate either way, and the notes were left for the other person.
@@ -730,6 +810,9 @@ enum Copy {
         case "2026-10-following": return "Staying on the same page"
         case "2026-10-flyleaf": return "The front of the book"
         case "2026-10-light": return "Light, and the finer points"
+        case "2026-10-closing": return "When a room is done"
+        case "2026-10-found": return "A door, if you want one"
+        case "2026-10-twelve": return "Room for more of you"
         default: return whatsNewHeading
         }
     }
@@ -837,26 +920,54 @@ enum Copy {
     /// What's new (A67): how it is set.
     static let whatsNewQuietHoursBody =
         "One band from noon to noon. Drag either end of the dark stretch. Thinking of you still arrives, as a touch."
-    /// What's new (A70): the fire's light, and every ember's, falls softly.
+    /// What's new (A70): a room holds twelve.
+    static let whatsNewTwelveTitle = "A room holds twelve now"
+    /// What's new (A70): who can come, and where they sit.
+    static let whatsNewTwelveBody =
+        "Invite up to twelve people into one room. Past six, the faces round the fire sit in two rows."
+    /// What's new (A70): four new inks.
+    static let whatsNewInksTitle = "Four new inks"
+    /// What's new (A70): which, and why.
+    static let whatsNewInksBody =
+        "Bronze, jade, sky and iris join the eight, so everyone in a room of twelve has an ink of their own."
+    /// What's new (A72): a room that can be found.
+    static let whatsNewFindTitle = "Rooms that can be found"
+    /// What's new (A72): who decides, and how someone comes in.
+    static let whatsNewFindBody =
+        "When everyone in a room says yes, people can find it and ask to join. Anyone inside can let them in, and nobody is ever told no."
+    /// What's new (A72): you, found.
+    static let whatsNewBeingFoundTitle = "Being found, if you choose"
+    /// What's new (A72): what is seen, and that it starts off.
+    static let whatsNewBeingFoundBody =
+        "Turn it on in You, and people can find your name, your face and one line in your own words. It stays off until you do."
+    /// What's new (A72): the line under a face in the picture, as someone
+    /// would write it.
+    static let whatsNewBeingFoundLine = "Reading Mark, slowly."
+    /// What's new (A73): a room closed by everyone.
+    static let whatsNewClosingTitle = "Closing a room, together"
+    /// What's new (A73): how, and what everyone keeps.
+    static let whatsNewClosingBody =
+        "When everyone in a room says so, or it has been quiet for a month and one of you asks, the room closes. Everyone keeps the whole shelf as a file: every book, note, mark and card."
+    /// What's new (A74): the fire's light, and every ember's, falls softly.
     static let whatsNewSoftLightTitle = "The light falls softly"
-    /// What's new (A70): what changed about it — it fades the way light
+    /// What's new (A74): what changed about it — it fades the way light
     /// does, with no edge.
     static let whatsNewSoftLightBody =
         "The glow around the fire, and the pool of light under each ember, now fades into the dark the way light does, with no edge around it."
-    /// What's new (A70): a finished book's marks, quoted in your version.
+    /// What's new (A74): a finished book's marks, quoted in your version.
     static let whatsNewQuotedMarksTitle = "Your marks, quoted in your version"
-    /// What's new (A70): the licensed versions included, and what it says
+    /// What's new (A74): the licensed versions included, and what it says
     /// when a chapter is not here yet.
     static let whatsNewQuotedMarksBody =
         "Open a finished book and each verse you marked is quoted in the version you read, the New King James and the others included. If its chapter isn’t on this phone yet, it says so, and the words come when they can."
-    /// What's new (A70): a verse number keeps to its verse.
+    /// What's new (A74): a verse number keeps to its verse.
     static let whatsNewNumbersStayTitle = "A verse number stays with its verse"
-    /// What's new (A70): what a full line does now.
+    /// What's new (A74): what a full line does now.
     static let whatsNewNumbersStayBody =
         "A number no longer ends a line on its own. When a line is full, it goes down to the next with its verse’s first word."
-    /// What's new (A70): a voice note's wave fills its note.
+    /// What's new (A74): a voice note's wave fills its note.
     static let whatsNewWavesFillTitle = "A voice note’s wave, the width of the note"
-    /// What's new (A70): however short, and where a drag lands.
+    /// What's new (A74): however short, and where a drag lands.
     static let whatsNewWavesFillBody =
         "However short a note is, its wave runs the whole width of the note, and a drag along it lands on the bar under your finger."
 }

@@ -342,7 +342,7 @@ private fun togglePlayback(player: VoicePlayer, audioFile: File?) {
  * plays. No timer, no duration readout — a duration is a count and it
  * makes people self-conscious about how long they talked.
  *
- * Across the whole of the note, whatever the number of peaks (A70): each has
+ * Across the whole of the note, whatever the number of peaks (A74): each has
  * an equal share of the width and its bar stands in the middle of it. The
  * bars were a fixed step from the start, so a short note filled part of the
  * card and stopped, and the width drawn said how long somebody talked, which

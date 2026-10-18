@@ -15,8 +15,12 @@ import app.readribbon.design.RibbonMotion
 import app.readribbon.screens.LONG_LOOP_MS
 import app.readribbon.screens.LOOP_MS
 import app.readribbon.screens.STILL_AT
+import app.readribbon.screens.beingFoundFrame
 import app.readribbon.screens.body
+import app.readribbon.screens.closingFrame
+import app.readribbon.screens.findARoomFrame
 import app.readribbon.screens.flyleafFrame
+import app.readribbon.screens.fourInksFrame
 import app.readribbon.screens.followingFrame
 import app.readribbon.screens.lightFrame
 import app.readribbon.screens.loopTime
@@ -31,6 +35,7 @@ import app.readribbon.screens.readableFrame
 import app.readribbon.screens.pageFrame
 import app.readribbon.screens.typefaceFrame
 import app.readribbon.screens.roomGroupsFrame
+import app.readribbon.screens.roomOfTwelveFrame
 import app.readribbon.screens.selectionFrame
 import app.readribbon.screens.shelfFrame
 import app.readribbon.screens.staysFrame
@@ -387,6 +392,78 @@ class WhatsNewOnLaunchTest {
         }
     }
 
+    // The fourth release's two (A70).
+
+    @Test fun reduceMotionHoldsTheRoomFullAndEveryInkHanging() {
+        val twelve = roomOfTwelveFrame(WhatsNewItem.roomOfTwelve.timeline.stillAt)
+        assertTrue("everyone seated", twelve.arrivals.all { it == 1f })
+        assertEquals("and nobody leaving", 0f, twelve.leave, 0f)
+
+        val inks = fourInksFrame(WhatsNewItem.fourInks.timeline.stillAt)
+        assertTrue("all four new inks laid in", inks.laid.all { it == 1f })
+        assertEquals("and none lifting", 0f, inks.lift, 0f)
+    }
+
+    @Test fun eachTwelveLoopBeginsAndEndsAtRest() {
+        for (t in listOf(0, WhatsNewItem.roomOfTwelve.timeline.loopMs - 1)) {
+            val twelve = roomOfTwelveFrame(t)
+            assertEquals("only the six seated", 0f, twelve.arrivals.sum() * (1f - twelve.leave), 0.001f)
+        }
+        for (t in listOf(0, WhatsNewItem.fourInks.timeline.loopMs - 1)) {
+            val inks = fourInksFrame(t)
+            assertEquals("only the brief's eight", 0f, inks.laid.sum() * (1f - inks.lift), 0.001f)
+        }
+    }
+
+    /** The newcomers, and the new inks, come one after another — never a later one ahead. */
+    @Test fun theNewcomersAndTheNewInksComeInTurn() {
+        for (t in 0 until LONG_LOOP_MS step 10) {
+            val arrivals = roomOfTwelveFrame(t).arrivals
+            assertEquals("the newcomers at $t", arrivals.sortedDescending(), arrivals)
+            val laid = fourInksFrame(t).laid
+            assertEquals("the inks at $t", laid.sortedDescending(), laid)
+        }
+    }
+
+    // The fifth release's two (A72).
+
+    @Test fun reduceMotionHoldsTheAskerInAndTheLineWritten() {
+        val door = findARoomFrame(WhatsNewItem.findARoom.timeline.stillAt)
+        assertEquals("the one who asked is in", 1f, door.enter, 0f)
+        assertEquals("and not leaving", 0f, door.leave, 0f)
+
+        val found = beingFoundFrame(WhatsNewItem.beingFound.timeline.stillAt)
+        assertEquals("the switch on", 1f, found.on, 0f)
+        assertEquals("the line written", 1f, found.written, 0f)
+        assertEquals("and said", 1f, found.said, 0f)
+    }
+
+    @Test fun eachFoundLoopBeginsAndEndsWithNobodyAsking() {
+        for (t in listOf(0, WhatsNewItem.findARoom.timeline.loopMs - 1)) {
+            val door = findARoomFrame(t)
+            assertEquals("nobody at the edge at $t", 0f, door.ask * (1f - door.leave), 0.001f)
+        }
+        for (t in listOf(0, WhatsNewItem.beingFound.timeline.loopMs - 1)) {
+            assertEquals("off at $t", 0f, beingFoundFrame(t).on, 0.001f)
+        }
+    }
+
+    // The sixth release's one (A73).
+
+    @Test fun reduceMotionHoldsTheRoomClosedAndTheShelfKept() {
+        val closing = closingFrame(WhatsNewItem.closingARoom.timeline.stillAt)
+        assertEquals("the room quiet", 1f, closing.dim, 0f)
+        assertEquals("the shelf kept", 1f, closing.kept, 0f)
+    }
+
+    @Test fun eachClosingLoopBeginsAndEndsWithTheRoomOpen() {
+        for (t in listOf(0, WhatsNewItem.closingARoom.timeline.loopMs - 1)) {
+            val closing = closingFrame(t)
+            assertEquals("open at $t", 0f, closing.dim, 0.001f)
+            assertEquals("nothing kept at $t", 0f, closing.kept, 0.001f)
+        }
+    }
+
     /** Your rooms' ribbons, and the embers on the shelf, come one after another — never a later one ahead. */
     @Test fun theRibbonsAndTheEmbersComeInTurn() {
         for (t in 0 until LOOP_MS step 10) {
@@ -434,7 +511,7 @@ class WhatsNewOnLaunchTest {
         )
     }
 
-    // The fourth release's four (A70).
+    // The fourth release's four (A74).
 
     @Test fun reduceMotionHoldsTheFinerPointsAtTheirEnds() {
         assertEquals("the ember's light up round it", 1f, lightFrame(WhatsNewItem.softLight.timeline.stillAt).lit, 0f)
@@ -567,6 +644,11 @@ class WhatsNewOnLaunchTest {
             WhatsNewItem.quietHoursNight to ::nightFrame,
             WhatsNewItem.yourPage to ::pageFrame,
             WhatsNewItem.typeface to ::typefaceFrame,
+            WhatsNewItem.roomOfTwelve to ::roomOfTwelveFrame,
+            WhatsNewItem.fourInks to ::fourInksFrame,
+            WhatsNewItem.findARoom to ::findARoomFrame,
+            WhatsNewItem.beingFound to ::beingFoundFrame,
+            WhatsNewItem.closingARoom to ::closingFrame,
             WhatsNewItem.softLight to ::lightFrame,
             WhatsNewItem.quotedMarks to ::quotedFrame,
             WhatsNewItem.numbersStay to ::numbersFrame,
@@ -594,8 +676,11 @@ class WhatsNewOnLaunchTest {
         }
         assertEquals("6 October 2026", Copy.whatsNewReleased("2026-10-06"))
         assertEquals("7 October 2026", Copy.whatsNewReleased("2026-10-07"))
-        assertEquals("17 October 2026", Copy.whatsNewReleased("2026-10-17"))
+        assertEquals("18 October 2026", Copy.whatsNewReleased("2026-10-18"))
         assertEquals("Light, and the finer points", Copy.whatsNewTitle("2026-10-light"))
+        assertEquals("When a room is done", Copy.whatsNewTitle("2026-10-closing"))
+        assertEquals("A door, if you want one", Copy.whatsNewTitle("2026-10-found"))
+        assertEquals("Room for more of you", Copy.whatsNewTitle("2026-10-twelve"))
         assertEquals("The front of the book", Copy.whatsNewTitle("2026-10-flyleaf"))
         assertEquals("Staying on the same page", Copy.whatsNewTitle("2026-10-following"))
         assertEquals("The words under the words", Copy.whatsNewTitle("2026-10-original"))

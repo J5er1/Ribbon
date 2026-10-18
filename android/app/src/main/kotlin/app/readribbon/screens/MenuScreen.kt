@@ -118,6 +118,8 @@ import app.readribbon.app.firstName
 import app.readribbon.core.Bible
 import app.readribbon.core.Reading
 import app.readribbon.core.Room
+import app.readribbon.core.RoomClosing
+import app.readribbon.core.RoomOpenness
 import app.readribbon.core.ShelfCompany
 import app.readribbon.core.VerseAddress
 import app.readribbon.core.YourShelf
@@ -141,6 +143,7 @@ import app.readribbon.design.RibbonShape
 import app.readribbon.design.RibbonType
 import app.readribbon.design.SectionLabel
 import app.readribbon.design.Setting
+import app.readribbon.design.SettingSwitch
 import app.readribbon.design.SettingValue
 import app.readribbon.design.SettingsGroup
 import app.readribbon.design.SmallCaps
@@ -655,6 +658,64 @@ fun MenuScreen(
                     }
                 }
             }
+            // Being found (A72): finding, a found room, a found person, and
+            // your own being found, each a page inside the menu.
+            composable(FindRoute.FIND) {
+                FindRoomScreen(
+                    model = model,
+                    onBack = { navController.popBackStack() },
+                    onRoom = { room -> navController.navigate(FindRoute.room(room.id)) },
+                    onPerson = { face ->
+                        model.lookAt(face)
+                        navController.navigate(FindRoute.person(face.id))
+                    },
+                    onBeingFound = { navController.navigate(FindRoute.BEING_FOUND) },
+                )
+            }
+            composable(
+                FindRoute.ROOM_PATTERN,
+                arguments = listOf(navArgument(FindRoute.ROOM_ID) { type = NavType.StringType }),
+            ) { entryArgs ->
+                val roomID = entryArgs.arguments?.getString(FindRoute.ROOM_ID).asUuid()
+                if (roomID == null) {
+                    Box(Modifier.fillMaxSize().room())
+                } else {
+                    key(roomID) {
+                        FoundRoomScreen(
+                            model = model,
+                            roomID = roomID,
+                            onBack = { navController.popBackStack() },
+                            onPerson = { face ->
+                                model.lookAt(face)
+                                navController.navigate(FindRoute.person(face.id))
+                            },
+                            onBeingFound = { navController.navigate(FindRoute.BEING_FOUND) },
+                        )
+                    }
+                }
+            }
+            composable(
+                FindRoute.PERSON_PATTERN,
+                arguments = listOf(navArgument(FindRoute.PERSON_ID) { type = NavType.StringType }),
+            ) { entryArgs ->
+                val face = entryArgs.arguments?.getString(FindRoute.PERSON_ID).asUuid()
+                    ?.let { model.faceMet(it) }
+                if (face == null) {
+                    Box(Modifier.fillMaxSize().room())
+                } else {
+                    key(face.id) {
+                        FoundPersonScreen(
+                            model = model,
+                            face = face,
+                            onBack = { navController.popBackStack() },
+                            onRoom = { room -> navController.navigate(FindRoute.room(room.id)) },
+                        )
+                    }
+                }
+            }
+            composable(FindRoute.BEING_FOUND) {
+                BeingFoundScreen(model = model, onBack = { navController.popBackStack() })
+            }
             composable(MenuRoute.JOIN_WITH_INVITE) {
                 JoinWithInviteScreen(
                     onBack = { navController.popBackStack() },
@@ -747,6 +808,7 @@ private fun RoomMenu(
     modifier: Modifier = Modifier,
 ) {
     val here = model.currentRoom
+    val context = LocalContext.current
     RibbonScreen(
         title = here?.let { model.displayName(it) } ?: Copy.ROOMS,
         lede = Copy.ROOM_LEDE,
@@ -755,10 +817,26 @@ private fun RoomMenu(
     ) {
         // This room (S12/S15).
         here?.let { room ->
+            // Asks into this room (A72), first: somebody is waiting at the
+            // door, and every answer is here.
+            model.knocks(room).forEach { knock ->
+                key(knock.id) {
+                    KnockTile(
+                        model = model,
+                        knock = knock,
+                        onPerson = { face ->
+                            model.lookAt(face)
+                            onOpen(FindRoute.person(face.id))
+                        },
+                    )
+                    Air(SectionGap)
+                }
+            }
+
             if (model.isFull(room)) {
                 // S15's full state, said where the invite would have been.
                 Text(
-                    text = Copy.ROOM_HOLDS_SIX,
+                    text = Copy.ROOM_HOLDS_TWELVE,
                     style = RibbonType.ui(15f),
                     color = Palette.muted,
                     modifier = Modifier.padding(bottom = 10.dp),
@@ -793,7 +871,12 @@ private fun RoomMenu(
             }
 
             Air(SectionGap)
-            RoomControls(model = model, room = room, onLeft = onDismiss)
+            RoomControls(
+                model = model,
+                room = room,
+                onLeft = onDismiss,
+                onClosed = { closed -> shareShelf(context, model, closed) },
+            )
             Air(SectionGap)
         }
 
@@ -832,8 +915,46 @@ private fun RoomMenu(
             if (model.remote != null) {
                 MenuRow(Copy.JOIN_WITH_AN_INVITE) { onOpen(MenuRoute.JOIN_WITH_INVITE) }
             }
+            // Finding needs an account to ask with (A72).
+            if (model.discoveryAvailable) {
+                MenuRow(Copy.FIND_A_ROOM) { onOpen(FindRoute.FIND) }
+            }
+        }
+
+        // Rooms that have closed (A73): each one's shelf, to keep.
+        val closed = model.closedRooms
+        if (closed.isNotEmpty()) {
+            Air(SectionGap)
+            SettingsGroup(count = closed.size, title = Copy.CLOSED_ROOMS) {
+                closed.forEach { room ->
+                    Setting(
+                        title = model.displayName(room),
+                        subtitle = Copy.KEEP_THE_SHELF_SUB,
+                        value = Copy.KEEP_THE_SHELF,
+                        chevron = false,
+                        onClick = { shareShelf(context, model, room) },
+                    )
+                }
+            }
         }
     }
+}
+
+/**
+ * A room's shelf handed on as a file (§6.8, A73), through the system's
+ * chooser: the moment it closes on this phone, and whenever it is asked for
+ * again. Written to the cache's shelves folder, which the FileProvider lends.
+ */
+private fun shareShelf(context: android.content.Context, model: AppModel, room: Room) {
+    val file = model.shelfFile(room) ?: return
+    val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+    val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(android.content.Intent.EXTRA_STREAM, uri)
+        putExtra(android.content.Intent.EXTRA_SUBJECT, file.nameWithoutExtension)
+        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    context.startActivity(android.content.Intent.createChooser(send, null))
 }
 
 /**
@@ -948,6 +1069,20 @@ private fun YouMenu(
                 onClick = { onOpen(MenuRoute.APPEARANCE) },
                 modifier = Modifier.flowsAsWords(Flows.settingsTitle(Flows.APPEARANCE)),
             )
+        }
+
+        // Being found (A72): off unless you turn it on, and only there at all
+        // where there is an account to be found by.
+        if (model.discoveryAvailable) {
+            Air(SectionGap)
+            SettingsGroup(count = 1) {
+                Setting(
+                    title = Copy.BEING_FOUND,
+                    subtitle = Copy.BEING_FOUND_SUB,
+                    value = if (model.beingFound.findable) Copy.ON else Copy.OFF,
+                    onClick = { onOpen(FindRoute.BEING_FOUND) },
+                )
+            }
         }
 
         Air(SectionGap)
@@ -1849,9 +1984,14 @@ private fun RoomControls(
     model: AppModel,
     room: Room,
     onLeft: () -> Unit,
+    /** The room closed on this request (A73): its shelf is handed on. */
+    onClosed: (Room) -> Unit,
 ) {
     // Saveable for the same reason the name above is.
     var editingRoomName by rememberSaveable { mutableStateOf(false) }
+    var askingToClose by remember { mutableStateOf(false) }
+    var closingLine by remember { mutableStateOf<String?>(null) }
+    val closingScope = rememberCoroutineScope()
     var roomName by rememberSaveable { mutableStateOf("") }
     var showInkPicker by remember { mutableStateOf(false) }
     var confirmLeave by remember { mutableStateOf(false) }
@@ -1925,11 +2065,78 @@ private fun RoomControls(
             MenuRow(Copy.CHANGE_YOUR_INK) { showInkPicker = true }
         }
 
+        // Being found (A72): your yes, and the room's line for the people who
+        // find it. Who has not said yes is never named.
+        if (model.discoveryAvailable) {
+            Air(18.dp)
+            RoomBeingFound(model = model, room = room)
+            Air(8.dp)
+        }
+
         // The way out is quiet, never emphasised, and never hidden.
         QuietControl(
             title = Copy.LEAVE_THIS_ROOM,
             modifier = Modifier.offset(x = QuietControlInset),
         ) { confirmLeave = true }
+
+        // Closing (§6.8, A73): as quiet as leaving, asked once, and never a
+        // retention offer. Who has not asked is never named.
+        if (model.closingAvailable) {
+            // A yes that is waiting is offered again once saying it closes the
+            // room: it went quiet, or the last one said yes or left.
+            if (model.closing(room) == RoomClosing.waitingForOthers && !model.closesOnYourYes(room)) {
+                Text(
+                    text = Copy.YOU_ASKED_TO_CLOSE,
+                    style = RibbonType.ui(14f),
+                    color = Palette.muted,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+                QuietControl(
+                    title = Copy.TAKE_IT_BACK,
+                    modifier = Modifier.offset(x = QuietControlInset),
+                ) {
+                    closingLine = null
+                    closingScope.launch {
+                        runCatching { model.takeBackClosing(room) }
+                            .onFailure { closingLine = Copy.SERVER_UNREACHABLE }
+                    }
+                }
+            } else {
+                QuietControl(
+                    title = Copy.CLOSE_THIS_ROOM,
+                    modifier = Modifier.offset(x = QuietControlInset),
+                ) { askingToClose = true }
+            }
+            closingLine?.let {
+                Text(text = it, style = RibbonType.ui(14f), color = Palette.muted)
+            }
+        }
+    }
+
+    if (askingToClose) {
+        RibbonConfirmDialog(
+            question = model.closeQuestion(room),
+            onDismiss = { askingToClose = false },
+        ) {
+            ConfirmChoice(
+                title = Copy.CLOSE_THIS_ROOM,
+                destructive = true,
+                onClick = {
+                    askingToClose = false
+                    closingLine = null
+                    closingScope.launch {
+                        try {
+                            if (model.askToClose(room)) onClosed(room)
+                        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                            throw cancelled
+                        } catch (e: Exception) {
+                            closingLine = Copy.SERVER_UNREACHABLE
+                        }
+                    }
+                },
+            )
+            ConfirmChoice(title = Copy.NEVER_MIND, onClick = { askingToClose = false })
+        }
     }
 
     if (showInkPicker) {
@@ -1949,6 +2156,82 @@ private fun RoomControls(
                 onLeft()
             },
         )
+    }
+}
+
+/**
+ * The room's own switch for being found, with where it stands, and its line
+ * (A72). The line's row becomes its field in place, as the name's does.
+ */
+@Composable
+private fun RoomBeingFound(model: AppModel, room: Room) {
+    var editingLine by rememberSaveable { mutableStateOf(false) }
+    var roomLine by rememberSaveable { mutableStateOf("") }
+    val openness = when (model.openness(room)) {
+        RoomOpenness.closed -> Copy.ROOM_OPENS_WHEN_EVERYONE
+        RoomOpenness.waitingForOthers -> Copy.YOU_SAID_YES_WAITING
+        RoomOpenness.open -> Copy.ROOM_IS_OPEN
+    }
+    SettingsGroup(count = 2) {
+        SettingSwitch(
+            title = Copy.LET_THIS_ROOM_BE_FOUND,
+            subtitle = openness,
+            value = model.myMembership(room)?.wouldOpen ?: false,
+            onChange = { model.setWouldOpen(it, room) },
+        )
+        if (editingLine) {
+            val focus = remember { FocusRequester() }
+            LaunchedEffect(focus) { runCatching { focus.requestFocus() } }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 58.dp)
+                    .clip(RibbonShape.rowShape)
+                    .background(Palette.surface)
+                    .padding(horizontal = 20.dp),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                if (roomLine.isEmpty()) {
+                    Text(
+                        text = Copy.ROOM_LINE_PROMPT,
+                        style = RibbonType.ui(17f),
+                        color = Palette.muted,
+                        modifier = Modifier.clearAndSetSemantics {},
+                    )
+                }
+                BasicTextField(
+                    value = roomLine,
+                    onValueChange = { roomLine = it },
+                    singleLine = true,
+                    textStyle = RibbonType.ui(17f).copy(color = Palette.text),
+                    cursorBrush = SolidColor(Palette.chartreuse),
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Sentences,
+                        imeAction = ImeAction.Done,
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            model.setLine(roomLine, room)
+                            editingLine = false
+                        },
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focus)
+                        .semantics { contentDescription = Copy.A_LINE_ABOUT_THIS_ROOM },
+                )
+            }
+        } else {
+            Setting(
+                title = Copy.A_LINE_ABOUT_THIS_ROOM,
+                subtitle = room.line,
+                chevron = false,
+                onClick = {
+                    roomLine = room.line ?: ""
+                    editingLine = true
+                },
+            )
+        }
     }
 }
 

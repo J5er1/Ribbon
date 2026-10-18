@@ -1214,7 +1214,7 @@ struct ChapterTextView: UIViewRepresentable {
             var nearest: (verse: Int, distance: CGFloat)?
             for (verse, range) in page.numbers {
                 // The figures, without the thin space and the joiner after
-                // them (A70).
+                // them (A74).
                 let figures = NSRange(location: range.location, length: (String(verse) as NSString).length)
                 let glyphs = view.layoutManager.glyphRange(forCharacterRange: figures, actualCharacterRange: nil)
                 guard glyphs.length > 0 else { continue }
@@ -1558,7 +1558,7 @@ struct ChapterTextView: UIViewRepresentable {
                     // The verse number: small caps superscript, ~45%, or
                     // clearer (A68). Where it is set is kept, for a tap on
                     // it (A62). After it, its thin space and then a word
-                    // joiner (A70), which takes no room and is never a place
+                    // joiner (A74), which takes no room and is never a place
                     // to break: the thin space alone let a line end on the
                     // number with its verse beginning the next. The line
                     // breaks at the space before the number instead, which

@@ -49,7 +49,7 @@ struct ChapterPage {
     private var orderIndex: [Int: Int] = [:]
     /// Where each verse's number is printed — the figures, the thin space
     /// after them and the word joiner that keeps them on their verse's line
-    /// (A70). The chapter's first verse has none.
+    /// (A74). The chapter's first verse has none.
     private(set) var numbers: [Int: NSRange] = [:]
 
     // MARK: Setting

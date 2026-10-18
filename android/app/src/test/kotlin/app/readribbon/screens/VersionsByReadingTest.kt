@@ -41,7 +41,7 @@ import org.robolectric.annotation.Config
  * footnote says which verse that is. The preview under the size is a piece
  * of the page: that verse and the next, the second numbered the way the
  * page numbers it — a thin space after the number, never a word space, and
- * the word joiner that keeps it on its verse's line (A70). With no book open,
+ * the word joiner that keeps it on its verse's line (A74). With no book open,
  * all of it is the first verses of John. And the slider says the size as a
  * size, in points, rather than how far along a bar it is.
  */

@@ -56,11 +56,32 @@ final class BibleTests: XCTestCase {
         XCTAssertLessThan(a, c) // Mark precedes John in the canon
     }
 
-    func testInkPaletteIsEightAndExcludesChartreuse() {
-        XCTAssertEqual(Ink.allCases.count, 8)
+    func testInkPaletteIsTwelveAndExcludesChartreuse() {
+        XCTAssertEqual(Ink.allCases.count, 12)
         // Chartreuse is the brand's, not the user's.
         XCTAssertFalse(Ink.allCases.contains { $0.darkHex.uppercased() == "D6E45C" })
         let taken: [Ink] = [.teal, .ochre]
-        XCTAssertEqual(Ink.remaining(taken: taken).count, 6)
+        XCTAssertEqual(Ink.remaining(taken: taken).count, 10)
+    }
+
+    func testTheInksGoRoundTheWheel() {
+        // The order every picker shows them in (A70). The brief's eight keep
+        // their order among themselves; the four new ones sit between them.
+        XCTAssertEqual(Ink.allCases.map(\.rawValue), [
+            "crimson", "clay", "ochre", "bronze", "moss", "jade",
+            "teal", "sky", "indigo", "iris", "plum", "rose",
+        ])
+    }
+
+    func testEveryInkIsItsOwnColourOnBothGrounds() {
+        XCTAssertEqual(Set(Ink.allCases.map(\.darkHex)).count, Ink.allCases.count)
+        XCTAssertEqual(Set(Ink.allCases.map(\.lightHex)).count, Ink.allCases.count)
+    }
+
+    func testAFullRoomHasAnInkForEveryone() {
+        XCTAssertEqual(Room.capacity, 12)
+        XCTAssertGreaterThanOrEqual(Ink.allCases.count, Room.capacity)
+        let elevenTaken = Array(Ink.allCases.dropLast())
+        XCTAssertEqual(Ink.remaining(taken: elevenTaken), [.rose])
     }
 }

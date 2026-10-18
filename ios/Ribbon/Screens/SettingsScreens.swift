@@ -507,7 +507,7 @@ struct PageStrip: View {
     /// The page's verse number: small caps at 0.62 of the size, ivory at
     /// the page's alpha — 45%, or 70% when they are clearer (A68) — raised
     /// by 0.3 of the size, and a thin space after it with the page's word
-    /// joiner, which keeps it on its verse's line (A70).
+    /// joiner, which keeps it on its verse's line (A74).
     private func verseNumber(_ verse: Int, theme: ReadingTheme) -> Text {
         Text(verbatim: "\(verse)\u{2009}\u{2060}")
             .font(RibbonType.smallCaps(theme.fontSize * 0.62))
@@ -739,18 +739,17 @@ struct DownloadsScreen: View {
 
 // MARK: - S22: The plan
 
-/// The first book is free, all the way through — not a 7-day trial,
-/// because a clock is a count. The ask appears in exactly two places: the
-/// shelf after the first ember, and here. A non-paying member never sees a
-/// price and never learns who pays.
+/// Ribbon is free for now (A71): every room, every book. The book's first
+/// free book and its ask after the first ember wait for pricing; until
+/// then this screen says the true thing, and where a change would be said.
 struct PlanScreen: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         RibbonScreen(title: Copy.plan, lede: Copy.planLede, onBack: { dismiss() }) {
-            SettingsGroup(footnote: Copy.theAskComesOnce) {
-                SettingNote(Copy.firstBookFree)
+            SettingsGroup(footnote: Copy.ifThatChanges) {
+                SettingNote(Copy.freeForNow)
                 if let room = model.currentRoom, room.isPaused {
                     // The restore half needs StoreKit, which arrives with
                     // billing (deviation 11): the room says the true thing,

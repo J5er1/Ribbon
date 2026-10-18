@@ -12,18 +12,30 @@ final class WhatsNewTests: XCTestCase {
 
     func testTodaysRelease() {
         XCTAssertEqual(WhatsNew.releases.first?.id, "2026-10-light")
-        XCTAssertEqual(WhatsNew.releases.first?.released, "2026-10-17")
+        XCTAssertEqual(WhatsNew.releases.first?.released, "2026-10-18")
         XCTAssertEqual(
             WhatsNew.releases.first?.items,
             [.softLight, .quotedMarks, .numbersStay, .wavesFill])
-        // The front of the book (A67–A69) belongs to the release before.
-        let flyleaf = WhatsNew.releases.dropFirst().first
+        // Closing a room (A73) is the release before.
+        let closing = WhatsNew.releases.dropFirst().first
+        XCTAssertEqual(closing?.id, "2026-10-closing")
+        XCTAssertEqual(closing?.items, [.closingARoom])
+        // Being found (A72) before that.
+        let found = WhatsNew.releases.dropFirst(2).first
+        XCTAssertEqual(found?.id, "2026-10-found")
+        XCTAssertEqual(found?.items, [.findARoom, .beingFound])
+        // A room of twelve (A70) before that.
+        let twelve = WhatsNew.releases.dropFirst(3).first
+        XCTAssertEqual(twelve?.id, "2026-10-twelve")
+        XCTAssertEqual(twelve?.items, [.roomOfTwelve, .fourInks])
+        // The front of the book (A67–A69) before that.
+        let flyleaf = WhatsNew.releases.dropFirst(4).first
         XCTAssertEqual(flyleaf?.id, "2026-10-flyleaf")
         XCTAssertEqual(
             flyleaf?.items,
             [.flyleaf, .yourShelf, .versionsByReading, .yourPage, .typeface, .notificationsByName, .quietHoursNight])
-        // And the Hebrew made easy to read (A66) to the one before that.
-        let following = WhatsNew.releases.dropFirst(2).first
+        // The Hebrew made easy to read (A66) belongs to the release before that.
+        let following = WhatsNew.releases.dropFirst(5).first
         XCTAssertEqual(following?.id, "2026-10-following")
         XCTAssertEqual(
             following?.items,
@@ -34,7 +46,7 @@ final class WhatsNewTests: XCTestCase {
     // and every thing new told in exactly one of them.
     func testTheListReadsNewestFirstAndTellsEachThingOnce() {
         let ids = WhatsNew.releases.map(\.id)
-        XCTAssertEqual(ids, ["2026-10-light", "2026-10-flyleaf", "2026-10-following", "2026-10-original"])
+        XCTAssertEqual(ids, ["2026-10-light", "2026-10-closing", "2026-10-found", "2026-10-twelve", "2026-10-flyleaf", "2026-10-following", "2026-10-original"])
         XCTAssertEqual(Set(ids).count, ids.count)
         let days = WhatsNew.releases.map(\.released)
         XCTAssertTrue(days.allSatisfy { $0.count == 10 })
@@ -48,16 +60,16 @@ final class WhatsNewTests: XCTestCase {
     // and someone two behind hears about this one, not the backlog.
     func testAnUpdaterWhoSawAnEarlierOneSeesThisOne() {
         XCTAssertEqual(
-            WhatsNew.toShow(lastSeen: "2026-10-flyleaf", hasHistory: true, plainLaunch: true)?.id,
+            WhatsNew.toShow(lastSeen: "2026-10-closing", hasHistory: true, plainLaunch: true)?.id,
             "2026-10-light")
         XCTAssertEqual(
-            WhatsNew.toShow(lastSeen: "2026-10-following", hasHistory: true, plainLaunch: true)?.id,
+            WhatsNew.toShow(lastSeen: "2026-10-found", hasHistory: true, plainLaunch: true)?.id,
             "2026-10-light")
         XCTAssertEqual(
             WhatsNew.toShow(lastSeen: "2026-10-original", hasHistory: true, plainLaunch: true)?.id,
             "2026-10-light")
         XCTAssertEqual(
-            WhatsNew.seenAfter(lastSeen: "2026-10-flyleaf", hasHistory: true, plainLaunch: true, shown: true),
+            WhatsNew.seenAfter(lastSeen: "2026-10-closing", hasHistory: true, plainLaunch: true, shown: true),
             "2026-10-light")
         XCTAssertNil(WhatsNew.toShow(lastSeen: "2026-10-light", hasHistory: true, plainLaunch: true))
     }
@@ -78,6 +90,11 @@ final class WhatsNewTests: XCTestCase {
         XCTAssertEqual(WhatsNewItem.notificationsByName.rawValue, "notificationsByName")
         XCTAssertEqual(WhatsNewItem.quietHoursNight.rawValue, "quietHoursNight")
         XCTAssertEqual(WhatsNewItem.typeface.rawValue, "typeface")
+        XCTAssertEqual(WhatsNewItem.roomOfTwelve.rawValue, "roomOfTwelve")
+        XCTAssertEqual(WhatsNewItem.fourInks.rawValue, "fourInks")
+        XCTAssertEqual(WhatsNewItem.findARoom.rawValue, "findARoom")
+        XCTAssertEqual(WhatsNewItem.beingFound.rawValue, "beingFound")
+        XCTAssertEqual(WhatsNewItem.closingARoom.rawValue, "closingARoom")
         XCTAssertEqual(WhatsNewItem.softLight.rawValue, "softLight")
         XCTAssertEqual(WhatsNewItem.quotedMarks.rawValue, "quotedMarks")
         XCTAssertEqual(WhatsNewItem.numbersStay.rawValue, "numbersStay")

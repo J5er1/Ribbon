@@ -61,6 +61,8 @@ struct MenuScreen: View {
     /// A room just made, waiting for the naming sheet to finish going away
     /// before its invite is handed out.
     @State private var stagedRoom: Room?
+    /// A room's shelf, written to a file and being handed on (A73).
+    @State private var keeping: KeptShelf?
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -80,7 +82,10 @@ struct MenuScreen: View {
                                 dismiss()
                             },
                             onStartARoom: { showNewRoom = true },
-                            onJoinWithInvite: { path.append(MenuRoute.joinWithInvite) })
+                            onJoinWithInvite: { path.append(MenuRoute.joinWithInvite) },
+                            onFindARoom: { path.append(FindRoute.find) },
+                            onPerson: { face in path.append(FindRoute.person(face)) },
+                            onKeep: { closed in keep(closed) })
                     } else {
                         GrainBackground()
                     }
@@ -90,11 +95,15 @@ struct MenuScreen: View {
                         onText: { path.append(MenuRoute.text) },
                         onDownloads: { path.append(MenuRoute.downloads) },
                         onWhatsNew: { path.append(MenuRoute.whatsNew) },
+                        onBeingFound: { path.append(FindRoute.beingFound) },
                         onEmber: { readingID in path.append(MenuRoute.ember(readingID)) })
                 }
             }
             .navigationDestination(for: MenuRoute.self) { route in
                 destination(route)
+            }
+            .navigationDestination(for: FindRoute.self) { route in
+                finding(route)
             }
             .navigationDestination(for: PersonRoute.self) { route in
                 // An ember's record names who read it, as portraits, and a
@@ -125,6 +134,15 @@ struct MenuScreen: View {
         }) {
             NewRoomSheet { room in stagedRoom = room }
         }
+        // The shelf, handed on: the moment a room closes on this phone, and
+        // whenever a closed room's shelf is asked for again (A73). With no
+        // room left open, the menu has nothing under it and goes too.
+        .sheet(item: $keeping, onDismiss: {
+            if model.currentRoom == nil { dismiss() }
+        }) { kept in
+            ActivitySheet(items: [kept.url])
+                .presentationDetents([.medium, .large])
+        }
         .sheet(item: $inviting, onDismiss: {
             if closeAfterInviting {
                 closeAfterInviting = false
@@ -133,6 +151,34 @@ struct MenuScreen: View {
         }) { target in
             InviteSheet(room: target.room)
                 .presentationDetents([.medium])
+        }
+    }
+
+    private func keep(_ room: Room) {
+        if let url = model.shelfFile(for: room) { keeping = KeptShelf(url: url) }
+    }
+
+    /// Being found (A72): finding, a found room, a found person, and your
+    /// own being found, each a page inside the menu.
+    @ViewBuilder
+    private func finding(_ route: FindRoute) -> some View {
+        switch route {
+        case .find:
+            FindRoomScreen(
+                onRoom: { room in path.append(FindRoute.room(room.id)) },
+                onPerson: { face in path.append(FindRoute.person(face)) },
+                onBeingFound: { path.append(FindRoute.beingFound) })
+        case .room(let id):
+            FoundRoomScreen(
+                roomID: id,
+                onPerson: { face in path.append(FindRoute.person(face)) },
+                onBeingFound: { path.append(FindRoute.beingFound) })
+            .id(id)
+        case .person(let face):
+            FoundPersonScreen(face: face, onRoom: { room in path.append(FindRoute.room(room.id)) })
+                .id(face.id)
+        case .beingFound:
+            BeingFoundScreen()
         }
     }
 
@@ -208,6 +254,10 @@ private struct RoomMenuScreen: View {
     var onSwitch: (UUID) -> Void
     var onStartARoom: () -> Void
     var onJoinWithInvite: () -> Void
+    var onFindARoom: () -> Void
+    var onPerson: (PublicFace) -> Void
+    /// A room's shelf to hand on: one that has just closed, or an older one.
+    var onKeep: (Room) -> Void
 
     var body: some View {
         RibbonScreen(
@@ -219,9 +269,16 @@ private struct RoomMenuScreen: View {
             }
         ) {
             VStack(alignment: .leading, spacing: 28) {
+                // Asks into this room (A72), first: somebody is waiting at
+                // the door, and every answer is here.
+                ForEach(model.knocks(on: room)) { knock in
+                    KnockTile(knock: knock, onPerson: onPerson)
+                        .transition(.opacity)
+                }
+
                 if model.isFull(room) {
                     // S15's full state, said where the invite would have been.
-                    SettingNote(Copy.roomHoldsSix)
+                    SettingNote(Copy.roomHoldsTwelve)
                 } else if model.remote != nil {
                     // The link resolves through the backend, so without one
                     // there is nothing to hand out and no row for it.
@@ -233,7 +290,7 @@ private struct RoomMenuScreen: View {
                     SettingRow(Copy.plan, subtitle: Copy.planSub, action: onPlan)
                 }
 
-                RoomControls(room: room, onLeft: onClose)
+                RoomControls(room: room, onLeft: onClose, onClosed: onKeep)
 
                 VStack(alignment: .leading, spacing: 10) {
                     SectionLabel(Copy.yourRooms)
@@ -250,10 +307,17 @@ private struct RoomMenuScreen: View {
                         if model.remote != nil {
                             SettingRow(Copy.joinWithAnInvite, action: onJoinWithInvite)
                         }
+                        // Finding needs an account to ask with (A72).
+                        if model.discoveryAvailable {
+                            SettingRow(Copy.findARoom, action: onFindARoom)
+                        }
                     }
                     .padding(.top, 6)
                 }
+
+                ClosedRoomsSection(onKeep: onKeep)
             }
+            .animation(RibbonMotion.arrive, value: model.knocks(on: room).map(\.id))
         }
     }
 }
@@ -331,9 +395,16 @@ private struct RoomControls: View {
     @Environment(AppModel.self) private var model
     let room: Room
     var onLeft: () -> Void
+    /// The room closed on this request (A73): its shelf is handed on.
+    var onClosed: (Room) -> Void
 
     @State private var editingRoomName = false
+    @State private var closingQuestion: ConfirmState?
+    @State private var closingLine: String?
     @State private var roomName = ""
+    @State private var editingRoomLine = false
+    @State private var roomLine = ""
+    @FocusState private var roomLineFocused: Bool
     @State private var showInkPicker = false
     private enum Leaving { case confirm, notes }
     @State private var leaving: Leaving?
@@ -376,14 +447,124 @@ private struct RoomControls: View {
                 }
             }
             .animation(RibbonMotion.settle, value: editingRoomName)
+
+            // Being found (A72): your yes, and the room's line for the
+            // people who find it. Who has not said yes is never named.
+            if model.discoveryAvailable {
+                SettingsGroup {
+                    SettingSwitch(Copy.letThisRoomBeFound, subtitle: opennessLine, isOn: Binding(
+                        get: { model.myMembership(in: room)?.wouldOpen ?? false },
+                        set: { model.setWouldOpen($0, in: room) }))
+                    if editingRoomLine {
+                        TextField(
+                            "", text: $roomLine,
+                            prompt: Text(Copy.roomLinePrompt).foregroundStyle(Palette.muted))
+                            .font(RibbonType.ui(17))
+                            .foregroundStyle(Palette.text)
+                            .focused($roomLineFocused)
+                            .submitLabel(.done)
+                            .onSubmit(commitRoomLine)
+                            .onChange(of: roomLineFocused) { _, focused in
+                                if !focused { commitRoomLine() }
+                            }
+                            .padding(.horizontal, RibbonShape.textInset)
+                            .frame(maxWidth: .infinity, minHeight: RibbonShape.rowHeight, alignment: .leading)
+                            .tile()
+                            .onAppear { roomLineFocused = true }
+                            .transition(.opacity)
+                    } else {
+                        SettingRow(Copy.aLineAboutThisRoom, subtitle: room.line, chevron: false) {
+                            roomLine = room.line ?? ""
+                            editingRoomLine = true
+                        }
+                        .transition(.opacity)
+                    }
+                }
+                .padding(.top, 18)
+                .animation(RibbonMotion.settle, value: editingRoomLine)
+            }
             // The way out is quiet, never emphasised, and never hidden.
             QuietControl(title: Copy.leaveThisRoom) { leaving = .confirm }
                 .padding(.horizontal, RibbonShape.textInset)
+
+            // Closing (§6.8, A73): as quiet as leaving, asked once, and
+            // never a retention offer. Who has not asked is never named.
+            if model.closingAvailable {
+                closing
+                    .padding(.horizontal, RibbonShape.textInset)
+                    .confirm($closingQuestion, dismissTitle: Copy.neverMind)
+            }
         }
         .sheet(isPresented: $showInkPicker) {
             InkPickerSheet(room: room)
         }
         .confirm(leaveDialog)
+    }
+
+    @ViewBuilder
+    private var closing: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            // A yes that is waiting is offered again once saying it closes
+            // the room: it went quiet, or the last one said yes or left.
+            if model.closing(of: room) == .waitingForOthers && !model.closesOnYourYes(room) {
+                Text(Copy.youAskedToClose)
+                    .font(RibbonType.ui(14))
+                    .foregroundStyle(Palette.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                QuietControl(title: Copy.takeItBack) { takeBackClosing() }
+            } else {
+                QuietControl(title: Copy.closeThisRoom) {
+                    closingQuestion = ConfirmState(
+                        question: model.closeQuestion(for: room),
+                        choices: [ConfirmChoice(Copy.closeThisRoom, destructive: true) { askToClose() }])
+                }
+            }
+            if let closingLine {
+                Text(closingLine)
+                    .font(RibbonType.ui(14))
+                    .foregroundStyle(Palette.muted)
+                    .transition(.opacity)
+            }
+        }
+        .animation(RibbonMotion.arrive, value: model.closing(of: room))
+    }
+
+    private func askToClose() {
+        closingQuestion = nil
+        closingLine = nil
+        let asked = room
+        Task {
+            do {
+                if try await model.askToClose(asked) { onClosed(asked) }
+            } catch {
+                closingLine = Copy.serverUnreachable
+            }
+        }
+    }
+
+    private func takeBackClosing() {
+        closingLine = nil
+        Task {
+            do {
+                try await model.takeBackClosing(room)
+            } catch {
+                closingLine = Copy.serverUnreachable
+            }
+        }
+    }
+
+    private var opennessLine: String {
+        switch model.openness(of: room) {
+        case .closed: return Copy.roomOpensWhenEveryone
+        case .waitingForOthers: return Copy.youSaidYesWaiting
+        case .open: return Copy.roomIsOpen
+        }
+    }
+
+    private func commitRoomLine() {
+        guard editingRoomLine else { return }
+        model.setLine(roomLine, of: room)
+        editingRoomLine = false
     }
 
     private func commitRoomName() {
@@ -430,6 +611,7 @@ private struct YouScreen: View {
     var onText: () -> Void
     var onDownloads: () -> Void
     var onWhatsNew: () -> Void
+    var onBeingFound: () -> Void
     /// An ember on your shelf, by its reading.
     var onEmber: (UUID) -> Void
 
@@ -459,6 +641,17 @@ private struct YouScreen: View {
 
                 SettingsGroup(title: Copy.howYouRead) {
                     SettingRow(Copy.textAndTranslation, subtitle: Copy.textSub, action: onText)
+                }
+
+                // Being found (A72): off unless you turn it on, and only
+                // there at all where there is an account to be found by.
+                if model.discoveryAvailable {
+                    SettingsGroup {
+                        SettingRow(
+                            Copy.beingFound, subtitle: Copy.beingFoundSub,
+                            value: model.beingFound.findable ? Copy.on : Copy.off,
+                            action: onBeingFound)
+                    }
                 }
 
                 SettingsGroup(title: Copy.thisPhone) {

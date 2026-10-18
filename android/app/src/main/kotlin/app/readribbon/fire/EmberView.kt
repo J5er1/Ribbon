@@ -142,7 +142,7 @@ fun DrawScope.drawEmber(time: Double) {
 
     // The bloom beneath — the light that implies the shelf.
     //
-    // A pool, not a slab (A70). The bloom was an oval wider and deeper than
+    // A pool, not a slab (A74). The bloom was an oval wider and deeper than
     // the ember's own box, filled with a round gradient still well on at the
     // oval's rim. A Compose Canvas does not clip, so here it ran on past the
     // box, into the next ember's cell and behind the book's name, and ended

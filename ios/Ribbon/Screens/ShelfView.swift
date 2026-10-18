@@ -147,7 +147,7 @@ struct EmberRecordScreen: View {
     /// again belongs to the room, not to you, so there it is not offered.
     var onReadAgain: ((String) -> Void)? = nil
 
-    /// A licensed version's chapters, for the highlights' quotes (A70):
+    /// A licensed version's chapters, for the highlights' quotes (A74):
     /// this phone's copy where it has one, or streamed for this screen.
     @State private var licensedChapters: [LicensedChapter: ScriptureChapter] = [:]
     /// The chapters that would not come — no copy here, and no connection
@@ -296,7 +296,7 @@ struct EmberRecordScreen: View {
     /// A highlight's verse, in the version the record reads in. A bundled
     /// version's is in the bundle. A licensed one's was looked for there
     /// too, where none of it is, so every NKJV, NIV or NASB reader's record
-    /// was a column of bare references (A70): it is this phone's copy of
+    /// was a column of bare references (A74): it is this phone's copy of
     /// the chapter now, or the chapter streamed for this screen.
     private func quotedText(_ address: VerseAddress) -> String? {
         guard let licensed else {
@@ -428,7 +428,7 @@ private struct EmberNoteRow: View {
 private struct QuotedHighlight: View {
     let highlight: Highlight
     /// The verse in the version the record reads in, worked out by the
-    /// record (A70). Nil while a licensed chapter is on its way, and when
+    /// record (A74). Nil while a licensed chapter is on its way, and when
     /// it will not come.
     let text: String?
     /// Its chapter would not come: the quote's place says so, quietly, in

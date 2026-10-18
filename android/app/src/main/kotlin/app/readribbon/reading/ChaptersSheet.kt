@@ -240,7 +240,7 @@ private fun ChapterTile(
             },
         contentAlignment = Alignment.Center,
     ) {
-        // The figures level and in step (A70), so a row of chapters sits on
+        // The figures level and in step (A74), so a row of chapters sits on
         // one line rather than rising and falling with the face's old-style
         // figures.
         Text(

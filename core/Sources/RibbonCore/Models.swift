@@ -42,10 +42,13 @@ public struct Person: Codable, Hashable, Identifiable, Sendable {
     }
 }
 
-/// 2–6 people. The app's root. A person may hold several rooms; they never
-/// interact — nothing crosses between them (§2.4).
+/// 2–12 people (§2.3, raised from six by A70). The app's root. A person
+/// may hold several rooms; they never interact — nothing crosses between
+/// them (§2.4).
 public struct Room: Codable, Hashable, Identifiable, Sendable {
-    public static let capacity = 6
+    /// Twelve, and there are twelve inks, so everyone in a full room has
+    /// one of their own (A70).
+    public static let capacity = 12
 
     public var id: UUID
     /// Optional. When empty, the interface derives a name from members'
@@ -61,16 +64,25 @@ public struct Room: Codable, Hashable, Identifiable, Sendable {
     /// (`TranslationChoice.page`) and nothing reads this for display. It is
     /// still decoded and written because shipped clients read and write it.
     public var translation: TranslationID
+    /// One line about the room for people who find it (A72). Nil until
+    /// somebody in it writes one.
+    public var line: String?
+    /// When the room closed (§6.8, A73): everyone agreed, or it had been
+    /// quiet for thirty days and one person asked. Nil while it is open. A
+    /// closed room keeps everything, and its shelf can be kept as a file.
+    public var closedAt: Date?
 
-    public init(id: UUID = UUID(), name: String? = nil, createdAt: Date, isPaused: Bool = false, translation: TranslationID = .bsb) {
+    public init(id: UUID = UUID(), name: String? = nil, createdAt: Date, isPaused: Bool = false, translation: TranslationID = .bsb, line: String? = nil, closedAt: Date? = nil) {
         self.id = id
         self.name = name
         self.createdAt = createdAt
         self.isPaused = isPaused
         self.translation = translation
+        self.line = line
+        self.closedAt = closedAt
     }
 
-    enum CodingKeys: String, CodingKey { case id, name, createdAt, isPaused, translation }
+    enum CodingKeys: String, CodingKey { case id, name, createdAt, isPaused, translation, line, closedAt }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -80,6 +92,8 @@ public struct Room: Codable, Hashable, Identifiable, Sendable {
         isPaused = try c.decodeIfPresent(Bool.self, forKey: .isPaused) ?? false
         // A room saved before rooms had a version reads the default.
         translation = try c.decodeIfPresent(TranslationID.self, forKey: .translation) ?? .bsb
+        line = try c.decodeIfPresent(String.self, forKey: .line)
+        closedAt = try c.decodeIfPresent(Date.self, forKey: .closedAt)
     }
 }
 
@@ -93,13 +107,35 @@ public struct Membership: Codable, Hashable, Identifiable, Sendable {
     /// freely, per highlight) or while an ink pick is still waiting (§4.5).
     public var ink: Ink?
     public var joinedAt: Date
+    /// Whether this person has said yes to the room being found (A72). The
+    /// room is found only while everyone has (`RoomOpenness`).
+    public var wouldOpen: Bool
+    /// Whether this person has asked for the room to close (§6.8, A73). It
+    /// closes once everyone has (`RoomClosing`).
+    public var wouldClose: Bool
 
-    public init(id: UUID = UUID(), roomID: UUID, personID: UUID, ink: Ink? = nil, joinedAt: Date) {
+    public init(id: UUID = UUID(), roomID: UUID, personID: UUID, ink: Ink? = nil, joinedAt: Date, wouldOpen: Bool = false, wouldClose: Bool = false) {
         self.id = id
         self.roomID = roomID
         self.personID = personID
         self.ink = ink
         self.joinedAt = joinedAt
+        self.wouldOpen = wouldOpen
+        self.wouldClose = wouldClose
+    }
+
+    enum CodingKeys: String, CodingKey { case id, roomID, personID, ink, joinedAt, wouldOpen, wouldClose }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        roomID = try c.decode(UUID.self, forKey: .roomID)
+        personID = try c.decode(UUID.self, forKey: .personID)
+        ink = try c.decodeIfPresent(Ink.self, forKey: .ink)
+        joinedAt = try c.decode(Date.self, forKey: .joinedAt)
+        // A membership saved before rooms could be found has said nothing.
+        wouldOpen = try c.decodeIfPresent(Bool.self, forKey: .wouldOpen) ?? false
+        wouldClose = try c.decodeIfPresent(Bool.self, forKey: .wouldClose) ?? false
     }
 }
 

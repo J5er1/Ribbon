@@ -498,7 +498,7 @@ object FirePainter {
                 FireState.steady -> footprint * (1.0 + 0.35 * coalDepth) to 0.3
                 FireState.banked -> footprint * (0.42 + 0.2 * coalDepth) to 0.13
             }
-            // The light dies to nothing at its own rim, on every side (A70).
+            // The light dies to nothing at its own rim, on every side (A74).
             // It was a round gradient cut by a shorter ellipse — 0.62 of its
             // radius above the coals, 0.43 below — so the path ended while the
             // light was still a third on, a crisp arc over the fire; and the
@@ -991,7 +991,7 @@ private fun DrawScope.fillAdditive(path: Path, brush: Brush, blurPx: Float = 0f)
 }
 
 /**
- * Half of the warm throw (A70): [light], a round gradient of [radius] about
+ * Half of the warm throw (A74): [light], a round gradient of [radius] about
  * [coals], squashed to [reach] of height above the coals' line when [above]
  * and below it when not, so the gradient's own clear is the half-ellipse's
  * rim.

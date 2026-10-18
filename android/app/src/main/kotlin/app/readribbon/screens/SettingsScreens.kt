@@ -866,7 +866,7 @@ private fun Modifier.bleed(by: Dp): Modifier = this.layout { measurable, constra
  * page and not a description of it: a number before each verse but a
  * chapter's first — small caps at 0.62 of the size, ivory at the page's 45%
  * or its clearer ink, raised, and a thin space after it with the page's word
- * joiner, which keeps it on its verse's line (A70) — the words of Jesus
+ * joiner, which keeps it on its verse's line (A74) — the words of Jesus
  * in the crimson ink when the switch is on, each block of the chapter on a
  * line of its own (and, with a line for every verse, each verse the core
  * starts one for: A68), and a psalm's title and a stanza break left out.
@@ -1354,9 +1354,9 @@ fun PlanScreen(
     ) {
         SettingsGroup(
             count = if (paused) 2 else 1,
-            footnote = Copy.THE_ASK_COMES_ONCE,
+            footnote = Copy.IF_THAT_CHANGES,
         ) {
-            SettingNote(Copy.FIRST_BOOK_FREE)
+            SettingNote(Copy.FREE_FOR_NOW)
             if (paused) {
                 // S22's anatomy is "Start the room again if paused · manage
                 // in the store", and the restore half needs billing that does

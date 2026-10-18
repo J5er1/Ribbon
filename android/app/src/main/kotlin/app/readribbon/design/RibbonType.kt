@@ -232,7 +232,7 @@ object RibbonType {
     )
 
     /**
-     * Interface text for figures that stand in a row (A70). Alegreya Sans's
+     * Interface text for figures that stand in a row (A74). Alegreya Sans's
      * own figures are old-style: 3, 4, 5, 7 and 9 hang below the line that 0,
      * 1 and 2 sit on, and 6 and 8 rise above them, which a grid of numbers
      * reads as ragged. These are the face's lining figures, each as wide as

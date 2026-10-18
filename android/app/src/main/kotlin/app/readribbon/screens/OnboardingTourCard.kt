@@ -295,7 +295,7 @@ private fun FireGraphic() {
     // its ambient throw across the whole of its canvas and then clipped it
     // at the edge, which on bare ground was a plainly visible rectangle of
     // slightly-warmer dark, and the recess owned that edge. The throw dies
-    // inside its canvas now (A70), and the well stays: it is the same hearth
+    // inside its canvas now (A74), and the well stays: it is the same hearth
     // the room will hand them in about four taps, which is the better
     // introduction anyway.
     Box(

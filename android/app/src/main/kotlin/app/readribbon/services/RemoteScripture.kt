@@ -178,7 +178,7 @@ suspend fun ScriptureStore.ensureRemoteChapter(
 /**
  * Stream a chapter through the proxy and keep it nowhere: for a book that
  * is not the one being read — a finished book's record quoting its
- * highlights (A70). Through [ensureRemoteChapter] it would be kept, and
+ * highlights (A74). Through [ensureRemoteChapter] it would be kept, and
  * keeping it would prune the book that is being read: the cache holds one
  * book a translation, and that one is the open one. What comes lives as
  * long as the screen that asked for it.

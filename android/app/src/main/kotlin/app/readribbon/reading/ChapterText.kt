@@ -552,7 +552,7 @@ fun ChapterText(
                 // words again.
                 val verse = page.versesIn(texts).singleOrNull()
                 // The figures, without the thin space and the word joiner
-                // after them (A70).
+                // after them (A74).
                 val number = verse != null &&
                     texts.joinToString("") { it.text }.trim { it.isWhitespace() || it == '\u2060' } == verse.toString()
                 if (lastReport[0] != null && !number) return@collect
@@ -1952,7 +1952,7 @@ private fun buildChapterPage(
                     letterSpacing = 0.sp,
                 )
                 // A thin space after the number, never a word space, and
-                // then a word joiner (A70), which takes no room and is never
+                // then a word joiner (A74), which takes no room and is never
                 // a place to break: the thin space alone let a line end on
                 // the number with its verse beginning the next. The line
                 // breaks at the space before the number instead, which is

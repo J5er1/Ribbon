@@ -167,7 +167,7 @@ enum FirePainter {
             throwRadius = footprint * (0.42 + 0.2 * coalDepth)
             throwOpacity = 0.13
         }
-        // The light dies to nothing at its own rim, on every side (A70). It
+        // The light dies to nothing at its own rim, on every side (A74). It
         // was a round gradient cut by a shorter ellipse — 0.62 of its radius
         // above the coals, 0.43 below — so the path ended while the light was
         // still a third on, a crisp arc over the fire; and the canvas, which

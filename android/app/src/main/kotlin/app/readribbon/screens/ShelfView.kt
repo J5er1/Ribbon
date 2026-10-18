@@ -440,7 +440,7 @@ fun EmberRecordScreen(
     // The version the record reads in: your own (A60).
     val translation = model.words(model.room(reading))
     val licensed = TranslationRegistry.translation(translation)?.takeIf { !it.isBundled }
-    // A licensed version's chapters, for the highlights' quotes (A70): this
+    // A licensed version's chapters, for the highlights' quotes (A74): this
     // phone's copy where it has one, or streamed for this screen. Swift keys
     // them on the version as well as the chapter; here the version is the
     // `remember` key, which comes to the same.
@@ -683,7 +683,7 @@ fun EmberRecordScreen(
                                     // assets. A licensed one's was looked for
                                     // there too, where none of it is, so
                                     // every NKJV, NIV or NASB reader's record
-                                    // was a column of bare references (A70):
+                                    // was a column of bare references (A74):
                                     // it is this phone's copy of the chapter
                                     // now, or the chapter streamed for this
                                     // screen.
@@ -813,7 +813,7 @@ private fun EmberNoteRow(
  * One highlight on the record: its verse, and where it is.
  *
  * @param text the verse in the version the record reads in, worked out by
- *   the record (A70). In your own version (A60): A42 held a finished book
+ *   the record (A74). In your own version (A60): A42 held a finished book
  *   to the room's because re-wording it would have moved its marks off their
  *   words; a mark follows its original words now, so the keepsake can read
  *   in the version you read. Null while a licensed chapter is on its way,

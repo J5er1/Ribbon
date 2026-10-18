@@ -7,7 +7,7 @@ import RibbonCore
 // alone is in the full ink; the rest are bare, their numbers quiet, as
 // Android has always set them (I44) — paper on the ground is a faint edge
 // on its own. Every number is in lining figures, so the grid sits level
-// (A70). Where the ribbon is, a hairline in the accent at the tile's foot.
+// (A74). Where the ribbon is, a hairline in the accent at the tile's foot.
 // Addresses, never scores: nothing here says how far along anybody is.
 
 struct ChaptersSheet: View {
@@ -87,7 +87,7 @@ private struct ChapterTile: View {
     let ribbon: Bool
     var action: () -> Void
     /// Read so that a type-size change sets the figures again: their face
-    /// is UIKit's, scaled when it is made (A70).
+    /// is UIKit's, scaled when it is made (A74).
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
@@ -106,7 +106,7 @@ private struct ChapterTile: View {
 
     private var face: some View {
         VStack(spacing: 0) {
-            // The figures level and in step (A70); the chapter you are in
+            // The figures level and in step (A74); the chapter you are in
             // in the full ink and the rest quiet, so where you are is said
             // twice, by the number as well as by its tile (I44).
             Text(String(number))

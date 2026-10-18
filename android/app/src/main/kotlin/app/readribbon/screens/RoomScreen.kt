@@ -73,6 +73,7 @@ import app.readribbon.core.NoteKind
 import app.readribbon.core.Reading
 import app.readribbon.core.Ribbon
 import app.readribbon.core.Room
+import app.readribbon.core.Seating
 import app.readribbon.core.TranslationID
 import app.readribbon.core.VerseAddress
 import app.readribbon.design.Air
@@ -751,7 +752,7 @@ private fun Hearth(
             // for fixed that, and it is the better picture anyway: a warm
             // object in a dark recess, in a room the wallpaper may have
             // painted any colour at all. The throw dies inside its own
-            // canvas now (A70), so the well has no edge left to hide; it
+            // canvas now (A74), so the well has no edge left to hide; it
             // stays for the picture.
             // The well's own padding belongs to what stands in it rather
             // than to the recess, so that on a lit hearth every pixel of the
@@ -998,10 +999,10 @@ private fun UnlitHearth(paused: Boolean, modifier: Modifier = Modifier) {
  * when it belonged to somebody who had just arrived.
  *
  * What keeps it from being the avatar row of a social app — which §3 says
- * this product is not: six at most, because that is the room's size; no names
- * under the faces; no overflow marker; nothing counted; membership order, so
- * nobody is ranked; and absence is never dimmed, because a dimmed face is a
- * judgement.
+ * this product is not: one row of six at most, and two rows past that (A70);
+ * no names under the faces; no overflow marker; nothing counted; membership
+ * order, so nobody is ranked; and absence is never dimmed, because a dimmed
+ * face is a judgement.
  */
 @Composable
 private fun Seats(
@@ -1057,75 +1058,101 @@ private fun Seats(
     // invited and nothing pending.
     val seatKept = model.somebodyIsExpected(room)
 
-    // How many squares have to fit: everyone drawn, plus the open seat.
-    val places = minOf(shown.size, Room.capacity) + if (seatKept) 1 else 0
+    // How many squares have to fit: everyone drawn, plus the open seat. Up
+    // to six sit in one row; a room of seven to twelve sits in two
+    // (`Seating`, A70), and the widest row sets the size of every seat.
+    val seated = shown.take(Room.capacity)
+    val places = seated.size + if (seatKept) 1 else 0
+    val rows = Seating.rows(places).ifEmpty { listOf(0) }
+    val widest = rows.max()
 
     BoxWithConstraints(modifier = modifier) {
         // Six 48 dp squares need 288 dp and a 360 dp phone offers 268 inside
-        // the hearth. Rather than wrap a row of faces onto two lines — which
-        // would read as a list rather than as a circle round a fire — the
-        // seats give up a few dp each until they fit, and stop at the 44 dp
-        // minimum a finger is owed. Below even that the row scrolls.
-        val touch = if (places <= 1) {
+        // the hearth. Rather than wrap a row of six faces onto two lines —
+        // which would read as a list rather than as a circle round a fire —
+        // the seats give up a few dp each until they fit, and stop at the
+        // 44 dp minimum a finger is owed. Below even that the row scrolls.
+        // Past six, two rows: a row that scrolled would hide half the room.
+        val touch = if (widest <= 1) {
             SEAT_TOUCH
         } else {
-            val each = (maxWidth - SEAT_GAP * (places - 1)) / places
+            val each = (maxWidth - SEAT_GAP * (widest - 1)) / widest
             each.coerceIn(SEAT_MIN_TOUCH, SEAT_TOUCH)
         }
         val face = SEAT * (touch / SEAT_TOUCH)
+        // Read here: inside the column the box's scope is not the receiver.
+        val across = maxWidth
 
-        Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(
-                if (touch * places + SEAT_GAP * (places - 1) > maxWidth) {
-                    Modifier.horizontalScroll(rememberScrollState())
-                } else {
-                    Modifier
-                }
-            ),
-        horizontalArrangement = Arrangement.spacedBy(SEAT_GAP, Alignment.CenterHorizontally),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        shown.take(Room.capacity).forEach { personID ->
-            key(personID) {
-                // Seeded on whether the row has drawn yet, not on whether this
-                // person is here. They are always here by the time their seat
-                // first composes — `shown` only ever gains ids from `here` —
-                // so seeding from `here` makes the enter transition below
-                // unreachable, and a seat taken by somebody who has just joined
-                // appears without any arrival at all. Seeding from `!seeded`
-                // keeps launch silent and lets a genuine join be seen.
-                val seat = remember { MutableTransitionState(!seeded) }
-                seat.targetState = personID in here
-                AnimatedVisibility(
-                    visibleState = seat,
-                    enter = fadeIn(arrive) + scaleIn(arrive, initialScale = 0.82f),
-                    exit = fadeOut(arrive) + scaleOut(arrive, targetScale = 0.82f),
-                    label = "a-seat",
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(SEAT_GAP),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            var start = 0
+            rows.forEachIndexed { row, count ->
+                val from = minOf(start, seated.size)
+                val until = minOf(start + count, seated.size)
+                start += count
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(
+                            if (touch * count + SEAT_GAP * (count - 1) > across) {
+                                Modifier.horizontalScroll(rememberScrollState())
+                            } else {
+                                Modifier
+                            }
+                        ),
+                    horizontalArrangement = Arrangement.spacedBy(SEAT_GAP, Alignment.CenterHorizontally),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Seat(
-                        model = model,
-                        room = room,
-                        personID = personID,
-                        present = personID in present,
-                        idle = personID in idle,
-                        touch = touch,
-                        face = face,
-                        onClick = { onOpenPerson(personID, room.id) },
-                    )
+                    seated.subList(from, until).forEach { personID ->
+                        key(personID) {
+                            // Seeded on whether the row has drawn yet, not on
+                            // whether this person is here. They are always here
+                            // by the time their seat first composes — `shown`
+                            // only ever gains ids from `here` — so seeding from
+                            // `here` makes the enter transition below
+                            // unreachable, and a seat taken by somebody who has
+                            // just joined appears without any arrival at all.
+                            // Seeding from `!seeded` keeps launch silent and
+                            // lets a genuine join be seen.
+                            val seat = remember { MutableTransitionState(!seeded) }
+                            seat.targetState = personID in here
+                            AnimatedVisibility(
+                                visibleState = seat,
+                                enter = fadeIn(arrive) + scaleIn(arrive, initialScale = 0.82f),
+                                exit = fadeOut(arrive) + scaleOut(arrive, targetScale = 0.82f),
+                                label = "a-seat",
+                            ) {
+                                Seat(
+                                    model = model,
+                                    room = room,
+                                    personID = personID,
+                                    present = personID in present,
+                                    idle = personID in idle,
+                                    touch = touch,
+                                    face = face,
+                                    onClick = { onOpenPerson(personID, room.id) },
+                                )
+                            }
+                        }
+                    }
+
+                    // Always composed in the last row, so it can fade out
+                    // when nobody is expected any more.
+                    if (row == rows.lastIndex) {
+                        AnimatedVisibility(
+                            visible = seatKept,
+                            enter = fadeIn(arrive) + scaleIn(arrive, initialScale = 0.82f),
+                            exit = fadeOut(arrive) + scaleOut(arrive, targetScale = 0.82f),
+                            label = "an-open-seat",
+                        ) {
+                            OpenSeat(touch = touch, face = face, onInvite = onInvite)
+                        }
+                    }
                 }
             }
-        }
-
-        AnimatedVisibility(
-            visible = seatKept,
-            enter = fadeIn(arrive) + scaleIn(arrive, initialScale = 0.82f),
-            exit = fadeOut(arrive) + scaleOut(arrive, targetScale = 0.82f),
-            label = "an-open-seat",
-        ) {
-            OpenSeat(touch = touch, face = face, onInvite = onInvite)
-        }
         }
     }
 }

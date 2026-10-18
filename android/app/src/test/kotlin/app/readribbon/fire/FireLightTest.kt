@@ -21,7 +21,7 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * The fire's light, and an ember's, die to nothing inside their own canvas
- * (A70).
+ * (A74).
  *
  * The warm throw was a round gradient cut by a shorter ellipse and then by
  * the canvas floor, and an ember's bloom was an oval bigger than the

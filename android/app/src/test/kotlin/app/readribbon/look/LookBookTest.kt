@@ -321,6 +321,27 @@ class LookBookTest {
         shoot("room-of-six-360dp") { Room(m, m.state.rooms.first()) }
     }
 
+    /**
+     * A room of twelve on the same phone (A70): two rows of six round the
+     * fire, every face at a finger's width, each in an ink of its own.
+     */
+    @Test @Config(sdk = [34], qualifiers = "w360dp-h800dp-xhdpi")
+    fun roomOfTwelve() {
+        val others = listOf(ruth, ann) + (1..9).map { Person(name = "Person $it") }
+        val everyone = listOf(me) + others
+        val open = reading("ISA", FireScale.large)
+        val state = AppState(
+            me = me,
+            people = everyone.associateBy { it.id },
+            rooms = listOf(room),
+            memberships = everyone.zip(Ink.entries).map { (person, ink) -> membership(person, ink) },
+            readings = listOf(open),
+            currentRoomID = room.id,
+        )
+        val m = model(state)
+        shoot("room-of-twelve-360dp") { Room(m, m.state.rooms.first()) }
+    }
+
     /** A paused room: presence off, waiting rows gone, no new fire. */
     @Test fun roomPaused() {
         val paused = room.copy(isPaused = true)
@@ -2174,7 +2195,7 @@ class LookBookTest {
         val appearance = Appearance(ApplicationProvider.getApplicationContext())
         appearance.wallpaperColour = true
         // The release the page's picture came in, by name: the newest one
-        // has moved on (A70), and its title is not this picture's.
+        // has moved on (A74), and its title is not this picture's.
         val release = app.readribbon.core.WhatsNew.releases.first { it.id == "2026-10-flyleaf" }
             .copy(items = listOf(app.readribbon.core.WhatsNewItem.yourPage))
         var frozen by mutableStateOf(0L)

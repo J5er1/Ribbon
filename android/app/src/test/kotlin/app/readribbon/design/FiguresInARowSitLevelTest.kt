@@ -7,7 +7,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * Figures that stand in a row sit level (A70).
+ * Figures that stand in a row sit level (A74).
  *
  * Alegreya Sans sets old-style figures unless it is asked for others, and a
  * grid of chapters in them rises and falls: 3, 4, 5, 7 and 9 hang below the
