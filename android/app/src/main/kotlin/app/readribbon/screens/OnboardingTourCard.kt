@@ -291,13 +291,13 @@ private fun NotesGraphic() {
  */
 @Composable
 private fun FireGraphic() {
-    // In a well, for the reason the room's fire is in one: the fire draws
-    // its ambient throw across the whole of its canvas and then clips it at
-    // the edge, which on bare ground is a plainly visible rectangle of
-    // slightly-warmer dark. The recess owns that edge, so there is nothing
-    // to see but the glow inside it — and it is the same hearth the room
-    // will hand them in about four taps, which is the better introduction
-    // anyway.
+    // In a well, for the reason the room's fire is in one: the fire drew
+    // its ambient throw across the whole of its canvas and then clipped it
+    // at the edge, which on bare ground was a plainly visible rectangle of
+    // slightly-warmer dark, and the recess owned that edge. The throw dies
+    // inside its canvas now (A70), and the well stays: it is the same hearth
+    // the room will hand them in about four taps, which is the better
+    // introduction anyway.
     Box(
         modifier = Modifier
             .fillMaxWidth()

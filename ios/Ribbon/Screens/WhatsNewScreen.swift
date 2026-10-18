@@ -95,6 +95,9 @@ struct WhatsNewScreen: View {
     /// bounce past the top is not somebody asking to go.
     @State private var fingerDown = false
     @State private var leaving = false
+    /// There is more of the page below what can be seen, so its foot goes
+    /// into the ground rather than stopping at the way out (I44).
+    @State private var moreBelow = false
     /// Under VoiceOver the screen hands the listener its heading first.
     @AccessibilityFocusState private var headingFocused: Bool
 
@@ -104,6 +107,10 @@ struct WhatsNewScreen: View {
     /// How far past the top the page has to be pulled to leave: the same
     /// pull that closes the book (S02).
     private static let pullToLeave: CGFloat = 90
+    /// How deep the fade is where the scroll meets the way out: Android's
+    /// 28, and the page's own bottom margin, so that at the very end, where
+    /// it goes, it was lying over nothing but the margin.
+    private static let scrollFade: CGFloat = 28
 
     var body: some View {
         VStack(spacing: 0) {
@@ -139,6 +146,27 @@ struct WhatsNewScreen: View {
             }
             .onScrollPhaseChange { _, phase in
                 fingerDown = phase == .interacting || phase == .tracking
+            }
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                geometry.contentOffset.y + geometry.containerSize.height
+                    < geometry.contentSize.height + geometry.contentInsets.bottom - 1
+            } action: { _, more in
+                moreBelow = more
+            }
+            // While there is more below, the words go *into* the ground
+            // above the way out rather than being cut off at it, as they
+            // do on Android (I44) — a hard edge across a line of type reads
+            // as a layout that ran out of room, not as more to come.
+            .overlay(alignment: .bottom) {
+                if moreBelow {
+                    LinearGradient(
+                        colors: [Palette.ground.opacity(0), Palette.ground],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                    .frame(height: Self.scrollFade)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                }
             }
 
             // Pinned at the foot, outside the scroll, so it is never
@@ -244,6 +272,10 @@ private struct WhatsNewItemView: View {
         case .typeface: TypefaceVignette(startsAfter: startsAfter)
         case .notificationsByName: NotificationsByNameVignette(startsAfter: startsAfter)
         case .quietHoursNight: QuietHoursNightVignette(startsAfter: startsAfter)
+        case .softLight: SoftLightVignette(startsAfter: startsAfter)
+        case .quotedMarks: QuotedMarksVignette(startsAfter: startsAfter)
+        case .numbersStay: NumbersStayVignette(startsAfter: startsAfter)
+        case .wavesFill: WavesFillVignette(startsAfter: startsAfter)
         }
     }
 
@@ -264,6 +296,10 @@ private struct WhatsNewItemView: View {
         case .typeface: return Copy.whatsNewTypefaceTitle
         case .notificationsByName: return Copy.whatsNewNotificationsTitle
         case .quietHoursNight: return Copy.whatsNewQuietHoursTitle
+        case .softLight: return Copy.whatsNewSoftLightTitle
+        case .quotedMarks: return Copy.whatsNewQuotedMarksTitle
+        case .numbersStay: return Copy.whatsNewNumbersStayTitle
+        case .wavesFill: return Copy.whatsNewWavesFillTitle
         }
     }
 
@@ -284,6 +320,10 @@ private struct WhatsNewItemView: View {
         case .typeface: return Copy.whatsNewTypefaceBody
         case .notificationsByName: return Copy.whatsNewNotificationsBody
         case .quietHoursNight: return Copy.whatsNewQuietHoursBody
+        case .softLight: return Copy.whatsNewSoftLightBody
+        case .quotedMarks: return Copy.whatsNewQuotedMarksBody
+        case .numbersStay: return Copy.whatsNewNumbersStayBody
+        case .wavesFill: return Copy.whatsNewWavesFillBody
         }
     }
 }
@@ -373,9 +413,10 @@ private enum Vignette {
     // MARK: Selecting, the way your phone does
 
     /// John 1:1 as it opens, after its number the way the page sets one:
-    /// small caps, raised, at 45% (ChapterTextView), with a thin space.
+    /// small caps, raised, at 45% (ChapterTextView), with a thin space and
+    /// the page's word joiner (A70).
     static var beginning: Text {
-        let number = Text(verbatim: "1\u{2009}")
+        let number = Text(verbatim: "1\u{2009}\u{2060}")
             .font(RibbonType.smallCaps(textSize * 0.62))
             .foregroundStyle(Palette.text.opacity(0.45))
             .baselineOffset(textSize * 0.3)
@@ -605,7 +646,7 @@ private enum Vignette {
                 case .words(let words):
                     text = Text("\(text)\(Text(verbatim: words).font(face))")
                 case .number(let verse):
-                    let number = Text(verbatim: "\(verse)\u{2009}")
+                    let number = Text(verbatim: "\(verse)\u{2009}\u{2060}")
                         .font(RibbonType.smallCaps(pageSize * 0.62))
                         .foregroundStyle(Palette.text.opacity(numbers))
                         .baselineOffset(pageSize * 0.3)
@@ -647,6 +688,92 @@ private enum Vignette {
     static let bandHeight: CGFloat = 28
     static let bandShape = TileShape(8)
     static let nightHandle = CGSize(width: 4, height: 18)
+
+    // MARK: The light falls softly
+
+    /// The ember a little larger than You draws a long book's, so that the
+    /// light it throws has room to be seen going to nothing — across the
+    /// whole of its canvas, and nowhere reaching an edge (A70).
+    static let softEmber: CGFloat = 1.2
+
+    /// The husk as `EmberView.draw` sets it — centred, a little above the
+    /// middle of its canvas, 0.32 of the shorter side each way across and
+    /// 0.82 of that up and down — so that the ember can stay lit while only
+    /// the light it throws comes up. If the ember's hand moves its husk,
+    /// this moves with it.
+    static func emberHusk(in size: CGSize) -> CGRect {
+        let r = min(size.width, size.height) * 0.32
+        let cx = size.width / 2
+        let cy = size.height * 0.52
+        return CGRect(x: cx - r, y: cy - r * 0.82, width: r * 2, height: r * 1.64)
+    }
+
+    // MARK: Your marks, quoted in your version
+
+    /// John 1:5 as the Berean Standard has it, and the reference a finished
+    /// book's record sets under it in small caps (`QuotedHighlight`).
+    static let lightShines = "The Light shines in the darkness, and the darkness has not overcome it."
+    static let lightShinesAt = "John 1:5"
+    /// The record's quote as it sets one: Literata at 15, ten points in
+    /// from the edge of its wash, and the wash's corner.
+    static let quoteSize: CGFloat = 15
+    static let quoteInset: CGFloat = 10
+    static let quoteCorner: CGFloat = 6
+
+    // MARK: A verse number stays with its verse
+
+    /// Larger than the small page's 13, because five lines are all this
+    /// page holds; small enough that its longest — the line with the number
+    /// and its word still up at the end of it — fits the narrowest well.
+    static let flowSize: CGFloat = 15
+
+    /// John 1:4–5 as the Berean Standard has it, set as the page sets it
+    /// now, in a measure narrow enough that verse 5's number would fall at
+    /// the end of the second line: the number goes down with "The", its thin
+    /// space and its word joiner between them (A70), and begins the third.
+    /// Set by hand, line by line, so that the measure is the picture's and
+    /// not the phone's. The number as the page sets one — small caps at 0.62
+    /// of the size, raised by 0.3 of it, at the page's quiet 45%.
+    static var lightOfMen: Text {
+        let number = Text(verbatim: "5\u{2009}\u{2060}")
+            .font(RibbonType.smallCaps(flowSize * 0.62))
+            .foregroundStyle(Palette.text.opacity(PageType.quietVerseNumberAlpha))
+            .baselineOffset(flowSize * 0.3)
+            .customAttribute(VignetteWords(role: .number))
+        return Text("""
+            In Him was life, and that
+            life was the light of \(words("men.", .lineEnd))
+            \(number)\(words("The", .firstWord)) \(words("Light shines in the", .makesRoom))
+            darkness, and the darkness
+            has not overcome it.
+            """)
+    }
+    /// How far the number and its word go down as they leave the end of the
+    /// line, and come down as they arrive at the start of the next: down
+    /// both times, one way, as one thing.
+    static let drop: CGFloat = 5
+
+    // MARK: A voice note's wave, the width of the note
+
+    /// When Ruth spoke, as a note's head says it (`RibbonClock.phrase`).
+    static let spokenWhen = "this morning"
+    /// A short note's peaks — a sentence's worth, rising and falling — few
+    /// enough that, a fixed step apart from the leading edge as they were,
+    /// they reached a fifth of the way across the note and stopped.
+    static let shortNote: [Float] = [
+        0.25, 0.55, 0.8, 0.6, 0.35, 0.7, 0.95, 0.75,
+        0.5, 0.3, 0.6, 0.85, 0.65, 0.4, 0.5, 0.2,
+    ]
+    /// The bars as `WaveformView` draws them: two points wide, at least
+    /// three high, thirty for a full peak, and the step they used to stand
+    /// at from the leading edge — the bar and 1.5 between (A70).
+    static let barWidth: CGFloat = 2
+    static let barGap: CGFloat = 1.5
+    static let barReach: CGFloat = 30
+    /// `WaveformView`'s height, and how far past either end of it the
+    /// picture draws, for the fingertip at the wave's very ends.
+    static let waveHeight: CGFloat = 44
+    static let waveReach: CGFloat = 14
 
     // The page's wash (ChapterTextView's layout manager), in the page's
     // numbers: a band at the height of the letters, bled a little, round
@@ -712,6 +839,13 @@ private struct VignetteWords: TextAttribute {
         case step(Int)
         /// A verse's number, which a tap takes the verse by.
         case number
+        /// A verse's first word, which its number keeps to (A70).
+        case firstWord
+        /// The last word of a full line, after which a number used to stand.
+        case lineEnd
+        /// The words that move along their line to make room for what
+        /// comes down to the start of it.
+        case makesRoom
     }
     var role: Role
 }
@@ -1830,32 +1964,67 @@ private struct YourShelfVignette: View {
 }
 
 /// An ember drawn by the ember's own hand (`EmberView.draw`), in
-/// `EmberView`'s proportions at the size a picture of a shelf has room
-/// for. It breathes as an ember on the shelf does, each at its own time,
-/// and holds one instant under reduce motion.
-private struct VignetteEmber: View {
+/// `EmberView`'s proportions at the size a picture has room for — a shelf's
+/// a little over half You's, the light's a little more than You's. It
+/// breathes as an ember on the shelf does, each at its own time, and holds
+/// one instant under reduce motion.
+private struct VignetteEmber: View, Animatable {
     var scale: FireScale
     var seed: Double
+    /// Its size against the one You draws it at.
+    var shrink: CGFloat = Vignette.emberShrink
+    /// How far the light it throws has come up around it, 0 to 1: all of
+    /// it, as on the shelf, unless a picture is bringing it up (A70).
+    var lit: Double = 1
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    var animatableData: Double {
+        get { lit }
+        set { lit = newValue }
+    }
+
     var body: some View {
-        let size = CGFloat(scale.frameHeight) * 0.30 * Vignette.emberShrink
+        let size = CGFloat(scale.frameHeight) * 0.30 * shrink
         Group {
             if reduceMotion {
                 Canvas { context, canvasSize in
-                    EmberView.draw(in: &context, size: canvasSize, time: seed)
+                    Self.draw(in: &context, size: canvasSize, time: seed, lit: lit)
                 }
             } else {
                 TimelineView(.animation(minimumInterval: 1.0 / 12.0)) { timeline in
                     Canvas { context, canvasSize in
-                        EmberView.draw(
+                        Self.draw(
                             in: &context, size: canvasSize,
-                            time: timeline.date.timeIntervalSinceReferenceDate * 0.25 + seed)
+                            time: timeline.date.timeIntervalSinceReferenceDate * 0.25 + seed,
+                            lit: lit)
                     }
                 }
             }
         }
         .frame(width: size * 1.7, height: size * 1.35)
+    }
+
+    /// The ember's own drawing, whole when it is lit. On the way, twice:
+    /// once kept to the husk, so the ember itself is all there from the
+    /// first frame, and once everywhere else at `lit`, so what comes up is
+    /// the light it throws and nothing of the ember — one drawing of each
+    /// place, never two laid over each other.
+    static func draw(in context: inout GraphicsContext, size: CGSize, time: Double, lit: Double) {
+        guard lit < 1 else {
+            EmberView.draw(in: &context, size: size, time: time)
+            return
+        }
+        let husk = Vignette.emberHusk(in: size)
+        var ember = context
+        ember.clip(to: Path(ellipseIn: husk))
+        EmberView.draw(in: &ember, size: size, time: time)
+        guard lit > 0 else { return }
+        var around = Path(CGRect(origin: .zero, size: size))
+        around.addEllipse(in: husk)
+        var light = context
+        light.clip(to: around, style: FillStyle(eoFill: true))
+        light.opacity = lit
+        EmberView.draw(in: &light, size: size, time: time)
     }
 }
 
@@ -2116,10 +2285,10 @@ private struct NotificationsByNameVignette: View {
 }
 
 /// The row's switch at the picture's size, drawn as the app draws its own
-/// (`RibbonSwitch`, I41): a well, the accent filling it as it turns on,
-/// and a paper knob crossing to the trailing end and taking the ground's
-/// colour. One value, `on`, from 0 to 1, so the whole of it moves on the
-/// picture's beat and nothing else's.
+/// (`RibbonSwitch`, I41, I44): a well, the accent filling it as it turns
+/// on, and a knob in the muted colour crossing to the trailing end and
+/// taking the ground's colour. One value, `on`, from 0 to 1, so the whole
+/// of it moves on the picture's beat and nothing else's.
 private struct VignetteSwitch: View {
     var on: Double
 
@@ -2135,9 +2304,8 @@ private struct VignetteSwitch: View {
                 .frame(width: Vignette.switchWidth, height: Vignette.switchHeight)
                 .opacity(on)
             Circle()
-                .fill(Palette.surface)
-                .overlay { Circle().strokeBorder(Palette.rule, lineWidth: 1) }
-                .overlay { Circle().fill(Palette.ground).opacity(on) }
+                .fill(Palette.ground)
+                .overlay { Circle().fill(Palette.muted).opacity(1 - on) }
                 .frame(width: Vignette.switchKnob, height: Vignette.switchKnob)
                 .offset(x: near + (far - near) * CGFloat(on))
         }
@@ -2353,6 +2521,395 @@ private struct TypefaceVignette: View {
             withAnimation(RibbonMotion.settle) { chosen = 0 }
             guard await beat(RibbonMotion.settleDuration + Vignette.breath) else { return }
         }
+    }
+}
+
+// MARK: 16. The light falls softly
+
+/// One ember on the well's floor, drawn by the ember's own hand, larger
+/// than the shelf's. The ember is there from the first frame; the light it
+/// throws comes up around it out of the dark, slowly, the way light does,
+/// and is left to breathe, then goes back down the same way. At no moment
+/// does any of it have an edge: the light ends where it has gone to
+/// nothing, inside the ember's own canvas (A70).
+private struct SoftLightVignette: View {
+    let startsAfter: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// How far the light has come up around the ember.
+    @State private var lit = 0.0
+
+    var body: some View {
+        VignetteEmber(scale: .large, seed: 2.6, shrink: Vignette.softEmber, lit: lit)
+            .frame(maxWidth: .infinity)
+            .task(id: reduceMotion) { await play() }
+    }
+
+    private func play() async {
+        guard !reduceMotion else {
+            // How it ends: lit, and still.
+            lit = 1
+            return
+        }
+        lit = 0
+        guard await beat(startsAfter) else { return }
+        while true {
+            // Up out of the dark on the long curve — the one the fire goes
+            // down to an ember on — because light that comes up all at once
+            // has an edge in time, if not in space.
+            withAnimation(RibbonMotion.become) { lit = 1 }
+            guard await beat(RibbonMotion.becomeDuration) else { return }
+            // Left lit, breathing as the shelf's embers do, for the long
+            // breath every picture takes — two seconds, as Android's is.
+            guard await beat(Vignette.rest + Vignette.breath) else { return }
+            withAnimation(RibbonMotion.become) { lit = 0 }
+            guard await beat(RibbonMotion.becomeDuration + Vignette.breath) else { return }
+        }
+    }
+}
+
+// MARK: 17. Your marks, quoted in your version
+
+/// A finished book's record of one mark, as `QuotedHighlight` draws it:
+/// in the quote's place at first, the quiet line that says its chapter is
+/// not on this phone yet; then the chapter comes, and the verse is quoted
+/// in Literata on its wash, the line giving way to it on `arrive`, the way
+/// the record brings it in. Under it all along, the reference in small
+/// caps. After a while the row fades, and begins again.
+private struct QuotedMarksVignette: View {
+    let startsAfter: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// The chapter has come, and the verse is quoted in its place.
+    @State private var quoted = false
+    /// The row as a whole, which fades at the end rather than the quote
+    /// going back to the line it replaced.
+    @State private var shown = 1.0
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            // The two in one place, so that the line and the quote cross
+            // in it, and the reference under them goes down as the quote
+            // takes its room.
+            ZStack(alignment: .topLeading) {
+                if quoted {
+                    Text(verbatim: Vignette.lightShines)
+                        .font(RibbonType.scripture(Vignette.quoteSize))
+                        .foregroundStyle(Palette.text)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(Vignette.quoteInset)
+                        .background(
+                            Ink.ochre.color.opacity(Palette.highlightWash),
+                            in: RoundedRectangle(cornerRadius: Vignette.quoteCorner))
+                        .transition(.opacity)
+                } else {
+                    Text(Copy.originalNotOnThisPhone)
+                        .font(RibbonType.ui(14))
+                        .foregroundStyle(Palette.muted)
+                        .lineLimit(1)
+                        .transition(.opacity)
+                }
+            }
+            SmallCaps(Vignette.lightShinesAt, size: 11)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .opacity(shown)
+        .padding(.horizontal, 22)
+        .task(id: reduceMotion) { await play() }
+    }
+
+    private func play() async {
+        shown = 1
+        guard !reduceMotion else {
+            // How it ends: the verse quoted, in your version.
+            quoted = true
+            return
+        }
+        quoted = false
+        guard await beat(startsAfter) else { return }
+        while true {
+            // The line that says the chapter is not here, read before it
+            // goes.
+            guard await beat(Vignette.rest) else { return }
+            withAnimation(RibbonMotion.arrive) { quoted = true }
+            guard await beat(RibbonMotion.arriveDuration + Vignette.rest) else { return }
+            withAnimation(RibbonMotion.settle) { shown = 0 }
+            guard await beat(RibbonMotion.settleDuration) else { return }
+            quoted = false
+            guard await beat(Vignette.breath) else { return }
+            withAnimation(RibbonMotion.arrive) { shown = 1 }
+            guard await beat(RibbonMotion.arriveDuration) else { return }
+        }
+    }
+}
+
+// MARK: 18. A verse number stays with its verse
+
+/// A small page of John 1:4–5, five lines in a narrow measure. Verse 5's
+/// number and its first word stand up at the end of the second line, past
+/// where the line is full; they go down together, leaving the line's end
+/// and arriving at the start of the next, and the words there move along
+/// to make room for them. Nothing else on the page moves. Held, then the
+/// page fades and is set again as it was.
+private struct NumbersStayVignette: View {
+    let startsAfter: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// How far the number and its word have gone down, 0 to 1.
+    @State private var settled = 0.0
+    /// The page as a whole, which fades at the end rather than the number
+    /// going back up — up is the one way it never goes.
+    @State private var shown = 1.0
+
+    var body: some View {
+        Vignette.lightOfMen
+            .font(RibbonType.scripture(Vignette.flowSize))
+            .foregroundStyle(Palette.text)
+            .lineLimit(5)
+            // The measure is the lines' own, as they are set: never wrapped
+            // again by the well.
+            .fixedSize()
+            .textRenderer(NumberKeepsItsVerse(settled: settled))
+            .opacity(shown)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 20)
+            .task(id: reduceMotion) { await play() }
+    }
+
+    private func play() async {
+        shown = 1
+        guard !reduceMotion else {
+            // How it ends: the lines as they are set now, the number
+            // beginning the line with its word.
+            settled = 1
+            return
+        }
+        settled = 0
+        guard await beat(startsAfter) else { return }
+        while true {
+            // The full line, looked at before anything moves.
+            guard await beat(Vignette.rest) else { return }
+            withAnimation(RibbonMotion.open) { settled = 1 }
+            guard await beat(RibbonMotion.openDuration + Vignette.rest) else { return }
+            withAnimation(RibbonMotion.settle) { shown = 0 }
+            guard await beat(RibbonMotion.settleDuration) else { return }
+            settled = 0
+            guard await beat(Vignette.breath) else { return }
+            withAnimation(RibbonMotion.arrive) { shown = 1 }
+            guard await beat(RibbonMotion.arriveDuration) else { return }
+        }
+    }
+}
+
+/// Draws the page as it is set now and, at `settled` 0, as it would have
+/// been with the number kept up on the full line: the number and its word
+/// just past that line's last word, on its baseline, and the words after
+/// them back at the start of their own line. On the way, the two leave the
+/// line's end going down and fade, and arrive at the next line's start
+/// coming down — a cross between two places rather than a journey through
+/// the lines between, so no word is ever drawn over another — while the
+/// words after them move along. Every place is the layout's own.
+private struct NumberKeepsItsVerse: TextRenderer, Animatable {
+    var settled: Double
+
+    var animatableData: Double {
+        get { settled }
+        set { settled = newValue }
+    }
+
+    /// Up at the end of the full line, the number and its word stand past
+    /// the measure, and a little below it as they leave.
+    var displayPadding: EdgeInsets {
+        EdgeInsets(top: 8, leading: 4, bottom: 8, trailing: 40)
+    }
+
+    func draw(layout: Text.Layout, in context: inout GraphicsContext) {
+        guard let number = layout.boxes(of: .number).first,
+              let word = layout.boxes(of: .firstWord).first,
+              let lineEnd = layout.boxes(of: .lineEnd).first,
+              let room = layout.boxes(of: .makesRoom).first
+        else {
+            for line in layout {
+                context.draw(line)
+            }
+            return
+        }
+        // A space between words, as this layout sets one: the one after
+        // the verse's first word.
+        let space = room.rect.minX - word.rect.maxX
+        // Up at the end of the full line: a space after its last word, on
+        // the words' baseline — never the number's, which is raised.
+        let up = CGSize(
+            width: lineEnd.rect.maxX + space - number.rect.minX,
+            height: lineEnd.baseline - word.baseline)
+        // The words after them, before they have moved along: where the
+        // number begins their line now.
+        let along = room.rect.minX - number.rect.minX
+        let gone = CGFloat(settled)
+
+        for line in layout {
+            for run in line {
+                switch run[VignetteWords.self]?.role {
+                case .number?, .firstWord?:
+                    if settled < 1 {
+                        var leaving = context
+                        leaving.opacity = 1 - settled
+                        leaving.translateBy(x: up.width, y: up.height + Vignette.drop * gone)
+                        leaving.draw(run)
+                    }
+                    if settled > 0 {
+                        var arriving = context
+                        arriving.opacity = settled
+                        arriving.translateBy(x: 0, y: -Vignette.drop * (1 - gone))
+                        arriving.draw(run)
+                    }
+                case .makesRoom?:
+                    var moving = context
+                    moving.translateBy(x: -along * (1 - gone), y: 0)
+                    moving.draw(run)
+                default:
+                    context.draw(run)
+                }
+            }
+        }
+    }
+}
+
+// MARK: 19. A voice note's wave, the width of the note
+
+/// Ruth's voice note on its paper, her face and when she spoke over its
+/// wave. A short note's bars stand bunched at the leading edge, a fixed
+/// step apart, as they did; they spread until each stands in the middle of
+/// its own share of the whole width (A70). Then a fingertip settles on the
+/// wave's start and drags along it, and the ink fills the bars up to the
+/// one under it, as the note's own scrub does — the share a finger is in
+/// is the bar it is on. It lifts; after a while the wave fades, and stands
+/// bunched again.
+private struct WavesFillVignette: View {
+    let startsAfter: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// How far the bars have gone from bunched to spread across the note.
+    @State private var spread = 0.0
+    /// How far along the drag is, and so how far the ink has filled.
+    @State private var played = 0.0
+    @State private var press = 0.0
+    /// The wave as a whole, which fades at the end rather than unfilling.
+    @State private var shown = 1.0
+
+    var body: some View {
+        // The note's own head (`NoteCard`): the face, and when, in small
+        // caps.
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Vignette.readerFace(22)
+                SmallCaps(Vignette.spokenWhen, size: 12)
+            }
+            VignetteWave(
+                peaks: Vignette.shortNote, ink: .teal,
+                spread: spread, progress: played, press: press)
+                .frame(height: Vignette.waveHeight)
+                .opacity(shown)
+        }
+        .padding(.horizontal, Vignette.rowInset)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .paper(.row)
+        .padding(.horizontal, 22)
+        .task(id: reduceMotion) { await play() }
+    }
+
+    private func play() async {
+        shown = 1
+        press = 0
+        guard !reduceMotion else {
+            // How it stands: spread across the note, and still.
+            spread = 1
+            played = 0
+            return
+        }
+        spread = 0
+        played = 0
+        guard await beat(startsAfter) else { return }
+        while true {
+            // The note as it was, looked at: a short wave, stopping.
+            guard await beat(Vignette.rest) else { return }
+            withAnimation(RibbonMotion.open) { spread = 1 }
+            // The note as it stands now, across its whole width, looked at
+            // before a finger comes: the frame reduce motion holds, and
+            // Android's long breath.
+            guard await beat(RibbonMotion.openDuration + Vignette.rest) else { return }
+            withAnimation(RibbonMotion.arrive) { press = 1 }
+            guard await beat(RibbonMotion.arriveDuration) else { return }
+            // Dragged along on the long curve, slowly enough to watch the
+            // ink keep to the finger, bar by bar.
+            withAnimation(RibbonMotion.become) { played = 1 }
+            guard await beat(RibbonMotion.becomeDuration) else { return }
+            withAnimation(RibbonMotion.settle) { press = 0 }
+            guard await beat(RibbonMotion.settleDuration + Vignette.rest) else { return }
+            withAnimation(RibbonMotion.settle) { shown = 0 }
+            guard await beat(RibbonMotion.settleDuration) else { return }
+            spread = 0
+            played = 0
+            guard await beat(Vignette.breath) else { return }
+            withAnimation(RibbonMotion.arrive) { shown = 1 }
+            guard await beat(RibbonMotion.arriveDuration) else { return }
+        }
+    }
+}
+
+/// The note's wave as `WaveformView` draws it — its bars, its ink, its rule
+/// for which are played — from where its bars used to stand to where they
+/// stand now, with a fingertip at the point the drag has reached. Drawn
+/// rather than borrowed because the real one stands only where it stands
+/// now, and answers a finger; this one answers nothing. It reaches past
+/// the wave's ends by `waveReach`, so the fingertip is whole at either end.
+private struct VignetteWave: View, Animatable {
+    var peaks: [Float]
+    var ink: Ink
+    var spread: Double
+    var progress: Double
+    var press: Double
+
+    var animatableData: AnimatablePair<Double, AnimatablePair<Double, Double>> {
+        get { AnimatablePair(spread, AnimatablePair(progress, press)) }
+        set {
+            spread = newValue.first
+            progress = newValue.second.first
+            press = newValue.second.second
+        }
+    }
+
+    var body: some View {
+        Canvas { context, size in
+            let reach = Vignette.waveReach
+            let width = max(0, size.width - reach * 2)
+            let count = max(1, peaks.count)
+            let share = width / CGFloat(count)
+            for (index, peak) in peaks.enumerated() {
+                // Where it stood, a fixed step from the leading edge, and
+                // where it stands, in the middle of its share.
+                let bunched = CGFloat(index) * (Vignette.barWidth + Vignette.barGap) + Vignette.barWidth / 2
+                let even = share * (CGFloat(index) + 0.5)
+                let x = reach + bunched + (even - bunched) * CGFloat(spread)
+                let height = max(3, CGFloat(peak) * Vignette.barReach)
+                // `WaveformView`'s own rule, so the bar under the finger is
+                // the last one filled.
+                let isPlayed = Double(index) / Double(count) <= progress
+                let bar = CGRect(
+                    x: x - Vignette.barWidth / 2, y: (size.height - height) / 2,
+                    width: Vignette.barWidth, height: height)
+                context.fill(
+                    Path(roundedRect: bar, cornerRadius: Vignette.barWidth / 2),
+                    with: .color(ink.color.opacity(isPlayed ? 1 : 0.35)))
+            }
+            let at = reach + width * CGFloat(progress)
+            Vignette.fingertip(
+                on: CGRect(x: at, y: size.height / 2, width: 0, height: 0),
+                press: press, radius: 12, in: &context)
+        }
+        .padding(.horizontal, -Vignette.waveReach)
     }
 }
 

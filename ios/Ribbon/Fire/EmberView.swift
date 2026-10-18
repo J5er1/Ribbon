@@ -48,18 +48,37 @@ struct EmberView: View {
         let pulse = 0.85 + 0.1 * FirePainter.breath(time, 0.37)
 
         // The bloom beneath — the light that implies the shelf.
-        let bloomRect = CGRect(
-            x: cx - r * 2.4, y: size.height * 0.66,
-            width: r * 4.8, height: r * 1.5)
-        context.fill(
-            Path(ellipseIn: bloomRect),
-            with: .radialGradient(
-                Gradient(colors: [
-                    Palette.flameDeep.opacity(0.20 * pulse),
-                    .clear,
-                ]),
-                center: CGPoint(x: cx, y: size.height * 0.8),
-                startRadius: 0, endRadius: r * 2.4))
+        //
+        // A pool, not a slab (A70). The bloom was an ellipse wider and deeper
+        // than the ember's own canvas, filled with a round gradient still
+        // well on at the ellipse's rim and at the canvas's sides and floor;
+        // the canvas cut it there, so every ember stood on a lit rectangle,
+        // and two large ones in a shelf row were two rectangles with a dark
+        // seam between them — a drawn shelf, the one thing this light is
+        // here to make unnecessary. Now the gradient is squashed into an
+        // ellipse that fits: as wide as the canvas, and as deep below the
+        // light's centre as the canvas goes, the same above. Its own clear is
+        // the rim, which meets the frame only where the light has gone, so
+        // nothing lit touches an edge and the seams go with it. The centre is
+        // where it was, and as warm.
+        let bloomCentre = CGPoint(x: cx, y: size.height * 0.8)
+        let across = min(r * 2.4, cx)
+        let deep = size.height - bloomCentre.y
+        if across > 0 {
+            // A copy carries the squash and leaves the context as it was.
+            var squashed = context
+            squashed.translateBy(x: bloomCentre.x, y: bloomCentre.y)
+            squashed.scaleBy(x: 1, y: deep / across)
+            squashed.fill(
+                Path(CGRect(x: -across, y: -across, width: across * 2, height: across * 2)),
+                with: .radialGradient(
+                    Gradient(colors: [
+                        Palette.flameDeep.opacity(0.20 * pulse),
+                        .clear,
+                    ]),
+                    center: .zero,
+                    startRadius: 0, endRadius: across))
+        }
 
         // The ember itself: a warm heart in a dark husk.
         let husk = CGRect(x: cx - r, y: cy - r * 0.82, width: r * 2, height: r * 1.64)

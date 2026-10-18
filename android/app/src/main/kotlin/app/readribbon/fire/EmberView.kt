@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
@@ -140,19 +141,40 @@ fun DrawScope.drawEmber(time: Double) {
     val pulse = 0.85 + 0.1 * FirePainter.breath(time, 0.37)
 
     // The bloom beneath — the light that implies the shelf.
-    val bloomRadius = r * 2.4f
-    drawOval(
-        brush = Brush.radialGradient(
-            colors = listOf(
-                Palette.flameDeep.copy(alpha = (0.20 * pulse).toFloat()),
-                Color.Transparent,
-            ),
-            center = Offset(cx, height * 0.8f),
-            radius = bloomRadius,
-        ),
-        topLeft = Offset(cx - bloomRadius, height * 0.66f),
-        size = Size(width = r * 4.8f, height = r * 1.5f),
-    )
+    //
+    // A pool, not a slab (A70). The bloom was an oval wider and deeper than
+    // the ember's own box, filled with a round gradient still well on at the
+    // oval's rim. A Compose Canvas does not clip, so here it ran on past the
+    // box, into the next ember's cell and behind the book's name, and ended
+    // in a hard oval; on iOS the canvas cut it into a lit rectangle, and two
+    // large embers in a shelf row were two rectangles with a dark seam
+    // between them. A drawn shelf either way — the one thing this light is
+    // here to make unnecessary. Now the gradient is squashed into an
+    // ellipse that fits: as wide as the box, and as deep below the light's
+    // centre as the box goes, the same above. Its own clear is the rim,
+    // which meets the box only where the light has gone, so nothing lit
+    // reaches an edge or passes one. The centre is where it was, and as warm.
+    // The squash is a [scale] about the centre, lasting only for its block —
+    // the Swift's translated, scaled copy of its context.
+    val bloomCentre = Offset(cx, height * 0.8f)
+    val across = min(r * 2.4f, cx)
+    val deep = height - bloomCentre.y
+    if (across > 0f) {
+        scale(scaleX = 1f, scaleY = deep / across, pivot = bloomCentre) {
+            drawRect(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        Palette.flameDeep.copy(alpha = (0.20 * pulse).toFloat()),
+                        Color.Transparent,
+                    ),
+                    center = bloomCentre,
+                    radius = across,
+                ),
+                topLeft = Offset(bloomCentre.x - across, bloomCentre.y - across),
+                size = Size(across * 2f, across * 2f),
+            )
+        }
+    }
 
     // The ember itself: a warm heart in a dark husk.
     //

@@ -566,6 +566,91 @@ final class PageTextView: UITextView {
             tap.isEnabled = false
         }
     }
+
+    // MARK: The selection, on its words (I44)
+
+    // The page's leading is its line-height multiple, and TextKit 1 puts all
+    // of it above a line's letters: the baseline sits at the foot of the
+    // line box. The system draws a selection over the whole box and hangs
+    // the start handle from its top, so on the page's generous leading the
+    // highlight rose into the gap above the words and the start handle's
+    // knob sat on the line before. Each rect keeps its full height — a
+    // selection is a line box with the words in the middle of it, never a
+    // wash's band on the baseline (A41b) — and moves down by half the extra
+    // leading, which puts the letters in the middle of their line's box,
+    // where Android's proportional line height already puts them. Every
+    // line of a paragraph moves alike, so the system's rects, which run
+    // several whole lines together, stay one shape; the room a paragraph
+    // leaves before itself stays where the system put it, above the
+    // paragraph's first words. The handles and the loupe are placed from
+    // these same rects and the caret's, so they follow.
+
+    override func selectionRects(for range: UITextRange) -> [UITextSelectionRect] {
+        super.selectionRects(for: range).map { selection in
+            let shift = halfTheExtraLeading(at: selection.rect)
+            return shift == 0 ? selection : CentredSelectionRect(selection, down: shift)
+        }
+    }
+
+    override func caretRect(for position: UITextPosition) -> CGRect {
+        let caret = super.caretRect(for: position)
+        return caret.offsetBy(dx: 0, dy: halfTheExtraLeading(at: caret))
+    }
+
+    /// How far a selection's rect or the caret moves down: half of what the
+    /// box of the line in its middle holds above the letters more than below
+    /// them. The box is the line's used rect, without the room a paragraph
+    /// leaves before or after it; the letters are the ascender and descender
+    /// of the tallest face on the line, on its baseline — the face TextKit
+    /// made the line's box from, the words' or a psalm's title's. Never a
+    /// verse's raised number, whose figures TextKit places above the line's
+    /// baseline. Nothing where no line is.
+    private func halfTheExtraLeading(at rect: CGRect) -> CGFloat {
+        guard !rect.isNull, !rect.isInfinite, rect.height > 0, layoutManager.numberOfGlyphs > 0 else { return 0 }
+        let inset = textContainerInset
+        let point = CGPoint(x: rect.midX - inset.left, y: rect.midY - inset.top)
+        let glyph = layoutManager.glyphIndex(for: point, in: textContainer)
+        var lineGlyphs = NSRange()
+        let line = layoutManager.lineFragmentRect(forGlyphAt: glyph, effectiveRange: &lineGlyphs)
+        guard point.y >= line.minY, point.y <= line.maxY else { return 0 }
+        let box = layoutManager.lineFragmentUsedRect(forGlyphAt: glyph, effectiveRange: nil)
+        let characters = layoutManager.characterRange(forGlyphRange: lineGlyphs, actualGlyphRange: nil)
+        var tallest: (font: UIFont, at: Int)?
+        textStorage.enumerateAttribute(.font, in: characters) { value, range, _ in
+            guard let font = value as? UIFont else { return }
+            if tallest.map({ font.lineHeight > $0.font.lineHeight }) ?? true {
+                tallest = (font, range.location)
+            }
+        }
+        guard let tallest else { return 0 }
+        let at = layoutManager.glyphIndexForCharacter(at: tallest.at)
+        let baseline = line.minY + layoutManager.location(forGlyphAt: at).y
+        let above = (baseline - tallest.font.ascender) - box.minY
+        let below = box.maxY - (baseline - tallest.font.descender)
+        let shift = (above - below) / 2
+        return abs(shift) < 0.5 ? 0 : shift
+    }
+}
+
+/// A selection rect the system made, moved down onto its words (I44).
+/// Everything else about it — which end of the selection it holds, which
+/// way its words run — is the system's own.
+private final class CentredSelectionRect: UITextSelectionRect {
+    private let original: UITextSelectionRect
+    private let shift: CGFloat
+
+    init(_ original: UITextSelectionRect, down shift: CGFloat) {
+        self.original = original
+        self.shift = shift
+        super.init()
+    }
+
+    override var rect: CGRect { original.rect.offsetBy(dx: 0, dy: shift) }
+    override var writingDirection: NSWritingDirection { original.writingDirection }
+    override var containsStart: Bool { original.containsStart }
+    override var containsEnd: Bool { original.containsEnd }
+    override var isVertical: Bool { original.isVertical }
+    override var transform: CGAffineTransform { original.transform }
 }
 
 struct ChapterTextView: UIViewRepresentable {
@@ -1128,8 +1213,9 @@ struct ChapterTextView: UIViewRepresentable {
             let reachAcrossLines: CGFloat = 6
             var nearest: (verse: Int, distance: CGFloat)?
             for (verse, range) in page.numbers {
-                // The figures, without the thin space after them.
-                let figures = NSRange(location: range.location, length: max(1, range.length - 1))
+                // The figures, without the thin space and the joiner after
+                // them (A70).
+                let figures = NSRange(location: range.location, length: (String(verse) as NSString).length)
                 let glyphs = view.layoutManager.glyphRange(forCharacterRange: figures, actualCharacterRange: nil)
                 guard glyphs.length > 0 else { continue }
                 let rect = view.layoutManager.boundingRect(forGlyphRange: glyphs, in: view.textContainer)
@@ -1471,8 +1557,17 @@ struct ChapterTextView: UIViewRepresentable {
                 if let verse = span.v, verse != 1 {
                     // The verse number: small caps superscript, ~45%, or
                     // clearer (A68). Where it is set is kept, for a tap on
-                    // it (A62).
-                    let number = "\(verse)\u{2009}"
+                    // it (A62). After it, its thin space and then a word
+                    // joiner (A70), which takes no room and is never a place
+                    // to break: the thin space alone let a line end on the
+                    // number with its verse beginning the next. The line
+                    // breaks at the space before the number instead, which
+                    // is the verse before's own. Not the narrow no-break
+                    // space, though it is one character: Unicode's word
+                    // rules count it part of a word, and a hold that goes by
+                    // them — Android's does — would take the number and the
+                    // verse's first word as one.
+                    let number = "\(verse)\u{2009}\u{2060}"
                     page.number(verse, at: blockStart + blockText.length, length: (number as NSString).length)
                     blockText.append(NSAttributedString(
                         string: number,

@@ -2173,7 +2173,9 @@ class LookBookTest {
     @Test fun theWhatsNewPage() {
         val appearance = Appearance(ApplicationProvider.getApplicationContext())
         appearance.wallpaperColour = true
-        val release = app.readribbon.core.WhatsNew.releases.first()
+        // The release the page's picture came in, by name: the newest one
+        // has moved on (A70), and its title is not this picture's.
+        val release = app.readribbon.core.WhatsNew.releases.first { it.id == "2026-10-flyleaf" }
             .copy(items = listOf(app.readribbon.core.WhatsNewItem.yourPage))
         var frozen by mutableStateOf(0L)
         compose.setContent {

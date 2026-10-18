@@ -865,7 +865,8 @@ private fun Modifier.bleed(by: Dp): Modifier = this.layout { measurable, constra
  * Verses set the way reading/ChapterText.kt sets them, so the strip is the
  * page and not a description of it: a number before each verse but a
  * chapter's first — small caps at 0.62 of the size, ivory at the page's 45%
- * or its clearer ink, raised, and a thin space after it — the words of Jesus
+ * or its clearer ink, raised, and a thin space after it with the page's word
+ * joiner, which keeps it on its verse's line (A70) — the words of Jesus
  * in the crimson ink when the switch is on, each block of the chapter on a
  * line of its own (and, with a line for every verse, each verse the core
  * starts one for: A68), and a psalm's title and a stanza break left out.
@@ -915,7 +916,7 @@ private fun pageOf(
                 if ((!wrote && length > 0) || (wrote && index in lineStarts)) append('\n')
                 wrote = true
                 if (verse != 1 && numbered.add(verse)) {
-                    withStyle(number) { append("$verse\u2009") }
+                    withStyle(number) { append("$verse\u2009\u2060") }
                 }
                 if (redLetter && span.isRedLetter) {
                     withStyle(red) { append(span.t) }

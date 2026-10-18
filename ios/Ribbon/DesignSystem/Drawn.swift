@@ -111,12 +111,18 @@ struct ChoiceRibbon: View {
 // MARK: - The switch (I41)
 
 /// A switch drawn on the page (I41): a 46 × 28 capsule. Off, it is a well
-/// with a paper knob at its leading end; on, the well fills with the
-/// accent and the knob — now the ground's own colour, as the way-in
-/// button's words are on the accent — sits at the trailing end. The knob
-/// travels on the fingertip's spring; the fill comes up on `arrive`. Under
-/// reduce motion the knob does not travel: it fades out of one end and
-/// into the other, as the Segments pill does.
+/// with a knob in the muted colour at its leading end; on, the well fills
+/// with the accent and the knob — now the ground's own colour, as the
+/// way-in button's words are on the accent — sits at the trailing end. The
+/// knob travels on the fingertip's spring; the fill comes up on `arrive`.
+/// Under reduce motion the knob does not travel: it fades out of one end
+/// and into the other, as the Segments pill does.
+///
+/// The knob was paper, with the rule round it (I44). Paper in a well on a
+/// paper row is three near-flat colours 1.05 to 1.24:1 apart, so a switch
+/// that was off was a switch nobody could see. The muted colour is 5.2:1
+/// on the well — Android's unchecked thumb, for the same reason — and it
+/// needs no rule to stop where it stops.
 ///
 /// A picture of a state, hidden from the screen reader: the `Toggle` it
 /// is drawn for says on or off itself.
@@ -159,14 +165,15 @@ struct RibbonSwitch: View {
 
     private func knob(on: Bool) -> some View {
         Circle()
-            .fill(Palette.surface)
-            .overlay { Circle().strokeBorder(Palette.rule, lineWidth: 1) }
+            .fill(Palette.ground)
             .overlay {
                 // The knob's colour is a change of light, not of place: it
-                // keeps its curve wherever the knob is.
+                // keeps its curve wherever the knob is. The ground is under
+                // the muted light rather than over it, so that on, the knob
+                // is the ground and nothing else, edge and all.
                 Circle()
-                    .fill(Palette.ground)
-                    .opacity(on ? 1 : 0)
+                    .fill(Palette.muted)
+                    .opacity(on ? 0 : 1)
                     .animation(RibbonMotion.arrive, value: on)
             }
             .frame(width: Self.knobSize, height: Self.knobSize)

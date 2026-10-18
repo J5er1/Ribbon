@@ -167,24 +167,47 @@ enum FirePainter {
             throwRadius = footprint * (0.42 + 0.2 * coalDepth)
             throwOpacity = 0.13
         }
-        let glowBreath = 1 + 0.05 * breath(time, 0.13)
-        let glowRect = CGRect(
-            x: cx - throwRadius * CGFloat(glowBreath),
-            y: baseY - throwRadius * CGFloat(glowBreath) * 0.62,
-            width: throwRadius * 2 * CGFloat(glowBreath),
-            height: throwRadius * CGFloat(glowBreath) * 1.05)
+        // The light dies to nothing at its own rim, on every side (A70). It
+        // was a round gradient cut by a shorter ellipse — 0.62 of its radius
+        // above the coals, 0.43 below — so the path ended while the light was
+        // still a third on, a crisp arc over the fire; and the canvas, which
+        // ends 0.12 of its height under the coals, cut the rest near full
+        // strength, a hard flat floor across the well. Now the gradient is
+        // squashed into the ellipse rather than cut by it, so its own clear
+        // is the rim — and squashed twice, above the coals' line and below
+        // it, because one gradient is one shape and this light is two: tall
+        // over the flames, flat along the ground, where the frame leaves it
+        // only that 0.12 to fade in. The halves meet on the coals, under the
+        // bed, and the light adds, so the row they share is neither doubled
+        // nor thinned. Every reach is held inside the canvas at the top of
+        // the breath. Where the old ellipse fitted, the rim is where its
+        // edge was; the centre is as warm as it was.
+        let glowBreath = CGFloat(1 + 0.05 * breath(time, 0.13))
+        let fullest: CGFloat = 1.05   // breath() never passes 1
+        let across = min(throwRadius, cx / fullest) * glowBreath
+        let up = min(throwRadius * 0.62, baseY / fullest) * glowBreath
+        let down = min(throwRadius * 0.43, (h - baseY) / fullest) * glowBreath
+        let throwLight = GraphicsContext.Shading.radialGradient(
+            Gradient(colors: [
+                Palette.flameCore.opacity(throwOpacity),
+                Palette.flameDeep.opacity(throwOpacity * 0.4),
+                .clear,
+            ]),
+            center: .zero,
+            startRadius: 0,
+            endRadius: across)
         context.blendMode = .plusLighter
-        context.fill(
-            Path(ellipseIn: glowRect),
-            with: .radialGradient(
-                Gradient(colors: [
-                    Palette.flameCore.opacity(throwOpacity),
-                    Palette.flameDeep.opacity(throwOpacity * 0.4),
-                    .clear,
-                ]),
-                center: CGPoint(x: cx, y: baseY),
-                startRadius: 0,
-                endRadius: throwRadius * CGFloat(glowBreath)))
+        if across > 0 {
+            for (reach, top) in [(up, -across), (down, 0)] {
+                // A copy carries the squash and leaves the context as it was.
+                var half = context
+                half.translateBy(x: cx, y: baseY)
+                half.scaleBy(x: 1, y: reach / across)
+                half.fill(
+                    Path(CGRect(x: -across, y: top, width: across * 2, height: across)),
+                    with: throwLight)
+            }
+        }
         context.blendMode = .normal
 
         // --- The coal bed ---------------------------------------------------

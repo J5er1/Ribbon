@@ -63,7 +63,8 @@ struct TextSettingsScreen: View {
         var chapters: [TranslationID: ScriptureChapter] = [:]
     }
 
-    /// The bar RibbonScreen draws over its scroll.
+    /// The bar RibbonScreen draws over its scroll (I44): the page passes
+    /// under it, but what can be seen of the strip starts at its foot.
     private static let barHeight: CGFloat = 52
 
     var body: some View {
@@ -505,9 +506,10 @@ struct PageStrip: View {
 
     /// The page's verse number: small caps at 0.62 of the size, ivory at
     /// the page's alpha — 45%, or 70% when they are clearer (A68) — raised
-    /// by 0.3 of the size, and a thin space after it.
+    /// by 0.3 of the size, and a thin space after it with the page's word
+    /// joiner, which keeps it on its verse's line (A70).
     private func verseNumber(_ verse: Int, theme: ReadingTheme) -> Text {
-        Text(verbatim: "\(verse)\u{2009}")
+        Text(verbatim: "\(verse)\u{2009}\u{2060}")
             .font(RibbonType.smallCaps(theme.fontSize * 0.62))
             .foregroundStyle(Palette.text.opacity(theme.verseNumberAlpha))
             .baselineOffset(theme.fontSize * 0.3)

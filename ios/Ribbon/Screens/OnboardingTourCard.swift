@@ -130,18 +130,20 @@ struct OnboardingTourCard: View {
         .padding(.horizontal, 20)
     }
 
-    // The fire itself, in its well, as the hearth draws it.
+    // The fire itself, in its well, as the hearth draws it — and only the
+    // fire, as Android's tour has it (I44). The well was inset twice as far
+    // as the page's and the note's, so the cards changed width as they
+    // turned; and with a hairline and the fire's state under it, it stood
+    // some thirty points taller than the 220 every picture is given, and
+    // its foot came down onto its own title. As wide as the other wells
+    // now, and at medium still, 14 above and below, on a phone it fits its
+    // slot: 14, 180, 14.
     private var fireVisual: some View {
-        VStack(spacing: 10) {
-            CampfireView(state: .burning, scale: .medium, coalDepth: 0.4)
-            HairlineRule()
-                .scaleEffect(x: 0.62, y: 1)
-            SmallCaps(FireState.burning.displayName, size: 13)
-        }
-        .padding(.vertical, 18)
-        .frame(maxWidth: .infinity)
-        .well(.card)
-        .padding(.horizontal, 40)
+        CampfireView(state: .burning, scale: .medium, coalDepth: 0.4)
+            .padding(.vertical, 14)
+            .frame(maxWidth: .infinity)
+            .well(.card)
+            .padding(.horizontal, 20)
     }
 
     private static let samplePeaks: [Float] = (0..<40).map { i in

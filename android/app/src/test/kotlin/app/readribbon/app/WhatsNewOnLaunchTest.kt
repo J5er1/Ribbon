@@ -11,18 +11,22 @@ import app.readribbon.core.WhatsNew
 import app.readribbon.data.AppState
 import app.readribbon.data.LocalStore
 import app.readribbon.core.WhatsNewItem
+import app.readribbon.design.RibbonMotion
 import app.readribbon.screens.LONG_LOOP_MS
 import app.readribbon.screens.LOOP_MS
 import app.readribbon.screens.STILL_AT
 import app.readribbon.screens.body
 import app.readribbon.screens.flyleafFrame
 import app.readribbon.screens.followingFrame
+import app.readribbon.screens.lightFrame
 import app.readribbon.screens.loopTime
 import app.readribbon.screens.lordFrame
 import app.readribbon.screens.nightFrame
 import app.readribbon.screens.notificationsFrame
+import app.readribbon.screens.numbersFrame
 import app.readribbon.screens.originalFrame
 import app.readribbon.screens.ownVersionFrame
+import app.readribbon.screens.quotedFrame
 import app.readribbon.screens.readableFrame
 import app.readribbon.screens.pageFrame
 import app.readribbon.screens.typefaceFrame
@@ -33,6 +37,7 @@ import app.readribbon.screens.staysFrame
 import app.readribbon.screens.timeline
 import app.readribbon.screens.title
 import app.readribbon.screens.versionsFrame
+import app.readribbon.screens.wavesFrame
 import app.readribbon.services.Notifications
 import app.readribbon.services.LocalPresenceService
 import kotlin.time.Clock
@@ -429,6 +434,114 @@ class WhatsNewOnLaunchTest {
         )
     }
 
+    // The fourth release's four (A70).
+
+    @Test fun reduceMotionHoldsTheFinerPointsAtTheirEnds() {
+        assertEquals("the ember's light up round it", 1f, lightFrame(WhatsNewItem.softLight.timeline.stillAt).lit, 0f)
+
+        val quoted = quotedFrame(WhatsNewItem.quotedMarks.timeline.stillAt)
+        assertEquals("the verse quoted", 1f, quoted.quote * quoted.shown, 0f)
+        assertEquals("and the line that stood in for it gone", 0f, quoted.waiting, 0f)
+
+        val numbers = numbersFrame(WhatsNewItem.numbersStay.timeline.stillAt)
+        assertEquals("the number gone down with its word", 1f, numbers.settled * numbers.shown, 0f)
+
+        val wave = wavesFrame(WhatsNewItem.wavesFill.timeline.stillAt)
+        assertEquals("the bars across the whole note", 1f, wave.spread * wave.shown, 0f)
+        assertEquals("nothing played, and no finger on it", 0f, wave.played + wave.press, 0f)
+    }
+
+    @Test fun eachFinerPointsLoopBeginsAndEndsAtRest() {
+        for (t in listOf(0, WhatsNewItem.softLight.timeline.loopMs - 1)) {
+            assertEquals("the ember alone, its light down", 0f, lightFrame(t).lit, 0.001f)
+        }
+        for (t in listOf(0, WhatsNewItem.quotedMarks.timeline.loopMs - 1)) {
+            val quoted = quotedFrame(t)
+            assertEquals("the quiet line in the quote's place", 1f, quoted.waiting * quoted.shown, 0.001f)
+            assertEquals("and no quote yet", 0f, quoted.quote, 0.001f)
+        }
+        for (t in listOf(0, WhatsNewItem.numbersStay.timeline.loopMs - 1)) {
+            val numbers = numbersFrame(t)
+            assertEquals("the number up on the full line", 0f, numbers.settled, 0.001f)
+            assertEquals("and the page there", 1f, numbers.shown, 0.001f)
+        }
+        for (t in listOf(0, WhatsNewItem.wavesFill.timeline.loopMs - 1)) {
+            val wave = wavesFrame(t)
+            assertEquals("the bars where they used to stand", 0f, wave.spread, 0.001f)
+            assertEquals("nothing played or pressed", 0f, wave.played + wave.press, 0.001f)
+            assertEquals("and the wave there", 1f, wave.shown, 0.001f)
+        }
+    }
+
+    /**
+     * Light coming up, and a drag watched bar by bar, are on the fire's long
+     * curve and so on loops of their own, as the iPhone's are; the quote and
+     * the number keep the first release's clock.
+     */
+    @Test fun theLightAndTheDragTakeTheLongCurve() {
+        fun span(values: List<Float>) = values.indexOfFirst { it == 1f } - values.indexOfFirst { it > 0f } + 1
+        val light = (0 until WhatsNewItem.softLight.timeline.loopMs).map { lightFrame(it).lit }
+        assertTrue("the light comes up on it (${span(light)} ms)", span(light) in 2400..RibbonMotion.BECOME_MS)
+        val drag = (0 until WhatsNewItem.wavesFill.timeline.loopMs).map { wavesFrame(it).played }
+        assertTrue("and the drag goes along on it (${span(drag)} ms)", span(drag) in 2400..RibbonMotion.BECOME_MS)
+        assertEquals("the quote's loop is the first release's", LOOP_MS, WhatsNewItem.quotedMarks.timeline.loopMs)
+        assertEquals("and the number's", LOOP_MS, WhatsNewItem.numbersStay.timeline.loopMs)
+    }
+
+    /**
+     * The line that stands in for the quote and the quote cross in one place,
+     * on one arrive, as the record brings a verse in: one going as the other
+     * comes, so the place is never empty and never holds both at full.
+     */
+    @Test fun theQuoteTakesTheLinesPlaceOnOneArrive() {
+        val frames = (0 until WhatsNewItem.quotedMarks.timeline.loopMs).map(::quotedFrame)
+        for ((t, quoted) in frames.withIndex()) {
+            assertEquals("at $t", 1f, quoted.waiting + quoted.quote, 0.0001f)
+        }
+        val coming = frames.indexOfFirst { it.quote > 0f }
+        val come = frames.indexOfFirst { it.quote == 1f }
+        assertTrue("on one arrive (${come - coming + 1} ms)", come - coming + 1 in 300..RibbonMotion.ARRIVE_MS)
+    }
+
+    /**
+     * Nothing these pictures show goes back where it can be seen: the quote
+     * does not turn back into its line, the number does not go back up, and
+     * the bars neither gather again nor empty. Each is set back as it began
+     * only while its picture has faded right out.
+     */
+    @Test fun nothingGoesBackWhereItCanBeSeen() {
+        fun check(what: String, loop: Int, value: (Int) -> Float, shown: (Int) -> Float) {
+            for (t in 0 until loop - 1) {
+                if (value(t + 1) < value(t) - 0.0001f) {
+                    assertEquals("$what goes back only out of sight, at $t", 0f, shown(t) + shown(t + 1), 0f)
+                }
+            }
+        }
+        val quoted = WhatsNewItem.quotedMarks.timeline.loopMs
+        check("the quote", quoted, { quotedFrame(it).quote }, { quotedFrame(it).shown })
+        val numbers = WhatsNewItem.numbersStay.timeline.loopMs
+        check("the number", numbers, { numbersFrame(it).settled }, { numbersFrame(it).shown })
+        val waves = WhatsNewItem.wavesFill.timeline.loopMs
+        check("the bars", waves, { wavesFrame(it).spread }, { wavesFrame(it).shown })
+        check("the ink", waves, { wavesFrame(it).played }, { wavesFrame(it).shown })
+    }
+
+    /**
+     * The bars stand across the note before a fingertip comes, and it is on
+     * the wave the whole time the ink is filling: the ink goes only where a
+     * finger takes it.
+     */
+    @Test fun theWaveIsSpreadAndThenDragged() {
+        for (t in 0 until WhatsNewItem.wavesFill.timeline.loopMs) {
+            val wave = wavesFrame(t)
+            if (wave.shown < 1f) continue
+            if (wave.press > 0f) assertEquals("spread before the finger lands, at $t", 1f, wave.spread, 0f)
+            if (wave.played > 0f && wave.played < 1f) {
+                assertEquals("the finger on it while it fills, at $t", 1f, wave.press, 0f)
+            }
+        }
+    }
+
     /**
      * The new pictures breathe as the first release's do: once everything
      * has arrived, nearly two seconds of nothing moving before the loop lets
@@ -454,6 +567,10 @@ class WhatsNewOnLaunchTest {
             WhatsNewItem.quietHoursNight to ::nightFrame,
             WhatsNewItem.yourPage to ::pageFrame,
             WhatsNewItem.typeface to ::typefaceFrame,
+            WhatsNewItem.softLight to ::lightFrame,
+            WhatsNewItem.quotedMarks to ::quotedFrame,
+            WhatsNewItem.numbersStay to ::numbersFrame,
+            WhatsNewItem.wavesFill to ::wavesFrame,
         )) {
             val timeline = item.timeline
             val breath = stillFor(timeline.loopMs, timeline.stillAt, frame)
@@ -477,6 +594,8 @@ class WhatsNewOnLaunchTest {
         }
         assertEquals("6 October 2026", Copy.whatsNewReleased("2026-10-06"))
         assertEquals("7 October 2026", Copy.whatsNewReleased("2026-10-07"))
+        assertEquals("17 October 2026", Copy.whatsNewReleased("2026-10-17"))
+        assertEquals("Light, and the finer points", Copy.whatsNewTitle("2026-10-light"))
         assertEquals("The front of the book", Copy.whatsNewTitle("2026-10-flyleaf"))
         assertEquals("Staying on the same page", Copy.whatsNewTitle("2026-10-following"))
         assertEquals("The words under the words", Copy.whatsNewTitle("2026-10-original"))

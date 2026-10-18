@@ -301,6 +301,66 @@ Sliders and typefaces (A69, I43), on both phones:
 - What's new: "Set in the type you read best", the ribbon walking the five
   faces; reduce motion holds it on the last.
 
+The visual pass (A70, I44), on both phones unless it says. The iPhone
+builds and parts of it were seen in a simulator; Android has not been
+compiled yet:
+
+- First, CI on the first push. Android compiles; `FireLightTest` passes,
+  the fire's and the ember's outer edge at 4/255 or under (if Robolectric's
+  Skia dithers more, the bound can be raised — the old paint was tens of
+  levels); the page's and the pictures' number templates with the word
+  joiner (`"$v\u2009\u2060"`) build and set the digits, then the two marks;
+  `FiguresInARowSitLevelTest` passes.
+- The fire in the room, on the tour card and in the widget; the embers on
+  the shelf, on You, in a record and in What's new. No arc of light over
+  the fire, no flat line of light across the well under it, no lit
+  rectangle under an ember, no dark seam between two large ones; on
+  Android, nothing of an ember's light in the next cell or behind its
+  book's name, and the widget's glow not running under the book's name.
+  The steady fire's glow is a little narrower and softer at the sides now
+  — on purpose; the fire itself should look as it did.
+- Find a verse number at a line's end (Exodus 36 had one, "westward. 33"):
+  it goes down with its verse's first word. Hold a verse's first word: only
+  the word is taken. Hold its number: the whole verse. Try for a hold
+  between the thin space and the joiner: it should take the verse, as a
+  hold on the number does, or nothing — never the number with the word.
+- iPhone: select words. The highlight sits on them, the start handle's
+  knob in the gap above the first line and not on the line before. Drag
+  both ends and watch the loupe; select across a paragraph break, and
+  beside a psalm's title (Psalm 3).
+- The chapters: every figure one height, the grid level; on the iPhone the
+  chapter you are in in the full ink and the rest quieter.
+- A finished book's record, read in the New King James: with its chapters
+  on the phone, the quotes are there at once; with the book not the room's
+  open one and nothing on the phone, they fade in after a moment, and the
+  open book still opens offline afterwards; in airplane mode, "Not on this
+  phone yet." in each quote's place, then, the connection back, the quotes
+  arrive without a tap. Never the Berean's words. A record in the Berean
+  looks as it did.
+- Record a two-second voice note: its wave runs the whole width of the
+  note, evenly spaced; drag along it, and the bar under your finger is the
+  one lit. On the iPhone, the tour's note card too.
+- iPhone: scroll You, Text and Notifications. The tiles pass softly under
+  the way back rather than being cut across under it; tap the bar's empty
+  middle with a tile under it, and nothing opens. Hold a slider in Text:
+  the strip is pinned at the bar's foot. In What's new the last lines fade
+  above Done while there is more, and nothing is faded at the very end.
+- iPhone: every off switch can be seen, its knob muted; on is as it was;
+  VoiceOver still says a switch.
+- iPhone: the tour's four cards are one width, and the fire card's well is
+  clear of its title.
+- iPhone: the version line under You says 0.5.0 and its build, and the
+  archive gives no warning that the widget's version differs (ITMS-90473).
+- What's new: update over the build before and open the app —
+  "Light, and the finer points", four pictures moving: the ember's light
+  coming up round it with no seam at the husk's edge, the quote arriving
+  where "Not on this phone yet." was ("this iPhone" on the iPhone), the
+  number going down with "The", the wave spreading and filling under a
+  fingertip. On a narrow phone (an SE, or Display Zoom), the number and
+  "The" past the second line's end stay inside the picture. On Android,
+  Ruth's face on the note is a face, not a letter alone. Both palettes.
+  Reduce motion holds each still. You → What's new: it heads the list.
+
 A mark following its words (A60, I37) — compiled on both platforms by CI,
 never yet run on a phone:
 

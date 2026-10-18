@@ -744,13 +744,15 @@ private fun Hearth(
             // ground cut into the paler card.
             //
             // It is not decoration, and finding that out is what put it here.
-            // The fire draws its own ambient throw across the whole of its
-            // canvas and then clips it at the edge — which is invisible
+            // The fire drew its own ambient throw across the whole of its
+            // canvas and then clipped it at the edge — which is invisible
             // against near-black and a plainly drawn rectangle against
             // anything paler. Standing the fire on the ground it was drawn
-            // for fixes that, and it is the better picture anyway: a warm
+            // for fixed that, and it is the better picture anyway: a warm
             // object in a dark recess, in a room the wallpaper may have
-            // painted any colour at all.
+            // painted any colour at all. The throw dies inside its own
+            // canvas now (A70), so the well has no edge left to hide; it
+            // stays for the picture.
             // The well's own padding belongs to what stands in it rather
             // than to the recess, so that on a lit hearth every pixel of the
             // recess is part of the handle. An 18 dp band of dead ground

@@ -14,6 +14,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -25,6 +26,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
@@ -496,29 +498,47 @@ object FirePainter {
                 FireState.steady -> footprint * (1.0 + 0.35 * coalDepth) to 0.3
                 FireState.banked -> footprint * (0.42 + 0.2 * coalDepth) to 0.13
             }
+            // The light dies to nothing at its own rim, on every side (A70).
+            // It was a round gradient cut by a shorter ellipse — 0.62 of its
+            // radius above the coals, 0.43 below — so the path ended while the
+            // light was still a third on, a crisp arc over the fire; and the
+            // offscreen canvas, which ends 0.12 of its height under the coals,
+            // cut the rest near full strength, a hard flat floor across the
+            // well (the widget, which draws the fire through an inset that
+            // clips nothing, let it run on under the book's name instead).
+            // Now the gradient is squashed into the ellipse rather than cut by
+            // it, so its own clear is the rim — and squashed twice, above the
+            // coals' line and below it, because one gradient is one shape and
+            // this light is two: tall over the flames, flat along the ground,
+            // where the frame leaves it only that 0.12 to fade in. The halves
+            // meet on the coals, under the bed, and the light adds, so the row
+            // they share is neither doubled nor thinned. Every reach is held
+            // inside the canvas at the top of the breath. Where the old
+            // ellipse fitted, the rim is where its edge was; the centre is as
+            // warm as it was.
             val glowBreath = 1 + 0.05 * breath(time, 0.13)
-            val glowRect = rectOf(
-                x = cx - throwRadius * glowBreath,
-                y = baseY - throwRadius * glowBreath * 0.62,
-                width = throwRadius * 2 * glowBreath,
-                height = throwRadius * glowBreath * 1.05,
-            )
-            // SwiftUI's radial gradient takes a start and an end radius;
-            // Compose takes a centre and one radius. Every gradient here
-            // starts at 0, so the stops fall in the same places and the end
-            // radius is simply Compose's radius.
-            fillAdditive(
-                ovalPath(glowRect),
-                Brush.radialGradient(
+            val fullest = 1.05   // breath() never passes 1
+            val across = min(throwRadius, cx / fullest) * glowBreath
+            val up = min(throwRadius * 0.62, baseY / fullest) * glowBreath
+            val down = min(throwRadius * 0.43, (h - baseY) / fullest) * glowBreath
+            if (across > 0.0) {
+                val coals = Offset(cx.toFloat(), baseY.toFloat())
+                // SwiftUI's radial gradient takes a start and an end radius;
+                // Compose takes a centre and one radius. Every gradient here
+                // starts at 0, so the stops fall in the same places and the
+                // end radius is simply Compose's radius.
+                val throwLight = Brush.radialGradient(
                     colors = listOf(
                         Palette.flameCore.opacity(throwOpacity),
                         Palette.flameDeep.opacity(throwOpacity * 0.4),
                         Color.Transparent,
                     ),
-                    center = Offset(cx.toFloat(), baseY.toFloat()),
-                    radius = (throwRadius * glowBreath).toFloat(),
-                ),
-            )
+                    center = coals,
+                    radius = across.toFloat(),
+                )
+                fillThrowHalf(throwLight, coals, across.toFloat(), up.toFloat(), above = true)
+                fillThrowHalf(throwLight, coals, across.toFloat(), down.toFloat(), above = false)
+            }
 
             // --- The coal bed -------------------------------------------------
             // The one thing that may grow (Law 4). Not a single ellipse: a low
@@ -968,6 +988,39 @@ private fun DrawScope.fillAdditive(path: Path, brush: Brush, blurPx: Float = 0f)
     val paint = SoftPaints.at(blurPx)
     brush.applyTo(size, paint, 1f)
     drawIntoCanvas { it.drawPath(path, paint) }
+}
+
+/**
+ * Half of the warm throw (A70): [light], a round gradient of [radius] about
+ * [coals], squashed to [reach] of height above the coals' line when [above]
+ * and below it when not, so the gradient's own clear is the half-ellipse's
+ * rim.
+ *
+ * What the Swift says with a copy of its context, translated to the coals
+ * and scaled, a DrawScope says with a [scale] about the coals that lasts
+ * only for its block. The rect is the gradient's half-square before the
+ * squash; past [radius] the gradient is already clear, so the corners draw
+ * nothing and only the half-ellipse shows. Additive, as all the fire's light
+ * is — which is also why the two halves can share the coals' row without a
+ * seam: their edge coverage on that row sums, rather than one half's edge
+ * thinning the other's.
+ */
+private fun DrawScope.fillThrowHalf(
+    light: Brush,
+    coals: Offset,
+    radius: Float,
+    reach: Float,
+    above: Boolean,
+) {
+    if (reach <= 0f) return
+    scale(scaleX = 1f, scaleY = reach / radius, pivot = coals) {
+        drawRect(
+            brush = light,
+            topLeft = Offset(coals.x - radius, if (above) coals.y - radius else coals.y),
+            size = Size(radius * 2, radius),
+            blendMode = BlendMode.Plus,
+        )
+    }
 }
 
 /**

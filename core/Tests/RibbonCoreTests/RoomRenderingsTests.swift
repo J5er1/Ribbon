@@ -43,7 +43,9 @@ final class RoomRenderingsTests: XCTestCase {
             ])
     }
 
-    func r(_ start: Int, _ end: Int) -> TextRange { TextRange(start: start, end: end) }
+    // Qualified: the macOS 27 SDK brings a TextRange of its own, and the
+    // bare name no longer says which.
+    func r(_ start: Int, _ end: Int) -> RibbonCore.TextRange { RibbonCore.TextRange(start: start, end: end) }
 
     // MARK: The room of eleven
 

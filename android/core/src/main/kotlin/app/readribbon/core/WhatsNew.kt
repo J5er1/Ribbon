@@ -86,6 +86,28 @@ enum class WhatsNewItem {
      * matches Literata's (A69).
      */
     typeface,
+
+    /**
+     * The fire's glow, and every ember's pool of light, fade to nothing,
+     * with no edge around them (A70).
+     */
+    softLight,
+
+    /**
+     * A finished book's record quotes each marked verse in the reader's own
+     * version, the licensed ones included — and says so where it cannot yet
+     * (A70).
+     */
+    quotedMarks,
+
+    /** A verse number never ends a line apart from its verse (A70). */
+    numbersStay,
+
+    /**
+     * A voice note's wave runs the whole width of its note, evenly spaced,
+     * and a drag lands on the bar under the finger (A70).
+     */
+    wavesFill,
 }
 
 /**
@@ -107,6 +129,16 @@ object WhatsNew {
      * are simply how the app is now — there for the reading, from You.
      */
     val releases: List<WhatsNewRelease> = listOf(
+        WhatsNewRelease(
+            id = "2026-10-light",
+            released = "2026-10-17",
+            items = listOf(
+                WhatsNewItem.softLight,
+                WhatsNewItem.quotedMarks,
+                WhatsNewItem.numbersStay,
+                WhatsNewItem.wavesFill,
+            ),
+        ),
         WhatsNewRelease(
             id = "2026-10-flyleaf",
             released = "2026-10-08",

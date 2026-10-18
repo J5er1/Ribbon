@@ -76,6 +76,29 @@ enum RibbonType {
         .custom("AlegreyaSans-Medium", size: size, relativeTo: .body)
     }
 
+    /// Interface text for figures that stand in a row (A70). Alegreya
+    /// Sans's own figures are old-style: 3, 4, 5, 7 and 9 hang below the
+    /// line that 0, 1 and 2 sit on, and 6 and 8 rise above them, which a
+    /// grid of numbers reads as ragged. These are the face's lining
+    /// figures, each as wide as the others, so the numbers sit level and
+    /// in step. SwiftUI cannot ask a custom face for its figures, so this
+    /// is the UIKit face with its features set, scaled for
+    /// `dynamicTypeSize` the way `ui` is scaled for the body.
+    static func figures(_ size: CGFloat = 17, at dynamicTypeSize: DynamicTypeSize) -> Font {
+        let base = UIFont(name: "AlegreyaSans-Regular", size: size)
+            ?? UIFont(name: sans, size: size)
+            ?? .systemFont(ofSize: size)
+        let traits = UITraitCollection(preferredContentSizeCategory: UIContentSizeCategory(dynamicTypeSize))
+        let scaled = UIFontMetrics(forTextStyle: .body).scaledFont(for: base, compatibleWith: traits)
+        let level = scaled.fontDescriptor.addingAttributes([.featureSettings: [
+            [UIFontDescriptor.FeatureKey.type: kNumberCaseType,
+             UIFontDescriptor.FeatureKey.selector: kUpperCaseNumbersSelector],
+            [UIFontDescriptor.FeatureKey.type: kNumberSpacingType,
+             UIFontDescriptor.FeatureKey.selector: kMonospacedNumbersSelector],
+        ]])
+        return Font(UIFont(descriptor: level, size: scaled.pointSize) as CTFont)
+    }
+
     /// True small caps. Set strings in normal sentence case; the face does
     /// the capitalization work.
     static func smallCaps(_ size: CGFloat = 13) -> Font {

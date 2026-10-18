@@ -55,6 +55,18 @@ public enum WhatsNewItem: String, Codable, Hashable, Sendable, CaseIterable {
     /// The page can be set in one of five typefaces, each at a size that
     /// matches Literata's (A69).
     case typeface
+    /// The fire's glow, and every ember's pool of light, fade to nothing,
+    /// with no edge around them (A70).
+    case softLight
+    /// A finished book's record quotes each marked verse in the reader's own
+    /// version, the licensed ones included — and says so where it cannot yet
+    /// (A70).
+    case quotedMarks
+    /// A verse number never ends a line apart from its verse (A70).
+    case numbersStay
+    /// A voice note's wave runs the whole width of its note, evenly spaced,
+    /// and a drag lands on the bar under the finger (A70).
+    case wavesFill
 }
 
 /// A release worth telling someone about. The id is a name, not a version
@@ -79,6 +91,9 @@ public enum WhatsNew {
     /// skipped three releases hears about the one they are on, and the rest
     /// are simply how the app is now — there for the reading, from You.
     public static let releases: [WhatsNewRelease] = [
+        WhatsNewRelease(
+            id: "2026-10-light", released: "2026-10-17",
+            items: [.softLight, .quotedMarks, .numbersStay, .wavesFill]),
         WhatsNewRelease(
             id: "2026-10-flyleaf", released: "2026-10-08",
             items: [.flyleaf, .yourShelf, .versionsByReading, .yourPage, .typeface, .notificationsByName, .quietHoursNight]),

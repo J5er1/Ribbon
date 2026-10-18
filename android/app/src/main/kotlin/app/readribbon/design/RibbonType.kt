@@ -232,6 +232,15 @@ object RibbonType {
     )
 
     /**
+     * Interface text for figures that stand in a row (A70). Alegreya Sans's
+     * own figures are old-style: 3, 4, 5, 7 and 9 hang below the line that 0,
+     * 1 and 2 sit on, and 6 and 8 rise above them, which a grid of numbers
+     * reads as ragged. These are the face's lining figures, each as wide as
+     * the others, so the numbers sit level and in step.
+     */
+    fun figures(size: Float = 17f): TextStyle = ui(size).copy(fontFeatureSettings = "lnum, tnum")
+
+    /**
      * True small caps. Set strings in normal sentence case; the face does
      * the capitalisation work. The tracking matches the iOS build's
      * kerning of 7.5% of the size, so a running head sets identically on
