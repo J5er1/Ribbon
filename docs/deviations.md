@@ -4860,19 +4860,26 @@ A72. **Being found (2026-10-found; reverses §3's "no strangers, no
     room or reading id; they are listed in still-to-do rather than changed
     here.
 
-    **On the live project, all but `let_in`** (18 October 2026), with the
-    owner's go-ahead: *"go ahead and apply the migration"*. The database
-    tool timed out on the whole file, so the same file went up in nine
-    pieces in its own order, each its own transaction and recorded as
+    **On the live project** (18 October 2026), with the owner's
+    go-ahead: *"go ahead and apply the migration"*. The database tool
+    timed out on the whole file, so the same file went up in nine pieces
+    in its own order, each its own transaction and recorded as
     `ribbon_being_found_*`: keep_in_place, people_and_blocks, open_rooms,
     knocks, who_can_see, find_rooms, asking, reports — and let_in, which
-    has not landed. It is the one piece with `delete` statements in it,
-    and the tool holds those for an approval that has not been answered
-    in time. Until it lands "Let them in" says "Can't reach Ribbon right
-    now"; everything else works. The phones learn the tables are there on
-    their next refresh: before, nothing about finding appeared (§6.1, no
-    dead control), and new fields are only ever written by their own
-    requests, so a phone on a project without them behaves as it did.
+    the tool would not take (it holds anything with `delete` in it for an
+    approval this session cannot show), so the owner ran it in the
+    dashboard's SQL editor, unchanged from the file. Afterwards, in a
+    transaction that rolled back, as three real profiles: a closed room
+    refuses an ask and is not found; one yes of two is still closed; both
+    yeses open it, and the ask is marked; a member sees the ask and the
+    asker; a membership cannot be moved into another room; `let_in` seats
+    the asker with `would_open` and clears the ask; a block is invisible to
+    the blocked; reports are unreadable; a blocked findable person is not
+    found; and signed out, no profile is visible. The phones learn the
+    tables are there on their next refresh: before, nothing about finding
+    appeared (§6.1, no dead control), and new fields are only ever written
+    by their own requests, so a phone on a project without them behaves as
+    it did.
 
     **What's new**, "A door, if you want one": a fourth face waiting past
     the room's edge and then let in, the row making room; and Being found's
