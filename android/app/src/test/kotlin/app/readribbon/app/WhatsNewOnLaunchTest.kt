@@ -14,7 +14,9 @@ import app.readribbon.core.WhatsNewItem
 import app.readribbon.screens.LONG_LOOP_MS
 import app.readribbon.screens.LOOP_MS
 import app.readribbon.screens.STILL_AT
+import app.readribbon.screens.beingFoundFrame
 import app.readribbon.screens.body
+import app.readribbon.screens.findARoomFrame
 import app.readribbon.screens.flyleafFrame
 import app.readribbon.screens.fourInksFrame
 import app.readribbon.screens.followingFrame
@@ -417,6 +419,29 @@ class WhatsNewOnLaunchTest {
         }
     }
 
+    // The fifth release's two (A72).
+
+    @Test fun reduceMotionHoldsTheAskerInAndTheLineWritten() {
+        val door = findARoomFrame(WhatsNewItem.findARoom.timeline.stillAt)
+        assertEquals("the one who asked is in", 1f, door.enter, 0f)
+        assertEquals("and not leaving", 0f, door.leave, 0f)
+
+        val found = beingFoundFrame(WhatsNewItem.beingFound.timeline.stillAt)
+        assertEquals("the switch on", 1f, found.on, 0f)
+        assertEquals("the line written", 1f, found.written, 0f)
+        assertEquals("and said", 1f, found.said, 0f)
+    }
+
+    @Test fun eachFoundLoopBeginsAndEndsWithNobodyAsking() {
+        for (t in listOf(0, WhatsNewItem.findARoom.timeline.loopMs - 1)) {
+            val door = findARoomFrame(t)
+            assertEquals("nobody at the edge at $t", 0f, door.ask * (1f - door.leave), 0.001f)
+        }
+        for (t in listOf(0, WhatsNewItem.beingFound.timeline.loopMs - 1)) {
+            assertEquals("off at $t", 0f, beingFoundFrame(t).on, 0.001f)
+        }
+    }
+
     /** Your rooms' ribbons, and the embers on the shelf, come one after another — never a later one ahead. */
     @Test fun theRibbonsAndTheEmbersComeInTurn() {
         for (t in 0 until LOOP_MS step 10) {
@@ -491,6 +516,8 @@ class WhatsNewOnLaunchTest {
             WhatsNewItem.typeface to ::typefaceFrame,
             WhatsNewItem.roomOfTwelve to ::roomOfTwelveFrame,
             WhatsNewItem.fourInks to ::fourInksFrame,
+            WhatsNewItem.findARoom to ::findARoomFrame,
+            WhatsNewItem.beingFound to ::beingFoundFrame,
         )) {
             val timeline = item.timeline
             val breath = stillFor(timeline.loopMs, timeline.stillAt, frame)
@@ -514,6 +541,7 @@ class WhatsNewOnLaunchTest {
         }
         assertEquals("6 October 2026", Copy.whatsNewReleased("2026-10-06"))
         assertEquals("7 October 2026", Copy.whatsNewReleased("2026-10-07"))
+        assertEquals("A door, if you want one", Copy.whatsNewTitle("2026-10-found"))
         assertEquals("Room for more of you", Copy.whatsNewTitle("2026-10-twelve"))
         assertEquals("The front of the book", Copy.whatsNewTitle("2026-10-flyleaf"))
         assertEquals("Staying on the same page", Copy.whatsNewTitle("2026-10-following"))

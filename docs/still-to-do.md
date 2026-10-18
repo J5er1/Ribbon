@@ -342,6 +342,33 @@ A room of twelve (A70), on both phones:
   of you", the faces seating from six to twelve and the four inks laid in;
   reduce motion holds the room full and all twelve hanging.
 
+Being found (A72), on both phones, once section 9's migration is applied:
+
+- Before it is applied: no "Find a room" row, no "Let this room be
+  found", no Being found in You. After it, and a pull: all three appear
+  without a reinstall.
+- Being found starts at "I'm thirteen or older"; once said, the switch.
+  Your line, typed and left, is kept; emptied, it is gone.
+- Two rooms of two, A and B. Everyone in B says yes: B is found from A's
+  account by its name, by its line, and by "mark" or "Mark 4" while it
+  reads Mark. Until the last person in B says yes it is not found, and
+  the switch says "You said yes. It opens once everyone has." without
+  naming anyone.
+- Someone not findable opens a found room: "To ask, let yourself be found
+  first", and the row goes to Being found. Findable, they ask with a line:
+  "You asked." and the tile says "asked". Taking it back clears both.
+- In B, the ask is at the top of the room's menu with the asker's face and
+  line. "Let them in": they arrive in the room on both phones (theirs on
+  its next pull). "Not now": it goes, and the asker is told nothing.
+- Block the asker from their face: the ask goes, they stop appearing in
+  any search, and they cannot find B. Being found lists them by name;
+  "Unblock" undoes it.
+- Report a room and a person: "Thank you. It has been passed on." The
+  rows are in `public.reports`, visible in the dashboard only.
+- Delete an account that was findable: it can no longer be found.
+- What's new: "A door, if you want one", the fourth face let in and the
+  switch with its line; reduce motion holds both at their ends.
+
 ## 7. The New King James's usage reporting, and its proxy
 
 API.Bible asks apps to report each chapter shown (FUMS) with the
@@ -366,3 +393,35 @@ refuses the thirteenth; `invite_preview` is still callable signed out and
 
 Shipped builds are unaffected: they still stop the invite sheet at six on
 the phone, and they read the four new inks as no ink or ochre (A70).
+
+## 9. Being found — the migration, not yet applied
+
+`supabase/migrations/20261016180000_ribbon_being_found.sql`
+(docs/deviations.md A72) is written and committed but is **not on the live
+project**. It wants, in this order:
+
+1. A rehearsal in a transaction that is rolled back: the whole file, then,
+   as two signed-in people (`set local role authenticated` and a `sub` in
+   `request.jwt.claims`), `ask_to_join` refused while the room is closed
+   and accepted once every member has said yes; `let_in` seating the asker
+   with `would_open` true; `find_rooms` never returning a room you are in
+   or one with someone you have blocked; `can_see_person` false for a
+   blocked findable profile; and an update moving a membership into
+   another room refused by `keep_in_place`.
+2. Applied, with `apply_migration` or the CLI. Nothing in it drops
+   anything, so it reads the same in either.
+3. In the dashboard: `reports` readable there, and an advisor run (the new
+   tables all have row-level security on).
+
+Until it is applied the phones show nothing of finding (A72); after it, a
+pull is enough.
+
+**Follow-up, found while writing it.** The `keep_in_place` repair covers
+memberships and invites. Other tables carry a room or reading id that an
+update policy checks only by author — notes, positions, quiet days,
+ribbons, cards and their answers among them. Moving one of those rows
+needs the id of a reading in a room you are not in, which nothing hands
+out today (finding gives room ids, not reading ids), so it is not urgent;
+but each should either pin its parent id the same way or check membership
+on the new row as well as the old.
+

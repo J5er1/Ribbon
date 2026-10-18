@@ -21,6 +21,12 @@ enum PendingWrite: Codable, Hashable {
     case highlight(UUID)
     case cardAnswer(cardID: UUID)
     case ribbon(readingID: UUID)
+    /// Being found (A72): your profile's choice, keyed by your own id.
+    case beingFound
+    /// Your yes or no to a room being found, by your membership's id.
+    case wouldOpen(membershipID: UUID)
+    /// A room's line, by the room's id.
+    case roomLine(roomID: UUID)
 }
 
 /// A note this phone is still deleting: what the delete needs to know
@@ -95,11 +101,19 @@ struct AppState: Codable {
     var pendingHighlightDeletes: Set<UUID> = []
     /// Keyed, so saying the same thing twice replaces rather than repeats.
     var unsaid: [UUID: PendingWrite] = [:]
+    /// Whether you can be found, and your line (A72). Kept here and pushed
+    /// to your profile; your account's own row wins when it has one.
+    var beingFound = BeingFound()
+    /// The names of the people you have blocked, as you knew them when you
+    /// did: once blocked, the server stops showing you their profile, and
+    /// the list in Being found would otherwise be a list of nobody.
+    var blockedNames: [UUID: String] = [:]
 
     enum CodingKeys: String, CodingKey {
         case me, people, rooms, memberships, readings, notes, highlights, quietDays, positions, ribbons, cards, invites, currentRoomID, settings, hasSeenMarginHint, hasPulledTheFire, hasAskedAboutNotifications, portraitETags, notifiedThrough, invitesNotYetPushed, invitesHandedOut
         case pendingRoomPushes, pendingNoteDeletes, pendingNotePushes, pendingHighlightDeletes, unsaid
         case whatsNewSeen
+        case beingFound, blockedNames
     }
 
     init() {}
@@ -135,6 +149,8 @@ struct AppState: Codable {
         pendingNotePushes = try container.decodeIfPresent(Set<UUID>.self, forKey: .pendingNotePushes) ?? []
         pendingHighlightDeletes = try container.decodeIfPresent(Set<UUID>.self, forKey: .pendingHighlightDeletes) ?? []
         unsaid = try container.decodeIfPresent([UUID: PendingWrite].self, forKey: .unsaid) ?? [:]
+        beingFound = try container.decodeIfPresent(BeingFound.self, forKey: .beingFound) ?? BeingFound()
+        blockedNames = try container.decodeIfPresent([UUID: String].self, forKey: .blockedNames) ?? [:]
     }
 }
 

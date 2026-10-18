@@ -491,6 +491,8 @@ internal val WhatsNewItem.title: String
         WhatsNewItem.quietHoursNight -> Copy.WHATS_NEW_QUIET_HOURS_TITLE
         WhatsNewItem.roomOfTwelve -> Copy.WHATS_NEW_TWELVE_TITLE
         WhatsNewItem.fourInks -> Copy.WHATS_NEW_INKS_TITLE
+        WhatsNewItem.findARoom -> Copy.WHATS_NEW_FIND_TITLE
+        WhatsNewItem.beingFound -> Copy.WHATS_NEW_BEING_FOUND_TITLE
     }
 
 internal val WhatsNewItem.body: String
@@ -512,6 +514,8 @@ internal val WhatsNewItem.body: String
         WhatsNewItem.quietHoursNight -> Copy.WHATS_NEW_QUIET_HOURS_BODY
         WhatsNewItem.roomOfTwelve -> Copy.WHATS_NEW_TWELVE_BODY
         WhatsNewItem.fourInks -> Copy.WHATS_NEW_INKS_BODY
+        WhatsNewItem.findARoom -> Copy.WHATS_NEW_FIND_BODY
+        WhatsNewItem.beingFound -> Copy.WHATS_NEW_BEING_FOUND_BODY
     }
 
 // MARK: - The clock
@@ -566,6 +570,8 @@ internal val WhatsNewItem.timeline: Timeline
         WhatsNewItem.versionsByReading,
         WhatsNewItem.notificationsByName,
         WhatsNewItem.fourInks,
+        WhatsNewItem.findARoom,
+        WhatsNewItem.beingFound,
         -> Timeline(LOOP_MS, STILL_AT)
         WhatsNewItem.followingStays -> Timeline(LONG_LOOP_MS, STAYS_STILL_AT)
         WhatsNewItem.nativeSelection -> Timeline(LONG_LOOP_MS, SELECTION_STILL_AT)
@@ -1111,6 +1117,18 @@ private fun Vignette(item: WhatsNewItem, startAfter: Long, frozenAt: Long?, modi
         WhatsNewItem.fourInks -> Modifier.drawWithCache {
             val page = layOutTheInks()
             onDrawBehind { drawTheInks(page, inks, fourInksFrame(clock.longValue.toInt())) }
+        }
+        WhatsNewItem.findARoom -> Modifier.drawWithCache {
+            val page = layOutTheDoor(measurer)
+            onDrawBehind { drawTheDoor(page, inks, findARoomFrame(clock.longValue.toInt())) }
+        }
+        WhatsNewItem.beingFound -> Modifier.drawWithCache {
+            val page = layOutTheSwitch(
+                measurer, inks, ui,
+                title = Copy.LET_PEOPLE_FIND_YOU,
+                sentence = Copy.WHATS_NEW_BEING_FOUND_LINE,
+            )
+            onDrawBehind { drawNotifications(page, inks, grain, beingFoundFrame(clock.longValue.toInt())) }
         }
     }
     Box(modifier.then(drawing))
@@ -2563,6 +2581,10 @@ private fun CacheDrawScope.layOutTheSwitch(
     measurer: TextMeasurer,
     inks: VignetteInks,
     ui: TextStyle,
+    // The row's title and the words in its well: notifications' by
+    // default, and Being found's own for its picture (A72).
+    title: String = Copy.NOTES_LEFT_FOR_YOU,
+    sentence: String = Copy.notifNoteLeft(READER, NOTED_AT),
 ): TheSwitch {
     val inset = INSET.toPx()
     val left = inset
@@ -2574,25 +2596,25 @@ private fun CacheDrawScope.layOutTheSwitch(
     val wordsLeft = left + padX
     val wordsRoom = (right - padX - trackWidth - 10.dp.toPx() - wordsLeft).coerceAtLeast(1f)
 
-    val title = fitted(measurer, AnnotatedString(Copy.NOTES_LEFT_FOR_YOU), ui.copy(color = inks.text), wordsRoom)
+    val titleLine = fitted(measurer, AnnotatedString(title), ui.copy(color = inks.text), wordsRoom)
 
     val wellX = 8.dp.toPx()
     val wellY = 6.dp.toPx()
     val face = NOTE_FACE.toPx()
     val faceGap = 6.dp.toPx()
-    val sentence = fitted(
+    val sentenceLine = fitted(
         measurer,
-        AnnotatedString(Copy.notifNoteLeft(READER, NOTED_AT)),
+        AnnotatedString(sentence),
         RibbonType.ui(13f).copy(color = inks.text.copy(alpha = 0.8f)),
         (wordsRoom - wellX * 2 - face - faceGap).coerceAtLeast(1f),
     )
-    val wellHeight = wellY * 2 + maxOf(face, sentence.size.height.toFloat())
-    val wellWidth = wellX * 2 + face + faceGap + sentence.size.width
+    val wellHeight = wellY * 2 + maxOf(face, sentenceLine.size.height.toFloat())
+    val wellWidth = wellX * 2 + face + faceGap + sentenceLine.size.width
 
     val under = 8.dp.toPx()
-    val height = padY * 2 + title.size.height + under + wellHeight
+    val height = padY * 2 + titleLine.size.height + under + wellHeight
     val top = ((size.height - height) / 2f).coerceAtLeast(0f)
-    val wellTop = top + padY + title.size.height + under
+    val wellTop = top + padY + titleLine.size.height + under
     val faceAt = Offset(wordsLeft + wellX + face / 2f, wellTop + wellHeight / 2f)
     val initial = measurer.measure(
         AnnotatedString(READER.take(1)),
@@ -2605,15 +2627,15 @@ private fun CacheDrawScope.layOutTheSwitch(
 
     return TheSwitch(
         shape = rounded(Rect(left, top, right, top + height), RibbonShape.row.toPx()),
-        title = title,
+        title = titleLine,
         titleAt = Offset(wordsLeft, top + padY),
         well = rounded(Rect(wordsLeft, wellTop, wordsLeft + wellWidth, wellTop + wellHeight), RibbonShape.small.toPx()),
         face = faceAt,
         faceRadius = face / 2f,
         initial = initial,
         initialAt = faceAt - Offset(initial.size.width / 2f, initial.size.height / 2f),
-        sentence = sentence,
-        sentenceAt = Offset(faceAt.x + face / 2f + faceGap, wellTop + (wellHeight - sentence.size.height) / 2f),
+        sentence = sentenceLine,
+        sentenceAt = Offset(faceAt.x + face / 2f + faceGap, wellTop + (wellHeight - sentenceLine.size.height) / 2f),
         track = Rect(right - padX - trackWidth, trackTop, right - padX, trackTop + trackHeight),
         thumbOff = THUMB_OFF.toPx(),
         thumbOn = THUMB_ON.toPx(),
@@ -3228,3 +3250,91 @@ private fun DrawScope.drawTheInks(page: TheInks, inks: VignetteInks, frame: Four
     // The rules over the ribbons' top edges, so each reads as tucked under.
     for (rule in page.rules) drawRect(inks.rule, topLeft = rule.topLeft, size = rule.size)
 }
+
+// MARK: - Rooms that can be found (A72)
+
+/**
+ * Three faces seated in a row, and past a hairline — the room's edge — a
+ * fourth, asking, fainter ([ask]). Then the edge goes and the fourth takes a
+ * place in the row, the row making room as the hearth's does ([enter]).
+ * After a while the fourth goes and the edge comes back ([leave]).
+ */
+internal data class FindARoomFrame(val ask: Float, val enter: Float, val leave: Float)
+
+internal fun findARoomFrame(t: Int): FindARoomFrame = FindARoomFrame(
+    ask = beat(t, at = 400, ms = 400),
+    enter = beat(t, at = 1200, ms = 480),
+    leave = beat(t, at = 3660, ms = 400),
+)
+
+private const val DOOR_MONOGRAMS = "RAJS"
+private val DOOR_INKS = listOf(Ink.teal, Ink.ochre, Ink.plum, Ink.sky)
+
+/** The faces' initials, each in its own ink, the picture's middle, and the edge's width. */
+private class TheDoor(
+    val centre: Offset,
+    val pitch: Float,
+    val radius: Float,
+    val edge: Float,
+    val initials: List<TextLayoutResult>,
+)
+
+private fun CacheDrawScope.layOutTheDoor(measurer: TextMeasurer): TheDoor = TheDoor(
+    centre = Offset(size.width / 2f, size.height / 2f),
+    pitch = TWELVE_PITCH.toPx(),
+    radius = TWELVE_FACE.toPx() / 2f,
+    edge = 1.dp.toPx(),
+    initials = DOOR_MONOGRAMS.mapIndexed { i, letter ->
+        measurer.measure(
+            AnnotatedString(letter.toString()),
+            monogram(TWELVE_FACE).copy(color = DOOR_INKS[i].color),
+            softWrap = false,
+            maxLines = 1,
+            density = this,
+        )
+    },
+)
+
+/** Face [index] in a row of [seated], centred on the picture. */
+private fun TheDoor.seat(index: Int, seated: Int): Offset =
+    Offset(centre.x + (index - (seated - 1) / 2f) * pitch, centre.y)
+
+private fun DrawScope.drawTheDoor(page: TheDoor, inks: VignetteInks, frame: FindARoomFrame) {
+    // How far the fourth is in the room, and so how much room the row makes.
+    val inside = frame.enter * (1f - frame.leave)
+    val edgeX = page.centre.x + 2.1f * page.pitch
+    faded(1f - inside) {
+        drawRect(
+            inks.rule,
+            topLeft = Offset(edgeX - page.edge / 2f, page.centre.y - page.radius * 1.5f),
+            size = Size(page.edge, page.radius * 3f),
+        )
+    }
+    for (index in 0 until DOOR_MONOGRAMS.length) {
+        val newcomer = index == DOOR_MONOGRAMS.length - 1
+        val at = if (newcomer) {
+            between(Offset(page.centre.x + 3f * page.pitch, page.centre.y), page.seat(index, 4), frame.enter)
+        } else {
+            between(page.seat(index, 3), page.seat(index, 4), inside)
+        }
+        val shown = if (newcomer) frame.ask * (0.6f + 0.4f * frame.enter) * (1f - frame.leave) else 1f
+        if (shown <= 0f) continue
+        // The one asking is a little smaller until it is in, as a face
+        // taking its seat at the hearth is.
+        val r = if (newcomer) page.radius * (0.82f + 0.18f * frame.enter) else page.radius
+        faded(shown) {
+            drawCircle(inks.raised, radius = r, center = at)
+            val initial = page.initials[index]
+            drawText(initial, topLeft = at - Offset(initial.size.width / 2f, initial.size.height / 2f))
+        }
+    }
+}
+
+// MARK: - Being found, if you choose (A72)
+
+/**
+ * Being found's own switch, and under its title, in a small well, what
+ * people see once it is on: a face and one line, written in as the switch
+ * turns. Notifications' picture saying a different thing, on the same beats.
+ */
+internal fun beingFoundFrame(t: Int): NotificationsFrame = notificationsFrame(t)

@@ -246,6 +246,8 @@ private struct WhatsNewItemView: View {
         case .quietHoursNight: QuietHoursNightVignette(startsAfter: startsAfter)
         case .roomOfTwelve: RoomOfTwelveVignette(startsAfter: startsAfter)
         case .fourInks: FourInksVignette(startsAfter: startsAfter)
+        case .findARoom: FindARoomVignette(startsAfter: startsAfter)
+        case .beingFound: BeingFoundVignette(startsAfter: startsAfter)
         }
     }
 
@@ -268,6 +270,8 @@ private struct WhatsNewItemView: View {
         case .quietHoursNight: return Copy.whatsNewQuietHoursTitle
         case .roomOfTwelve: return Copy.whatsNewTwelveTitle
         case .fourInks: return Copy.whatsNewInksTitle
+        case .findARoom: return Copy.whatsNewFindTitle
+        case .beingFound: return Copy.whatsNewBeingFoundTitle
         }
     }
 
@@ -290,6 +294,8 @@ private struct WhatsNewItemView: View {
         case .quietHoursNight: return Copy.whatsNewQuietHoursBody
         case .roomOfTwelve: return Copy.whatsNewTwelveBody
         case .fourInks: return Copy.whatsNewInksBody
+        case .findARoom: return Copy.whatsNewFindBody
+        case .beingFound: return Copy.whatsNewBeingFoundBody
         }
     }
 }
@@ -2502,6 +2508,169 @@ private struct FourInksVignette: View {
             guard await beat(RibbonMotion.openDuration + Vignette.rest) else { return }
             withAnimation(RibbonMotion.settle) { laid = 0 }
             guard await beat(RibbonMotion.settleDuration + Vignette.breath) else { return }
+        }
+    }
+}
+
+// MARK: 18. Rooms that can be found
+
+/// Three faces seated in a row, and past a hairline — the room's edge — a
+/// fourth, asking, fainter. Then the edge goes, and the fourth takes a
+/// place in the row, the row making room as the hearth's does (A72). After
+/// a while the fourth goes and the edge comes back.
+private struct FindARoomVignette: View {
+    let startsAfter: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// The fourth is at the edge, asking.
+    @State private var asking = false
+    /// The fourth is in.
+    @State private var inside = false
+
+    private static let face: CGFloat = 22
+    /// Centre to centre: the face and the room's gap.
+    private static let pitch: CGFloat = 30
+    private static let monograms = Array("RAJS")
+    private static let inks: [Ink] = [.teal, .ochre, .plum, .sky]
+
+    var body: some View {
+        GeometryReader { proxy in
+            let mid = CGPoint(x: proxy.size.width / 2, y: proxy.size.height / 2)
+            ZStack {
+                Rectangle()
+                    .fill(Palette.rule)
+                    .frame(width: 1, height: Self.face * 1.5)
+                    .position(x: mid.x + 2.1 * Self.pitch, y: mid.y)
+                    .opacity(inside ? 0 : 1)
+                ForEach(0..<4, id: \.self) { index in
+                    face(index)
+                        .scaleEffect(index < 3 || inside || reduceMotion ? 1 : 0.82)
+                        .opacity(index < 3 ? 1 : (inside ? 1 : (asking ? 0.6 : 0)))
+                        .position(place(index, mid: mid))
+                }
+            }
+        }
+        .padding(.horizontal, 22)
+        .task(id: reduceMotion) { await play() }
+    }
+
+    private func face(_ index: Int) -> some View {
+        ZStack {
+            Circle().fill(Palette.raised)
+            Text(verbatim: String(Self.monograms[index]))
+                .font(RibbonType.uiMedium(Self.face * 0.42))
+                .foregroundStyle(Self.inks[index].color)
+        }
+        .frame(width: Self.face, height: Self.face)
+    }
+
+    /// Where a face sits: in the row, centred on the picture — the fourth
+    /// beyond the edge until it is in.
+    private func place(_ index: Int, mid: CGPoint) -> CGPoint {
+        if index == 3 && !inside {
+            return CGPoint(x: mid.x + 3 * Self.pitch, y: mid.y)
+        }
+        let seated = inside ? 4 : 3
+        let across = CGFloat(index) - CGFloat(seated - 1) / 2
+        return CGPoint(x: mid.x + across * Self.pitch, y: mid.y)
+    }
+
+    private func play() async {
+        // How it stands under reduce motion: the fourth let in.
+        guard !reduceMotion else {
+            asking = true
+            inside = true
+            return
+        }
+        asking = false
+        inside = false
+        guard await beat(startsAfter) else { return }
+        while true {
+            withAnimation(RibbonMotion.arrive) { asking = true }
+            guard await beat(RibbonMotion.arriveDuration + 0.4) else { return }
+            withAnimation(RibbonMotion.settle) { inside = true }
+            guard await beat(RibbonMotion.settleDuration + Vignette.rest) else { return }
+            withAnimation(RibbonMotion.settle) {
+                asking = false
+                inside = false
+            }
+            guard await beat(RibbonMotion.settleDuration + Vignette.breath) else { return }
+        }
+    }
+}
+
+// MARK: 19. Being found, if you choose
+
+/// Being found's own switch, and under its title, in a small well, what
+/// people see once it is on: a face and one line in its own words, written
+/// in as the switch turns (A72). Notifications' picture, saying a
+/// different thing.
+private struct BeingFoundVignette: View {
+    let startsAfter: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    @State private var on = 0.0
+    @State private var written = 0.0
+    /// The line as a whole, which fades at the end rather than being
+    /// unwritten.
+    @State private var said = 1.0
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 10) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(Copy.letPeopleFindYou)
+                    .font(RibbonType.ui(15))
+                    .foregroundStyle(Palette.text)
+                    .lineLimit(1)
+                HStack(alignment: .top, spacing: 6) {
+                    Vignette.readerFace(14)
+                        .padding(.top, 1)
+                    Text(Copy.whatsNewBeingFoundLine)
+                        .font(RibbonType.ui(13))
+                        .foregroundStyle(Palette.text.opacity(0.8))
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textRenderer(WritesIn(written: written))
+                        .opacity(said)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .well(.small)
+            }
+            Spacer(minLength: 0)
+            VignetteSwitch(on: on)
+        }
+        .padding(.horizontal, Vignette.rowInset)
+        .padding(.vertical, 12)
+        .paper(.row)
+        .padding(.horizontal, 22)
+        .task(id: reduceMotion) { await play() }
+    }
+
+    private func play() async {
+        said = 1
+        guard !reduceMotion else {
+            // How it ends: on, and the line written.
+            on = 1
+            written = 1
+            return
+        }
+        on = 0
+        written = 0
+        guard await beat(startsAfter) else { return }
+        while true {
+            withAnimation(RibbonMotion.open) { on = 1 }
+            guard await beat(RibbonMotion.openDuration) else { return }
+            withAnimation(RibbonMotion.open) { written = 1 }
+            guard await beat(RibbonMotion.openDuration + Vignette.rest) else { return }
+            withAnimation(RibbonMotion.settle) {
+                said = 0
+                on = 0
+            }
+            guard await beat(RibbonMotion.settleDuration) else { return }
+            written = 0
+            said = 1
+            guard await beat(Vignette.breath) else { return }
         }
     }
 }

@@ -23,13 +23,19 @@ class WhatsNewTest {
 
     @Test
     fun testTodaysRelease() {
-        assertEquals("2026-10-twelve", WhatsNew.releases.firstOrNull()?.id)
+        assertEquals("2026-10-found", WhatsNew.releases.firstOrNull()?.id)
         assertEquals(
-            listOf(WhatsNewItem.roomOfTwelve, WhatsNewItem.fourInks),
+            listOf(WhatsNewItem.findARoom, WhatsNewItem.beingFound),
             WhatsNew.releases.firstOrNull()?.items,
         )
-        // The front of the book (A67–A69) is the release before.
-        assertEquals("2026-10-flyleaf", WhatsNew.releases.getOrNull(1)?.id)
+        // A room of twelve (A70) is the release before.
+        assertEquals("2026-10-twelve", WhatsNew.releases.getOrNull(1)?.id)
+        assertEquals(
+            listOf(WhatsNewItem.roomOfTwelve, WhatsNewItem.fourInks),
+            WhatsNew.releases.getOrNull(1)?.items,
+        )
+        // The front of the book (A67–A69) is the one before that.
+        assertEquals("2026-10-flyleaf", WhatsNew.releases.getOrNull(2)?.id)
         assertEquals(
             listOf(
                 WhatsNewItem.flyleaf,
@@ -40,10 +46,10 @@ class WhatsNewTest {
                 WhatsNewItem.notificationsByName,
                 WhatsNewItem.quietHoursNight,
             ),
-            WhatsNew.releases.getOrNull(1)?.items,
+            WhatsNew.releases.getOrNull(2)?.items,
         )
         // The Hebrew made easy to read (A66) belongs to the release before that.
-        assertEquals("2026-10-following", WhatsNew.releases.getOrNull(2)?.id)
+        assertEquals("2026-10-following", WhatsNew.releases.getOrNull(3)?.id)
         assertEquals(
             listOf(
                 WhatsNewItem.followingStays,
@@ -52,7 +58,7 @@ class WhatsNewTest {
                 WhatsNewItem.lordReadsLord,
                 WhatsNewItem.originalReadable,
             ),
-            WhatsNew.releases.getOrNull(2)?.items,
+            WhatsNew.releases.getOrNull(3)?.items,
         )
     }
 
@@ -62,7 +68,7 @@ class WhatsNewTest {
     fun testTheListReadsNewestFirstAndTellsEachThingOnce() {
         val ids = WhatsNew.releases.map { it.id }
         assertEquals(
-            listOf("2026-10-twelve", "2026-10-flyleaf", "2026-10-following", "2026-10-original"),
+            listOf("2026-10-found", "2026-10-twelve", "2026-10-flyleaf", "2026-10-following", "2026-10-original"),
             ids,
         )
         assertEquals(ids.size, ids.toSet().size)
@@ -79,18 +85,18 @@ class WhatsNewTest {
     @Test
     fun testAnUpdaterWhoSawAnEarlierOneSeesThisOne() {
         assertEquals(
-            "2026-10-twelve",
-            WhatsNew.toShow(lastSeen = "2026-10-flyleaf", hasHistory = true, plainLaunch = true)?.id,
+            "2026-10-found",
+            WhatsNew.toShow(lastSeen = "2026-10-twelve", hasHistory = true, plainLaunch = true)?.id,
         )
         assertEquals(
-            "2026-10-twelve",
+            "2026-10-found",
             WhatsNew.toShow(lastSeen = "2026-10-original", hasHistory = true, plainLaunch = true)?.id,
         )
         assertEquals(
-            "2026-10-twelve",
-            WhatsNew.seenAfter(lastSeen = "2026-10-flyleaf", hasHistory = true, plainLaunch = true, shown = true),
+            "2026-10-found",
+            WhatsNew.seenAfter(lastSeen = "2026-10-twelve", hasHistory = true, plainLaunch = true, shown = true),
         )
-        assertNull(WhatsNew.toShow(lastSeen = "2026-10-twelve", hasHistory = true, plainLaunch = true))
+        assertNull(WhatsNew.toShow(lastSeen = "2026-10-found", hasHistory = true, plainLaunch = true))
     }
 
     @Test
@@ -112,6 +118,8 @@ class WhatsNewTest {
         assertEquals("typeface", WhatsNewItem.typeface.name)
         assertEquals("roomOfTwelve", WhatsNewItem.roomOfTwelve.name)
         assertEquals("fourInks", WhatsNewItem.fourInks.name)
+        assertEquals("findARoom", WhatsNewItem.findARoom.name)
+        assertEquals("beingFound", WhatsNewItem.beingFound.name)
         val json = Json.encodeToString(
             listOf(WhatsNewItem.original, WhatsNewItem.ownVersion, WhatsNewItem.followingWords),
         )

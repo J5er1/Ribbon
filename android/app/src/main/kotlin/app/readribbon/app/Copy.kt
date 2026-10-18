@@ -823,6 +823,77 @@ object Copy {
      */
     const val START_A_ROOM_INSTEAD = "Start a room instead"
 
+    // Being found (A72) — a room that everyone in it has opened, a person who
+    // chose to be seen, and a stranger asking. Nobody walks in, nobody is
+    // told no, and nothing here is ever a number. Copy.swift's, line for
+    // line.
+    const val FIND_A_ROOM = "Find a room"
+    const val FIND_A_ROOM_LEDE = "Rooms whose people have chosen to be found. Ask, and anyone inside can let you in."
+    const val FIND_PROMPT = "A book, or a room's name"
+    const val NO_ROOM_IS_OPEN_YET = "No room is open to be found yet."
+    const val NOTHING_OPEN_MATCHES = "Nothing open matches that."
+    const val PEOPLE = "People"
+    const val OPEN_ROOMS = "Open rooms"
+
+    /**
+     * A found room with no name, called by the people in it who chose to be
+     * found — "Ruth, Ann and Sam" — or, with nobody, by what it is.
+     */
+    fun roomOf(names: List<String>): String = when (names.size) {
+        0 -> "A room with no name"
+        1 -> names[0]
+        else -> names.dropLast(1).joinToString(", ") + " and " + names.last()
+    }
+    fun readingBook(book: String) = "Reading $book"
+    const val ASK_TO_JOIN = "Ask to join"
+
+    /** A found room you have asked into, marked on its tile in small caps. */
+    const val ASKED = "asked"
+    const val ASK_LINE_PROMPT = "Say something, if you like"
+    const val ASK = "Ask"
+    const val YOU_ASKED = "You asked. Anyone in the room can let you in."
+    const val TAKE_BACK_YOUR_ASK = "Take back your ask"
+    const val FOUND_ROOM_IS_FULL = "This room is full."
+    const val ROOM_IS_NOT_OPEN = "This room isn't open any more."
+    const val ASK_NEEDS_BEING_FOUND = "To ask, let yourself be found first, so the room can see who is asking."
+    const val ASKED_ENOUGH = "You have asks waiting already. Take one back to ask here."
+    const val BEING_FOUND = "Being found"
+    const val BEING_FOUND_SUB = "Whether people outside your rooms can find you"
+
+    /** Being found's state on its row in You, in small caps. */
+    const val ON = "on"
+    const val OFF = "off"
+    const val BEING_FOUND_LEDE = "Off unless you turn it on. When it is on, anyone on Ribbon can find your name, your face and one line in your own words. Nothing else: not your rooms, not your notes."
+    const val LET_PEOPLE_FIND_YOU = "Let people find you"
+    const val THIRTEEN_OR_OLDER_QUESTION = "Being found is for people thirteen or older."
+    const val I_AM_THIRTEEN_OR_OLDER = "I'm thirteen or older"
+    const val YOUR_LINE = "Your line"
+    const val YOUR_LINE_PROMPT = "One line in your own words"
+    const val PEOPLE_YOUVE_BLOCKED = "People you've blocked"
+    const val UNBLOCK = "Unblock"
+
+    /**
+     * The room's own switch (A72). A yes alone opens nothing: the room opens
+     * once everyone in it has said yes, and who has not is never named.
+     */
+    const val LET_THIS_ROOM_BE_FOUND = "Let this room be found"
+    const val ROOM_OPENS_WHEN_EVERYONE = "Found only once everyone in it says yes."
+    const val YOU_SAID_YES_WAITING = "You said yes. It opens once everyone has."
+    const val ROOM_IS_OPEN = "Open. People can find it and ask to join."
+    const val A_LINE_ABOUT_THIS_ROOM = "A line about this room"
+    const val ROOM_LINE_PROMPT = "What you're reading, and who is welcome"
+    fun askedToJoin(name: String) = "$name asked to join."
+    const val LET_THEM_IN = "Let them in"
+    const val NOT_NOW = "Not now"
+    const val ROOMS_THEYVE_OPENED = "Rooms they're in"
+    const val BLOCK = "Block"
+    fun blockQuestion(name: String) =
+        "Block $name? You stop seeing each other outside the rooms you share. Neither of you is told."
+    const val REPORT = "Report"
+    const val REPORT_THIS_ROOM = "Report this room"
+    const val REPORT_QUESTION = "Tell the people who run Ribbon about this? Nobody else sees it."
+    const val REPORTED = "Thank you. It has been passed on."
+
     // The menu (S14 + S18, one screen — see docs/deviations.md 14). Three
     // section heads, so the rooms, the room you are in, and you are three
     // things rather than one pile.
@@ -1486,6 +1557,7 @@ object Copy {
         "2026-10-original" -> "The words under the words"
         "2026-10-following" -> "Staying on the same page"
         "2026-10-flyleaf" -> "The front of the book"
+        "2026-10-found" -> "A door, if you want one"
         "2026-10-twelve" -> "Room for more of you"
         else -> WHATS_NEW_HEADING
     }
@@ -1651,6 +1723,23 @@ object Copy {
     /** What's new (A70): which, and why. */
     const val WHATS_NEW_INKS_BODY =
         "Bronze, jade, sky and iris join the eight, so everyone in a room of twelve has an ink of their own."
+
+    /** What's new (A72): a room that can be found. */
+    const val WHATS_NEW_FIND_TITLE = "Rooms that can be found"
+
+    /** What's new (A72): who decides, and how someone comes in. */
+    const val WHATS_NEW_FIND_BODY =
+        "When everyone in a room says yes, people can find it and ask to join. Anyone inside can let them in, and nobody is ever told no."
+
+    /** What's new (A72): you, found. */
+    const val WHATS_NEW_BEING_FOUND_TITLE = "Being found, if you choose"
+
+    /** What's new (A72): what is seen, and that it starts off. */
+    const val WHATS_NEW_BEING_FOUND_BODY =
+        "Turn it on in You, and people can find your name, your face and one line in your own words. It stays off until you do."
+
+    /** What's new (A72): the line under a face in the picture, as someone would write it. */
+    const val WHATS_NEW_BEING_FOUND_LINE = "Reading Mark, slowly."
 }
 
 /** First names only, everywhere a person is addressed in a line of copy. */

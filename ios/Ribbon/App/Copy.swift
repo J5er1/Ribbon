@@ -372,6 +372,72 @@ enum Copy {
     /// in the join thread (S16/S17) — never a step without a way out.
     static let startARoomInstead = "Start a room instead"
 
+    // MARK: Being found (A72) — a room that everyone in it has opened, a
+    // person who chose to be seen, and a stranger asking. Nobody walks in,
+    // nobody is told no, and nothing here is ever a number.
+    static let findARoom = "Find a room"
+    static let findARoomLede = "Rooms whose people have chosen to be found. Ask, and anyone inside can let you in."
+    static let findPrompt = "A book, or a room's name"
+    static let noRoomIsOpenYet = "No room is open to be found yet."
+    static let nothingOpenMatches = "Nothing open matches that."
+    static let people = "People"
+    static let openRooms = "Open rooms"
+    /// A found room with no name, called by the people in it who chose to
+    /// be found — "Ruth, Ann and Sam" — or, with nobody, by what it is.
+    static func roomOf(_ names: [String]) -> String {
+        switch names.count {
+        case 0: return "A room with no name"
+        case 1: return names[0]
+        default: return names.dropLast().joined(separator: ", ") + " and " + names[names.count - 1]
+        }
+    }
+    static func readingBook(_ book: String) -> String { "Reading \(book)" }
+    static let askToJoin = "Ask to join"
+    /// A found room you have asked into, marked on its tile in small caps.
+    static let asked = "asked"
+    static let askLinePrompt = "Say something, if you like"
+    static let ask = "Ask"
+    static let youAsked = "You asked. Anyone in the room can let you in."
+    static let takeBackYourAsk = "Take back your ask"
+    static let foundRoomIsFull = "This room is full."
+    static let roomIsNotOpen = "This room isn't open any more."
+    static let askNeedsBeingFound = "To ask, let yourself be found first, so the room can see who is asking."
+    static let askedEnough = "You have asks waiting already. Take one back to ask here."
+    static let beingFound = "Being found"
+    static let beingFoundSub = "Whether people outside your rooms can find you"
+    /// Being found's state on its row in You, in small caps.
+    static let on = "on"
+    static let off = "off"
+    static let beingFoundLede = "Off unless you turn it on. When it is on, anyone on Ribbon can find your name, your face and one line in your own words. Nothing else: not your rooms, not your notes."
+    static let letPeopleFindYou = "Let people find you"
+    static let thirteenOrOlderQuestion = "Being found is for people thirteen or older."
+    static let iAmThirteenOrOlder = "I'm thirteen or older"
+    static let yourLine = "Your line"
+    static let yourLinePrompt = "One line in your own words"
+    static let peopleYouveBlocked = "People you've blocked"
+    static let unblock = "Unblock"
+    /// The room's own switch (A72). A yes alone opens nothing: the room
+    /// opens once everyone in it has said yes, and who has not is never
+    /// named.
+    static let letThisRoomBeFound = "Let this room be found"
+    static let roomOpensWhenEveryone = "Found only once everyone in it says yes."
+    static let youSaidYesWaiting = "You said yes. It opens once everyone has."
+    static let roomIsOpen = "Open. People can find it and ask to join."
+    static let aLineAboutThisRoom = "A line about this room"
+    static let roomLinePrompt = "What you're reading, and who is welcome"
+    static func askedToJoin(_ name: String) -> String { "\(name) asked to join." }
+    static let letThemIn = "Let them in"
+    static let notNow = "Not now"
+    static let roomsTheyveOpened = "Rooms they're in"
+    static let block = "Block"
+    static func blockQuestion(_ name: String) -> String {
+        "Block \(name)? You stop seeing each other outside the rooms you share. Neither of you is told."
+    }
+    static let report = "Report"
+    static let reportThisRoom = "Report this room"
+    static let reportQuestion = "Tell the people who run Ribbon about this? Nobody else sees it."
+    static let reported = "Thank you. It has been passed on."
+
     // MARK: The chapter list and the ribbon (ledger A30/A31)
     static let chapters = "Chapters"
     static let goThere = "Go there"
@@ -728,6 +794,7 @@ enum Copy {
         case "2026-10-original": return "The words under the words"
         case "2026-10-following": return "Staying on the same page"
         case "2026-10-flyleaf": return "The front of the book"
+        case "2026-10-found": return "A door, if you want one"
         case "2026-10-twelve": return "Room for more of you"
         default: return whatsNewHeading
         }
@@ -846,6 +913,19 @@ enum Copy {
     /// What's new (A70): which, and why.
     static let whatsNewInksBody =
         "Bronze, jade, sky and iris join the eight, so everyone in a room of twelve has an ink of their own."
+    /// What's new (A72): a room that can be found.
+    static let whatsNewFindTitle = "Rooms that can be found"
+    /// What's new (A72): who decides, and how someone comes in.
+    static let whatsNewFindBody =
+        "When everyone in a room says yes, people can find it and ask to join. Anyone inside can let them in, and nobody is ever told no."
+    /// What's new (A72): you, found.
+    static let whatsNewBeingFoundTitle = "Being found, if you choose"
+    /// What's new (A72): what is seen, and that it starts off.
+    static let whatsNewBeingFoundBody =
+        "Turn it on in You, and people can find your name, your face and one line in your own words. It stays off until you do."
+    /// What's new (A72): the line under a face in the picture, as someone
+    /// would write it.
+    static let whatsNewBeingFoundLine = "Reading Mark, slowly."
 }
 
 /// The first word of a name, for the places that say it in passing. Kept

@@ -7,6 +7,12 @@ import RibbonCore
 // same objects later. Cold start renders from this state instantly — no
 // splash, no skeleton (§05).
 
+/// Someone you have blocked, by the name you knew them by (A72).
+struct BlockedPerson: Identifiable, Hashable {
+    let id: UUID
+    let name: String
+}
+
 /// The join a tapped invite link is waiting to run (S16).
 struct PendingInvite: Identifiable, Equatable {
     let token: UUID
@@ -731,6 +737,15 @@ final class AppModel {
         case .ribbon(let readingID):
             guard let ribbon = state.ribbons.first(where: { $0.readingID == readingID }) else { return }
             try await remote.push(ribbon: ribbon)
+        case .beingFound:
+            guard let me = state.me else { return }
+            try await remote.push(beingFound: state.beingFound, profile: me)
+        case .wouldOpen(let membershipID):
+            guard let membership = state.memberships.first(where: { $0.id == membershipID }) else { return }
+            try await remote.push(wouldOpen: membership.wouldOpen, membership: membership)
+        case .roomLine(let roomID):
+            guard let room = state.rooms.first(where: { $0.id == roomID }) else { return }
+            try await remote.push(roomLine: room.line, room: room)
         }
     }
 
@@ -1527,6 +1542,212 @@ final class AppModel {
         RoomWatch.stop()
     }
 
+    // MARK: - Being found (A72)
+
+    /// Asks into the rooms you are in, standing ones only, as the last pull
+    /// had them. Never kept on the phone.
+    private(set) var knocks: [Knock] = []
+    /// The people you have blocked, once asked for.
+    private(set) var blockedPeople: Set<UUID> = []
+
+    var beingFound: BeingFound { state.beingFound }
+
+    /// Whether the project has finding at all — the migration that brings
+    /// it may land after a build that knows about it. Asked on each refresh
+    /// until the answer is yes.
+    private(set) var serverFinds = false
+
+    /// Discovery runs through the backend and needs an account, and a
+    /// project that has it: without all three its controls are absent
+    /// rather than dead (§6.1).
+    var discoveryAvailable: Bool { remote != nil && isSignedIn && serverFinds }
+
+    /// "I am thirteen or older", said once.
+    func sayThirteenOrOlder() {
+        guard state.beingFound.saidThirteenAt == nil else { return }
+        state.beingFound.saidThirteenAt = Date()
+        persist()
+        pushBeingFound()
+    }
+
+    func setFindable(_ findable: Bool) {
+        guard !findable || state.beingFound.canBeFindable else { return }
+        state.beingFound.findable = findable
+        persist()
+        pushBeingFound()
+    }
+
+    func setOwnLine(_ line: String?) {
+        let cleaned = OwnLine.clean(line)
+        guard cleaned != state.beingFound.line else { return }
+        state.beingFound.line = cleaned
+        persist()
+        pushBeingFound()
+    }
+
+    private func pushBeingFound() {
+        guard let me = state.me else { return }
+        sayItAgainIfNeeded(me.id, .beingFound)
+    }
+
+    /// Whether this room can be found, from your side of it.
+    func openness(of room: Room) -> RoomOpenness {
+        guard let me = state.me else { return .closed }
+        return RoomOpenness.of(members(of: room), me: me.id)
+    }
+
+    /// Your yes to the room being found, or your no. A yes alone opens
+    /// nothing: the room opens once everyone in it has said yes.
+    func setWouldOpen(_ wouldOpen: Bool, in room: Room) {
+        guard let me = state.me,
+              let i = state.memberships.firstIndex(where: { $0.roomID == room.id && $0.personID == me.id })
+        else { return }
+        state.memberships[i].wouldOpen = wouldOpen
+        persist()
+        let membership = state.memberships[i]
+        sayItAgainIfNeeded(membership.id, .wouldOpen(membershipID: membership.id))
+    }
+
+    /// The room's one line, for the people who find it.
+    func setLine(_ line: String?, of room: Room) {
+        guard let i = state.rooms.firstIndex(where: { $0.id == room.id }) else { return }
+        let cleaned = OwnLine.clean(line)
+        guard cleaned != state.rooms[i].line else { return }
+        state.rooms[i].line = cleaned
+        persist()
+        sayItAgainIfNeeded(room.id, .roomLine(roomID: room.id))
+    }
+
+    /// The standing asks into one room, oldest first.
+    func knocks(on room: Room) -> [Knock] {
+        Knock.standing(knocks.filter { $0.roomID == room.id }, at: Date())
+    }
+
+    /// Letting someone in. They arrive on the next pull, on every phone.
+    func letIn(_ knock: Knock) async throws {
+        guard let remote else { return }
+        try await remote.letIn(room: knock.roomID, person: knock.person.id)
+        knocks.removeAll { $0.id == knock.id }
+        await presence.announceChange()
+        await refreshFromRemote()
+    }
+
+    /// "Not now": the ask is set down for the whole room. The asker is
+    /// not told, and can ask again.
+    func setDown(_ knock: Knock) {
+        knocks.removeAll { $0.id == knock.id }
+        guard let remote else { return }
+        Task { try? await remote.setDownAsk(room: knock.roomID, person: knock.person.id) }
+    }
+
+    /// Open rooms by what someone typed: their words, and the books the
+    /// words could mean. Nothing typed is every open room.
+    func findRooms(matching query: String) async throws -> [OpenRoom] {
+        guard let remote else { return [] }
+        let words = OwnLine.clean(query)
+        let books = BookSearch.books(matching: query)
+        return try await remote.findRooms(words: words, books: books.isEmpty ? nil : books)
+    }
+
+    /// One open room, as it stands now. Nil when it is no longer open to
+    /// you — closed, full of people who blocked you, or you are in it.
+    func openRoom(_ id: UUID) async throws -> OpenRoom? {
+        try await remote?.findRooms(room: id).first
+    }
+
+    /// The open rooms a findable person is in.
+    func openRooms(of person: UUID) async throws -> [OpenRoom] {
+        try await remote?.findRooms(person: person) ?? []
+    }
+
+    func findPeople(matching query: String) async throws -> [PublicFace] {
+        guard let remote, let words = OwnLine.clean(query), words.count >= 2 else { return [] }
+        return try await remote.findPeople(words: words)
+    }
+
+    /// Asking into a room. The database's word for why not becomes a
+    /// sentence here, or nil when it was only the network.
+    func askToJoin(_ room: OpenRoom, saying line: String?) async throws {
+        guard let remote else { return }
+        try await remote.askToJoin(room: room.id, said: line)
+    }
+
+    func takeBackAsk(_ room: OpenRoom) async throws {
+        try await remote?.takeBackAsk(room: room.id)
+    }
+
+    /// What a refused ask says, from the database's own word for it.
+    static func askRefusal(_ error: Error) -> String {
+        if case SupabaseError.http(_, let body) = error {
+            if body.contains("not_findable") { return Copy.askNeedsBeingFound }
+            if body.contains("room_not_open") { return Copy.roomIsNotOpen }
+            if body.contains("room_full") { return Copy.foundRoomIsFull }
+            if body.contains("asked_enough") { return Copy.askedEnough }
+        }
+        return Copy.serverUnreachable
+    }
+
+    func loadBlocked() async {
+        guard let remote, let blocked = try? await remote.blocked() else { return }
+        blockedPeople = Set(blocked)
+    }
+
+    /// Whom you have blocked, by the name you knew them by, for Being
+    /// found's list. Someone blocked on another phone has no name here.
+    var blockedList: [BlockedPerson] {
+        blockedPeople
+            .map { BlockedPerson(id: $0, name: state.blockedNames[$0] ?? Copy.someone) }
+            .sorted { ($0.name, $0.id.uuidString) < ($1.name, $1.id.uuidString) }
+    }
+
+    /// Blocking: the two of you stop seeing each other in every list, and
+    /// neither can ask into the other's rooms. Neither is told.
+    func block(_ face: PublicFace) async throws {
+        guard let remote else { return }
+        try await remote.block(face.id)
+        blockedPeople.insert(face.id)
+        state.blockedNames[face.id] = face.name
+        persist()
+        knocks.removeAll { $0.person.id == face.id }
+    }
+
+    func unblock(_ person: UUID) async throws {
+        guard let remote else { return }
+        try await remote.unblock(person)
+        blockedPeople.remove(person)
+        state.blockedNames.removeValue(forKey: person)
+        persist()
+    }
+
+    /// Faces seen in finding, kept for this launch only: a stranger's face
+    /// is not written to the phone.
+    private var foundFaces: [UUID: UIImage] = [:]
+    @ObservationIgnored private var foundFacesAsked: Set<UUID> = []
+
+    /// A found person's face: theirs from your rooms if you share one, or
+    /// the one fetched while finding.
+    func face(of face: PublicFace) -> UIImage? {
+        portraits[face.id] ?? foundFaces[face.id]
+    }
+
+    /// Fetch a found person's face, once a launch, when they have one.
+    func lookAt(_ face: PublicFace) {
+        guard face.portraitPath != nil, portraits[face.id] == nil,
+              !foundFacesAsked.contains(face.id), let remote, remote.isSignedIn
+        else { return }
+        foundFacesAsked.insert(face.id)
+        Task {
+            let found = await remote.fetchPortrait(personID: face.id, ifNoneMatch: nil)
+            guard case .changed(let data, _) = found, let image = UIImage(data: data) else { return }
+            foundFaces[face.id] = image
+        }
+    }
+
+    /// A report, for the people who run Ribbon.
+    func report(person: UUID? = nil, room: UUID? = nil) async throws {
+        try await remote?.report(person: person, room: room)
+    }
+
     // MARK: - The account and the room surface of sync (§6.10, S16)
 
     var isSignedIn: Bool { remote?.isSignedIn ?? false }
@@ -1590,6 +1811,12 @@ final class AppModel {
         me.name = row.name
         me.translation = TranslationID(rawValue: row.translation)
         state.me = me
+        // Being found (A72): the account's choice, unless this phone's is
+        // still on its way. Nil is a project without the columns.
+        if let findable = row.findable, state.unsaid[me.id] == nil {
+            state.beingFound = BeingFound(
+                findable: findable, line: row.line, saidThirteenAt: row.thirteenOrOlderAt)
+        }
         if row.portraitPath != nil { refreshPortrait(me.id) }
         persist()
     }
@@ -1919,6 +2146,9 @@ final class AppModel {
             }
             await pushInviteIfNeeded(invite, for: room)
         }
+        if !serverFinds, let there = await remote.findingIsThere() {
+            serverFinds = there
+        }
         guard let graph = try? await remote.pullRooms() else { return .none }
         let landed = merge(graph)
         announce(landed)
@@ -2094,11 +2324,16 @@ final class AppModel {
                     state.rooms[i].name = row.name
                     state.rooms[i].translation = translation ?? state.rooms[i].translation
                 }
+                // The room's line (A72), unless this phone's is still on
+                // its way up.
+                if state.unsaid[row.id] == nil {
+                    state.rooms[i].line = row.line
+                }
                 state.rooms[i].isPaused = row.isPaused
             } else {
                 state.rooms.append(
                     Room(id: row.id, name: row.name, createdAt: row.createdAt, isPaused: row.isPaused,
-                         translation: translation ?? .bsb))
+                         translation: translation ?? .bsb, line: row.line))
             }
         }
 
@@ -2111,10 +2346,17 @@ final class AppModel {
                 // there.
                 if row.personId != me.id { state.memberships[i].ink = ink }
                 state.memberships[i].joinedAt = row.joinedAt
+                // Everyone's yes to the room being found (A72) — mine too,
+                // said on another phone, unless this one's is still on its
+                // way. Nil is a project without the column: nothing said.
+                if let wouldOpen = row.wouldOpen,
+                   state.unsaid[state.memberships[i].id] == nil {
+                    state.memberships[i].wouldOpen = wouldOpen
+                }
             } else {
                 state.memberships.append(Membership(
                     id: row.id, roomID: row.roomId, personID: row.personId,
-                    ink: ink, joinedAt: row.joinedAt))
+                    ink: ink, joinedAt: row.joinedAt, wouldOpen: row.wouldOpen ?? false))
             }
         }
         // Departures propagate: a membership the backend no longer has is
@@ -2160,6 +2402,10 @@ final class AppModel {
             person.translation = translation
             state.people[row.id] = person
         }
+
+        // Asks into my rooms (A72): not kept on the phone, only shown, and
+        // only while they stand.
+        knocks = Knock.standing(graph.knocks.compactMap(\.knock), at: Date())
 
         for row in graph.invites {
             // The link is the room's, not the device's: a live invite the

@@ -224,6 +224,26 @@ class SupabaseClient(
         )
     }
 
+    /**
+     * Insert rows that are never updated in place (A72): a report, a block.
+     * [ignoringDuplicates] makes a second insert of the same key a quiet
+     * no-op rather than an update, which those tables do not allow.
+     */
+    suspend fun insert(table: String, rowsJson: String, ignoringDuplicates: Boolean = false) {
+        request(
+            method = "POST",
+            url = url("rest/v1/$table"),
+            body = rowsJson.toByteArray(),
+            authenticated = true,
+            headers = mapOf(
+                "Prefer" to if (ignoringDuplicates) {
+                    "resolution=ignore-duplicates,return=minimal"
+                } else {
+                    "return=minimal"
+                }),
+        )
+    }
+
     suspend fun delete(table: String, query: List<Pair<String, String>>) {
         request(method = "DELETE", url = url("rest/v1/$table", query), authenticated = true)
     }

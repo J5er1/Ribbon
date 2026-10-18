@@ -60,6 +60,11 @@ public enum WhatsNewItem: String, Codable, Hashable, Sendable, CaseIterable {
     /// Bronze, jade, sky and iris: an ink for everyone in a room of twelve
     /// (A70).
     case fourInks
+    /// A room whose people all say yes can be found, and asked into (A72).
+    case findARoom
+    /// You can be found too, by your name, your face and one line — off
+    /// until you turn it on (A72).
+    case beingFound
 }
 
 /// A release worth telling someone about. The id is a name, not a version
@@ -84,6 +89,9 @@ public enum WhatsNew {
     /// skipped three releases hears about the one they are on, and the rest
     /// are simply how the app is now — there for the reading, from You.
     public static let releases: [WhatsNewRelease] = [
+        WhatsNewRelease(
+            id: "2026-10-found", released: "2026-10-18",
+            items: [.findARoom, .beingFound]),
         WhatsNewRelease(
             id: "2026-10-twelve", released: "2026-10-16",
             items: [.roomOfTwelve, .fourInks]),

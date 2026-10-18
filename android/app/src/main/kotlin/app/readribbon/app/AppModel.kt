@@ -19,7 +19,9 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import app.readribbon.core.BeingFound
 import app.readribbon.core.Bible
+import app.readribbon.core.BookSearch
 import app.readribbon.core.CardState
 import app.readribbon.core.FireScale
 import app.readribbon.core.FireState
@@ -30,6 +32,11 @@ import app.readribbon.core.Highlight
 import app.readribbon.core.ReflectionCard
 import app.readribbon.core.ReflectionPrompts
 import app.readribbon.core.Ink
+import app.readribbon.core.Knock
+import app.readribbon.core.OpenRoom
+import app.readribbon.core.OwnLine
+import app.readribbon.core.PublicFace
+import app.readribbon.core.RoomOpenness
 import app.readribbon.core.Invite
 import app.readribbon.core.Membership
 import app.readribbon.core.Note
@@ -2249,6 +2256,241 @@ class AppModel(
         RoomWatch.stop(appContext)
     }
 
+    // MARK: - Being found (A72)
+
+    /** Whether a write about [key] is still on its way up. */
+    private fun isUnsaid(key: Uuid): Boolean = unsaid.any { it.first == key }
+
+    /**
+     * Asks into the rooms you are in, standing ones only, as the last pull
+     * had them. Never kept on the phone.
+     */
+    var knocks: List<Knock> by mutableStateOf(emptyList())
+        private set
+
+    /** The people you have blocked, once asked for. */
+    var blockedPeople: Set<Uuid> by mutableStateOf(emptySet())
+        private set
+
+    val beingFound: BeingFound get() = state.beingFound
+
+    /**
+     * Whether the project has finding at all — the migration that brings it
+     * may land after a build that knows about it. Asked on each refresh until
+     * the answer is yes.
+     */
+    var serverFinds: Boolean by mutableStateOf(false)
+        private set
+
+    /**
+     * Discovery runs through the backend and needs an account, and a project
+     * that has it: without all three its controls are absent rather than dead
+     * (§6.1).
+     */
+    val discoveryAvailable: Boolean get() = remote != null && isSignedIn && serverFinds
+
+    /** "I am thirteen or older", said once. */
+    fun sayThirteenOrOlder() {
+        if (state.beingFound.saidThirteenAt != null) return
+        state = state.copy(beingFound = state.beingFound.copy(saidThirteenAt = Clock.System.now()))
+        persist()
+        pushBeingFound()
+    }
+
+    fun setFindable(findable: Boolean) {
+        if (findable && !state.beingFound.canBeFindable) return
+        state = state.copy(beingFound = state.beingFound.copy(findable = findable))
+        persist()
+        pushBeingFound()
+    }
+
+    fun setOwnLine(line: String?) {
+        val cleaned = OwnLine.clean(line)
+        if (cleaned == state.beingFound.line) return
+        state = state.copy(beingFound = state.beingFound.copy(line = cleaned))
+        persist()
+        pushBeingFound()
+    }
+
+    private fun pushBeingFound() {
+        val me = state.me ?: return
+        sayItAgainIfNeeded(me.id) { remote ->
+            val now = state.me ?: return@sayItAgainIfNeeded
+            remote.push(beingFound = state.beingFound, profile = now)
+        }
+    }
+
+    /** Whether this room can be found, from your side of it. */
+    fun openness(room: Room): RoomOpenness {
+        val me = state.me ?: return RoomOpenness.closed
+        return RoomOpenness.of(members(room), me.id)
+    }
+
+    /**
+     * Your yes to the room being found, or your no. A yes alone opens
+     * nothing: the room opens once everyone in it has said yes.
+     */
+    fun setWouldOpen(wouldOpen: Boolean, room: Room) {
+        val me = state.me ?: return
+        val i = state.memberships.indexOfFirst { it.roomID == room.id && it.personID == me.id }
+        if (i < 0) return
+        val memberships = state.memberships.toMutableList()
+        memberships[i] = memberships[i].copy(wouldOpen = wouldOpen)
+        state = state.copy(memberships = memberships)
+        persist()
+        val membershipID = memberships[i].id
+        sayItAgainIfNeeded(membershipID) { remote ->
+            val now = state.memberships.firstOrNull { it.id == membershipID } ?: return@sayItAgainIfNeeded
+            remote.push(wouldOpen = now.wouldOpen, membership = now)
+        }
+    }
+
+    /** The room's one line, for the people who find it. */
+    fun setLine(line: String?, room: Room) {
+        val i = state.rooms.indexOfFirst { it.id == room.id }
+        if (i < 0) return
+        val cleaned = OwnLine.clean(line)
+        if (cleaned == state.rooms[i].line) return
+        val rooms = state.rooms.toMutableList()
+        rooms[i] = rooms[i].copy(line = cleaned)
+        state = state.copy(rooms = rooms)
+        persist()
+        sayItAgainIfNeeded(room.id) { remote ->
+            val now = state.rooms.firstOrNull { it.id == room.id } ?: return@sayItAgainIfNeeded
+            remote.push(roomLine = now.line, room = now)
+        }
+    }
+
+    /** The standing asks into one room, oldest first. */
+    fun knocks(room: Room): List<Knock> =
+        Knock.standing(knocks.filter { it.roomID == room.id }, Clock.System.now())
+
+    /** Letting someone in. They arrive on the next pull, on every phone. */
+    suspend fun letIn(knock: Knock) {
+        val remote = this.remote ?: return
+        remote.letIn(room = knock.roomID, person = knock.person.id)
+        knocks = knocks.filterNot { it.id == knock.id }
+        presence.announceChange()
+        refreshFromRemote()
+    }
+
+    /**
+     * "Not now": the ask is set down for the whole room. The asker is not
+     * told, and can ask again.
+     */
+    fun setDown(knock: Knock) {
+        knocks = knocks.filterNot { it.id == knock.id }
+        val remote = this.remote ?: return
+        viewModelScope.launch {
+            runCatching { remote.setDownAsk(room = knock.roomID, person = knock.person.id) }
+        }
+    }
+
+    /**
+     * Open rooms by what someone typed: their words, and the books the words
+     * could mean. Nothing typed is every open room.
+     */
+    suspend fun findRooms(matching: String): List<OpenRoom> {
+        val remote = this.remote ?: return emptyList()
+        val books = BookSearch.books(matching)
+        return remote.findRooms(words = OwnLine.clean(matching), books = books.ifEmpty { null })
+    }
+
+    /**
+     * One open room, as it stands now. Null when it is no longer open to
+     * you — closed, full of people who blocked you, or you are in it.
+     */
+    suspend fun openRoom(id: Uuid): OpenRoom? = remote?.findRooms(room = id)?.firstOrNull()
+
+    /** The open rooms a findable person is in. */
+    suspend fun openRooms(person: Uuid): List<OpenRoom> = remote?.findRooms(person = person) ?: emptyList()
+
+    suspend fun findPeople(matching: String): List<PublicFace> {
+        val remote = this.remote ?: return emptyList()
+        val words = OwnLine.clean(matching) ?: return emptyList()
+        if (words.length < 2) return emptyList()
+        return remote.findPeople(words)
+    }
+
+    /** Asking into a room, with a line if there is one. */
+    suspend fun askToJoin(room: OpenRoom, saying: String?) {
+        remote?.askToJoin(room = room.id, said = saying)
+    }
+
+    suspend fun takeBackAsk(room: OpenRoom) {
+        remote?.takeBackAsk(room = room.id)
+    }
+
+    suspend fun loadBlocked() {
+        val remote = this.remote ?: return
+        val blocked = runCatching { remote.blocked() }.getOrNull() ?: return
+        blockedPeople = blocked.toSet()
+    }
+
+    /**
+     * Whom you have blocked, by the name you knew them by, for Being found's
+     * list. Someone blocked on another phone has no name here.
+     */
+    val blockedList: List<Pair<Uuid, String>>
+        get() = blockedPeople
+            .map { it to (state.blockedNames[it] ?: Copy.SOMEONE) }
+            .sortedWith(compareBy({ it.second }, { it.first.toString() }))
+
+    /**
+     * Blocking: the two of you stop seeing each other in every list, and
+     * neither can ask into the other's rooms. Neither is told.
+     */
+    suspend fun block(face: PublicFace) {
+        val remote = this.remote ?: return
+        remote.block(face.id)
+        blockedPeople = blockedPeople + face.id
+        state = state.copy(blockedNames = state.blockedNames + (face.id to face.name))
+        persist()
+        knocks = knocks.filterNot { it.person.id == face.id }
+    }
+
+    suspend fun unblock(person: Uuid) {
+        val remote = this.remote ?: return
+        remote.unblock(person)
+        blockedPeople = blockedPeople - person
+        state = state.copy(blockedNames = state.blockedNames - person)
+        persist()
+    }
+
+    /** Faces seen in finding, kept for this launch only: a stranger's face is not written to the phone. */
+    private val foundFaces = mutableStateMapOf<Uuid, ImageBitmap>()
+    private val foundFacesAsked = mutableSetOf<Uuid>()
+
+    /** A found person's face: theirs from your rooms if you share one, or the one fetched while finding. */
+    fun face(face: PublicFace): ImageBitmap? = portraits[face.id] ?: foundFaces[face.id]
+
+    /**
+     * Every face met while finding, this launch, by id. A navigation route is
+     * a string, so a found person travels between screens as an id and is
+     * looked up again here.
+     */
+    private val facesMet = mutableMapOf<Uuid, PublicFace>()
+
+    fun faceMet(id: Uuid): PublicFace? = facesMet[id]
+
+    /** Fetch a found person's face, once a launch, when they have one. */
+    fun lookAt(face: PublicFace) {
+        facesMet[face.id] = face
+        val remote = this.remote ?: return
+        if (face.portraitPath == null || portraits[face.id] != null) return
+        if (!remote.isSignedIn || !foundFacesAsked.add(face.id)) return
+        viewModelScope.launch {
+            val found = remote.fetchPortrait(personID = face.id, ifNoneMatch = null)
+            val changed = found as? SupabaseClient.PortraitFetch.Changed ?: return@launch
+            decodeImage(changed.data)?.let { foundFaces[face.id] = it }
+        }
+    }
+
+    /** A report, for the people who run Ribbon. */
+    suspend fun report(person: Uuid? = null, room: Uuid? = null) {
+        remote?.report(person = person, room = room)
+    }
+
     // MARK: - The account and the room surface of sync (§6.10, S16)
 
     val isSignedIn: Boolean get() = remote?.isSignedIn ?: false
@@ -2337,6 +2579,14 @@ class AppModel(
             name = row.name,
             translation = TranslationID(rawValue = row.translation))
         state = state.copy(me = me)
+        // Being found (A72): the account's choice, unless this phone's is
+        // still on its way. Null is a project without the columns.
+        val findable = row.findable
+        if (findable != null && !isUnsaid(me.id)) {
+            state = state.copy(
+                beingFound = BeingFound(
+                    findable = findable, line = row.line, saidThirteenAt = row.thirteenOrOlderAt))
+        }
         if (row.portraitPath != null) refreshPortrait(me.id)
         persist()
     }
@@ -2780,6 +3030,7 @@ class AppModel(
             }
             pushInviteIfNeeded(invite, room)
         }
+        if (!serverFinds) remote.findingIsThere()?.let { serverFinds = it }
         val graph = runCatching { remote.pullRooms() }.getOrNull() ?: return Arrivals.none
         val landed = merge(graph)
         announce(landed)
@@ -3043,6 +3294,9 @@ class AppModel(
                         translation = row.translation
                             ?.let { TranslationID(rawValue = it) } ?: room.translation)
                 }
+                // The room's line (A72), unless this phone's is still on its
+                // way up.
+                if (!isUnsaid(row.id)) room = room.copy(line = row.line)
                 rooms[i] = room.copy(isPaused = row.isPaused)
             } else {
                 rooms.add(
@@ -3050,7 +3304,8 @@ class AppModel(
                         id = row.id, name = row.name, createdAt = row.createdAt,
                         isPaused = row.isPaused,
                         translation = row.translation
-                            ?.let { TranslationID(rawValue = it) } ?: TranslationID.bsb))
+                            ?.let { TranslationID(rawValue = it) } ?: TranslationID.bsb,
+                        line = row.line))
             }
         }
         next = next.copy(rooms = rooms)
@@ -3066,12 +3321,19 @@ class AppModel(
                 // there.
                 var membership = memberships[i]
                 if (row.personId != me.id) membership = membership.copy(ink = ink)
+                // Everyone's yes to the room being found (A72) — mine too,
+                // said on another phone, unless this one's is still on its
+                // way. Null is a project without the column: nothing said.
+                val wouldOpen = row.wouldOpen
+                if (wouldOpen != null && !isUnsaid(membership.id)) {
+                    membership = membership.copy(wouldOpen = wouldOpen)
+                }
                 memberships[i] = membership.copy(joinedAt = row.joinedAt)
             } else {
                 memberships.add(
                     Membership(
                         id = row.id, roomID = row.roomId, personID = row.personId,
-                        ink = ink, joinedAt = row.joinedAt))
+                        ink = ink, joinedAt = row.joinedAt, wouldOpen = row.wouldOpen ?: false))
             }
         }
         // Departures propagate: a membership the backend no longer has is
@@ -3123,6 +3385,10 @@ class AppModel(
             people[row.id] = profile
         }
         next = next.copy(people = people)
+
+        // Asks into my rooms (A72): not kept on the phone, only shown, and
+        // only while they stand.
+        knocks = Knock.standing(graph.knocks.mapNotNull { it.knock() }, Clock.System.now())
 
         val invites = next.invites.toMutableList()
         for (row in graph.invites) {
@@ -3636,6 +3902,17 @@ class AppModel(
     }
 
     companion object {
+        /** What a refused ask says, from the database's own word for it (A72). */
+        fun askRefusal(error: Throwable): String {
+            val body = (error as? SupabaseError.Http)?.body.orEmpty()
+            return when {
+                "not_findable" in body -> Copy.ASK_NEEDS_BEING_FOUND
+                "room_not_open" in body -> Copy.ROOM_IS_NOT_OPEN
+                "room_full" in body -> Copy.FOUND_ROOM_IS_FULL
+                "asked_enough" in body -> Copy.ASKED_ENOUGH
+                else -> Copy.SERVER_UNREACHABLE
+            }
+        }
 
         /**
          * How long a face is taken on trust before it is asked about again.

@@ -95,6 +95,15 @@ enum class WhatsNewItem {
      * (A70).
      */
     fourInks,
+
+    /** A room whose people all say yes can be found, and asked into (A72). */
+    findARoom,
+
+    /**
+     * You can be found too, by your name, your face and one line — off until
+     * you turn it on (A72).
+     */
+    beingFound,
 }
 
 /**
@@ -116,6 +125,11 @@ object WhatsNew {
      * are simply how the app is now — there for the reading, from You.
      */
     val releases: List<WhatsNewRelease> = listOf(
+        WhatsNewRelease(
+            id = "2026-10-found",
+            released = "2026-10-18",
+            items = listOf(WhatsNewItem.findARoom, WhatsNewItem.beingFound),
+        ),
         WhatsNewRelease(
             id = "2026-10-twelve",
             released = "2026-10-16",

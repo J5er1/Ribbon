@@ -4,6 +4,7 @@ package app.readribbon.data
 
 import android.content.Context
 import android.os.StatFs
+import app.readribbon.core.BeingFound
 import app.readribbon.core.Highlight
 import app.readribbon.core.Invite
 import app.readribbon.core.Membership
@@ -335,6 +336,18 @@ data class AppState(
      * this phone, and a second phone on an older build has not seen anything.
      */
     val whatsNewSeen: String? = null,
+    /**
+     * Whether you can be found, and your line (A72). Kept here and pushed to
+     * your profile; your account's own row wins when it has one. Not
+     * salvaged: the profile holds it too.
+     */
+    val beingFound: BeingFound = BeingFound(),
+    /**
+     * The names of the people you have blocked, as you knew them when you
+     * did: once blocked, the server stops showing you their profile, and the
+     * list in Being found would otherwise be a list of nobody.
+     */
+    val blockedNames: Map<Uuid, String> = emptyMap(),
 )
 
 /**

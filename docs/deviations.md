@@ -4786,6 +4786,93 @@ A71. **Free, for now (amends §14 and S22).** Owner: *"Pricing will be
       asked for anything; what a reader meets is unchanged but for one
       line on the plan screen.
 
+A72. **Being found (2026-10-found; reverses §3's "no strangers, no
+    discovery", amends §6.8 and S12).** Owner, asked how far reaching
+    outside a room should go: *"Share a verse out"*, *"Bring someone in"*,
+    *"People across rooms"* and *"Public profiles / discovery"*; and then,
+    of the last: *"public profiles and discovery: just build it out how
+    you'd like, and then work on what's next as you wish."* A70 said this
+    was owed a conversation before it was built; that was it, and the
+    shape below is the one chosen with the owner's leave. Until now a
+    person was visible only to the people they share a room with, and a
+    room only to its members. This opens exactly two doors, each from the
+    inside, and nobody walks through either uninvited.
+
+    - **A person may be findable**: their name, their face and one line in
+      their own words (140 characters, `OwnLine`), seen by anyone signed
+      in. Off unless they turn it on, in You → Being found, and only once
+      they have said "I'm thirteen or older" — the store age gate is not
+      enough for something strangers can see, and the server holds it too
+      (`profiles_findable_said_thirteen`). Nothing else about them is ever
+      shown: not their rooms' words, not their notes, not a count of
+      anything.
+    - **A room may be open**: found by anyone signed in, by its name, its
+      line or the book it is reading ("mark", "1 cor" and "Mark 4" all find
+      Mark, `BookSearch`), and asked into. A room is open only while
+      *everyone* in it has said yes (`memberships.would_open`), the way
+      closing a room asks everyone (§6.8): one person's switch never
+      exposes the others. Each person's switch is in the room's menu, "Let
+      this room be found", and under it where the room stands — closed,
+      "You said yes. It opens once everyone has.", or open. Who has not
+      said yes is never named. A found room shows its name (or the first
+      names of the people in it who are findable), its line, its book and
+      its fire — never how many are in it, and never anyone who has not
+      chosen to be found.
+    - **Nobody walks in.** A stranger asks, with a line if they like (280
+      characters), and must be findable to ask, so the room can see who is
+      asking. The ask waits at the top of the room's menu, with their face
+      and what they said; anyone in the room can "Let them in" or say "Not
+      now". Nobody is told no: "Not now" sets the ask down silently, an ask
+      lapses after fourteen days, and the asker can take it back. Someone
+      let in arrives having already said yes to the room being found,
+      because that is how they found it. A person holds at most five asks
+      at once, and the message for it is not a number: "You have asks
+      waiting already."
+    - **Blocks and reports.** Two people who block each other stop seeing
+      each other in every list, cannot ask into each other's rooms, and
+      their asks disappear; neither is told, and who has blocked you is
+      never asked. The rooms they share are untouched — leaving is still
+      how you leave. Blocked people are listed in Being found by the name
+      you knew them by (the server no longer shows you their profile).
+      Reports go to a table nobody signed in can read, for the people who
+      run Ribbon through the dashboard.
+    - **Deleting your account** turns finding off and takes your line
+      with it, as well as emptying the profile (A40).
+
+    **The server half** is `20261016180000_ribbon_being_found.sql`. New
+    columns (`profiles.findable`, `line`, `thirteen_or_older_at`;
+    `rooms.line`; `memberships.would_open`), three tables (`blocks`,
+    `knocks`, `reports`), and the functions the phones call: `find_rooms`,
+    `find_people`, `ask_to_join`, `let_in`. Who may see a profile is now
+    `can_see_person` — yourself, anyone you share a room with, and, unless
+    either of you has blocked the other, anyone findable and anyone asking
+    into a room of yours — and a portrait follows its person. Nothing is
+    dropped: existing policies are altered in place and triggers created
+    or replaced.
+
+    **A repair, found on the way.** Memberships and invites could be
+    updated into another room: their update policies check whose row it
+    is, not where it points, so a member could move their own membership
+    row into any room whose id they knew — which this feature hands to
+    strangers. Both now keep their place (`keep_in_place`: `room_id` and
+    `person_id` on a membership, `room_id` and `created_by` on an invite).
+    The same shape is possible, in principle, on other tables that carry a
+    room or reading id; they are listed in still-to-do rather than changed
+    here.
+
+    **Not yet on the live project.** The migration needs the owner's
+    approval of the database tool in this session, which has not come; it
+    has not been run, rehearsed whole, or applied. The phones are built to
+    meet that honestly: each asks the project once a refresh whether the
+    tables are there, and until they are, nothing about finding appears —
+    no row in the menu, no switch, no Being found (§6.1, no dead control).
+    New fields are only ever written by their own requests, so a phone on
+    a project without them behaves exactly as it did.
+
+    **What's new**, "A door, if you want one": a fourth face waiting past
+    the room's edge and then let in, the row making room; and Being found's
+    own switch turning on with a face and its line written in under it.
+
 ## iOS (phase four): the second pass
 
 Android took a design pass of its own (A18–A51) and the two platforms
