@@ -109,8 +109,30 @@ enum class WhatsNewItem {
     closingARoom,
 
     /**
+     * The fire's glow, and every ember's pool of light, fade to nothing,
+     * with no edge around them (A74).
+     */
+    softLight,
+
+    /**
+     * A finished book's record quotes each marked verse in the reader's own
+     * version, the licensed ones included — and says so where it cannot yet
+     * (A74).
+     */
+    quotedMarks,
+
+    /** A verse number never ends a line apart from its verse (A74). */
+    numbersStay,
+
+    /**
+     * A voice note's wave runs the whole width of its note, evenly spaced,
+     * and a drag lands on the bar under the finger (A74).
+     */
+    wavesFill,
+
+    /**
      * Anyone in a room may ask it a question of their own at a chapter's end,
-     * and cards open for everyone when the last answer is in (A74).
+     * and cards open for everyone when the last answer is in (A75).
      */
     askTheRoom,
 }
@@ -138,6 +160,16 @@ object WhatsNew {
             id = "2026-10-cards",
             released = "2026-10-18",
             items = listOf(WhatsNewItem.askTheRoom),
+        ),
+        WhatsNewRelease(
+            id = "2026-10-light",
+            released = "2026-10-18",
+            items = listOf(
+                WhatsNewItem.softLight,
+                WhatsNewItem.quotedMarks,
+                WhatsNewItem.numbersStay,
+                WhatsNewItem.wavesFill,
+            ),
         ),
         WhatsNewRelease(
             id = "2026-10-closing",

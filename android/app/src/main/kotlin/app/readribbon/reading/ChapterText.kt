@@ -551,7 +551,10 @@ fun ChapterText(
                 // to a whole verse. The words it had stand until it reaches
                 // words again.
                 val verse = page.versesIn(texts).singleOrNull()
-                val number = verse != null && texts.joinToString("") { it.text }.trim() == verse.toString()
+                // The figures, without the thin space and the word joiner
+                // after them (A74).
+                val number = verse != null &&
+                    texts.joinToString("") { it.text }.trim { it.isWhitespace() || it == '\u2060' } == verse.toString()
                 if (lastReport[0] != null && !number) return@collect
                 val whole = verse?.let { VerseRange("", 0, it, it) }
                 if (whole != null) selection.select(whole) else selection.state.clear()
@@ -1948,9 +1951,17 @@ private fun buildChapterPage(
                     // word space.
                     letterSpacing = 0.sp,
                 )
-                // A thin space after the number, never a word space.
+                // A thin space after the number, never a word space, and
+                // then a word joiner (A74), which takes no room and is never
+                // a place to break: the thin space alone let a line end on
+                // the number with its verse beginning the next. The line
+                // breaks at the space before the number instead, which is
+                // the verse before's own. Not the narrow no-break space,
+                // though it is one character: Unicode's word rules count it
+                // part of a word, and the hold, which picks its word by them,
+                // would take the number and the verse's first word as one.
                 val digits = builder.length
-                appendRun(numberSpan, v, "$v ", spoken = false)
+                appendRun(numberSpan, v, "$v\u2009\u2060", spoken = false)
                 numbers[v] = digits until digits + v.toString().length
                 wrote = true
             }

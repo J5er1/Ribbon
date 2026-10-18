@@ -611,7 +611,7 @@ final class RemoteSync {
         }
     }
 
-    /// The room's own question (A74), asked. False when someone in the room
+    /// The room's own question (A75), asked. False when someone in the room
     /// asked one at this chapter first: there is one of the room's at a
     /// time, and the server keeps it so.
     func ask(card: ReflectionCard) async throws -> Bool {
@@ -1333,7 +1333,7 @@ final class RemoteSync {
         var question: String
         var state: String
         var openedAt: Date?
-        /// Only ever sent for the room's own card (A74); a project without
+        /// Only ever sent for the room's own card (A75); a project without
         /// the column never hears of it from a card of Ribbon's.
         var byTheRoom: Bool? = nil
         var writtenBy: UUID? = nil
@@ -1400,7 +1400,7 @@ private enum SessionKeychain {
 
 extension RemoteSync.CardRow {
     /// A card as the server keeps it: its state as the table spells it, and
-    /// whose it is when the room asked it (A74).
+    /// whose it is when the room asked it (A75).
     init(_ card: ReflectionCard) {
         self.init(
             id: card.id, readingId: card.readingID, chapter: card.chapter, question: card.question,

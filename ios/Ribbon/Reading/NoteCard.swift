@@ -134,6 +134,15 @@ struct NoteCard: View {
 /// The waveform, drawn in the author's ink, filling left-to-right as it
 /// plays. No timer, no duration readout — a duration is a count and it
 /// makes people self-conscious about how long they talked.
+///
+/// Across the whole of the note, whatever the number of peaks (A74): each
+/// has an equal share of the width and its bar stands in the middle of it.
+/// The bars were a fixed step from the leading edge, so a short note — or
+/// the tour's forty — filled part of the card and stopped, and the width
+/// drawn said how long somebody talked, which is a duration by another
+/// name. It also put the bars somewhere a drag did not: a scrub reads the
+/// whole width, so on a short note the finger was past the last bar long
+/// before the note's end. Now the share a finger is in is the bar it is on.
 struct WaveformView: View {
     var peaks: [Float]
     var ink: Ink
@@ -144,13 +153,14 @@ struct WaveformView: View {
     var body: some View {
         GeometryReader { geo in
             let width = geo.size.width
-            HStack(alignment: .center, spacing: 1.5) {
+            HStack(alignment: .center, spacing: 0) {
                 let bars = displayPeaks
                 ForEach(bars.indices, id: \.self) { index in
                     let played = Double(index) / Double(max(1, bars.count)) <= progress
                     Capsule()
                         .fill(ink.color.opacity(played ? 1 : 0.35))
                         .frame(width: 2, height: max(3, CGFloat(bars[index]) * 30))
+                        .frame(maxWidth: .infinity)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)

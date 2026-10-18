@@ -240,9 +240,12 @@ private fun ChapterTile(
             },
         contentAlignment = Alignment.Center,
     ) {
+        // The figures level and in step (A74), so a row of chapters sits on
+        // one line rather than rising and falling with the face's old-style
+        // figures.
         Text(
             text = "$number",
-            style = RibbonType.ui(17f),
+            style = RibbonType.figures(17f),
             color = if (youAreHere) Palette.text else Palette.muted,
         )
         if (hasRibbon) {

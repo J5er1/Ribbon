@@ -147,9 +147,35 @@ struct EmberRecordScreen: View {
     /// again belongs to the room, not to you, so there it is not offered.
     var onReadAgain: ((String) -> Void)? = nil
 
+    /// A licensed version's chapters, for the highlights' quotes (A74):
+    /// this phone's copy where it has one, or streamed for this screen.
+    @State private var licensedChapters: [LicensedChapter: ScriptureChapter] = [:]
+    /// The chapters that would not come — no copy here, and no connection
+    /// or no answer. Their quotes say so rather than standing empty.
+    @State private var wouldNotCome: Set<LicensedChapter> = []
+
+    private struct LicensedChapter: Hashable {
+        var translation: TranslationID
+        var chapter: Int
+    }
+
     private var book: BibleBook? { Bible.book(id: reading.bookID) }
     private var notes: [Note] { model.notes(in: reading) }
     private var highlights: [Highlight] { model.highlights(in: reading) }
+    /// The version the record reads in: your own (A60).
+    private var translation: TranslationID { model.words(room: model.room(of: reading)) }
+    /// That version, when it is one that streams rather than one in the
+    /// bundle. Nil for a bundled version, and for one this build does not
+    /// know, which is looked for in the bundle as it always was.
+    private var licensed: Translation? {
+        TranslationRegistry.translation(for: translation).flatMap { $0.isBundled ? nil : $0 }
+    }
+    /// What the licensed quotes are asked for under: the version, the
+    /// network, and the chapters the highlights are in.
+    private var licensedAsk: String {
+        let chapters = Set(highlights.map(\.range.start.chapter)).sorted().map(String.init)
+        return "\(translation.rawValue)/\(model.isOnline)/\(chapters.joined(separator: ","))"
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -167,6 +193,11 @@ struct EmberRecordScreen: View {
         }
         .room()
         .toolbar(.hidden, for: .navigationBar)
+        // Keyed on the network as well, so a connection coming back asks
+        // again for the chapters that would not come, without a tap — and
+        // on the chapters, so a highlight that syncs in from one not yet
+        // asked for is quoted too.
+        .task(id: licensedAsk) { await bringLicensedChapters() }
     }
 
     private var record: some View {
@@ -232,7 +263,12 @@ struct EmberRecordScreen: View {
                 if !highlights.isEmpty {
                     VStack(alignment: .leading, spacing: 14) {
                         ForEach(highlights) { highlight in
-                            QuotedHighlight(highlight: highlight, onOpenVerse: onOpenVerse)
+                            QuotedHighlight(
+                                highlight: highlight,
+                                text: quotedText(highlight.range.start),
+                                notHere: wouldNotCome.contains(LicensedChapter(
+                                    translation: translation, chapter: highlight.range.start.chapter)),
+                                onOpenVerse: onOpenVerse)
                         }
                     }
                     .padding(.horizontal, 24)
@@ -253,6 +289,91 @@ struct EmberRecordScreen: View {
             .readableColumn()
         }
         .scrollIndicators(.hidden)
+    }
+
+    // MARK: A licensed version's verses
+
+    /// A highlight's verse, in the version the record reads in. A bundled
+    /// version's is in the bundle. A licensed one's was looked for there
+    /// too, where none of it is, so every NKJV, NIV or NASB reader's record
+    /// was a column of bare references (A74): it is this phone's copy of
+    /// the chapter now, or the chapter streamed for this screen.
+    private func quotedText(_ address: VerseAddress) -> String? {
+        guard let licensed else {
+            return model.scripture.verseText(address, translation: translation)
+        }
+        return licensedChapters[LicensedChapter(translation: licensed.id, chapter: address.chapter)]?
+            .text(forVerse: address.verse)
+    }
+
+    /// The licensed chapters the highlights are in, each asked for once
+    /// however many highlights it holds — a long book can have dozens, and
+    /// API.Bible counts every call. What this phone holds first, read off
+    /// the main thread; then, with a connection, the rest, one at a time.
+    ///
+    /// Kept, the way the page keeps them, only when the book is the one the
+    /// room has open. The cache holds one book a translation, and keeping a
+    /// finished one would put out the chapters of the book being read; any
+    /// other book's are streamed and kept nowhere.
+    ///
+    /// What comes arrives rather than appears, on `arrive`, the way the
+    /// original words' panel brings in a licensed version — the plain
+    /// token, kept under reduce motion, because what it carries is words
+    /// fading in. What will not come says so. Never another version's
+    /// words in its place: the record reads in yours (A60), and the
+    /// Berean's under your reference would be a misquotation.
+    private func bringLicensedChapters() async {
+        guard let licensed else { return }
+        let bookID = reading.bookID
+        let wanted = Set(highlights.map(\.range.start.chapter)).sorted()
+            .map { LicensedChapter(translation: licensed.id, chapter: $0) }
+            .filter { licensedChapters[$0] == nil }
+        guard !wanted.isEmpty else { return }
+
+        let store = model.scripture
+        let held = await Task.detached(priority: .userInitiated) {
+            var held: [LicensedChapter: ScriptureChapter] = [:]
+            for key in wanted {
+                let address = VerseAddress(bookID: bookID, chapter: key.chapter, verse: 1)
+                if let chapter = store.cachedRemoteChapter(address, translation: licensed) {
+                    held[key] = chapter
+                }
+            }
+            return held
+        }.value
+        guard !Task.isCancelled else { return }
+        if !held.isEmpty {
+            withAnimation(RibbonMotion.arrive) {
+                licensedChapters.merge(held) { $1 }
+                wouldNotCome.subtract(held.keys)
+            }
+        }
+
+        let missing = wanted.filter { held[$0] == nil }
+        guard !missing.isEmpty else { return }
+        guard model.isOnline else {
+            withAnimation(RibbonMotion.arrive) { wouldNotCome.formUnion(missing) }
+            return
+        }
+        let open = model.room(of: reading).flatMap { model.openReading(in: $0) }?.bookID == bookID
+        for key in missing {
+            let address = VerseAddress(bookID: bookID, chapter: key.chapter, verse: 1)
+            let chapter: ScriptureChapter?
+            if open {
+                chapter = await store.ensureRemoteChapter(address, translation: licensed)
+            } else {
+                chapter = await store.streamRemoteChapter(address, translation: licensed)
+            }
+            guard !Task.isCancelled else { return }
+            withAnimation(RibbonMotion.arrive) {
+                if let chapter {
+                    licensedChapters[key] = chapter
+                    wouldNotCome.remove(key)
+                } else {
+                    wouldNotCome.insert(key)
+                }
+            }
+        }
     }
 }
 
@@ -305,8 +426,16 @@ private struct EmberNoteRow: View {
 }
 
 private struct QuotedHighlight: View {
-    @Environment(AppModel.self) private var model
     let highlight: Highlight
+    /// The verse in the version the record reads in, worked out by the
+    /// record (A74). Nil while a licensed chapter is on its way, and when
+    /// it will not come.
+    let text: String?
+    /// Its chapter would not come: the quote's place says so, quietly, in
+    /// the words the original words' panel uses for the same thing, rather
+    /// than leaving the reference standing alone as though nothing had been
+    /// marked there.
+    let notHere: Bool
     var onOpenVerse: ((VerseAddress) -> Void)?
 
     var body: some View {
@@ -325,8 +454,7 @@ private struct QuotedHighlight: View {
 
     private var quote: some View {
         VStack(alignment: .leading, spacing: 4) {
-            if let reading = model.state.readings.first(where: { $0.id == highlight.readingID }),
-               let text = model.scripture.verseText(highlight.range.start, translation: model.words(room: model.room(of: reading))) {
+            if let text {
                 Text(text)
                     .font(RibbonType.scripture(15))
                     .foregroundStyle(Palette.text)
@@ -334,6 +462,12 @@ private struct QuotedHighlight: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(10)
                     .background(highlight.ink.color.opacity(Palette.highlightWash), in: RoundedRectangle(cornerRadius: 6))
+                    .transition(.opacity)
+            } else if notHere {
+                Text(Copy.originalNotOnThisPhone)
+                    .font(RibbonType.ui(14))
+                    .foregroundStyle(Palette.muted)
+                    .transition(.opacity)
             }
             SmallCaps(highlight.range.formatted, size: 11)
         }

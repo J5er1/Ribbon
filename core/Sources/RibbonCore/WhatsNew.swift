@@ -68,8 +68,20 @@ public enum WhatsNewItem: String, Codable, Hashable, Sendable, CaseIterable {
     /// A room can close when everyone agrees, and everyone keeps the shelf
     /// as a file (A73).
     case closingARoom
+    /// The fire's glow, and every ember's pool of light, fade to nothing,
+    /// with no edge around them (A74).
+    case softLight
+    /// A finished book's record quotes each marked verse in the reader's own
+    /// version, the licensed ones included — and says so where it cannot yet
+    /// (A74).
+    case quotedMarks
+    /// A verse number never ends a line apart from its verse (A74).
+    case numbersStay
+    /// A voice note's wave runs the whole width of its note, evenly spaced,
+    /// and a drag lands on the bar under the finger (A74).
+    case wavesFill
     /// Anyone in a room may ask it a question of their own at a chapter's
-    /// end, and cards open for everyone when the last answer is in (A74).
+    /// end, and cards open for everyone when the last answer is in (A75).
     case askTheRoom
 }
 
@@ -98,6 +110,9 @@ public enum WhatsNew {
         WhatsNewRelease(
             id: "2026-10-cards", released: "2026-10-18",
             items: [.askTheRoom]),
+        WhatsNewRelease(
+            id: "2026-10-light", released: "2026-10-18",
+            items: [.softLight, .quotedMarks, .numbersStay, .wavesFill]),
         WhatsNewRelease(
             id: "2026-10-closing", released: "2026-10-18",
             items: [.closingARoom]),

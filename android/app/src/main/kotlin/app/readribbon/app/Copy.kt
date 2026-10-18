@@ -497,7 +497,10 @@ object Copy {
 
     /**
      * S06 · the original (A60): a licensed version somebody here reads that
-     * has not streamed to this phone. Swift says the device's own noun.
+     * has not streamed to this phone. Swift says the device's own noun. S11
+     * says it too (A74), in a highlight's quote on a finished book's record,
+     * when its chapter in your licensed version is not here and will not
+     * come.
      */
     const val ORIGINAL_NOT_ON_THIS_PHONE = "Not on this phone yet."
 
@@ -586,7 +589,7 @@ object Copy {
      *  a thread, so there is nothing to timestamp. */
     fun answerFrom(name: String, answer: String) = "$name answered. $answer"
 
-    /** The room's own question (A74). Whose it is is said, as "Ruth banked
+    /** The room's own question (A75). Whose it is is said, as "Ruth banked
      *  the fire" is: asking is done in the open. */
     const val ASK_THE_ROOM = "Ask the room a question"
 
@@ -1587,6 +1590,7 @@ object Copy {
         "2026-10-following" -> "Staying on the same page"
         "2026-10-flyleaf" -> "The front of the book"
         "2026-10-cards" -> "A question of your own"
+        "2026-10-light" -> "Light, and the finer points"
         "2026-10-closing" -> "When a room is done"
         "2026-10-found" -> "A door, if you want one"
         "2026-10-twelve" -> "Room for more of you"
@@ -1779,14 +1783,52 @@ object Copy {
     const val WHATS_NEW_CLOSING_BODY =
         "When everyone in a room says so, or it has been quiet for a month and one of you asks, the room closes. Everyone keeps the whole shelf as a file: every book, note, mark and card."
 
-    /** What's new (A74): the room writes a card. */
+    /** What's new (A74): the fire's light, and every ember's, falls softly. */
+    const val WHATS_NEW_SOFT_LIGHT_TITLE = "The light falls softly"
+
+    /**
+     * What's new (A74): what changed about it — it fades the way light
+     * does, with no edge.
+     */
+    const val WHATS_NEW_SOFT_LIGHT_BODY =
+        "The glow around the fire, and the pool of light under each ember, " +
+            "now fades into the dark the way light does, with no edge around it."
+
+    /** What's new (A74): a finished book's marks, quoted in your version. */
+    const val WHATS_NEW_QUOTED_MARKS_TITLE = "Your marks, quoted in your version"
+
+    /**
+     * What's new (A74): the licensed versions included, and what it says
+     * when a chapter is not here yet.
+     */
+    const val WHATS_NEW_QUOTED_MARKS_BODY =
+        "Open a finished book and each verse you marked is quoted in the version you read, " +
+            "the New King James and the others included. " +
+            "If its chapter isn’t on this phone yet, it says so, and the words come when they can."
+
+    /** What's new (A74): a verse number keeps to its verse. */
+    const val WHATS_NEW_NUMBERS_STAY_TITLE = "A verse number stays with its verse"
+
+    /** What's new (A74): what a full line does now. */
+    const val WHATS_NEW_NUMBERS_STAY_BODY =
+        "A number no longer ends a line on its own. " +
+            "When a line is full, it goes down to the next with its verse’s first word."
+
+    /** What's new (A74): a voice note's wave fills its note. */
+    const val WHATS_NEW_WAVES_FILL_TITLE = "A voice note’s wave, the width of the note"
+
+    /** What's new (A74): however short, and where a drag lands. */
+    const val WHATS_NEW_WAVES_FILL_BODY =
+        "However short a note is, its wave runs the whole width of the note, " +
+            "and a drag along it lands on the bar under your finger."
+    /** What's new (A75): the room writes a card. */
     const val WHATS_NEW_ASK_TITLE = "Ask the room"
 
-    /** What's new (A74): where, how it waits, and that it opens. */
+    /** What's new (A75): where, how it waits, and that it opens. */
     const val WHATS_NEW_ASK_BODY =
         "At the end of a chapter, under Ribbon's card, anyone in the room can ask a question of their own. It waits sealed like any card and says whose it is, and the cards open for everyone the moment the last answer is in."
 
-    /** What's new (A74): the question in the picture, as someone would ask it. */
+    /** What's new (A75): the question in the picture, as someone would ask it. */
     const val WHATS_NEW_ASK_QUESTION = "What would you have said to him?"
 }
 

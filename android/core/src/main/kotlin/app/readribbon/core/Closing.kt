@@ -158,7 +158,7 @@ object ShelfExport {
             if (theirCards.isNotEmpty()) {
                 lines += listOf("Cards", "")
                 for (card in theirCards) {
-                    // A question the room asked says whose it was (A74).
+                    // A question the room asked says whose it was (A75).
                     val asked = if (card.byTheRoom) ", asked by ${card.writtenBy?.let(name) ?: "someone"}" else ""
                     lines += "Chapter ${card.chapter}$asked: ${card.question}"
                     val answers = card.answers.entries

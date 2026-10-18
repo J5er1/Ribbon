@@ -3,8 +3,11 @@ import RibbonCore
 
 // The chapter list (ledger A31): a sheet on the ground with the book's
 // name, the ribbon if it is somewhere worth going, and the chapters as a
-// grid of numbers. The one you are in is a tile of paper; the rest are
-// bare. Where the ribbon is, a hairline in the accent at the tile's foot.
+// grid of numbers. The one you are in is a tile of paper, and its number
+// alone is in the full ink; the rest are bare, their numbers quiet, as
+// Android has always set them (I44) — paper on the ground is a faint edge
+// on its own. Every number is in lining figures, so the grid sits level
+// (A74). Where the ribbon is, a hairline in the accent at the tile's foot.
 // Addresses, never scores: nothing here says how far along anybody is.
 
 struct ChaptersSheet: View {
@@ -83,6 +86,9 @@ private struct ChapterTile: View {
     let here: Bool
     let ribbon: Bool
     var action: () -> Void
+    /// Read so that a type-size change sets the figures again: their face
+    /// is UIKit's, scaled when it is made (A74).
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         Button(action: action) {
@@ -100,9 +106,12 @@ private struct ChapterTile: View {
 
     private var face: some View {
         VStack(spacing: 0) {
+            // The figures level and in step (A74); the chapter you are in
+            // in the full ink and the rest quiet, so where you are is said
+            // twice, by the number as well as by its tile (I44).
             Text(String(number))
-                .font(RibbonType.ui(17))
-                .foregroundStyle(Palette.text)
+                .font(RibbonType.figures(17, at: dynamicTypeSize))
+                .foregroundStyle(here ? Palette.text : Palette.muted)
                 .frame(maxWidth: .infinity)
                 .frame(height: 44)
             // The ribbon: a hairline in the accent at the tile's foot.

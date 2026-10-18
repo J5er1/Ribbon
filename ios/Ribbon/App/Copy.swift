@@ -243,7 +243,9 @@ enum Copy {
     /// says the selection as yours does.
     static let roomAllAgree = "Everyone here reads these words as you do."
     /// S06 · the original (A60): a licensed version somebody here reads
-    /// that has not streamed to this device.
+    /// that has not streamed to this device. S11 says it too (A74), in a
+    /// highlight's quote on a finished book's record, when its chapter in
+    /// your licensed version is not here and will not come.
     @MainActor static var originalNotOnThisPhone: String { "Not on this \(deviceNoun) yet." }
     /// S06 · the original (A60): a word's dictionary number, small and
     /// secondary under its definition.
@@ -276,7 +278,7 @@ enum Copy {
     static func cardOpenSpoken(_ question: String) -> String { "\(question). The card is open." }
     static func answerFrom(_ name: String, _ answer: String) -> String { "\(name) answered. \(answer)" }
 
-    // The room's own question (A74). Whose it is is said, as "Ruth banked
+    // The room's own question (A75). Whose it is is said, as "Ruth banked
     // the fire" is: asking is done in the open.
     static let askTheRoom = "Ask the room a question"
     static let askTheRoomField = "Your question for the room"
@@ -816,6 +818,7 @@ enum Copy {
         case "2026-10-following": return "Staying on the same page"
         case "2026-10-flyleaf": return "The front of the book"
         case "2026-10-cards": return "A question of your own"
+        case "2026-10-light": return "Light, and the finer points"
         case "2026-10-closing": return "When a room is done"
         case "2026-10-found": return "A door, if you want one"
         case "2026-10-twelve": return "Room for more of you"
@@ -954,12 +957,34 @@ enum Copy {
     /// What's new (A73): how, and what everyone keeps.
     static let whatsNewClosingBody =
         "When everyone in a room says so, or it has been quiet for a month and one of you asks, the room closes. Everyone keeps the whole shelf as a file: every book, note, mark and card."
-    /// What's new (A74): the room writes a card.
+    /// What's new (A74): the fire's light, and every ember's, falls softly.
+    static let whatsNewSoftLightTitle = "The light falls softly"
+    /// What's new (A74): what changed about it — it fades the way light
+    /// does, with no edge.
+    static let whatsNewSoftLightBody =
+        "The glow around the fire, and the pool of light under each ember, now fades into the dark the way light does, with no edge around it."
+    /// What's new (A74): a finished book's marks, quoted in your version.
+    static let whatsNewQuotedMarksTitle = "Your marks, quoted in your version"
+    /// What's new (A74): the licensed versions included, and what it says
+    /// when a chapter is not here yet.
+    static let whatsNewQuotedMarksBody =
+        "Open a finished book and each verse you marked is quoted in the version you read, the New King James and the others included. If its chapter isn’t on this phone yet, it says so, and the words come when they can."
+    /// What's new (A74): a verse number keeps to its verse.
+    static let whatsNewNumbersStayTitle = "A verse number stays with its verse"
+    /// What's new (A74): what a full line does now.
+    static let whatsNewNumbersStayBody =
+        "A number no longer ends a line on its own. When a line is full, it goes down to the next with its verse’s first word."
+    /// What's new (A74): a voice note's wave fills its note.
+    static let whatsNewWavesFillTitle = "A voice note’s wave, the width of the note"
+    /// What's new (A74): however short, and where a drag lands.
+    static let whatsNewWavesFillBody =
+        "However short a note is, its wave runs the whole width of the note, and a drag along it lands on the bar under your finger."
+    /// What's new (A75): the room writes a card.
     static let whatsNewAskTitle = "Ask the room"
-    /// What's new (A74): where, how it waits, and that it opens.
+    /// What's new (A75): where, how it waits, and that it opens.
     static let whatsNewAskBody =
         "At the end of a chapter, under Ribbon's card, anyone in the room can ask a question of their own. It waits sealed like any card and says whose it is, and the cards open for everyone the moment the last answer is in."
-    /// What's new (A74): the question in the picture, as someone would ask it.
+    /// What's new (A75): the question in the picture, as someone would ask it.
     static let whatsNewAskQuestion = "What would you have said to him?"
 }
 

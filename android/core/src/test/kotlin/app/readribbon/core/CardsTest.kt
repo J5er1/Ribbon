@@ -14,7 +14,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-// CardsTests.swift's tests, case for case (§4.6, §16.4, A74).
+// CardsTests.swift's tests, case for case (§4.6, §16.4, A75).
 
 class CardsTest {
     private val ruth = Uuid.parse("00000000-0000-4000-8000-000000000002")

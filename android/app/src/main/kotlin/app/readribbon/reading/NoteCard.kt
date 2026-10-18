@@ -341,6 +341,15 @@ private fun togglePlayback(player: VoicePlayer, audioFile: File?) {
  * The waveform, drawn in the author's ink, filling left-to-right as it
  * plays. No timer, no duration readout — a duration is a count and it
  * makes people self-conscious about how long they talked.
+ *
+ * Across the whole of the note, whatever the number of peaks (A74): each has
+ * an equal share of the width and its bar stands in the middle of it. The
+ * bars were a fixed step from the start, so a short note filled part of the
+ * card and stopped, and the width drawn said how long somebody talked, which
+ * is a duration by another name. It also put the bars somewhere a drag did
+ * not: a scrub reads the whole width, so on a short note the finger was past
+ * the last bar long before the note's end. Now the share a finger is in is
+ * the bar it is on.
  */
 @Composable
 fun WaveformView(
@@ -409,7 +418,8 @@ fun WaveformView(
     ) {
         Canvas(modifier = Modifier.fillMaxWidth().height(WAVE_HEIGHT)) {
             val barWidth = BAR_WIDTH.toPx()
-            val step = barWidth + BAR_GAP.toPx()
+            // Each peak's share of the width, the bar centred in it.
+            val step = size.width / bars.size
             val floor = BAR_MIN_HEIGHT.toPx()
             val full = BAR_FULL_HEIGHT.toPx()
             bars.forEachIndexed { index, peak ->
@@ -417,7 +427,10 @@ fun WaveformView(
                 val barHeight = max(floor, peak * full)
                 drawRoundRect(
                     color = color.copy(alpha = if (played) 1f else 0.35f),
-                    topLeft = Offset(index * step, (size.height - barHeight) / 2f),
+                    topLeft = Offset(
+                        index * step + (step - barWidth) / 2f,
+                        (size.height - barHeight) / 2f,
+                    ),
                     size = Size(barWidth, barHeight),
                     cornerRadius = CornerRadius(barWidth / 2f),
                 )
@@ -430,7 +443,6 @@ fun WaveformView(
 private val EMPTY_PEAKS = List(40) { 0.2f }
 
 private val BAR_WIDTH = 2.dp
-private val BAR_GAP = 1.5.dp
 private val BAR_MIN_HEIGHT = 3.dp
 private val BAR_FULL_HEIGHT = 30.dp
 private val WAVE_HEIGHT = 34.dp

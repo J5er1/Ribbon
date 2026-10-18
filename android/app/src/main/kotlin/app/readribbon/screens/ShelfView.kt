@@ -4,6 +4,7 @@ package app.readribbon.screens
 
 import android.content.Intent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.expandVertically
@@ -36,6 +37,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -65,9 +67,11 @@ import app.readribbon.core.Note
 import app.readribbon.core.Reading
 import app.readribbon.core.RibbonClock
 import app.readribbon.core.Room
-import app.readribbon.core.TranslationID
+import app.readribbon.core.ScriptureChapter
+import app.readribbon.core.TranslationRegistry
 import app.readribbon.core.VerseAddress
 import app.readribbon.design.BackChevron
+import app.readribbon.design.FadesUnderReduceMotion
 import app.readribbon.design.Flows
 import app.readribbon.design.NoteMark
 import app.readribbon.design.Palette
@@ -84,6 +88,12 @@ import app.readribbon.design.rememberReduceMotion
 import app.readribbon.design.room
 import app.readribbon.fire.EmberView
 import app.readribbon.reading.NoteCard
+import app.readribbon.services.cachedRemoteChapter
+import app.readribbon.services.ensureRemoteChapter
+import app.readribbon.services.streamRemoteChapter
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
 import kotlin.time.Clock
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
@@ -425,6 +435,86 @@ fun EmberRecordScreen(
     val notes: List<Note> = model.notes(reading)
     val highlights: List<Highlight> = model.highlights(reading)
     val reduceMotion = rememberReduceMotion()
+    val context = LocalContext.current
+
+    // The version the record reads in: your own (A60).
+    val translation = model.words(model.room(reading))
+    val licensed = TranslationRegistry.translation(translation)?.takeIf { !it.isBundled }
+    // A licensed version's chapters, for the highlights' quotes (A74): this
+    // phone's copy where it has one, or streamed for this screen. Swift keys
+    // them on the version as well as the chapter; here the version is the
+    // `remember` key, which comes to the same.
+    var licensedChapters by remember(translation) {
+        mutableStateOf(emptyMap<Int, ScriptureChapter>())
+    }
+    // The chapters that would not come — no copy here, and no connection or
+    // no answer. Their quotes say so rather than standing empty.
+    var wouldNotCome by remember(translation) { mutableStateOf(emptySet<Int>()) }
+    // The chapters the highlights are in, each once.
+    val highlightChapters = highlights.map { it.range.start.chapter }.distinct().sorted()
+
+    /**
+     * The licensed chapters the highlights are in, each asked for once
+     * however many highlights it holds — a long book can have dozens, and
+     * API.Bible counts every call. What this phone holds first, read off the
+     * main thread; then, with a connection, the rest, one at a time.
+     *
+     * Kept, the way the page keeps them, only when the book is the one the
+     * room has open. The cache holds one book a translation, and keeping a
+     * finished one would put out the chapters of the book being read; any
+     * other book's are streamed and kept nowhere.
+     *
+     * Keyed on the network as well, so a connection coming back asks again
+     * for the chapters that would not come, without a tap — and on the
+     * chapters, so a highlight that syncs in from one not yet asked for is
+     * quoted too. Never another version's words in their place: the record
+     * reads in yours (A60), and the Berean's under your reference would be a
+     * misquotation.
+     */
+    LaunchedEffect(licensed, model.isOnline, highlightChapters) {
+        if (licensed == null) return@LaunchedEffect
+        val wanted = highlightChapters.filter { it !in licensedChapters }
+        if (wanted.isEmpty()) return@LaunchedEffect
+
+        val held = withContext(Dispatchers.IO) {
+            buildMap<Int, ScriptureChapter> {
+                for (n in wanted) {
+                    val address = VerseAddress(bookID = reading.bookID, chapter = n, verse = 1)
+                    model.scripture.cachedRemoteChapter(context, address, licensed)?.let { put(n, it) }
+                }
+            }
+        }
+        if (held.isNotEmpty()) {
+            licensedChapters = licensedChapters + held
+            wouldNotCome = wouldNotCome - held.keys
+        }
+
+        val missing = wanted.filter { it !in held }
+        if (missing.isEmpty()) return@LaunchedEffect
+        if (!model.isOnline) {
+            wouldNotCome = wouldNotCome + missing
+            return@LaunchedEffect
+        }
+        val open = model.room(reading)?.let { model.openReading(it) }?.bookID == reading.bookID
+        for (n in missing) {
+            val address = VerseAddress(bookID = reading.bookID, chapter = n, verse = 1)
+            val chapter = if (open) {
+                model.scripture.ensureRemoteChapter(context, address, licensed)
+            } else {
+                model.scripture.streamRemoteChapter(address, licensed)
+            }
+            // Both swallow a cancellation into a null, as every fetch here
+            // does: a record left mid-fetch must not mark the chapter as one
+            // that would not come.
+            if (!isActive) return@LaunchedEffect
+            if (chapter != null) {
+                licensedChapters = licensedChapters + (n to chapter)
+                wouldNotCome = wouldNotCome - n
+            } else {
+                wouldNotCome = wouldNotCome + n
+            }
+        }
+    }
 
     /**
      * Ember → ember record. iOS gets this from the zoom navigation
@@ -581,12 +671,31 @@ fun EmberRecordScreen(
                         verticalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
                         highlights.forEach { highlight ->
-                            QuotedHighlight(
-                                translation = model.words(model.room(reading)),
-                                model = model,
-                                highlight = highlight,
-                                onOpenVerse = onOpenVerse,
-                            )
+                            // Each row is its highlight, as SwiftUI's
+                            // `ForEach` keys it: a quote's fade is its own,
+                            // and stays with it if a highlight synced in
+                            // later moves the rows under it.
+                            key(highlight.id) {
+                                val start = highlight.range.start
+                                QuotedHighlight(
+                                    highlight = highlight,
+                                    // A bundled version's verse is in the
+                                    // assets. A licensed one's was looked for
+                                    // there too, where none of it is, so
+                                    // every NKJV, NIV or NASB reader's record
+                                    // was a column of bare references (A74):
+                                    // it is this phone's copy of the chapter
+                                    // now, or the chapter streamed for this
+                                    // screen.
+                                    text = if (licensed == null) {
+                                        model.scripture.verseText(start, translation)
+                                    } else {
+                                        licensedChapters[start.chapter]?.text(start.verse)
+                                    },
+                                    notHere = licensed != null && start.chapter in wouldNotCome,
+                                    onOpenVerse = onOpenVerse,
+                                )
+                            }
                         }
                     }
                 }
@@ -700,19 +809,49 @@ private fun EmberNoteRow(
     }
 }
 
+/**
+ * One highlight on the record: its verse, and where it is.
+ *
+ * @param text the verse in the version the record reads in, worked out by
+ *   the record (A74). In your own version (A60): A42 held a finished book
+ *   to the room's because re-wording it would have moved its marks off their
+ *   words; a mark follows its original words now, so the keepsake can read
+ *   in the version you read. Null while a licensed chapter is on its way,
+ *   and when it will not come.
+ * @param notHere its chapter would not come: the quote's place says so,
+ *   quietly, in the words the original words' panel uses for the same thing,
+ *   rather than leaving the reference standing alone as though nothing had
+ *   been marked there.
+ */
 @Composable
 private fun QuotedHighlight(
-    model: AppModel,
     highlight: Highlight,
-    translation: TranslationID,
+    text: String?,
+    notHere: Boolean,
     onOpenVerse: ((VerseAddress) -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
-    // In your own version (A60). A42 held a finished book to the room's
-    // because re-wording it would have moved its marks off their words; a
-    // mark follows its original words now, so the keepsake can read in the
-    // version you read.
-    val text = model.scripture.verseText(highlight.range.start, translation)
+    // What comes arrives rather than appears, on `arrive`, the way the
+    // original words' panel brings in a licensed version — and stays a fade
+    // under reduce motion, because what it carries is words fading in, and
+    // held still a fade is a cut (I22). A verse there from the first frame,
+    // as a bundled one always is, is simply there.
+    val quote = remember { Animatable(if (text != null) 1f else 0f) }
+    LaunchedEffect(text != null) {
+        if (text == null) {
+            quote.snapTo(0f)
+        } else {
+            withContext(FadesUnderReduceMotion) { quote.animateTo(1f, RibbonMotion.arrive()) }
+        }
+    }
+    val line = remember { Animatable(if (notHere) 1f else 0f) }
+    LaunchedEffect(notHere) {
+        if (!notHere) {
+            line.snapTo(0f)
+        } else {
+            withContext(FadesUnderReduceMotion) { line.animateTo(1f, RibbonMotion.arrive()) }
+        }
+    }
 
     Column(
         modifier = modifier
@@ -735,11 +874,19 @@ private fun QuotedHighlight(
                 style = RibbonType.scripture(15f),
                 color = Palette.text,
                 modifier = Modifier
+                    .graphicsLayer { alpha = quote.value }
                     .background(
                         color = highlight.ink.color.copy(alpha = Palette.HIGHLIGHT_WASH),
                         shape = RoundedCornerShape(6.dp),
                     )
                     .padding(10.dp),
+            )
+        } else if (notHere) {
+            Text(
+                text = Copy.ORIGINAL_NOT_ON_THIS_PHONE,
+                style = RibbonType.ui(14f),
+                color = Palette.muted,
+                modifier = Modifier.graphicsLayer { alpha = line.value },
             )
         }
         SmallCaps(highlight.range.formatted, size = 11f)

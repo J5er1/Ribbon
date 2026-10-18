@@ -291,7 +291,7 @@ public struct ReflectionCard: Codable, Hashable, Identifiable, Sendable {
     public var answers: [UUID: String]
     public var state: CardState
     public var openedAt: Date?
-    /// Asked by someone in the room (A74), not written by Ribbon.
+    /// Asked by someone in the room (A75), not written by Ribbon.
     public var byTheRoom: Bool
     /// Who asked it, when the room did.
     public var writtenBy: UUID?

@@ -1,6 +1,6 @@
 import Foundation
 
-// Cards the room writes (build book §4.6, §16.4; A74). Ribbon writes one
+// Cards the room writes (build book §4.6, §16.4; A75). Ribbon writes one
 // card a chapter; anyone in the room may ask one more, of their own, beside
 // it. The server opens a card when the last answer lands
 // (20261019120000_ribbon_cards_the_room_writes.sql). The Kotlin port

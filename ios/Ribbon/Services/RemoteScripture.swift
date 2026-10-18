@@ -94,6 +94,20 @@ extension ScriptureStore {
         return chapter
     }
 
+    /// Stream a chapter through the proxy and keep it nowhere: for a book
+    /// that is not the one being read — a finished book's record quoting
+    /// its highlights (A74). Through `ensureRemoteChapter` it would be kept,
+    /// and keeping it would prune the book that is being read: the cache
+    /// holds one book a translation, and that one is the open one. What
+    /// comes lives as long as the screen that asked for it.
+    func streamRemoteChapter(
+        _ address: VerseAddress, translation: Translation,
+        provider: RemoteScriptureProvider = APIBibleProvider()
+    ) async -> ScriptureChapter? {
+        try? await provider.fetchChapter(
+            bookID: address.bookID, chapter: address.chapter, translation: translation)
+    }
+
     /// The chapter as converted, named for the converter's format: a
     /// chapter converted the old way is never read again, and goes in the
     /// next prune.

@@ -2488,7 +2488,7 @@ struct PassageEndView: View {
 
             if let room = model.room(of: reading) {
                 // Ribbon's card, and the room's own question beside it
-                // when someone has asked one (A74).
+                // when someone has asked one (A75).
                 ForEach(model.cards(for: reading, chapter: chapter)) { card in
                     ReflectionCardView(card: card, reading: reading, room: room)
                         .padding(.horizontal, 24)

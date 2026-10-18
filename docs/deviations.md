@@ -719,6 +719,8 @@ A15. **Three things the fire says differently, none of which change the
     reproduces the two properties of a SwiftUI Canvas the additive passes
     actually depend on: accumulation happens in the fire's own buffer rather
     than over the room's grain, and the warm throw is clipped at the edge.
+    *(Changed since, by A74: the throw dies inside its canvas on both
+    phones, so nothing lit is left at the edge to clip.)*
 
     One test differs on purpose. The fire draws larger in a "regular width"
     room; on Android that is measured from the *window* (600 dp, the
@@ -997,7 +999,8 @@ A25. **The front door took the same pass as the room — and the tour is an
       and that was the card introducing it. It is `CampfireView` now — the
       room's own fire, in a well, for the reason the room's is in one: the
       fire throws ambient light across its whole canvas and clips it, which
-      is a visible rectangle on bare ground.
+      is a visible rectangle on bare ground. *(Changed since, by A74: the
+      light dies inside its canvas; the well stays for the picture.)*
     - The intent step set its three unchosen options in `muted` on a fill
       that cannot be seen, so **three of four choices read as disabled** on
       the screen that asks who you will read with. They are `text` in both
@@ -4588,7 +4591,8 @@ A68. **The page, the way you read it (2026-10-flyleaf).** Owner, after A67:
     - a verse number can end a line with its verse starting on the next
       (the thin space after it allows a break), which puts that verse's
       gutter mark, landing and follow a line high; a word joiner after the
-      thin space would keep them together;
+      thin space would keep them together; *(Changed since, by A74: the
+      joiner is there, on both phones.)*
     - a stanza break before poetry is dropped on both phones — thousands
       of them in the Berean;
     - LORD could be set in Literata's own small capitals (`c2sc`), which
@@ -4964,7 +4968,250 @@ A73. **Closing a room (2026-10-closing; builds §6.8, which had no way to
     **What's new**, "When a room is done": three faces in a row quieten
     together, and a sheet rises under them with the shelf's lines on it.
 
-A74. **Cards the room writes (2026-10-cards; settles §16.4, amends §4.6).**
+A74. **A visual pass, and what it mended (2026-10-light).** Owner: *"can we
+    do a visual ios pass do you have the ios sim on local"*; handed what it
+    found, *"Fix the high and medium issues on both phones, with the ledger
+    and What's new entries."*; and *"can you also update the app from
+    here?"* — so this release goes out from here: the iPhone's build to
+    TestFlight from the Mac, since the TestFlight lane still has no keys
+    (still-to-do §2), and Android's through `main`, whose build is the APK
+    the app's own update check offers. Written as A70 on its branch;
+    #49, the social side, took A70–A73 on `main` first, so it is A74 here
+    and its release sits over theirs. The TestFlight build, 0.5.0 (3), was
+    made from the branch before that merge: it carries this release and
+    not #49's.
+
+    **How it was looked at.** On 17 October 2026, on an iPhone 18 Pro
+    simulator on iOS 27, signed in to the owner's own room: the room and its
+    fire, the book, a held word, the tour, You, the settings, a finished
+    book's record and What's new, a screenshot at a time. Whatever looked
+    wrong was a candidate. Each was checked against the code and against
+    this ledger — a choice written here is not a fault — and then given to a
+    second reading whose job was to argue it down, with pixels and
+    arithmetic. Of twenty-four, nineteen held as they were put and one in
+    part (the original words' panel: of its three, only the two
+    romanisations); four did not. The high and medium ones are mended: here
+    where both phones had them, in I44 where only the iPhone did. The low
+    ones are named below and left.
+
+    - **The light falls to nothing (F1).** The fire's warm throw was a round
+      gradient cut by a shorter ellipse — 0.62 of its radius above the
+      coals, 0.43 below — so the path ended with the light still nearly a
+      third on, a crisp arc over the flames; and the canvas, which ends 0.12
+      of its height under the coals, cut the rest near full strength, a hard
+      flat floor of light across the well. A25's well hides a canvas's edge
+      only where the two edges are one, and in the room and on the tour card
+      they are not. Now the gradient is squashed into the ellipse rather
+      than cut by it, so its own clear is the rim, in two halves that meet
+      on the coals' line under the bed — tall over the flames, flat along
+      the ground in the 0.12 the frame leaves — and add, so the row they
+      share is neither doubled nor thinned. Every reach stays inside the
+      canvas at the top of the breath. Letting the canvas bleed past its
+      frame was the other way; it would have lit the hairline and the book's
+      name, and found a new edge to stop at. This reverses A15's account of
+      the layer the fire composites in, which reproduced SwiftUI's Canvas
+      down to *"and the warm throw is clipped at the edge"*: nothing lit
+      reaches the edge now. The wells stay, for the picture. One change is
+      seen on purpose: the throw is held to the canvas's width, so a steady
+      fire's glow, and a burning one's over deep coals, is a little narrower
+      and softer at the sides — a dome of light, not a band across the
+      hearth — and grows taller with the coals rather than wider. The centre
+      is as warm as it was. On Android the widget's glow no longer runs
+      down under the book's name. Rendered from the real painters, the
+      brightest pixel at the canvas's edge was 18 to 66 levels and is 0;
+      `FireLightTest` holds Android's to 4 of 255.
+    - **An ember stands in a pool, not on a slab (F2).** Its bloom was an
+      ellipse wider and deeper than the ember's own canvas, filled with a
+      gradient still three quarters on at the canvas's floor. The iPhone's
+      canvas cut it into a lit rectangle, and two large embers side by side
+      on the shelf were two rectangles with a dark seam between them: a
+      drawn shelf, which that light is there to make unnecessary. Android's
+      does not clip, so there it spilled into the next ember's cell and
+      behind the book's name and ended in a hard oval rim. Now it is one
+      gradient squashed into an ellipse that fits the canvas — as wide as
+      it, and as deep above the light's centre as below it, where the canvas
+      ends — whose clear is its rim. The centre is where it was and as warm;
+      the pool is a little smaller beside the husk, and its edge, rendered,
+      was 31 to 36 levels and is 0. The shelf, You, the record and What's
+      new's shelf all draw through the one painter on each phone.
+    - **A verse number stays with its verse (F8).** After the number was a
+      thin space, which is a place a line may break, so a line could end on
+      "33" with "And he made the middle bar" beginning the next (Exodus 36),
+      and the verse's gutter mark, landing and follow sat a line high. This
+      closes what A68 left for the owner — *"a verse number can end a line
+      with its verse starting on the next (the thin space after it allows a
+      break) … a word joiner after the thin space would keep them
+      together"* — in the way it named: the thin space, then U+2060 WORD
+      JOINER, which has no width and is never a break. The line breaks at
+      the space before the number instead, which is the verse before's own
+      text and stays where it was. Not U+202F, the narrow no-break space,
+      though it is one character where these are two and was tried first:
+      Unicode's word rules count it part of a word, and ICU, by which
+      Android's hold picks its word, reads "33", U+202F, "And" as one. A
+      hold on a verse's first word would have taken its number, and a hold
+      on the number the number and the word, against A62's "a press on a
+      number still takes its verse". Set in TextKit, 24 chapters at 41
+      widths, the thin space alone let a number end a line 3,002 times; with
+      the joiner, never. The iPhone now finds a number's figures by the
+      verse's own digits rather than by the run less one character, and
+      Android's number-only selection trims the joiner as it trims a space.
+      The page, Text's strip and What's new's pictures set it alike.
+    - **Chapter numbers in lining figures (F12, in part).** Alegreya Sans's
+      figures are old-style unless it is asked: 3, 4, 5, 7 and 9 hang below
+      the line that 0, 1 and 2 sit on, and 6 and 8 rise over it, so the
+      chapter grid read ragged. Nothing had ever chosen them. The chapters
+      are set in the face's lining figures, each as wide as the next
+      (`RibbonType.figures`: `lnum`, `tnum`), on both phones; nothing else
+      about the face changes, and nothing else uses them yet. The muted
+      numbers are I44's.
+    - **A finished book's record quotes your version (F7, the one high).** A
+      highlight's verse was read from the bundle, where no licensed version
+      is, so every reader of the New King James, the NIV or the NASB had a
+      record of bare references, even with the chapter on the phone. A60
+      had already said what a licensed version does where it is quoted: it
+      *"comes from this phone's copy or the usual fetch, and says "Not on
+      this phone yet." otherwise"*. The record does that now. This phone's
+      copy first, read off the main thread; then, with a connection, each
+      distinct chapter the highlights are in, asked for once an opening and
+      one at a time, however many highlights it holds, because API.Bible
+      counts every call. Kept, as the page keeps it, only when the record's
+      book is the room's open one; any other is streamed by a fetch that
+      stores nothing (`streamRemoteChapter`), because the cache holds one
+      book a translation, and keeping a finished one would put out the
+      chapters of the book being read. What comes fades in on `arrive`.
+      What will not come says *"Not on this phone yet."* in the quote's
+      place — the panel's words, no new string — and is asked for again when
+      the connection comes back. Never another version's words: the record
+      reads in yours, and the Berean's under your reference would be a
+      misquotation. The cost, stated: a finished book that is not open
+      streams its chapters again each time its record opens, since by
+      design they are kept nowhere.
+    - **A voice note's wave runs the width of its note (F4).** Each bar was a
+      fixed step from the leading edge, so the tour's forty filled under
+      half the note and stopped, and a real note under about five seconds
+      drew short: its width said how long somebody talked, which is a
+      duration by another name (I14: "a waveform in ink and no duration").
+      And a scrub reads the whole width, so on a short note the finger was
+      past the last bar long before the note's end. Each peak has an equal
+      share of the width now, with its bar in the middle of it, and the
+      share a finger is in is the bar that lights.
+
+    **What's new** gains `2026-10-light`, dated 18 October, the day it
+    shipped, and placed over #49's three, under its own
+    title, "Light, and the finer points", and four pictures made the way
+    A61's are — the page's own type and inks on the house curves, a long
+    breath between beats, held still under reduce motion:
+    - *The light falls softly*: one ember, drawn by the ember's own painter
+      a little larger than You draws a long book's, lit from the first
+      frame; only the light it throws comes up around it out of the dark,
+      breathes, and goes back down, with no edge anywhere.
+    - *Your marks, quoted in your version*: a record's row with "Not on this
+      phone yet." in the quote's place — "this iPhone" on the iPhone, as
+      the panel's string says it there — giving way on `arrive` to John 1:5
+      on its wash, its reference under it.
+    - *A verse number stays with its verse*: John 1:4–5 set by hand in a
+      narrow measure, verse 5's number and "The" standing past the end of
+      the second line; they leave it going down and arrive at the start of
+      the third, as one, while "Light shines in the" moves along to make
+      room. It takes five lines, where three or four were meant: with
+      Literata's own widths, both verses whole put the number at a line's
+      end only in five, or in a measure wider than any picture's. And a
+      cross between the two places rather than a journey, since a straight
+      move would draw the pair over the words between.
+    - *A voice note’s wave, the width of the note*: Ruth's note, its bars
+      bunched at the leading edge as they stood, spreading until each is in
+      the middle of its share of the width; then a fingertip drags along
+      it and the ink fills to the bar under it.
+
+    Two of them go against A61's *"320–480 ms ease-out"*, and its loop of
+    about four and a half seconds, on purpose: the light comes up and goes
+    down, and the finger drags, on the fire's long curve (`become`, 2.5
+    seconds, eased at both ends), on loops of their own of eight seconds
+    and more. Light that comes up in a third of a second has an edge in
+    time, if not in space; a drag that quick could not be watched keeping
+    to the bars. Every other movement in them is on the house beats.
+
+    The lining figures are not among them, as too small to spend a picture
+    on; told, they would be a fifth.
+
+    **Found, and left for the owner** — low, and on both phones unless it
+    says:
+    - The tour's first card on the iPhone offers sign-in twice, the bar's
+      "Sign in" and "Already have an account? Sign in" at its foot, and so
+      has no "I have an invite" there. Android took the second out and said
+      why; `Copy.swift` still has the string `Copy.kt` does not (F5).
+    - "Start another" under the shelf is set on the section label's gutter
+      in nearly its small caps, so it reads as a heading with nothing under
+      it; the room's other quiet controls are centred (F6, found medium and
+      argued down).
+    - The original words' panel says a word in two romanisations, one over
+      the other: the Berean tables' for the word as read (kā·sep̄), Strong's
+      own for its dictionary form (keçeph). The vowel may differ, pausal
+      against lemma; the scheme should not. The mend is in the data
+      (`tools/original_to_json.py`), which both phones read (F11). The
+      panel's heading and its edge are as designed.
+    - The room names under Your ribbons wrap at the default size — "Jacob &
+      Angela" after the ampersand — and fit at the largest, the reverse of
+      what A67 meant: the column scales with the footnote, the name with
+      the body (F14).
+    - A section label whose note is too long for its line (Translation's)
+      wraps the note in a column of its own and centres the label against
+      it, rather than running on after it (F15).
+    - Downloads lists the streamed versions under "On this phone", marked
+      "Streams" (F17). A new title keeps I5's one group; two groups reverse
+      it.
+    - The notification's sentence in a room of two breaks inside its
+      reference, "…at Exodus" over "36:25" (F18): a no-break space before
+      the chapter, put in where the example is built (book names have
+      spaces of their own), or the example under the switch at the row's
+      full width.
+    - Straight and curly apostrophes side by side: the newer strings (A60,
+      A61, A65 and this release's) curly, two dozen older ones straight,
+      together on You (F20). Nothing chooses; a choice would be a house rule
+      here and a test on both phones.
+    - The hot air over the fire reads as a small grey disc, which its own
+      comment says it must never: on the iPhone a flat fill under a
+      three-point blur, on Android a round gradient on an oval a third as
+      tall (A43), so on neither does it fall off along the oval's short axis
+      (F23). It wants the throw's squash.
+
+    **Open from the review.**
+    - Android's settings screens scroll under a bar with no fade at all, so
+      a tile runs on under the back chevron and the status bar, where the
+      iPhone now has the system's soft edge (I44). Whether Android gets a
+      ground fade under its bar is a decision, and an A-number.
+    - The size slider's thumb is still paper with a rule: the off switch's
+      old paint, 1.05 to 1.2:1 on its row (I44).
+    - On an iPad the tour's fire card still overflows: medium is drawn 1.45
+      times larger in the regular size class, about 261 points in a 220
+      slot. The iPhone's tour also keeps coal depth 0.4 to Android's 0.5.
+    - Android's tour draws no wave in its note card at all, and squeezes a
+      208 dp fire into a 200 dp box.
+    - The tour's tallest flame and a wisp still touch the top of its canvas,
+      before and after; that is not the throw.
+
+    **Not faults.**
+    - A half-cut swatch at the end of the ink strip is A41c's: only the inks
+      scroll, so a room of two's eight never fit beside the pinned words,
+      and one is cut wherever the width ends (F10). What no decision covers
+      is that the strip always opens at its start, so the ink already chosen
+      — ochre, the third, by default — is the one cut, and a later choice
+      such as plum is out of sight. Scrolling it into view is both phones
+      and a release.
+    - The room's name in Your rooms, eight points further in than the rows
+      under it, keeps the space the accent bar took, so the name is where it
+      was read and the ribbon clears it (A67; F19). Android's is 2 dp in.
+    - The room's top edge (F24): the room passes under the clock on the same
+      soft edge as the page, and shows it less only because the fire is
+      already a soft light.
+
+    Android is not compiled here (there is no JDK on this Mac); CI compiles
+    it on the first push and runs `FireLightTest` and
+    `FiguresInARowSitLevelTest`. The iPhone builds, and its painters, the
+    page's line breaks and the selection were measured in harnesses and
+    probes. Nothing here has run on a phone, and What's new's four pictures
+    have not been seen moving on either.
+A75. **Cards the room writes (2026-10-cards; settles §16.4, amends §4.6).**
     Owner, asked what the social side should mean first: *"Cards the room
     writes"*; and of what came next, *"work on what's next as you wish."*
     §16.4 left open who writes the cards — Ribbon, chapter by chapter
@@ -5917,7 +6164,8 @@ I41. **The front of the book, on iOS (A67): the last of the system's
       `Toggle`, so what VoiceOver says — a switch, its name, on or off — is
       the system's own; only its picture is ours, through
       `RibbonToggleStyle`: a 46 × 28 well with a paper knob that goes dark
-      and crosses as the well fills with the accent. The whole tile takes
+      and crosses as the well fills with the accent. *(Changed since, by
+      I44: off, the knob is muted, with no rule.)* The whole tile takes
       the tap, margins included, where the system's switch took only its
       own pill. Android keeps Material's switch (A18, A29): there the
       structure is Material's by decision, and here the default is Apple's,
@@ -6035,6 +6283,107 @@ I43. **Sliders and typefaces, on iOS (A69).**
       lifts, or at once for a tap or a VoiceOver step. A drag the scroll
       takes away is written all the same. `Segments` had no caller left
       and is gone.
+
+I44. **The visual pass, on the iPhone (A74).** What only the iPhone had
+    wrong; the rest of the pass, and how it was made, is A74's.
+
+    - **The selection sits on its words (F9).** The page's leading is its
+      line-height multiple, and TextKit 1 puts all of it above a line's
+      letters, so the baseline sits at the foot of the line's box. The
+      system drew a selection over the whole box and hung the start handle
+      from its top: the highlight rose into the gap above the words, and
+      the start handle's knob sat on the line before. `PageTextView` now
+      overrides `selectionRects(for:)` and `caretRect(for:)`. Each rect
+      keeps its full height and moves down by half the extra leading of the
+      line at its middle, which puts the letters in the middle of their
+      box, where Android's proportional line height already puts them. The
+      full height is A41b's difference kept: a selection is a line box with
+      the words in the middle of it, a wash is a band hung off the baseline,
+      and a selection clamped to the letters would have been a wash's
+      shape. The shift is measured in the line's used rect, without the room
+      a paragraph leaves before it, from the tallest face on the line on its
+      own baseline — never a raised verse number's — so every line of a
+      paragraph moves alike, and the system's rects, which run whole middle
+      lines together, stay one shape. The moved rects are a
+      `UITextSelectionRect` subclass that passes through which end it
+      holds, its direction and its transform, and the handles and the loupe
+      are placed from them. Seen in an iOS 27 probe with the same code; not
+      yet in Ribbon.
+    - **The chapter you are in, said twice (F12).** The iPhone kept A31's
+      paper tile for the chapter you are in and set every number in the
+      full ink. Paper on the ground is 1.05:1 with a one-point rule, so on
+      the dark the tile was nearly the only mark, and a faint one. Android
+      has set the other numbers muted since its chapter list was built; the
+      iPhone does now, brought over from `ChaptersSheet.kt`. The figures
+      are A74's.
+    - **An off switch can be seen (F16).** This reverses I41's *"a paper
+      knob"*. Paper in a well on a paper row is three near-flat colours 1.05
+      to 1.24:1 apart, so a switch that was off was a switch nobody could
+      see. Off, the knob is muted now, 5.2:1 on the well — Android's
+      `SettingSwitch` thumb, for the same reason — with no rule round it.
+      On, it is the ground's colour on the accent as before: the muted is
+      laid over a ground knob and fades off it, rather than the ground over
+      a muted one, so nothing of the muted is left at its edge. The switch
+      in What's new's notifications picture is drawn the same.
+    - **The bar is the scroll's own (F13).** `RibbonScreen` stood its bar
+      above the scroll, so the scroll's top edge touched no bar and no safe
+      area and the system had nothing to soften: a tile scrolled up on You,
+      Text, the settings or a person's page was cut straight across 52
+      points under the clock, mid-word, on a phone whose reading page lets
+      its words pass softly under the status bar. The bar is a `safeAreaBar`
+      now. At rest the page starts where it did; scrolled, it passes under
+      the way back on the system's soft edge — named as soft: seen on the
+      simulator, the system judged a bar with a control in it worth its
+      hard edge, a lighter band with a rule under it, which was the cut
+      over again. The bar keeps its 52 points,
+      so Text's pinned strip still starts at its foot — what had looked like
+      the strip pinned under the bar mid-verse (F22) was the strip in the
+      scroll, half cut by this edge. It takes a tap across its whole width,
+      so a tap between the way back and the action does not reach a tile
+      passing under it half seen, and VoiceOver reads it first, as before.
+      What's new's foot was cut the same way, 12 points over Done; while
+      there is more below, it now fades 28 points into the ground, as
+      Android's always has — "a hard edge across a line of type reads as a
+      layout that ran out of room". Its top already had the system's edge.
+    - **The tour's fire card (F3).** Its well was inset 40 where the page's
+      and the note's are 20, so the cards changed width as they turned;
+      and with a hairline and the fire's state under it, it stood some
+      thirty points taller than the 220 every picture is given, and its foot
+      came down onto "A fire you keep together." It is Android's card now:
+      the fire alone in its well, as wide as the others, at medium still,
+      14 above and below — 208, which fits on a phone (not yet on an iPad:
+      A74).
+    - **The widget's version follows the app's (F21).** The app was set to
+      0.5.0 and the widget extension stayed at 0.2.0: each target carries
+      its own `MARKETING_VERSION`, and the version was edited on the app
+      target's General tab alone. xcodebuild warns that an extension's
+      version must match its app's, and App Store Connect sends the same as
+      ITMS-90473. Both are 0.5.0; the build numbers already matched. That
+      tab writes the target's own setting, so the next version is set on
+      both targets, or once at the project and never in the tab. Android
+      ships one APK with one version and has nothing to drift. The same edit
+      moved six keys from `Info.plist` into the target's build settings,
+      each with its value; the one thing a build setting cannot carry is the
+      comment the Live Activity's key had, kept here: *"Ruth is reading
+      Mark" on the lock screen (S24), started by push.*
+
+    **None of this is in What's new, and that is an argument, not a rule.**
+    The list is one list for both phones: a release's items are the same on
+    each, in both cores, and no item is shown on one phone only. Each of
+    these brings the iPhone level with what Android already did or never
+    got wrong — its selection already centred, its other chapters already
+    quiet, its off thumb already muted, its What's new foot already faded,
+    its tour's fire already alone in its well, and its settings never cut
+    under the bar — so told on both phones, each would be news on one and
+    untrue on the other. The widget's version is seen by nobody. If the
+    owner would rather iPhone readers hear of the selection and the
+    switches, the list needs its first item for one phone only, which is a
+    change to A61's rule in both cores and not this pass's to make.
+
+    The iPhone builds with all of it. The bar, the switch and the foot's
+    fade were seen in a simulator, the selection in a probe, and the tour's
+    card and the chapters' muted numbers only in code. None has run on a
+    phone.
 
 ## Licensed translations (decided: API.Bible)
 

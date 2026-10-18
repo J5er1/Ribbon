@@ -485,6 +485,15 @@ struct MenuTile: View {
 /// a lede in the muted colour, and the content — on the room's ground.
 /// No icons, no system bar; the title is on the page where a book would
 /// put it, not in the chrome.
+///
+/// The bar is the scroll's own, not a row above it (I44). Stood above it,
+/// the scroll's top edge touched no bar and no safe area, so the system
+/// had nothing to soften there, and a tile scrolled up was cut straight
+/// across 52 points under the clock, mid-word: the one hard edge on a
+/// phone whose reading page lets its words go softly under the status
+/// bar. Held as the scroll's bar, the page passes under the way back on
+/// that same soft edge. The bar keeps its 52 points, and the Text screen
+/// pins its strip of the page at that depth.
 struct RibbonScreen<Content: View, Actions: View>: View {
     var title: String
     var lede: String?
@@ -504,7 +513,35 @@ struct RibbonScreen<Content: View, Actions: View>: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                Text(title)
+                    .font(RibbonType.display(30))
+                    .foregroundStyle(Palette.text)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityAddTraits(.isHeader)
+                if let lede {
+                    Text(lede)
+                        .font(RibbonType.ui(15))
+                        .foregroundStyle(Palette.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 6)
+                }
+                content
+                    .padding(.top, 24)
+            }
+            .padding(.horizontal, RibbonShape.screenMargin)
+            .padding(.bottom, 40)
+            .readableColumn()
+        }
+        .scrollDismissesKeyboard(.interactively)
+        // Soft, by name: left to itself the system judged a bar with a
+        // control in it worth its hard edge — a lighter band with a rule
+        // under it, the cut this was meant to take away (I44).
+        .scrollEdgeEffectStyle(.soft, for: .top)
+        // At rest the page starts where it did, under the bar; scrolled,
+        // it passes beneath it on the system's soft edge (I44).
+        .safeAreaBar(edge: .top, spacing: 0) {
             HStack(spacing: 0) {
                 if let onBack {
                     BackChevron(action: onBack)
@@ -516,29 +553,10 @@ struct RibbonScreen<Content: View, Actions: View>: View {
             }
             .padding(.horizontal, 8)
             .frame(height: 52)
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(title)
-                        .font(RibbonType.display(30))
-                        .foregroundStyle(Palette.text)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityAddTraits(.isHeader)
-                    if let lede {
-                        Text(lede)
-                            .font(RibbonType.ui(15))
-                            .foregroundStyle(Palette.muted)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .padding(.top, 6)
-                    }
-                    content
-                        .padding(.top, 24)
-                }
-                .padding(.horizontal, RibbonShape.screenMargin)
-                .padding(.bottom, 40)
-                .readableColumn()
-            }
-            .scrollDismissesKeyboard(.interactively)
+            // All of the bar is the bar's, as it was when it stood above
+            // the page: a tap between the way back and the action does not
+            // reach a tile passing under it half seen.
+            .contentShape(Rectangle())
         }
         .room()
         .toolbar(.hidden, for: .navigationBar)

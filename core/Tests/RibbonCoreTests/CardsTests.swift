@@ -1,7 +1,7 @@
 import XCTest
 @testable import RibbonCore
 
-// Cards the room writes (§4.6, §16.4, A74). CardsTest.kt holds the Kotlin
+// Cards the room writes (§4.6, §16.4, A75). CardsTest.kt holds the Kotlin
 // port to the same answers, case for case.
 
 final class CardsTests: XCTestCase {

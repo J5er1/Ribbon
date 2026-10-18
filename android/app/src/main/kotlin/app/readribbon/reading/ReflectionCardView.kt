@@ -228,7 +228,7 @@ fun ReflectionCardView(
             .animateContentSize(animationSpec = RibbonMotion.settle(still)),
         verticalArrangement = Arrangement.spacedBy(Gap),
     ) {
-        // Whose question the room's own card is (A74), in their ink: said
+        // Whose question the room's own card is (A75), in their ink: said
         // in the open, as a banked fire is. Said once, with the question.
         val asker = askerOf(card, room, model, myInk)
         if (asker != null) {
@@ -307,7 +307,7 @@ private fun askerOf(card: ReflectionCard, room: Room, model: AppModel, myInk: In
 }
 
 /**
- * Asking the room its own question for a chapter (A74): a quiet control
+ * Asking the room its own question for a chapter (A75): a quiet control
  * under the cards that opens into a question set as a card's is — your name
  * over it, a hairline under it — with "Ask" and "Never mind". Once asked, it
  * is a card like the others, and the control is gone until it is set down.

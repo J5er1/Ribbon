@@ -40,9 +40,10 @@ import org.robolectric.annotation.Config
  * off the main thread from what the phone already holds, and the group's
  * footnote says which verse that is. The preview under the size is a piece
  * of the page: that verse and the next, the second numbered the way the
- * page numbers it — a thin space after the number, never a word space. With
- * no book open, all of it is the first verses of John. And the slider says
- * the size as a size, in points, rather than how far along a bar it is.
+ * page numbers it — a thin space after the number, never a word space, and
+ * the word joiner that keeps it on its verse's line (A74). With no book open,
+ * all of it is the first verses of John. And the slider says the size as a
+ * size, in points, rather than how far along a bar it is.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w411dp-h891dp-xhdpi")
@@ -100,14 +101,14 @@ class VersionsByReadingTest {
         show(open = false)
 
         compose.onNodeWithText("John 1:1").assertExists()
-        compose.onNode(hasText("2 He was with God in the beginning.", substring = true)).assertExists()
+        compose.onNode(hasText("2\u2009\u2060He was with God in the beginning.", substring = true)).assertExists()
     }
 
     @Test fun theVersionsAreShownWhereYouAre() {
         show(open = true)
 
         compose.onNodeWithText("Mark 4:12").assertExists()
-        compose.onNode(hasText("13 Then Jesus said to them", substring = true)).assertExists()
+        compose.onNode(hasText("13\u2009\u2060Then Jesus said to them", substring = true)).assertExists()
     }
 
     @Test fun theSizeIsSaidInPoints() {

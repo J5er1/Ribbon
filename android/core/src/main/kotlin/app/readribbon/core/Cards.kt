@@ -8,7 +8,7 @@ import kotlin.experimental.xor
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
-// Cards the room writes (build book §4.6, §16.4; A74). The port of
+// Cards the room writes (build book §4.6, §16.4; A75). The port of
 // Cards.swift, case for case; CardsTests.swift and CardsTest.kt hold the
 // two to the same answers.
 

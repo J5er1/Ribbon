@@ -163,14 +163,14 @@ class ThePageAsYouReadItTest {
         val model = show()
         // John 1:1 and 1:2 are one paragraph in the Berean Standard, so they
         // run on in the piece of page until the switch is on.
-        compose.onNode(hasText("God. 2 He was with God", substring = true)).assertExists()
+        compose.onNode(hasText("God. 2\u2009\u2060He was with God", substring = true)).assertExists()
 
         switchRow(Copy.VERSE_LINES).assertIsOff()
         switchRow(Copy.VERSE_LINES).performClick()
         compose.waitForIdle()
         switchRow(Copy.VERSE_LINES).assertIsOn()
         assertTrue(model.settings.versePerLine)
-        compose.onNode(hasText("God. \n2 He was with God", substring = true)).assertExists()
+        compose.onNode(hasText("God. \n2\u2009\u2060He was with God", substring = true)).assertExists()
         assertFalse("nothing else is set by it", model.settings.clearVerseNumbers)
 
         switchRow(Copy.VERSE_LINES).performClick()

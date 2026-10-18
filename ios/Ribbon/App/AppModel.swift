@@ -1250,7 +1250,7 @@ final class AppModel {
     // MARK: - Reflection Cards (§4.6, S08, S09)
 
     /// Ribbon's card for a chapter, made the first time anyone here reaches
-    /// its end. Its id is the same on every phone (A74), so two people
+    /// its end. Its id is the same on every phone (A75), so two people
     /// arriving at once make one card.
     func card(for reading: Reading, chapter: Int) -> ReflectionCard {
         if let existing = state.cards.first(where: {
@@ -1291,7 +1291,7 @@ final class AppModel {
 
     enum Asking { case asked, someoneAskedFirst }
 
-    /// The room's own question for a chapter, asked (A74). It goes to the
+    /// The room's own question for a chapter, asked (A75). It goes to the
     /// server first and is kept here only once it is there: there is one of
     /// the room's at a time, and the server is what says whose it is.
     func askTheRoom(_ question: String, reading: Reading, chapter: Int) async throws -> Asking {

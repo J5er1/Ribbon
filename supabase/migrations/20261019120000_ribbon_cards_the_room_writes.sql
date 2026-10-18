@@ -1,4 +1,4 @@
--- Cards the room writes (docs/deviations.md A74; build book §4.6, §16.4).
+-- Cards the room writes (docs/deviations.md A75; build book §4.6, §16.4).
 --
 -- Two things, the first of which the second needs.
 --

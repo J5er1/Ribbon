@@ -142,7 +142,7 @@ public enum ShelfExport {
             if !theirCards.isEmpty {
                 lines += ["Cards", ""]
                 for card in theirCards {
-                    // A question the room asked says whose it was (A74).
+                    // A question the room asked says whose it was (A75).
                     let asked = card.byTheRoom ? ", asked by \(card.writtenBy.map(name) ?? "someone")" : ""
                     lines.append("Chapter \(card.chapter)\(asked): \(card.question)")
                     let answers = card.answers

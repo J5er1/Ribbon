@@ -40,6 +40,7 @@ import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageShader
 import androidx.compose.ui.graphics.Paint
@@ -141,7 +142,8 @@ import app.readribbon.reading.SELECTION_TINT
 //
 // The "little animations" are drawn, not played: the app's own type on its
 // own paper, its own lift, its own ink wash and its own follow line — and
-// since A67 its own ribbons, embers and night — doing what they do in the
+// since A67 its own ribbons, embers and night, and since A74 an ember's
+// light, a record's quote and a voice note's wave — doing what they do in the
 // app. No images, no confetti, no badges, no counts —
 // a picture of a feature that looked like an advert for it would undo the
 // rest of the screen. Each one loops on a pure clock so that a frame of it
@@ -494,6 +496,10 @@ internal val WhatsNewItem.title: String
         WhatsNewItem.findARoom -> Copy.WHATS_NEW_FIND_TITLE
         WhatsNewItem.beingFound -> Copy.WHATS_NEW_BEING_FOUND_TITLE
         WhatsNewItem.closingARoom -> Copy.WHATS_NEW_CLOSING_TITLE
+        WhatsNewItem.softLight -> Copy.WHATS_NEW_SOFT_LIGHT_TITLE
+        WhatsNewItem.quotedMarks -> Copy.WHATS_NEW_QUOTED_MARKS_TITLE
+        WhatsNewItem.numbersStay -> Copy.WHATS_NEW_NUMBERS_STAY_TITLE
+        WhatsNewItem.wavesFill -> Copy.WHATS_NEW_WAVES_FILL_TITLE
         WhatsNewItem.askTheRoom -> Copy.WHATS_NEW_ASK_TITLE
     }
 
@@ -519,6 +525,10 @@ internal val WhatsNewItem.body: String
         WhatsNewItem.findARoom -> Copy.WHATS_NEW_FIND_BODY
         WhatsNewItem.beingFound -> Copy.WHATS_NEW_BEING_FOUND_BODY
         WhatsNewItem.closingARoom -> Copy.WHATS_NEW_CLOSING_BODY
+        WhatsNewItem.softLight -> Copy.WHATS_NEW_SOFT_LIGHT_BODY
+        WhatsNewItem.quotedMarks -> Copy.WHATS_NEW_QUOTED_MARKS_BODY
+        WhatsNewItem.numbersStay -> Copy.WHATS_NEW_NUMBERS_STAY_BODY
+        WhatsNewItem.wavesFill -> Copy.WHATS_NEW_WAVES_FILL_BODY
         WhatsNewItem.askTheRoom -> Copy.WHATS_NEW_ASK_BODY
     }
 
@@ -535,6 +545,9 @@ internal val WhatsNewItem.body: String
 // Every movement is on the app's own ease-out and inside the motion
 // tokens' 320–480 ms; between the movement and the next loop is a held
 // pause of about 1.8 s, so the eye has time to read what just happened.
+// Two things in the fourth release are not movements and take the fire's
+// long curve instead, on loops of their own, as the iPhone's do: light
+// coming up, and a drag slow enough to be watched bar by bar (A74).
 
 /** One whole loop of a vignette. */
 internal const val LOOP_MS = 4600
@@ -577,6 +590,8 @@ internal val WhatsNewItem.timeline: Timeline
         WhatsNewItem.findARoom,
         WhatsNewItem.beingFound,
         WhatsNewItem.closingARoom,
+        WhatsNewItem.quotedMarks,
+        WhatsNewItem.numbersStay,
         WhatsNewItem.askTheRoom,
         -> Timeline(LOOP_MS, STILL_AT)
         WhatsNewItem.followingStays -> Timeline(LONG_LOOP_MS, STAYS_STILL_AT)
@@ -586,6 +601,8 @@ internal val WhatsNewItem.timeline: Timeline
         WhatsNewItem.yourPage -> Timeline(LONG_LOOP_MS, PAGE_STILL_AT)
         WhatsNewItem.typeface -> Timeline(LONG_LOOP_MS, TYPEFACE_STILL_AT)
         WhatsNewItem.roomOfTwelve -> Timeline(LONG_LOOP_MS, TWELVE_STILL_AT)
+        WhatsNewItem.softLight -> Timeline(LIGHT_LOOP_MS, LIGHT_STILL_AT)
+        WhatsNewItem.wavesFill -> Timeline(WAVES_LOOP_MS, WAVES_STILL_AT)
     }
 
 /** Where a loop of [loopMs] is, [elapsedMs] after the screen appeared and [startAfter] late. */
@@ -882,6 +899,105 @@ internal fun pageFrame(t: Int): PageFrame {
     )
 }
 
+// The fourth release's four (A74), beat for beat as the iPhone's go.
+//
+// Three of them never undo what they show where it can be seen: the quote
+// does not go back to the line it replaced, the number does not go back up,
+// the bars do not gather again. Each picture fades instead, is set back as
+// it began while it cannot be seen, and comes back — the iPhone's way, and
+// the pictures' own, since what they show only ever goes one way in the app.
+
+/**
+ * Light on the long curve: the fire's own, eased at both ends over
+ * [RibbonMotion.BECOME_MS], rather than a movement's beat. Light that comes
+ * up all at once has an edge in time, if not in space; and a drag along a
+ * wave needs the time to be watched keeping to the finger, bar by bar.
+ */
+private fun longBeat(t: Int, at: Int): Float {
+    val raw = ((t - at).toFloat() / RibbonMotion.BECOME_MS).coerceIn(0f, 1f)
+    return RibbonMotion.EaseInOut.transform(raw)
+}
+
+/** The light's loop: up on the long curve, held as long as a picture holds, and down on it again. */
+internal const val LIGHT_LOOP_MS = 8000
+
+/** The light up round its ember, and breathing. */
+internal const val LIGHT_STILL_AT = 3900
+
+/**
+ * The light falls softly: the ember is lit from the first frame, and only
+ * the light it throws comes up round it out of the dark ([lit]), on the long
+ * curve; it is left to breathe, then goes back down the same way.
+ */
+internal data class LightFrame(val lit: Float)
+
+internal fun lightFrame(t: Int): LightFrame =
+    LightFrame(lit = longBeat(t, at = 400) * (1f - longBeat(t, at = 4900)))
+
+/**
+ * Your marks, quoted in your version: a finished book's record as it stands
+ * while its chapter is not on this phone yet — the quiet line in the quote's
+ * place ([waiting]) — and then the chapter come, the line giving way to the
+ * quote and its wash in the same place, on one arrive ([quote]), as
+ * `QuotedHighlight` brings a verse in. After the pause the row fades as a
+ * whole ([shown]), is set back to the line while it cannot be seen, and
+ * comes back.
+ */
+internal data class QuotedFrame(val waiting: Float, val quote: Float, val shown: Float)
+
+internal fun quotedFrame(t: Int): QuotedFrame {
+    val come = beat(t, at = 1000, ms = RibbonMotion.ARRIVE_MS)
+    val again = beat(t, at = 3720, ms = RibbonMotion.ARRIVE_MS)
+    return QuotedFrame(
+        waiting = 1f - come + again,
+        quote = come - again,
+        shown = 1f - beat(t, at = 3320, ms = RibbonMotion.SETTLE_MS) + beat(t, at = 4080, ms = RibbonMotion.ARRIVE_MS),
+    )
+}
+
+/**
+ * A verse number stays with its verse: John 1:4–5 with verse 5's number
+ * and its first word up at the end of the second line, past where the line
+ * is full; they go down together to begin the third, and the words there
+ * move along to make room for them ([settled]). Then the page fades
+ * ([shown]) and is set again as it was while it cannot be seen — up is the
+ * one way the number never goes.
+ */
+internal data class NumbersFrame(val settled: Float, val shown: Float)
+
+internal fun numbersFrame(t: Int): NumbersFrame = NumbersFrame(
+    settled = beat(t, at = 960, ms = RibbonMotion.OPEN_MS) - beat(t, at = 3840, ms = RibbonMotion.ARRIVE_MS),
+    shown = 1f - beat(t, at = 3440, ms = RibbonMotion.SETTLE_MS) + beat(t, at = 4200, ms = RibbonMotion.ARRIVE_MS),
+)
+
+/** The wave's loop: a spread, a held look, a press, a drag on the long curve, a lift, and the long pause. */
+internal const val WAVES_LOOP_MS = 9200
+
+/** The bars across the whole note, and nothing played: the note as it stands. */
+internal const val WAVES_STILL_AT = 2600
+
+/**
+ * A voice note's wave, the width of the note: a short note's bars where
+ * they used to stand, a fixed step apart from the leading edge and stopping
+ * a fifth of the way across; then spread until each stands in the middle of
+ * its own share of the whole width ([spread]), and held there. A fingertip
+ * settles on the wave's start ([press]) and drags along it to the end on the
+ * long curve, and the ink fills the bars up to the one under it ([played]),
+ * by the note's own rule; it lifts. After a while the wave fades ([shown]),
+ * stands bunched again while it cannot be seen, and comes back.
+ */
+internal data class WavesFrame(val spread: Float, val press: Float, val played: Float, val shown: Float)
+
+internal fun wavesFrame(t: Int): WavesFrame {
+    val again = beat(t, at = 8300, ms = RibbonMotion.ARRIVE_MS)
+    return WavesFrame(
+        spread = beat(t, at = 1200, ms = RibbonMotion.OPEN_MS) - again,
+        press = beat(t, at = 3480, ms = RibbonMotion.ARRIVE_MS) - beat(t, at = 6300, ms = RibbonMotion.SETTLE_MS),
+        played = longBeat(t, at = 3800) - again,
+        shown = 1f - beat(t, at = 7900, ms = RibbonMotion.SETTLE_MS) + beat(t, at = 8660, ms = RibbonMotion.ARRIVE_MS),
+    )
+}
+
 /**
  * The loop's clock for one vignette, as state read only while drawing — so
  * the picture moves and nothing recomposes.
@@ -1043,6 +1159,8 @@ private fun Vignette(item: WhatsNewItem, startAfter: Long, frozenAt: Long?, modi
             specimen = RibbonFonts.literata(FontWeight.Normal, SPECIMEN_SIZE),
             page = RibbonFonts.literata(FontWeight(PAGE_BOOK), PAGE_SIZE),
             pageHeavier = RibbonFonts.literata(FontWeight(PAGE_HEAVIER), PAGE_SIZE),
+            quote = RibbonFonts.literata(FontWeight.Normal, QUOTE_SIZE),
+            flow = RibbonFonts.literata(FontWeight.Normal, NUMBERS_SIZE),
         )
     }
     val grain = rememberGrain()
@@ -1140,6 +1258,25 @@ private fun Vignette(item: WhatsNewItem, startAfter: Long, frozenAt: Long?, modi
             val page = layOutTheClosing(measurer)
             onDrawBehind { drawTheClosing(page, inks, grain, closingFrame(clock.longValue.toInt())) }
         }
+        WhatsNewItem.softLight -> Modifier.drawWithCache {
+            val page = layOutTheLight()
+            onDrawBehind {
+                val t = clock.longValue.toInt()
+                drawTheLight(page, lightFrame(t), t)
+            }
+        }
+        WhatsNewItem.quotedMarks -> Modifier.drawWithCache {
+            val page = layOutTheQuote(measurer, inks, faces, smallCaps)
+            onDrawBehind { drawTheQuote(page, inks, quotedFrame(clock.longValue.toInt())) }
+        }
+        WhatsNewItem.numbersStay -> Modifier.drawWithCache {
+            val page = layOutTheNumbers(measurer, inks, faces, smallCaps)
+            onDrawBehind { drawTheNumbers(page, numbersFrame(clock.longValue.toInt())) }
+        }
+        WhatsNewItem.wavesFill -> Modifier.drawWithCache {
+            val page = layOutTheWave(measurer, inks)
+            onDrawBehind { drawTheWave(page, inks, grain, wavesFrame(clock.longValue.toInt())) }
+        }
         WhatsNewItem.askTheRoom -> Modifier.drawWithCache {
             val page = layOutTheQuestion(measurer, inks, faces, smallCaps)
             onDrawBehind { drawTheQuestion(page, inks, grain, askTheRoomFrame(clock.longValue.toInt())) }
@@ -1173,6 +1310,10 @@ private class VignetteFaces(
     /** The small page's, at Book and at Heavier on Literata's own axis (A68). */
     val page: FontFamily,
     val pageHeavier: FontFamily,
+    /** A finished book's quote, at the size the record sets it (A74). */
+    val quote: FontFamily,
+    /** The page that a verse number stays on, a little larger than the small page's (A74). */
+    val flow: FontFamily,
 )
 
 /**
@@ -1642,18 +1783,19 @@ private fun CacheDrawScope.layOutTheVerse(
     val room = size.width - inset * 2
     val style = TextStyle(fontFamily = faces.scripture, fontSize = 21.sp, color = inks.text)
     // The number as the page sets it (ChapterText): small caps at 0.62 em,
-    // lifted, at 45%. A word space after it rather than the page's thin
-    // one, so the handle that comes to rest between them has room.
+    // lifted, at 45%. After it the page's thin space and word joiner (A74),
+    // but at the words' size rather than the number's, so the handle that
+    // comes to rest between them has room.
     val number = RibbonType.smallCaps(11f).toSpanStyle().copy(
         fontSize = 0.62.em,
         color = inks.text.copy(alpha = 0.45f),
         baselineShift = BaselineShift(0.484f),
         letterSpacing = 0.sp,
     )
-    val text = "$BEGINNING_NUMBER $BEGINNING_LINE"
+    val text = "$BEGINNING_NUMBER\u2009\u2060$BEGINNING_LINE"
     val set = buildAnnotatedString {
         withStyle(number) { append(BEGINNING_NUMBER) }
-        append(" ")
+        append("\u2009\u2060")
         append(BEGINNING_LINE)
     }
     val line = fitted(measurer, set, style, room)
@@ -2916,10 +3058,10 @@ private fun DrawScope.drawTheTypefaces(page: TheTypefaces, inks: VignetteInks, f
 // The one picture in its release that is of the page itself, so it is drawn
 // from what the page is drawn from: Literata at Book and at Heavier on its
 // own weight axis, the numbers in the page's small caps, raised, a thin space
-// after each, at the page's quiet ink and its clearer one. Each line is set
-// on its own and broken where it is written here, at one size for all of
-// them, so the picture breaks alike on every phone and the heavier letters
-// never carry a word onto another line.
+// and the page's word joiner after each (A74), at the page's quiet ink and
+// its clearer one. Each line is set on its own and broken where it is written
+// here, at one size for all of them, so the picture breaks alike on every
+// phone and the heavier letters never carry a word onto another line.
 
 /**
  * The small page's size: John 1:1–3 in five lines as a paragraph and six a
@@ -2943,8 +3085,8 @@ private class PageRun(val text: String, val number: Boolean = false)
 
 private fun words(text: String) = PageRun(text)
 
-/** A number as the page sets one: its digits and a thin space, never a word space. */
-private fun number(verse: Int) = PageRun("$verse\u2009", number = true)
+/** A number as the page sets one: its digits, a thin space and the word joiner (A74), never a word space. */
+private fun number(verse: Int) = PageRun("$verse\u2009\u2060", number = true)
 
 /**
  * John 1:1–3 in the Berean Standard, as one paragraph: the page as it has
@@ -3464,7 +3606,512 @@ private fun DrawScope.drawTheClosing(page: TheClosing, inks: VignetteInks, grain
     }
 }
 
-// MARK: - Ask the room (A74)
+// MARK: - The fourth release's pictures (A74)
+//
+// Four of the finer points, each drawn with what draws it in the app: the
+// ember's own hand (`drawEmber`), a finished book's quote on its wash as
+// `QuotedHighlight` sets it, the page's type and its numbers as the page sets
+// them, and a voice note's bars as `WaveformView` lays them. Each is the
+// iPhone's picture, beat for beat, drawn this phone's way on its clock.
+
+// MARK: The light falls softly
+
+/**
+ * The pictured ember: a long book's, a little larger than You draws one, so
+ * that the light it throws has room to be seen going to nothing.
+ */
+private val SOFT_LIGHT_SCALE = FireScale.large
+private const val SOFT_LIGHT_GROWN = 1.2
+
+/** Where in its breath the pictured ember is: any instant of the painter's is an ember. */
+private const val SOFT_LIGHT_SEED = 2.6
+
+/**
+ * One ember on the paper, in the box `EmberView` gives it, and its husk in
+ * that box. Its light is fitted inside the box and clear before the box ends
+ * (A74), so nothing lit meets an edge, and nothing here draws one.
+ */
+private class TheLight(val ember: Rect, val husk: Path)
+
+/**
+ * The husk as `drawEmber` sets it — centred, a little above the middle of
+ * its box, 0.32 of the shorter side each way across and 0.82 of that up and
+ * down — so that the ember can stay lit while only the light it throws comes
+ * up. If the ember's hand moves its husk, this moves with it.
+ */
+private fun emberHusk(box: Size): Rect {
+    val r = minOf(box.width, box.height) * 0.32f
+    val cx = box.width / 2f
+    val cy = box.height * 0.52f
+    return Rect(cx - r, cy - r * 0.82f, cx + r, cy + r * 0.82f)
+}
+
+private fun CacheDrawScope.layOutTheLight(): TheLight {
+    // `EmberView`'s own proportions — a third of the fire it was, in a box
+    // half as wide again as it is tall — smaller only where the paper is.
+    val across = (SOFT_LIGHT_SCALE.frameHeight * 0.30 * SOFT_LIGHT_GROWN).dp.toPx()
+    val inset = INSET.toPx()
+    val fit = minOf(
+        1f,
+        (size.width - inset * 2) / (across * 1.7f),
+        (size.height - inset / 2f) / (across * 1.35f),
+    ).coerceAtLeast(0f)
+    val box = Size(across * 1.7f * fit, across * 1.35f * fit)
+    return TheLight(
+        ember = Rect(Offset((size.width - box.width) / 2f, (size.height - box.height) / 2f), box),
+        husk = Path().apply { addOval(emberHusk(box)) },
+    )
+}
+
+/**
+ * The pictured ember's breath at [t]: on a clock that swings rather than
+ * runs, at its quickest as quick as a shelf ember's, and back where it began
+ * when the loop wraps. This ember is lit throughout, so a breath that jumped
+ * at the wrap would be seen to.
+ */
+private fun lightBreath(t: Int): Double =
+    SOFT_LIGHT_SEED + EMBER_PACE * LIGHT_LOOP_MS / 1000.0 / (2 * kotlin.math.PI) *
+        kotlin.math.sin(2 * kotlin.math.PI * t / LIGHT_LOOP_MS)
+
+/**
+ * The ember at [frame]: whole when its light is all the way up, and on the
+ * way, twice — once kept to the husk, so the ember itself is all there from
+ * the first frame, and once everywhere else at [LightFrame.lit], so what
+ * comes up is the light it throws and nothing of the ember. Each place is
+ * drawn once, never two laid over each other.
+ */
+private fun DrawScope.drawTheLight(page: TheLight, frame: LightFrame, t: Int) {
+    val time = lightBreath(t)
+    val ember = page.ember
+    inset(
+        left = ember.left,
+        top = ember.top,
+        right = size.width - ember.right,
+        bottom = size.height - ember.bottom,
+    ) {
+        if (frame.lit >= 1f) {
+            drawEmber(time)
+        } else {
+            clipPath(page.husk) { drawEmber(time) }
+            faded(frame.lit) {
+                clipPath(page.husk, clipOp = ClipOp.Difference) { drawEmber(time) }
+            }
+        }
+    }
+}
+
+// MARK: Your marks, quoted in your version
+
+/** The marked verse as the Berean Standard has it, and the reference the record sets under it. */
+private const val QUOTED_VERSE = "The Light shines in the darkness, and the darkness has not overcome it."
+private const val QUOTED_AT = "John 1:5"
+
+/**
+ * The quote as `QuotedHighlight` sets it: Literata at 15 on the reading
+ * leading, ten in from the edge of a wash of the mark's ink, the wash's
+ * corner, and 4 down to the reference.
+ */
+private const val QUOTE_SIZE = 15f
+private const val QUOTE_LEADING = 1.62f
+private val QUOTE_PAD = 10.dp
+private val QUOTE_CORNER = 6.dp
+private val QUOTE_GAP = 4.dp
+
+/**
+ * A row of a finished book's record, set once: the quote wrapped on its
+ * wash, the quiet line that stands in its place, and the reference under
+ * them. Where they lie is the frame's — the quote's place grows as it comes
+ * — so only what they are and how large is kept here.
+ */
+private class TheQuote(
+    val left: Float,
+    val wash: Size,
+    val corner: Float,
+    val pad: Float,
+    val gap: Float,
+    val quote: TextLayoutResult,
+    val waiting: TextLayoutResult,
+    val reference: TextLayoutResult,
+)
+
+private fun CacheDrawScope.layOutTheQuote(
+    measurer: TextMeasurer,
+    inks: VignetteInks,
+    faces: VignetteFaces,
+    smallCaps: TextStyle,
+): TheQuote {
+    val inset = INSET.toPx()
+    val room = size.width - inset * 2
+    val pad = QUOTE_PAD.toPx()
+    val gap = QUOTE_GAP.toPx()
+    val reference = measurer.measure(
+        AnnotatedString(QUOTED_AT),
+        smallCaps.copy(color = inks.muted),
+        softWrap = false,
+        maxLines = 1,
+        density = this,
+    )
+
+    // Wrapped as the record wraps it, inside the wash's padding — smaller,
+    // all of it together, where the row would not fit the paper down.
+    fun lay(scale: Float) = measurer.measure(
+        AnnotatedString(QUOTED_VERSE),
+        TextStyle(
+            fontFamily = faces.quote,
+            fontSize = (QUOTE_SIZE * scale).sp,
+            lineHeight = (QUOTE_SIZE * QUOTE_LEADING * scale).sp,
+            color = inks.text,
+        ),
+        constraints = Constraints(maxWidth = (room - pad * 2).toInt().coerceAtLeast(1)),
+        density = this,
+    )
+    val down = size.height - inset - pad * 2 - gap - reference.size.height
+    var quote = lay(1f)
+    if (down > 0f && quote.size.height > down) quote = lay(down / quote.size.height * 0.98f)
+
+    // The quiet line, in the words the original words' panel uses for the
+    // same thing, on one line as the record keeps it.
+    val waiting = fitted(
+        measurer,
+        AnnotatedString(Copy.ORIGINAL_NOT_ON_THIS_PHONE),
+        RibbonType.ui(14f).copy(color = inks.muted),
+        room,
+    )
+    return TheQuote(
+        left = inset,
+        // As wide as the record lets it be: a quote that wraps fills it.
+        wash = Size(quote.size.width + pad * 2, quote.size.height + pad * 2),
+        corner = QUOTE_CORNER.toPx(),
+        pad = pad,
+        gap = gap,
+        quote = quote,
+        waiting = waiting,
+        reference = reference,
+    )
+}
+
+private fun DrawScope.drawTheQuote(page: TheQuote, inks: VignetteInks, frame: QuotedFrame) {
+    // The line and the quote in one place, crossing in it. The place grows
+    // from the line's height to the wash's as the quote comes, and the row
+    // stays centred on the paper, so the reference goes down as the quote
+    // takes its room.
+    val place = lerp(page.waiting.size.height.toFloat(), page.wash.height, frame.quote)
+    val top = ((size.height - (place + page.gap + page.reference.size.height)) / 2f).coerceAtLeast(0f)
+    faded(frame.shown) {
+        faded(frame.waiting) { drawText(page.waiting, topLeft = Offset(page.left, top)) }
+        // The wash comes with its words, as the record's does: one fade.
+        faded(frame.quote) {
+            drawRoundRect(
+                color = inks.wash,
+                topLeft = Offset(page.left, top),
+                size = page.wash,
+                cornerRadius = CornerRadius(page.corner),
+            )
+            drawText(page.quote, topLeft = Offset(page.left + page.pad, top + page.pad))
+        }
+        drawText(page.reference, topLeft = Offset(page.left, top + place + page.gap))
+    }
+}
+
+// MARK: A verse number stays with its verse
+
+/**
+ * The page's size here: larger than the small page's 13, because five lines
+ * are all this page holds; small enough that its longest — the line with the
+ * number and its word still up at the end of it — fits a narrow phone.
+ */
+private const val NUMBERS_SIZE = 15f
+
+/**
+ * John 1:4–5 as the Berean Standard has it, in the pieces its lines are made
+ * of, set as the page sets it now in a measure narrow enough that verse 5's
+ * number would fall at the end of the second line: the number as the page
+ * sets one — a thin space and the word joiner after it (A74) — with the word
+ * it opens, and after them the words that make room.
+ */
+private val NUMBERS_PASSAGE = listOf(
+    listOf(words("In Him was life, and that")),
+    listOf(words("life was the light of men.")),
+    listOf(number(5), words("The")),
+    listOf(words("Light shines in the")),
+    listOf(words("darkness, and the darkness")),
+    listOf(words("has not overcome it.")),
+)
+
+/** The number and its word: the one piece that goes down. */
+private const val NUMBERS_GOES_DOWN = 2
+
+/**
+ * The two settings, as pieces to a line, broken where the iPhone's picture
+ * breaks them (WhatsNewScreen.swift's `lightOfMen`). Kept: as the page sets
+ * it now, the number beginning the third line with its word. Crowded: the
+ * two up at the end of the second, past where it is full, and the third
+ * line's words back at its start.
+ */
+private val NUMBERS_KEPT = listOf(listOf(0), listOf(1), listOf(2, 3), listOf(4), listOf(5))
+private val NUMBERS_CROWDED = listOf(listOf(0), listOf(1, 2), listOf(3), listOf(4), listOf(5))
+
+/**
+ * How far the number and its word go down as they leave the end of the
+ * line, and come down as they arrive at the start of the next: down both
+ * times, one way, as one thing.
+ */
+private val NUMBERS_DROP = 5.dp
+
+/** A piece of the passage, set once, and where it begins in each setting. */
+private class PlacedPiece(val piece: TextLayoutResult, val crowded: Offset, val kept: Offset)
+
+private class TheNumbers(val pieces: List<PlacedPiece>, val drop: Float)
+
+private fun CacheDrawScope.layOutTheNumbers(
+    measurer: TextMeasurer,
+    inks: VignetteInks,
+    faces: VignetteFaces,
+    smallCaps: TextStyle,
+): TheNumbers {
+    val inset = INSET.toPx()
+    val room = size.width - inset * 2
+    // The number as the page sets it (ChapterText): small caps at 0.62 em,
+    // lifted, with no tracking, at the page's quiet ink.
+    val numberStyle = smallCaps.toSpanStyle().copy(
+        fontSize = 0.62.em,
+        color = inks.text.copy(alpha = PageType.quietVerseNumberAlpha.toFloat()),
+        baselineShift = BaselineShift(0.484f),
+        letterSpacing = 0.sp,
+    )
+    fun set(pieces: List<List<PageRun>>) = buildAnnotatedString {
+        pieces.forEachIndexed { i, piece ->
+            if (i > 0) append(" ")
+            for (run in piece) {
+                if (run.number) withStyle(numberStyle) { append(run.text) } else append(run.text)
+            }
+        }
+    }
+    fun lay(text: AnnotatedString, style: TextStyle) =
+        measurer.measure(text, style, softWrap = false, maxLines = 1, density = this)
+    fun linesOf(setting: List<List<Int>>) = setting.map { line -> line.map { NUMBERS_PASSAGE[it] } }
+    fun widest(setting: List<List<Int>>, style: TextStyle) =
+        linesOf(setting).maxOf { lay(set(it), style).size.width }.toFloat()
+
+    // One size for both settings: the picture's, or smaller where the block
+    // — centred by its lines as they are set now, with the crowded line's
+    // overhang past them on the right and as much again on the left — would
+    // not fit the paper across, or its five lines would not fit it down.
+    val base = TextStyle(fontFamily = faces.flow, fontSize = NUMBERS_SIZE.sp, color = inks.text)
+    val keptWidth = widest(NUMBERS_KEPT, base)
+    val across = keptWidth + 2f * (widest(NUMBERS_CROWDED, base) - keptWidth).coerceAtLeast(0f)
+    val count = NUMBERS_KEPT.size
+    val tall = NUMBERS_SIZE.sp.toPx() * PAGE_LEADING * count
+    val down = size.height - inset
+    val scale = minOf(
+        if (across > room) room / across * 0.98f else 1f,
+        if (tall > down) down / tall else 1f,
+    ).coerceAtLeast(0.1f)
+    val style = base.copy(fontSize = (NUMBERS_SIZE * scale).sp)
+
+    // Every line on one leading, the block centred on the paper by its lines
+    // as they are set now, and flush left, as the page's are; every line on
+    // its own baseline, so a raised number never lifts the line it opens.
+    val settings = listOf(NUMBERS_CROWDED, NUMBERS_KEPT)
+    val lines = settings.map { setting -> linesOf(setting).map { lay(set(it), style) } }
+    val advance = style.fontSize.toPx() * PAGE_LEADING
+    val left = (size.width - lines[1].maxOf { it.size.width }) / 2f
+    val top = (size.height - advance * count) / 2f
+    val first = lines[1][0]
+    val firstBaseline = top + (advance - first.size.height) / 2f + first.getLineBaseline(0)
+
+    // Where each piece begins in a setting: found along its line as that
+    // line is set, so that the pieces drawn apart lie where the line would.
+    fun placed(s: Int): Map<Int, Offset> = buildMap<Int, Offset> {
+        settings[s].forEachIndexed { l, line ->
+            var at = 0
+            line.forEachIndexed { j, p ->
+                if (j > 0) at += 1
+                val x = lines[s][l].getHorizontalPosition(at, usePrimaryDirection = true)
+                put(p, Offset(left + x, firstBaseline + advance * l))
+                at += NUMBERS_PASSAGE[p].sumOf { it.text.length }
+            }
+        }
+    }
+    val crowded = placed(0)
+    val kept = placed(1)
+    return TheNumbers(
+        pieces = NUMBERS_PASSAGE.indices.map { p ->
+            val piece = lay(set(listOf(NUMBERS_PASSAGE[p])), style)
+            val baseline = Offset(0f, piece.getLineBaseline(0))
+            PlacedPiece(piece, crowded = crowded.getValue(p) - baseline, kept = kept.getValue(p) - baseline)
+        },
+        drop = NUMBERS_DROP.toPx(),
+    )
+}
+
+private fun DrawScope.drawTheNumbers(page: TheNumbers, frame: NumbersFrame) {
+    val settled = frame.settled
+    faded(frame.shown) {
+        page.pieces.forEachIndexed { i, placed ->
+            if (i == NUMBERS_GOES_DOWN) {
+                // A cross between two places rather than a journey through
+                // the lines between, so that no word is ever drawn over
+                // another: leaving the full line's end going down, and
+                // arriving at the next line's start coming down.
+                faded(1f - settled) {
+                    drawText(placed.piece, topLeft = placed.crowded + Offset(0f, page.drop * settled))
+                }
+                faded(settled) {
+                    drawText(placed.piece, topLeft = placed.kept - Offset(0f, page.drop * (1f - settled)))
+                }
+            } else {
+                // The words after them move along to make room; everything
+                // else lies where it lies in both.
+                drawText(placed.piece, topLeft = placed.crowded + (placed.kept - placed.crowded) * settled)
+            }
+        }
+    }
+}
+
+// MARK: A voice note's wave, the width of the note
+
+/**
+ * A short note's peaks — a sentence's worth, rising and falling — few
+ * enough that, a fixed step apart from the leading edge as they were, they
+ * reached a fifth of the way across the note and stopped. The iPhone's own.
+ */
+private val NOTE_PEAKS = listOf(
+    0.25f, 0.55f, 0.8f, 0.6f, 0.35f, 0.7f, 0.95f, 0.75f,
+    0.5f, 0.3f, 0.6f, 0.85f, 0.65f, 0.4f, 0.5f, 0.2f,
+)
+
+/**
+ * The bars as `WaveformView` draws them: 2 wide, 3 tall at the least and 30
+ * for a full peak, played at the note's full ink and the rest a step back;
+ * and the strip a finger is answered in, 44 tall, with the wave in its
+ * middle.
+ */
+private val WAVE_BAR = 2.dp
+private val WAVE_FLOOR = 3.dp
+private val WAVE_FULL = 30.dp
+private const val WAVE_UNPLAYED = 0.35f
+private val WAVE_TOUCH = 44.dp
+
+/** Where a bar stood before (A74): a fixed step from the note's leading edge, its own width and 1.5 between. */
+private val WAVE_OLD_STEP = 3.5.dp
+
+/** The note's head, as NoteCard sets it: the reader's face at 22, and 8 from it when, in small caps at 12. */
+private val NOTE_PORTRAIT = 22.dp
+private const val NOTE_WHEN = "this morning"
+
+/**
+ * Ruth's voice note on a row of paper, raised off the picture's as a row
+ * is: her face and when she spoke over her wave, in her ink, across the
+ * note from its leading edge to its trailing one.
+ */
+private class TheWave(
+    val shape: Path,
+    val edge: Float,
+    val face: Offset,
+    val faceRadius: Float,
+    val initial: TextLayoutResult,
+    val initialAt: Offset,
+    val said: TextLayoutResult,
+    val saidAt: Offset,
+    val strip: Rect,
+    val bar: Float,
+    val floor: Float,
+    val full: Float,
+    val oldStep: Float,
+    val pen: Pen,
+)
+
+private fun CacheDrawScope.layOutTheWave(measurer: TextMeasurer, inks: VignetteInks): TheWave {
+    val inset = INSET.toPx()
+    val left = inset
+    val right = size.width - inset
+    val padX = ROW_INSET.toPx()
+    val padY = 12.dp.toPx()
+    val face = NOTE_PORTRAIT.toPx()
+    val beside = 8.dp.toPx()
+    val initial = measurer.measure(
+        AnnotatedString(READER.take(1)),
+        monogram(NOTE_PORTRAIT).copy(color = Ink.teal.color),
+        softWrap = false,
+        maxLines = 1,
+        density = this,
+    )
+    val said = fitted(
+        measurer,
+        AnnotatedString(NOTE_WHEN),
+        RibbonType.smallCaps(12f).copy(color = inks.muted),
+        (right - left - padX * 2 - face - beside).coerceAtLeast(1f),
+    )
+
+    // The head, and 8 under it the strip, in a row padded as the card's
+    // column stacks them, the row centred on the paper.
+    val head = maxOf(face, said.size.height.toFloat())
+    val under = 8.dp.toPx()
+    val touch = WAVE_TOUCH.toPx()
+    val height = padY * 2 + head + under + touch
+    val top = ((size.height - height) / 2f).coerceAtLeast(0f)
+    val faceAt = Offset(left + padX + face / 2f, top + padY + head / 2f)
+    val stripTop = top + padY + head + under
+    return TheWave(
+        shape = rounded(Rect(left, top, right, top + height), RibbonShape.row.toPx()),
+        edge = SHEET_EDGE.toPx(),
+        face = faceAt,
+        faceRadius = face / 2f,
+        initial = initial,
+        initialAt = faceAt - Offset(initial.size.width / 2f, initial.size.height / 2f),
+        said = said,
+        saidAt = Offset(left + padX + face + beside, faceAt.y - said.size.height / 2f),
+        strip = Rect(left + padX, stripTop, right - padX, stripTop + touch),
+        bar = WAVE_BAR.toPx(),
+        floor = WAVE_FLOOR.toPx(),
+        full = WAVE_FULL.toPx(),
+        oldStep = WAVE_OLD_STEP.toPx(),
+        pen = pen(),
+    )
+}
+
+private fun DrawScope.drawTheWave(page: TheWave, inks: VignetteInks, grain: Brush, frame: WavesFrame) {
+    val edge = if (inks.sheetsNeedEdges) inks.rule else null
+    sheet(page.shape, inks.raised, grain, edge, page.edge)
+    // Her face in the paper's colour, a step back from the row it is on. A
+    // face is raised everywhere else in these pictures, but there it lies on
+    // the paper or in a well; this row is already raised off the paper, and
+    // a face in the row's own colour would be no face at all, only its
+    // initial — where the iPhone's, raised on its row's paper, is a face.
+    drawCircle(inks.surface, radius = page.faceRadius, center = page.face)
+    drawText(page.initial, topLeft = page.initialAt)
+    drawText(page.said, topLeft = page.saidAt)
+
+    // The wave fades as a whole at the end, rather than unfilling; the head
+    // stays where it is.
+    faded(frame.shown) {
+        // The fingertip at the point the drag has reached: the share of the
+        // width it is in, which is the bar it is on.
+        val strip = page.strip
+        press(page.pen, Offset(strip.left + frame.played * strip.width, strip.center.y), inks.text, frame.press)
+
+        // Each bar from where it stood to the middle of its own share of the
+        // note, and played up to the one under the finger by the note's own
+        // rule.
+        val ink = Ink.teal.color
+        val share = strip.width / NOTE_PEAKS.size
+        NOTE_PEAKS.forEachIndexed { i, peak ->
+            val was = strip.left + i * page.oldStep
+            val now = strip.left + i * share + (share - page.bar) / 2f
+            val height = maxOf(page.floor, peak * page.full)
+            val isPlayed = i.toFloat() / NOTE_PEAKS.size <= frame.played
+            drawRoundRect(
+                color = ink.copy(alpha = if (isPlayed) 1f else WAVE_UNPLAYED),
+                topLeft = Offset(lerp(was, now, frame.spread), strip.center.y - height / 2f),
+                size = Size(page.bar, height),
+                cornerRadius = CornerRadius(page.bar / 2f),
+            )
+        }
+    }
+}
+
+// MARK: - Ask the room (A75)
 
 /**
  * The room's own card, as a chapter's end has it: whose question it is, in
@@ -3579,4 +4226,3 @@ private fun DrawScope.drawTheQuestion(page: TheQuestion, inks: VignetteInks, gra
         }
     }
 }
-

@@ -781,7 +781,7 @@ class RemoteSync(
     }
 
     /**
-     * The room's own question (A74), asked. False when someone in the room
+     * The room's own question (A75), asked. False when someone in the room
      * asked one at this chapter first: there is one of the room's at a time,
      * and the server keeps it so.
      */
@@ -1595,7 +1595,7 @@ class RemoteSync(
         val question: String,
         val state: String,
         val openedAt: Instant? = null,
-        /** Only ever sent for the room's own card (A74). */
+        /** Only ever sent for the room's own card (A75). */
         val byTheRoom: Boolean? = null,
         val writtenBy: Uuid? = null,
     ) {
@@ -1604,7 +1604,7 @@ class RemoteSync(
              * A card as the server keeps it: its state as the table spells
              * it, and whose it is when the room asked it. It used to carry a
              * `created_at` the table has never had, and the server refused
-             * every card this phone sent (A74).
+             * every card this phone sent (A75).
              */
             fun of(card: ReflectionCard) = CardRow(
                 id = card.id,
@@ -1623,7 +1623,7 @@ class RemoteSync(
     data class CardAnswerRow(
         val cardId: Uuid,
         val personId: Uuid,
-        /** The table's names: an answer is `body`, given at `answered_at` (A74). */
+        /** The table's names: an answer is `body`, given at `answered_at` (A75). */
         val body: String,
         val answeredAt: Instant,
     )

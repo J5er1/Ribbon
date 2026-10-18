@@ -3692,7 +3692,7 @@ fun PassageEnd(
         if (room != null) {
             HeldCard(model.card(reading, chapter), reading, room, model, reduceMotion)
             // The room's own question beside Ribbon's, when someone has asked
-            // one (A74), held across its exit the same way.
+            // one (A75), held across its exit the same way.
             for (roomCard in model.roomCards(reading, chapter)) {
                 key(roomCard.id) { HeldCard(roomCard, reading, room, model, reduceMotion) }
             }
