@@ -1254,6 +1254,7 @@ private fun Vignette(item: WhatsNewItem, startAfter: Long, frozenAt: Long?, modi
         WhatsNewItem.closingARoom -> Modifier.drawWithCache {
             val page = layOutTheClosing(measurer)
             onDrawBehind { drawTheClosing(page, inks, grain, closingFrame(clock.longValue.toInt())) }
+        }
         WhatsNewItem.softLight -> Modifier.drawWithCache {
             val page = layOutTheLight()
             onDrawBehind {
