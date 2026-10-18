@@ -96,14 +96,20 @@ class WhatsNewHistoryTest {
         compose.waitForIdle()
 
         // The newest first, under its day, as a heading.
-        compose.onNode(isHeading() and hasText(Copy.whatsNewTitle(latest.id), substring = true)).assertExists()
-        compose.onNode(hasText(Copy.whatsNewReleased(latest.released)!!)).assertExists()
+        // Its day on the same heading: two releases may share a day.
+        compose.onNode(
+            isHeading() and hasText(Copy.whatsNewTitle(latest.id), substring = true) and
+                hasText(Copy.whatsNewReleased(latest.released)!!, substring = true),
+        ).assertExists()
 
         // And the oldest further down, with its own day and title.
         val list = compose.onNode(hasScrollAction())
         list.performScrollToNode(hasText(Copy.whatsNewTitle(oldest.id)))
-        compose.onNode(isHeading() and hasText(Copy.whatsNewTitle(oldest.id), substring = true)).assertExists()
-        compose.onNode(hasText(Copy.whatsNewReleased(oldest.released)!!)).assertExists()
+        // Its day on the same heading: two releases may share a day.
+        compose.onNode(
+            isHeading() and hasText(Copy.whatsNewTitle(oldest.id), substring = true) and
+                hasText(Copy.whatsNewReleased(oldest.released)!!, substring = true),
+        ).assertExists()
         for (item in oldest.items) {
             list.performScrollToNode(hasText(item.title))
             compose.onNode(hasText(item.title, substring = true)).assertExists()

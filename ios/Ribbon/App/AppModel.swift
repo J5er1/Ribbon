@@ -1748,6 +1748,97 @@ final class AppModel {
         try await remote?.report(person: person, room: room)
     }
 
+    // MARK: - Closing a room (A73)
+
+    /// Whether the project can close rooms at all, asked on each refresh
+    /// until the answer is yes.
+    private(set) var serverCloses = false
+
+    /// Closing runs through the backend and needs an account, and a
+    /// project that has it (§6.1: absent rather than dead).
+    var closingAvailable: Bool { remote != nil && isSignedIn && serverCloses }
+
+    /// Rooms that have closed, most recently first.
+    var closedRooms: [Room] {
+        state.closedRooms.sorted { ($0.closedAt ?? .distantPast) > ($1.closedAt ?? .distantPast) }
+    }
+
+    func closing(of room: Room) -> RoomClosing {
+        guard let me = state.me else { return .open }
+        return RoomClosing.of(room, members(of: room), me: me.id)
+    }
+
+    /// Whether the room has been quiet long enough that one request closes
+    /// it, as far as this phone knows. The server has the last word.
+    func isQuiet(_ room: Room, at now: Date = Date()) -> Bool {
+        let heard = RoomSilence.lastHeard(
+            room: room, memberships: state.memberships, readings: state.readings,
+            notes: state.notes, highlights: state.highlights)
+        return RoomSilence.isQuiet(lastHeard: heard, at: now)
+    }
+
+    /// Whether your yes closes the room as you say it — again, if you said
+    /// it already and the room has since gone quiet, or the last person
+    /// who had not said it has said it or left.
+    func closesOnYourYes(_ room: Room) -> Bool {
+        guard let me = state.me else { return false }
+        return RoomClosing.closesOnYourYes(room, members(of: room), me: me.id, quiet: isQuiet(room))
+    }
+
+    /// The question asked before your yes: what it will do.
+    func closeQuestion(for room: Room) -> String {
+        if isQuiet(room) { return Copy.closeQuestionQuiet }
+        return closesOnYourYes(room) ? Copy.closeQuestionNow : Copy.closeQuestion
+    }
+
+    /// Asking for the room to close. True when it closed, and then it has
+    /// already left the room list by the time this returns.
+    func askToClose(_ room: Room) async throws -> Bool {
+        guard let remote, let me = state.me else { return false }
+        let closed = try await remote.closeRoom(room.id)
+        if let i = state.memberships.firstIndex(where: { $0.roomID == room.id && $0.personID == me.id }) {
+            state.memberships[i].wouldClose = true
+            persist()
+        }
+        await presence.announceChange()
+        await refreshFromRemote()
+        return closed
+    }
+
+    func takeBackClosing(_ room: Room) async throws {
+        guard let remote, let me = state.me,
+              let i = state.memberships.firstIndex(where: { $0.roomID == room.id && $0.personID == me.id })
+        else { return }
+        try await remote.takeBackClosing(state.memberships[i])
+        state.memberships[i].wouldClose = false
+        persist()
+    }
+
+    /// The room's whole shelf written to a file to hand on (§6.8): every
+    /// book, note, mark and opened card, as plain text.
+    func shelfFile(for room: Room) -> URL? {
+        let readingIDs = Set(state.readings.filter { $0.roomID == room.id }.map(\.id))
+        let title = displayName(of: room)
+        let text = ShelfExport.text(
+            title: title,
+            readings: state.readings.filter { $0.roomID == room.id },
+            notes: state.notes.filter { readingIDs.contains($0.readingID) },
+            highlights: state.highlights.filter { readingIDs.contains($0.readingID) },
+            cards: state.cards.filter { readingIDs.contains($0.readingID) },
+            name: { [weak self] id in self?.person(id)?.name ?? Copy.someone },
+            keptAt: Date(),
+            timeZone: .current)
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("shelves", isDirectory: true)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let url = folder.appendingPathComponent(ShelfExport.fileName(title: title))
+        do {
+            try text.write(to: url, atomically: true, encoding: .utf8)
+            return url
+        } catch {
+            return nil
+        }
+    }
+
     // MARK: - The account and the room surface of sync (§6.10, S16)
 
     var isSignedIn: Bool { remote?.isSignedIn ?? false }
@@ -2149,6 +2240,9 @@ final class AppModel {
         if !serverFinds, let there = await remote.findingIsThere() {
             serverFinds = there
         }
+        if !serverCloses, let there = await remote.closingIsThere() {
+            serverCloses = there
+        }
         guard let graph = try? await remote.pullRooms() else { return .none }
         let landed = merge(graph)
         announce(landed)
@@ -2315,6 +2409,23 @@ final class AppModel {
 
         for row in graph.rooms {
             let translation = row.translation.map(TranslationID.init(rawValue:))
+            // A closed room (A73) leaves the room list for the closed ones,
+            // keeping what it was called; its shelf stays to be kept.
+            if let closedAt = row.closedAt {
+                var closed = state.rooms.first(where: { $0.id == row.id })
+                    ?? state.closedRooms.first(where: { $0.id == row.id })
+                    ?? Room(id: row.id, name: row.name, createdAt: row.createdAt, isPaused: row.isPaused,
+                            translation: translation ?? .bsb, line: row.line)
+                closed.name = row.name
+                closed.closedAt = closedAt
+                state.rooms.removeAll { $0.id == row.id }
+                if let i = state.closedRooms.firstIndex(where: { $0.id == row.id }) {
+                    state.closedRooms[i] = closed
+                } else {
+                    state.closedRooms.append(closed)
+                }
+                continue
+            }
             if let i = state.rooms.firstIndex(where: { $0.id == row.id }) {
                 // Remote wins on the multi-author name and version — except
                 // over a local change that hasn't landed there yet. The
@@ -2353,10 +2464,16 @@ final class AppModel {
                    state.unsaid[state.memberships[i].id] == nil {
                     state.memberships[i].wouldOpen = wouldOpen
                 }
+                // Requests to close (A73) are said straight to the server,
+                // never queued, so the server's word is the word.
+                if let wouldClose = row.wouldClose {
+                    state.memberships[i].wouldClose = wouldClose
+                }
             } else {
                 state.memberships.append(Membership(
                     id: row.id, roomID: row.roomId, personID: row.personId,
-                    ink: ink, joinedAt: row.joinedAt, wouldOpen: row.wouldOpen ?? false))
+                    ink: ink, joinedAt: row.joinedAt, wouldOpen: row.wouldOpen ?? false,
+                    wouldClose: row.wouldClose ?? false))
             }
         }
         // Departures propagate: a membership the backend no longer has is
@@ -2401,6 +2518,12 @@ final class AppModel {
             person.name = row.name
             person.translation = translation
             state.people[row.id] = person
+        }
+
+        // The room on screen may just have closed (A73): the next open one
+        // takes its place.
+        if let current = state.currentRoomID, !state.rooms.contains(where: { $0.id == current }) {
+            state.currentRoomID = state.rooms.first?.id
         }
 
         // Asks into my rooms (A72): not kept on the phone, only shown, and

@@ -493,6 +493,7 @@ internal val WhatsNewItem.title: String
         WhatsNewItem.fourInks -> Copy.WHATS_NEW_INKS_TITLE
         WhatsNewItem.findARoom -> Copy.WHATS_NEW_FIND_TITLE
         WhatsNewItem.beingFound -> Copy.WHATS_NEW_BEING_FOUND_TITLE
+        WhatsNewItem.closingARoom -> Copy.WHATS_NEW_CLOSING_TITLE
     }
 
 internal val WhatsNewItem.body: String
@@ -516,6 +517,7 @@ internal val WhatsNewItem.body: String
         WhatsNewItem.fourInks -> Copy.WHATS_NEW_INKS_BODY
         WhatsNewItem.findARoom -> Copy.WHATS_NEW_FIND_BODY
         WhatsNewItem.beingFound -> Copy.WHATS_NEW_BEING_FOUND_BODY
+        WhatsNewItem.closingARoom -> Copy.WHATS_NEW_CLOSING_BODY
     }
 
 // MARK: - The clock
@@ -572,6 +574,7 @@ internal val WhatsNewItem.timeline: Timeline
         WhatsNewItem.fourInks,
         WhatsNewItem.findARoom,
         WhatsNewItem.beingFound,
+        WhatsNewItem.closingARoom,
         -> Timeline(LOOP_MS, STILL_AT)
         WhatsNewItem.followingStays -> Timeline(LONG_LOOP_MS, STAYS_STILL_AT)
         WhatsNewItem.nativeSelection -> Timeline(LONG_LOOP_MS, SELECTION_STILL_AT)
@@ -1129,6 +1132,10 @@ private fun Vignette(item: WhatsNewItem, startAfter: Long, frozenAt: Long?, modi
                 sentence = Copy.WHATS_NEW_BEING_FOUND_LINE,
             )
             onDrawBehind { drawNotifications(page, inks, grain, beingFoundFrame(clock.longValue.toInt())) }
+        }
+        WhatsNewItem.closingARoom -> Modifier.drawWithCache {
+            val page = layOutTheClosing(measurer)
+            onDrawBehind { drawTheClosing(page, inks, grain, closingFrame(clock.longValue.toInt())) }
         }
     }
     Box(modifier.then(drawing))
@@ -3338,3 +3345,114 @@ private fun DrawScope.drawTheDoor(page: TheDoor, inks: VignetteInks, frame: Find
  * turns. Notifications' picture saying a different thing, on the same beats.
  */
 internal fun beingFoundFrame(t: Int): NotificationsFrame = notificationsFrame(t)
+
+// MARK: - Closing a room, together (A73)
+
+/**
+ * Three faces in a row, the room as it was; they quieten together ([dim]),
+ * and under them a sheet rises with the shelf's lines on it — what each of
+ * them keeps ([kept]). Then the room comes back and the sheet goes.
+ */
+internal data class ClosingFrame(val dim: Float, val kept: Float)
+
+internal fun closingFrame(t: Int): ClosingFrame {
+    val back = 1f - beat(t, at = 3660, ms = 400)
+    return ClosingFrame(
+        dim = beat(t, at = 400, ms = 400) * back,
+        kept = beat(t, at = 1000, ms = 480) * back,
+    )
+}
+
+private const val CLOSING_MONOGRAMS = "RAJ"
+private val CLOSING_INKS = listOf(Ink.teal, Ink.ochre, Ink.plum)
+/** The shelf's lines: a book's name, and what was written in it. */
+private val CLOSING_LINES = listOf(0.5f, 0.86f, 0.72f)
+private val CLOSING_GAP = 16.dp
+private val CLOSING_LINE_WIDTH = 96.dp
+private val CLOSING_LINE_GAP = 9.dp
+private val CLOSING_INSET_X = 14.dp
+private val CLOSING_INSET_Y = 12.dp
+private val CLOSING_RISE = 10.dp
+
+/** The faces, their initials, and the sheet with its lines, as they stand once kept. */
+private class TheClosing(
+    val faces: List<Offset>,
+    val radius: Float,
+    val initials: List<TextLayoutResult>,
+    val sheet: Rect,
+    val corner: Float,
+    val lines: List<Rect>,
+    val rise: Float,
+    val edge: Float,
+)
+
+private fun CacheDrawScope.layOutTheClosing(measurer: TextMeasurer): TheClosing {
+    val face = TWELVE_FACE.toPx()
+    val pitch = TWELVE_PITCH.toPx()
+    val lineWidth = CLOSING_LINE_WIDTH.toPx()
+    val insetX = CLOSING_INSET_X.toPx()
+    val insetY = CLOSING_INSET_Y.toPx()
+    val lineGap = CLOSING_LINE_GAP.toPx()
+    val heavy = 2.dp.toPx()
+    val hair = 1.dp.toPx()
+    val sheetHeight = insetY * 2 + heavy + 2 * (lineGap + hair)
+    val whole = face + CLOSING_GAP.toPx() + sheetHeight
+    val top = (size.height - whole) / 2f
+    val mid = size.width / 2f
+    val sheet = Rect(
+        left = mid - lineWidth / 2f - insetX,
+        top = top + face + CLOSING_GAP.toPx(),
+        right = mid + lineWidth / 2f + insetX,
+        bottom = top + whole,
+    )
+    var y = sheet.top + insetY
+    val lines = CLOSING_LINES.mapIndexed { i, length ->
+        val height = if (i == 0) heavy else hair
+        val line = Rect(sheet.left + insetX, y, sheet.left + insetX + lineWidth * length, y + height)
+        y += height + lineGap
+        line
+    }
+    return TheClosing(
+        faces = (0 until 3).map { Offset(mid + (it - 1) * pitch, top + face / 2f) },
+        radius = face / 2f,
+        initials = CLOSING_MONOGRAMS.mapIndexed { i, letter ->
+            measurer.measure(
+                AnnotatedString(letter.toString()),
+                monogram(TWELVE_FACE).copy(color = CLOSING_INKS[i].color),
+                softWrap = false,
+                maxLines = 1,
+                density = this,
+            )
+        },
+        sheet = sheet,
+        corner = ROW_CORNER.toPx(),
+        lines = lines,
+        rise = CLOSING_RISE.toPx(),
+        edge = SHEET_EDGE.toPx(),
+    )
+}
+
+private fun DrawScope.drawTheClosing(page: TheClosing, inks: VignetteInks, grain: Brush, frame: ClosingFrame) {
+    faded(1f - 0.6f * frame.dim) {
+        page.faces.forEachIndexed { i, at ->
+            drawCircle(inks.raised, radius = page.radius, center = at)
+            val initial = page.initials[i]
+            drawText(initial, topLeft = at - Offset(initial.size.width / 2f, initial.size.height / 2f))
+        }
+    }
+    if (frame.kept <= 0f) return
+    faded(frame.kept) {
+        translate(top = page.rise * (1f - frame.kept)) {
+            val edge = if (inks.sheetsNeedEdges) inks.rule else null
+            sheet(rounded(page.sheet, page.corner), inks.raised, grain, edge, page.edge)
+            page.lines.forEachIndexed { i, line ->
+                drawRoundRect(
+                    if (i == 0) inks.text.copy(alpha = 0.7f) else inks.rule,
+                    topLeft = line.topLeft,
+                    size = line.size,
+                    cornerRadius = CornerRadius(line.height / 2f),
+                )
+            }
+        }
+    }
+}

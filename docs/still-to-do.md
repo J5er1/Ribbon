@@ -413,3 +413,24 @@ out today (finding gives room ids, not reading ids), so it is not urgent;
 but each should either pin its parent id the same way or check membership
 on the new row as well as the old.
 
+## 10. Closing a room — the migration, applied on 18 October
+
+`supabase/migrations/20261018120000_ribbon_closing_a_room.sql`
+(docs/deviations.md A73) is on the live project, in five pieces recorded
+as `ribbon_closing_*`, rehearsed beforehand in a rolled-back transaction
+(A73 lists what). Seen on a phone, both platforms:
+
+- The room menu shows "Close this room" under "Leave this room" only once
+  the phone has refreshed against the project. In a room of two, one yes
+  reads "You asked to close this room…" with "Take it back"; the other
+  person's yes closes it, and their phone offers the shelf at once.
+- The first person's phone, on its next refresh, moves the room out of
+  the list and into "Rooms that have closed" in the room menu; "Keep the
+  shelf" there hands on the file. Open the file in Files / a text editor
+  and read it through: books, notes, marks, cards.
+- Closing the last room you are in: the menu leaves for the first-run
+  door after the share sheet, not before it.
+- An invite link to a closed room says it has expired.
+- A quiet room: hard to make by hand; the rehearsal covered it on the
+  server. If one exists, the question should read "…quiet for a month,
+  so it closes now…".

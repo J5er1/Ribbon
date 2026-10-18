@@ -36,7 +36,10 @@ import app.readribbon.core.Knock
 import app.readribbon.core.OpenRoom
 import app.readribbon.core.OwnLine
 import app.readribbon.core.PublicFace
+import app.readribbon.core.RoomClosing
 import app.readribbon.core.RoomOpenness
+import app.readribbon.core.RoomSilence
+import app.readribbon.core.ShelfExport
 import app.readribbon.core.Invite
 import app.readribbon.core.Membership
 import app.readribbon.core.Note
@@ -2491,6 +2494,98 @@ class AppModel(
         remote?.report(person = person, room = room)
     }
 
+    // MARK: - Closing a room (A73)
+
+    /** Whether the project can close rooms at all, asked on each refresh until the answer is yes. */
+    var serverCloses: Boolean by mutableStateOf(false)
+        private set
+
+    /** Closing runs through the backend and needs an account, and a project that has it (§6.1). */
+    val closingAvailable: Boolean get() = remote != null && isSignedIn && serverCloses
+
+    /** Rooms that have closed, most recently first. */
+    val closedRooms: List<Room>
+        get() = state.closedRooms.sortedByDescending { it.closedAt ?: Instant.DISTANT_PAST }
+
+    fun closing(room: Room): RoomClosing {
+        val me = state.me ?: return RoomClosing.open
+        return RoomClosing.of(room, members(room), me.id)
+    }
+
+    /**
+     * Whether the room has been quiet long enough that one request closes it,
+     * as far as this phone knows. The server has the last word.
+     */
+    fun isQuiet(room: Room, now: Instant = Clock.System.now()): Boolean {
+        val heard = RoomSilence.lastHeard(
+            room = room, memberships = state.memberships, readings = state.readings,
+            notes = state.notes, highlights = state.highlights)
+        return RoomSilence.isQuiet(lastHeard = heard, now = now)
+    }
+
+    /**
+     * Whether your yes closes the room as you say it — again, if you said it
+     * already and the room has since gone quiet, or the last person who had
+     * not said it has said it or left.
+     */
+    fun closesOnYourYes(room: Room): Boolean {
+        val me = state.me ?: return false
+        return RoomClosing.closesOnYourYes(room, members(room), me.id, quiet = isQuiet(room))
+    }
+
+    /** The question asked before your yes: what it will do. */
+    fun closeQuestion(room: Room): String = when {
+        isQuiet(room) -> Copy.CLOSE_QUESTION_QUIET
+        closesOnYourYes(room) -> Copy.CLOSE_QUESTION_NOW
+        else -> Copy.CLOSE_QUESTION
+    }
+
+    /** Asking for the room to close. True when it closed, and then it has already left the room list. */
+    suspend fun askToClose(room: Room): Boolean {
+        val remote = this.remote ?: return false
+        val me = state.me ?: return false
+        val closed = remote.closeRoom(room.id)
+        state = state.copy(memberships = state.memberships.map {
+            if (it.roomID == room.id && it.personID == me.id) it.copy(wouldClose = true) else it
+        })
+        persist()
+        presence.announceChange()
+        refreshFromRemote()
+        return closed
+    }
+
+    suspend fun takeBackClosing(room: Room) {
+        val remote = this.remote ?: return
+        val me = state.me ?: return
+        val mine = state.memberships.firstOrNull { it.roomID == room.id && it.personID == me.id } ?: return
+        remote.takeBackClosing(mine)
+        state = state.copy(memberships = state.memberships.map {
+            if (it.id == mine.id) it.copy(wouldClose = false) else it
+        })
+        persist()
+    }
+
+    /** The room's whole shelf written to a file to hand on (§6.8): every book, note, mark and opened card. */
+    fun shelfFile(room: Room): java.io.File? {
+        val readings = state.readings.filter { it.roomID == room.id }
+        val readingIDs = readings.map { it.id }.toSet()
+        val title = displayName(room)
+        val text = ShelfExport.text(
+            title = title,
+            readings = readings,
+            notes = state.notes.filter { it.readingID in readingIDs },
+            highlights = state.highlights.filter { it.readingID in readingIDs },
+            cards = state.cards.filter { it.readingID in readingIDs },
+            name = { person(it)?.name ?: Copy.SOMEONE },
+            keptAt = Clock.System.now(),
+            timeZone = kotlinx.datetime.TimeZone.currentSystemDefault(),
+        )
+        return runCatching {
+            val folder = java.io.File(appContext.cacheDir, "shelves").apply { mkdirs() }
+            java.io.File(folder, ShelfExport.fileName(title)).apply { writeText(text) }
+        }.getOrNull()
+    }
+
     // MARK: - The account and the room surface of sync (§6.10, S16)
 
     val isSignedIn: Boolean get() = remote?.isSignedIn ?: false
@@ -3031,6 +3126,7 @@ class AppModel(
             pushInviteIfNeeded(invite, room)
         }
         if (!serverFinds) remote.findingIsThere()?.let { serverFinds = it }
+        if (!serverCloses) remote.closingIsThere()?.let { serverCloses = it }
         val graph = runCatching { remote.pullRooms() }.getOrNull() ?: return Arrivals.none
         val landed = merge(graph)
         announce(landed)
@@ -3278,7 +3374,24 @@ class AppModel(
         var next = state
 
         val rooms = next.rooms.toMutableList()
+        val closedRooms = next.closedRooms.toMutableList()
         for (row in graph.rooms) {
+            // A closed room (A73) leaves the room list for the closed ones,
+            // keeping what it was called; its shelf stays to be kept.
+            val closedAt = row.closedAt
+            if (closedAt != null) {
+                val was = rooms.firstOrNull { it.id == row.id }
+                    ?: closedRooms.firstOrNull { it.id == row.id }
+                    ?: Room(
+                        id = row.id, name = row.name, createdAt = row.createdAt, isPaused = row.isPaused,
+                        translation = row.translation?.let { TranslationID(rawValue = it) } ?: TranslationID.bsb,
+                        line = row.line)
+                val closed = was.copy(name = row.name, closedAt = closedAt)
+                rooms.removeAll { it.id == row.id }
+                val j = closedRooms.indexOfFirst { it.id == row.id }
+                if (j >= 0) closedRooms[j] = closed else closedRooms.add(closed)
+                continue
+            }
             val i = rooms.indexOfFirst { it.id == row.id }
             if (i >= 0) {
                 // Remote wins on the multi-author name — except over a
@@ -3308,7 +3421,7 @@ class AppModel(
                         line = row.line))
             }
         }
-        next = next.copy(rooms = rooms)
+        next = next.copy(rooms = rooms, closedRooms = closedRooms)
 
         val memberships = next.memberships.toMutableList()
         for (row in graph.memberships) {
@@ -3328,12 +3441,16 @@ class AppModel(
                 if (wouldOpen != null && !isUnsaid(membership.id)) {
                     membership = membership.copy(wouldOpen = wouldOpen)
                 }
+                // Requests to close (A73) are said straight to the server,
+                // never queued, so the server's word is the word.
+                row.wouldClose?.let { membership = membership.copy(wouldClose = it) }
                 memberships[i] = membership.copy(joinedAt = row.joinedAt)
             } else {
                 memberships.add(
                     Membership(
                         id = row.id, roomID = row.roomId, personID = row.personId,
-                        ink = ink, joinedAt = row.joinedAt, wouldOpen = row.wouldOpen ?: false))
+                        ink = ink, joinedAt = row.joinedAt, wouldOpen = row.wouldOpen ?: false,
+                        wouldClose = row.wouldClose ?: false))
             }
         }
         // Departures propagate: a membership the backend no longer has is
@@ -3385,6 +3502,13 @@ class AppModel(
             people[row.id] = profile
         }
         next = next.copy(people = people)
+
+        // The room on screen may just have closed (A73): the next open one
+        // takes its place.
+        val current = next.currentRoomID
+        if (current != null && next.rooms.none { it.id == current }) {
+            next = next.copy(currentRoomID = next.rooms.firstOrNull()?.id)
+        }
 
         // Asks into my rooms (A72): not kept on the phone, only shown, and
         // only while they stand.

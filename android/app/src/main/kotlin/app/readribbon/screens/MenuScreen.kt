@@ -118,6 +118,7 @@ import app.readribbon.app.firstName
 import app.readribbon.core.Bible
 import app.readribbon.core.Reading
 import app.readribbon.core.Room
+import app.readribbon.core.RoomClosing
 import app.readribbon.core.RoomOpenness
 import app.readribbon.core.ShelfCompany
 import app.readribbon.core.VerseAddress
@@ -807,6 +808,7 @@ private fun RoomMenu(
     modifier: Modifier = Modifier,
 ) {
     val here = model.currentRoom
+    val context = LocalContext.current
     RibbonScreen(
         title = here?.let { model.displayName(it) } ?: Copy.ROOMS,
         lede = Copy.ROOM_LEDE,
@@ -869,7 +871,12 @@ private fun RoomMenu(
             }
 
             Air(SectionGap)
-            RoomControls(model = model, room = room, onLeft = onDismiss)
+            RoomControls(
+                model = model,
+                room = room,
+                onLeft = onDismiss,
+                onClosed = { closed -> shareShelf(context, model, closed) },
+            )
             Air(SectionGap)
         }
 
@@ -913,7 +920,41 @@ private fun RoomMenu(
                 MenuRow(Copy.FIND_A_ROOM) { onOpen(FindRoute.FIND) }
             }
         }
+
+        // Rooms that have closed (A73): each one's shelf, to keep.
+        val closed = model.closedRooms
+        if (closed.isNotEmpty()) {
+            Air(SectionGap)
+            SettingsGroup(count = closed.size, title = Copy.CLOSED_ROOMS) {
+                closed.forEach { room ->
+                    Setting(
+                        title = model.displayName(room),
+                        subtitle = Copy.KEEP_THE_SHELF_SUB,
+                        value = Copy.KEEP_THE_SHELF,
+                        chevron = false,
+                        onClick = { shareShelf(context, model, room) },
+                    )
+                }
+            }
+        }
     }
+}
+
+/**
+ * A room's shelf handed on as a file (§6.8, A73), through the system's
+ * chooser: the moment it closes on this phone, and whenever it is asked for
+ * again. Written to the cache's shelves folder, which the FileProvider lends.
+ */
+private fun shareShelf(context: android.content.Context, model: AppModel, room: Room) {
+    val file = model.shelfFile(room) ?: return
+    val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+    val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(android.content.Intent.EXTRA_STREAM, uri)
+        putExtra(android.content.Intent.EXTRA_SUBJECT, file.nameWithoutExtension)
+        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    context.startActivity(android.content.Intent.createChooser(send, null))
 }
 
 /**
@@ -1943,9 +1984,14 @@ private fun RoomControls(
     model: AppModel,
     room: Room,
     onLeft: () -> Unit,
+    /** The room closed on this request (A73): its shelf is handed on. */
+    onClosed: (Room) -> Unit,
 ) {
     // Saveable for the same reason the name above is.
     var editingRoomName by rememberSaveable { mutableStateOf(false) }
+    var askingToClose by remember { mutableStateOf(false) }
+    var closingLine by remember { mutableStateOf<String?>(null) }
+    val closingScope = rememberCoroutineScope()
     var roomName by rememberSaveable { mutableStateOf("") }
     var showInkPicker by remember { mutableStateOf(false) }
     var confirmLeave by remember { mutableStateOf(false) }
@@ -2032,6 +2078,65 @@ private fun RoomControls(
             title = Copy.LEAVE_THIS_ROOM,
             modifier = Modifier.offset(x = QuietControlInset),
         ) { confirmLeave = true }
+
+        // Closing (§6.8, A73): as quiet as leaving, asked once, and never a
+        // retention offer. Who has not asked is never named.
+        if (model.closingAvailable) {
+            // A yes that is waiting is offered again once saying it closes the
+            // room: it went quiet, or the last one said yes or left.
+            if (model.closing(room) == RoomClosing.waitingForOthers && !model.closesOnYourYes(room)) {
+                Text(
+                    text = Copy.YOU_ASKED_TO_CLOSE,
+                    style = RibbonType.ui(14f),
+                    color = Palette.muted,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+                QuietControl(
+                    title = Copy.TAKE_IT_BACK,
+                    modifier = Modifier.offset(x = QuietControlInset),
+                ) {
+                    closingLine = null
+                    closingScope.launch {
+                        runCatching { model.takeBackClosing(room) }
+                            .onFailure { closingLine = Copy.SERVER_UNREACHABLE }
+                    }
+                }
+            } else {
+                QuietControl(
+                    title = Copy.CLOSE_THIS_ROOM,
+                    modifier = Modifier.offset(x = QuietControlInset),
+                ) { askingToClose = true }
+            }
+            closingLine?.let {
+                Text(text = it, style = RibbonType.ui(14f), color = Palette.muted)
+            }
+        }
+    }
+
+    if (askingToClose) {
+        RibbonConfirmDialog(
+            question = model.closeQuestion(room),
+            onDismiss = { askingToClose = false },
+        ) {
+            ConfirmChoice(
+                title = Copy.CLOSE_THIS_ROOM,
+                destructive = true,
+                onClick = {
+                    askingToClose = false
+                    closingLine = null
+                    closingScope.launch {
+                        try {
+                            if (model.askToClose(room)) onClosed(room)
+                        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                            throw cancelled
+                        } catch (e: Exception) {
+                            closingLine = Copy.SERVER_UNREACHABLE
+                        }
+                    }
+                },
+            )
+            ConfirmChoice(title = Copy.NEVER_MIND, onClick = { askingToClose = false })
+        }
     }
 
     if (showInkPicker) {

@@ -11,20 +11,24 @@ final class WhatsNewTests: XCTestCase {
     // MARK: Today's release
 
     func testTodaysRelease() {
-        XCTAssertEqual(WhatsNew.releases.first?.id, "2026-10-found")
-        XCTAssertEqual(WhatsNew.releases.first?.items, [.findARoom, .beingFound])
-        // A room of twelve (A70) is the release before.
-        let twelve = WhatsNew.releases.dropFirst().first
+        XCTAssertEqual(WhatsNew.releases.first?.id, "2026-10-closing")
+        XCTAssertEqual(WhatsNew.releases.first?.items, [.closingARoom])
+        // Being found (A72) is the release before.
+        let found = WhatsNew.releases.dropFirst().first
+        XCTAssertEqual(found?.id, "2026-10-found")
+        XCTAssertEqual(found?.items, [.findARoom, .beingFound])
+        // A room of twelve (A70) is the one before that.
+        let twelve = WhatsNew.releases.dropFirst(2).first
         XCTAssertEqual(twelve?.id, "2026-10-twelve")
         XCTAssertEqual(twelve?.items, [.roomOfTwelve, .fourInks])
-        // The front of the book (A67–A69) is the one before that.
-        let flyleaf = WhatsNew.releases.dropFirst(2).first
+        // The front of the book (A67–A69) before that.
+        let flyleaf = WhatsNew.releases.dropFirst(3).first
         XCTAssertEqual(flyleaf?.id, "2026-10-flyleaf")
         XCTAssertEqual(
             flyleaf?.items,
             [.flyleaf, .yourShelf, .versionsByReading, .yourPage, .typeface, .notificationsByName, .quietHoursNight])
         // The Hebrew made easy to read (A66) belongs to the release before that.
-        let following = WhatsNew.releases.dropFirst(3).first
+        let following = WhatsNew.releases.dropFirst(4).first
         XCTAssertEqual(following?.id, "2026-10-following")
         XCTAssertEqual(
             following?.items,
@@ -35,7 +39,7 @@ final class WhatsNewTests: XCTestCase {
     // and every thing new told in exactly one of them.
     func testTheListReadsNewestFirstAndTellsEachThingOnce() {
         let ids = WhatsNew.releases.map(\.id)
-        XCTAssertEqual(ids, ["2026-10-found", "2026-10-twelve", "2026-10-flyleaf", "2026-10-following", "2026-10-original"])
+        XCTAssertEqual(ids, ["2026-10-closing", "2026-10-found", "2026-10-twelve", "2026-10-flyleaf", "2026-10-following", "2026-10-original"])
         XCTAssertEqual(Set(ids).count, ids.count)
         let days = WhatsNew.releases.map(\.released)
         XCTAssertTrue(days.allSatisfy { $0.count == 10 })
@@ -49,15 +53,15 @@ final class WhatsNewTests: XCTestCase {
     // and someone two behind hears about this one, not the backlog.
     func testAnUpdaterWhoSawAnEarlierOneSeesThisOne() {
         XCTAssertEqual(
-            WhatsNew.toShow(lastSeen: "2026-10-twelve", hasHistory: true, plainLaunch: true)?.id,
-            "2026-10-found")
+            WhatsNew.toShow(lastSeen: "2026-10-found", hasHistory: true, plainLaunch: true)?.id,
+            "2026-10-closing")
         XCTAssertEqual(
             WhatsNew.toShow(lastSeen: "2026-10-original", hasHistory: true, plainLaunch: true)?.id,
-            "2026-10-found")
+            "2026-10-closing")
         XCTAssertEqual(
-            WhatsNew.seenAfter(lastSeen: "2026-10-twelve", hasHistory: true, plainLaunch: true, shown: true),
-            "2026-10-found")
-        XCTAssertNil(WhatsNew.toShow(lastSeen: "2026-10-found", hasHistory: true, plainLaunch: true))
+            WhatsNew.seenAfter(lastSeen: "2026-10-found", hasHistory: true, plainLaunch: true, shown: true),
+            "2026-10-closing")
+        XCTAssertNil(WhatsNew.toShow(lastSeen: "2026-10-closing", hasHistory: true, plainLaunch: true))
     }
 
     func testItemRawValues() throws {
@@ -80,6 +84,7 @@ final class WhatsNewTests: XCTestCase {
         XCTAssertEqual(WhatsNewItem.fourInks.rawValue, "fourInks")
         XCTAssertEqual(WhatsNewItem.findARoom.rawValue, "findARoom")
         XCTAssertEqual(WhatsNewItem.beingFound.rawValue, "beingFound")
+        XCTAssertEqual(WhatsNewItem.closingARoom.rawValue, "closingARoom")
         let json = try JSONEncoder().encode([WhatsNewItem.original, .ownVersion, .followingWords])
         XCTAssertEqual(String(decoding: json, as: UTF8.self), #"["original","ownVersion","followingWords"]"#)
     }

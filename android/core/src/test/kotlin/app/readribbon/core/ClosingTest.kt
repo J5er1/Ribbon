@@ -60,6 +60,26 @@ class ClosingTest {
         assertEquals(RoomClosing.open, RoomClosing.of(room(), listOf(membership(ruth, closing = true)), me))
     }
 
+    @Test
+    fun testYourYesWaitsWhileSomeoneElseHasNotSaidIt() {
+        val ms = listOf(membership(me, closing = true), membership(ruth, closing = true), membership(ann, closing = false))
+        assertFalse(RoomClosing.closesOnYourYes(room(), ms, me, quiet = false))
+    }
+
+    @Test
+    fun testYourYesClosesItWhenEveryoneElseHasSaidIt() {
+        val ms = listOf(membership(me, closing = false), membership(ruth, closing = true), membership(ann, closing = true))
+        assertTrue(RoomClosing.closesOnYourYes(room(), ms, me, quiet = false))
+        assertTrue("a room of one", RoomClosing.closesOnYourYes(room(), listOf(membership(me, closing = true)), me, quiet = false))
+    }
+
+    @Test
+    fun testYourYesClosesAQuietRoomAndNotAClosedOne() {
+        val ms = listOf(membership(me, closing = true), membership(ruth, closing = false))
+        assertTrue(RoomClosing.closesOnYourYes(room(), ms, me, quiet = true))
+        assertFalse(RoomClosing.closesOnYourYes(room(closedAt = at("2026-10-18T09:00:00Z")), ms, me, quiet = true))
+    }
+
     // Thirty quiet days
 
     @Test

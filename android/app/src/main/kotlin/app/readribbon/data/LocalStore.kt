@@ -348,6 +348,12 @@ data class AppState(
      * list in Being found would otherwise be a list of nobody.
      */
     val blockedNames: Map<Uuid, String> = emptyMap(),
+    /**
+     * Rooms that have closed (A73): out of the room list, their shelves still
+     * here to be kept as a file. Their readings, notes and marks stay in the
+     * lists above, as a room you have left keeps its books.
+     */
+    val closedRooms: List<Room> = emptyList(),
 )
 
 /**

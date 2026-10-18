@@ -29,6 +29,20 @@ public enum RoomClosing: Equatable, Sendable {
         }
         return .waitingForOthers
     }
+
+    /// Whether your yes closes the room as you say it: everyone else in it
+    /// has said yes already — or left, which a room of one is — or it has
+    /// been quiet long enough for one request to be enough. A yes already
+    /// given closes the room once this turns true, by being said again.
+    public static func closesOnYourYes(
+        _ room: Room, _ memberships: [Membership], me: UUID, quiet: Bool
+    ) -> Bool {
+        if room.closedAt != nil { return false }
+        if quiet { return true }
+        return memberships
+            .filter { $0.roomID == room.id && $0.personID != me }
+            .allSatisfy(\.wouldClose)
+    }
 }
 
 /// Thirty days in which nobody read, wrote or marked anything: then one

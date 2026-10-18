@@ -4885,6 +4885,82 @@ A72. **Being found (2026-10-found; reverses §3's "no strangers, no
     the room's edge and then let in, the row making room; and Being found's
     own switch turning on with a face and its line written in under it.
 
+A73. **Closing a room (2026-10-closing; builds §6.8, which had no way to
+    do it).** Owner: *"work on what's next as you wish."* §6.8 asks for it
+    in its own words: *"Requires everyone to agree, or 30 days of silence
+    plus one member's request. On close, every member gets an export of
+    the whole shelf — notes, highlights, cards — as a readable file. No
+    dark pattern, no retention offer."* This is that, as the book has it.
+
+    - **Each person says yes**, in the room's menu under "Leave this room",
+      as quietly as leaving: "Close this room", asked once. The question
+      says what the yes will do: wait for the others ("It closes once
+      everyone in it has said yes…"), close it now because everyone else
+      has, or close it now because the room has been quiet for a month.
+      Once you have said yes and it is waiting: "You asked to close this
+      room. It closes once everyone has." and "Take it back". Who has not
+      said yes is never named, and nobody is told that anyone has asked —
+      the same rule as a room being found (A72).
+    - **Quiet** is thirty days in which nobody arrived, read, wrote a note,
+      laid a mark or answered a card (`room_last_heard`). The phone
+      reckons it from what it holds, to choose the question; the server
+      decides.
+    - **A yes already given closes the room when it can** by being said
+      again: the menu offers "Close this room" again, in place of "Take it
+      back", once the room has gone quiet or the last person who had not
+      said yes has said it or left (`RoomClosing.closesOnYourYes`). The
+      server does not close a room on its own when someone leaves; a
+      closing is always somebody's request.
+    - **Closing is not undone.** A closed room leaves the room list, and
+      its rows stay where they are: nothing is deleted. It is listed in the
+      room menu under "Rooms that have closed", where its shelf can be
+      kept again at any time. It can no longer be found, joined by an
+      invite (which reads as expired, as shipped builds already say), or
+      asked into; no membership can be written into it by any door.
+    - **The shelf as a file** (`ShelfExport`, both cores, the same text to
+      the character): plain text, so it opens anywhere and still reads in
+      twenty years. The room's name and the day it was kept; then each
+      book in the order it was begun — when it was read, its notes in
+      verse order with who and when, its marks, and the cards the room
+      opened with everyone's answers. Sealed cards are left out: their
+      answers were nobody's to read (§4.6). It is handed on the moment the
+      room closes on your request (the share sheet; Android's chooser),
+      and the others keep theirs from "Rooms that have closed" — nobody's
+      shelf depends on being there when it closed. No retention offer, no
+      second question, no "are you sure you want to lose…".
+
+    **The server half** is `20261018120000_ribbon_closing_a_room.sql`:
+    `rooms.closed_at`, `memberships.would_close`, `room_last_heard`,
+    `close_room` (answers "closed" or "waiting"); a trigger so that only
+    `close_room` sets `closed_at` (any member may update the room row,
+    which would otherwise let one person close it for everyone); a closed
+    room is not open (A72), its invite previews as expired and
+    `accept_invite` refuses it; and a trigger refuses any membership into
+    a closed room, which covers `let_in` too.
+
+    **On the live project** (18 October 2026), in five pieces recorded as
+    `ribbon_closing_*`, after the owner's go-ahead for migrations
+    (*"Yeah, you can apply the migrations."*). Rehearsed first, the whole
+    file and its checks in one transaction that rolled back, as three real
+    profiles: one yes of two waits; a member cannot set `closed_at` by
+    hand, and can still rename the room; the second yes closes it; a
+    closed room is not open; its invite previews as expired, and a third
+    person accepting it is refused; and a room whose every row is forty
+    days old closes on one request. Afterwards the columns, the four
+    functions, both triggers and the closed check in `accept_invite` were
+    each confirmed on the live project.
+
+    **Older builds** know nothing of closing. They never offer it, and a
+    person on one never says yes, so a room with someone on an older
+    build closes only once it has been quiet for a month — or once they
+    update. A room that has closed stays in an older build's list as it
+    was, and what is written there still lands (the server does not refuse
+    notes or marks in a closed room); it is in the shelf the others keep
+    from then on.
+
+    **What's new**, "When a room is done": three faces in a row quieten
+    together, and a sheet rises under them with the shelf's lines on it.
+
 ## iOS (phase four): the second pass
 
 Android took a design pass of its own (A18–A51) and the two platforms

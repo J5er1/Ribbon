@@ -438,6 +438,19 @@ enum Copy {
     static let reportQuestion = "Tell the people who run Ribbon about this? Nobody else sees it."
     static let reported = "Thank you. It has been passed on."
 
+    // MARK: Closing a room (§6.8, A73) — everyone agrees, or a month of
+    // quiet and one person asks. No retention offer, no "are you sure?
+    // you'll lose everything": nothing is lost, and everyone keeps the shelf.
+    static let closeThisRoom = "Close this room"
+    static let closeQuestion = "Close this room? It closes once everyone in it has said yes, and everyone keeps the whole shelf as a file."
+    static let closeQuestionQuiet = "This room has been quiet for a month, so it closes now, for everyone. Everyone keeps the whole shelf as a file."
+    static let closeQuestionNow = "Everyone else in this room has said yes, so it closes now, for everyone. Everyone keeps the whole shelf as a file."
+    static let youAskedToClose = "You asked to close this room. It closes once everyone has."
+    static let takeItBack = "Take it back"
+    static let closedRooms = "Rooms that have closed"
+    static let keepTheShelf = "Keep the shelf"
+    static let keepTheShelfSub = "Every book, note, mark and card, as a file"
+
     // MARK: The chapter list and the ribbon (ledger A30/A31)
     static let chapters = "Chapters"
     static let goThere = "Go there"
@@ -794,6 +807,7 @@ enum Copy {
         case "2026-10-original": return "The words under the words"
         case "2026-10-following": return "Staying on the same page"
         case "2026-10-flyleaf": return "The front of the book"
+        case "2026-10-closing": return "When a room is done"
         case "2026-10-found": return "A door, if you want one"
         case "2026-10-twelve": return "Room for more of you"
         default: return whatsNewHeading
@@ -926,6 +940,11 @@ enum Copy {
     /// What's new (A72): the line under a face in the picture, as someone
     /// would write it.
     static let whatsNewBeingFoundLine = "Reading Mark, slowly."
+    /// What's new (A73): a room closed by everyone.
+    static let whatsNewClosingTitle = "Closing a room, together"
+    /// What's new (A73): how, and what everyone keeps.
+    static let whatsNewClosingBody =
+        "When everyone in a room says so, or it has been quiet for a month and one of you asks, the room closes. Everyone keeps the whole shelf as a file: every book, note, mark and card."
 }
 
 /// The first word of a name, for the places that say it in passing. Kept

@@ -41,6 +41,23 @@ final class ClosingTests: XCTestCase {
         XCTAssertEqual(RoomClosing.of(room(), [membership(ruth, closing: true)], me: me), .open)
     }
 
+    func testYourYesWaitsWhileSomeoneElseHasNotSaidIt() {
+        let ms = [membership(me, closing: true), membership(ruth, closing: true), membership(ann, closing: false)]
+        XCTAssertFalse(RoomClosing.closesOnYourYes(room(), ms, me: me, quiet: false))
+    }
+
+    func testYourYesClosesItWhenEveryoneElseHasSaidIt() {
+        let ms = [membership(me, closing: false), membership(ruth, closing: true), membership(ann, closing: true)]
+        XCTAssertTrue(RoomClosing.closesOnYourYes(room(), ms, me: me, quiet: false))
+        XCTAssertTrue(RoomClosing.closesOnYourYes(room(), [membership(me, closing: true)], me: me, quiet: false), "a room of one")
+    }
+
+    func testYourYesClosesAQuietRoomAndNotAClosedOne() {
+        let ms = [membership(me, closing: true), membership(ruth, closing: false)]
+        XCTAssertTrue(RoomClosing.closesOnYourYes(room(), ms, me: me, quiet: true))
+        XCTAssertFalse(RoomClosing.closesOnYourYes(room(closedAt: at("2026-10-18T09:00:00Z")), ms, me: me, quiet: true))
+    }
+
     // MARK: Thirty quiet days
 
     func testTheLastThingHeardIsTheLatestOfAnything() {

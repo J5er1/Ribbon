@@ -16,6 +16,7 @@ import app.readribbon.screens.LOOP_MS
 import app.readribbon.screens.STILL_AT
 import app.readribbon.screens.beingFoundFrame
 import app.readribbon.screens.body
+import app.readribbon.screens.closingFrame
 import app.readribbon.screens.findARoomFrame
 import app.readribbon.screens.flyleafFrame
 import app.readribbon.screens.fourInksFrame
@@ -442,6 +443,22 @@ class WhatsNewOnLaunchTest {
         }
     }
 
+    // The sixth release's one (A73).
+
+    @Test fun reduceMotionHoldsTheRoomClosedAndTheShelfKept() {
+        val closing = closingFrame(WhatsNewItem.closingARoom.timeline.stillAt)
+        assertEquals("the room quiet", 1f, closing.dim, 0f)
+        assertEquals("the shelf kept", 1f, closing.kept, 0f)
+    }
+
+    @Test fun eachClosingLoopBeginsAndEndsWithTheRoomOpen() {
+        for (t in listOf(0, WhatsNewItem.closingARoom.timeline.loopMs - 1)) {
+            val closing = closingFrame(t)
+            assertEquals("open at $t", 0f, closing.dim, 0.001f)
+            assertEquals("nothing kept at $t", 0f, closing.kept, 0.001f)
+        }
+    }
+
     /** Your rooms' ribbons, and the embers on the shelf, come one after another — never a later one ahead. */
     @Test fun theRibbonsAndTheEmbersComeInTurn() {
         for (t in 0 until LOOP_MS step 10) {
@@ -518,6 +535,7 @@ class WhatsNewOnLaunchTest {
             WhatsNewItem.fourInks to ::fourInksFrame,
             WhatsNewItem.findARoom to ::findARoomFrame,
             WhatsNewItem.beingFound to ::beingFoundFrame,
+            WhatsNewItem.closingARoom to ::closingFrame,
         )) {
             val timeline = item.timeline
             val breath = stillFor(timeline.loopMs, timeline.stillAt, frame)
@@ -541,6 +559,7 @@ class WhatsNewOnLaunchTest {
         }
         assertEquals("6 October 2026", Copy.whatsNewReleased("2026-10-06"))
         assertEquals("7 October 2026", Copy.whatsNewReleased("2026-10-07"))
+        assertEquals("When a room is done", Copy.whatsNewTitle("2026-10-closing"))
         assertEquals("A door, if you want one", Copy.whatsNewTitle("2026-10-found"))
         assertEquals("Room for more of you", Copy.whatsNewTitle("2026-10-twelve"))
         assertEquals("The front of the book", Copy.whatsNewTitle("2026-10-flyleaf"))

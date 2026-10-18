@@ -248,6 +248,7 @@ private struct WhatsNewItemView: View {
         case .fourInks: FourInksVignette(startsAfter: startsAfter)
         case .findARoom: FindARoomVignette(startsAfter: startsAfter)
         case .beingFound: BeingFoundVignette(startsAfter: startsAfter)
+        case .closingARoom: ClosingARoomVignette(startsAfter: startsAfter)
         }
     }
 
@@ -272,6 +273,7 @@ private struct WhatsNewItemView: View {
         case .fourInks: return Copy.whatsNewInksTitle
         case .findARoom: return Copy.whatsNewFindTitle
         case .beingFound: return Copy.whatsNewBeingFoundTitle
+        case .closingARoom: return Copy.whatsNewClosingTitle
         }
     }
 
@@ -296,6 +298,7 @@ private struct WhatsNewItemView: View {
         case .fourInks: return Copy.whatsNewInksBody
         case .findARoom: return Copy.whatsNewFindBody
         case .beingFound: return Copy.whatsNewBeingFoundBody
+        case .closingARoom: return Copy.whatsNewClosingBody
         }
     }
 }
@@ -2671,6 +2674,94 @@ private struct BeingFoundVignette: View {
             written = 0
             said = 1
             guard await beat(Vignette.breath) else { return }
+        }
+    }
+}
+
+// MARK: 20. Closing a room, together
+
+/// Three faces in a row, the room as it was; they quieten together, and
+/// under them a sheet rises with the shelf's lines on it — what each of
+/// them keeps (A73). Then the room comes back and the sheet goes.
+private struct ClosingARoomVignette: View {
+    let startsAfter: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// The room has closed.
+    @State private var closed = false
+    /// The shelf is kept, as a sheet.
+    @State private var kept = false
+
+    private static let face: CGFloat = 22
+    /// Centre to centre: the face and the room's gap.
+    private static let pitch: CGFloat = 30
+    private static let monograms = Array("RAJ")
+    private static let inks: [Ink] = [.teal, .ochre, .plum]
+    /// The shelf's lines: a book's name, and what was written in it.
+    private static let lines: [CGFloat] = [0.5, 0.86, 0.72]
+
+    var body: some View {
+        VStack(spacing: 16) {
+            HStack(spacing: Self.pitch - Self.face) {
+                ForEach(0..<3, id: \.self) { index in
+                    face(index)
+                }
+            }
+            .opacity(closed ? 0.4 : 1)
+            sheet
+                .opacity(kept ? 1 : 0)
+                .offset(y: kept || reduceMotion ? 0 : 10)
+        }
+        .frame(maxWidth: .infinity)
+        .task(id: reduceMotion) { await play() }
+    }
+
+    private func face(_ index: Int) -> some View {
+        ZStack {
+            Circle().fill(Palette.raised)
+            Text(verbatim: String(Self.monograms[index]))
+                .font(RibbonType.uiMedium(Self.face * 0.42))
+                .foregroundStyle(Self.inks[index].color)
+        }
+        .frame(width: Self.face, height: Self.face)
+    }
+
+    /// The file, as a page: three hairlines of different lengths.
+    private var sheet: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            ForEach(Array(Self.lines.enumerated()), id: \.offset) { index, length in
+                Capsule()
+                    .fill(index == 0 ? Palette.text.opacity(0.7) : Palette.rule)
+                    .frame(width: 96 * length, height: index == 0 ? 2 : 1)
+            }
+        }
+        .frame(width: 96, alignment: .leading)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .paper(.row)
+        .accessibilityHidden(true)
+    }
+
+    private func play() async {
+        // How it ends: the room closed, and the shelf kept.
+        guard !reduceMotion else {
+            closed = true
+            kept = true
+            return
+        }
+        closed = false
+        kept = false
+        guard await beat(startsAfter) else { return }
+        while true {
+            withAnimation(RibbonMotion.settle) { closed = true }
+            guard await beat(RibbonMotion.settleDuration + 0.2) else { return }
+            withAnimation(RibbonMotion.arrive) { kept = true }
+            guard await beat(RibbonMotion.arriveDuration + Vignette.rest) else { return }
+            withAnimation(RibbonMotion.settle) {
+                closed = false
+                kept = false
+            }
+            guard await beat(RibbonMotion.settleDuration + Vignette.breath) else { return }
         }
     }
 }

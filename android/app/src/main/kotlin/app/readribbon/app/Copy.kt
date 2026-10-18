@@ -894,6 +894,19 @@ object Copy {
     const val REPORT_QUESTION = "Tell the people who run Ribbon about this? Nobody else sees it."
     const val REPORTED = "Thank you. It has been passed on."
 
+    // Closing a room (§6.8, A73) — everyone agrees, or a month of quiet and
+    // one person asks. No retention offer, no "are you sure? you'll lose
+    // everything": nothing is lost, and everyone keeps the shelf.
+    const val CLOSE_THIS_ROOM = "Close this room"
+    const val CLOSE_QUESTION = "Close this room? It closes once everyone in it has said yes, and everyone keeps the whole shelf as a file."
+    const val CLOSE_QUESTION_QUIET = "This room has been quiet for a month, so it closes now, for everyone. Everyone keeps the whole shelf as a file."
+    const val CLOSE_QUESTION_NOW = "Everyone else in this room has said yes, so it closes now, for everyone. Everyone keeps the whole shelf as a file."
+    const val YOU_ASKED_TO_CLOSE = "You asked to close this room. It closes once everyone has."
+    const val TAKE_IT_BACK = "Take it back"
+    const val CLOSED_ROOMS = "Rooms that have closed"
+    const val KEEP_THE_SHELF = "Keep the shelf"
+    const val KEEP_THE_SHELF_SUB = "Every book, note, mark and card, as a file"
+
     // The menu (S14 + S18, one screen — see docs/deviations.md 14). Three
     // section heads, so the rooms, the room you are in, and you are three
     // things rather than one pile.
@@ -1557,6 +1570,7 @@ object Copy {
         "2026-10-original" -> "The words under the words"
         "2026-10-following" -> "Staying on the same page"
         "2026-10-flyleaf" -> "The front of the book"
+        "2026-10-closing" -> "When a room is done"
         "2026-10-found" -> "A door, if you want one"
         "2026-10-twelve" -> "Room for more of you"
         else -> WHATS_NEW_HEADING
@@ -1740,6 +1754,13 @@ object Copy {
 
     /** What's new (A72): the line under a face in the picture, as someone would write it. */
     const val WHATS_NEW_BEING_FOUND_LINE = "Reading Mark, slowly."
+
+    /** What's new (A73): a room closed by everyone. */
+    const val WHATS_NEW_CLOSING_TITLE = "Closing a room, together"
+
+    /** What's new (A73): how, and what everyone keeps. */
+    const val WHATS_NEW_CLOSING_BODY =
+        "When everyone in a room says so, or it has been quiet for a month and one of you asks, the room closes. Everyone keeps the whole shelf as a file: every book, note, mark and card."
 }
 
 /** First names only, everywhere a person is addressed in a line of copy. */

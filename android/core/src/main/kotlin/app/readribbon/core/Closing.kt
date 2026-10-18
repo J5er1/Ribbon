@@ -39,6 +39,20 @@ enum class RoomClosing {
             if (mine == null || !mine.wouldClose) return open
             return waitingForOthers
         }
+
+        /**
+         * Whether your yes closes the room as you say it: everyone else in it
+         * has said yes already — or left, which a room of one is — or it has
+         * been quiet long enough for one request to be enough. A yes already
+         * given closes the room once this turns true, by being said again.
+         */
+        fun closesOnYourYes(room: Room, memberships: List<Membership>, me: Uuid, quiet: Boolean): Boolean {
+            if (room.closedAt != null) return false
+            if (quiet) return true
+            return memberships
+                .filter { it.roomID == room.id && it.personID != me }
+                .all { it.wouldClose }
+        }
     }
 }
 

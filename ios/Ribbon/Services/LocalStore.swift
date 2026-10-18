@@ -108,12 +108,16 @@ struct AppState: Codable {
     /// did: once blocked, the server stops showing you their profile, and
     /// the list in Being found would otherwise be a list of nobody.
     var blockedNames: [UUID: String] = [:]
+    /// Rooms that have closed (A73): out of the room list, their shelves
+    /// still here to be kept as a file. Their readings, notes and marks stay
+    /// in the lists above, as a room you have left keeps its books.
+    var closedRooms: [Room] = []
 
     enum CodingKeys: String, CodingKey {
         case me, people, rooms, memberships, readings, notes, highlights, quietDays, positions, ribbons, cards, invites, currentRoomID, settings, hasSeenMarginHint, hasPulledTheFire, hasAskedAboutNotifications, portraitETags, notifiedThrough, invitesNotYetPushed, invitesHandedOut
         case pendingRoomPushes, pendingNoteDeletes, pendingNotePushes, pendingHighlightDeletes, unsaid
         case whatsNewSeen
-        case beingFound, blockedNames
+        case beingFound, blockedNames, closedRooms
     }
 
     init() {}
@@ -151,6 +155,7 @@ struct AppState: Codable {
         unsaid = try container.decodeIfPresent([UUID: PendingWrite].self, forKey: .unsaid) ?? [:]
         beingFound = try container.decodeIfPresent(BeingFound.self, forKey: .beingFound) ?? BeingFound()
         blockedNames = try container.decodeIfPresent([UUID: String].self, forKey: .blockedNames) ?? [:]
+        closedRooms = try container.decodeIfPresent([Room].self, forKey: .closedRooms) ?? []
     }
 }
 

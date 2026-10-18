@@ -691,6 +691,50 @@ final class RemoteSync {
         }
     }
 
+    // MARK: - Closing a room (A73)
+
+    /// Whether the project can close rooms: the column, read with nothing
+    /// asked for. Nil when the network could not say.
+    func closingIsThere() async -> Bool? {
+        guard userID != nil else { return nil }
+        do {
+            _ = try await withAuthRetry {
+                try await self.client.select(
+                    [ClosedAtRow].self, from: "rooms",
+                    query: [
+                        URLQueryItem(name: "select", value: "closed_at"),
+                        URLQueryItem(name: "limit", value: "1"),
+                    ])
+            }
+            return true
+        } catch SupabaseError.http(let status, _) where (400..<500).contains(status) {
+            return false
+        } catch {
+            return nil
+        }
+    }
+
+    /// Your request to close the room. True when it closed — now, or
+    /// already — and false while somebody has not asked yet.
+    func closeRoom(_ room: UUID) async throws -> Bool {
+        let data = try await withAuthRetry {
+            try await self.client.rpc("close_room", body: ["target_room": room.uuidString.lowercased()])
+        }
+        return try JSONDecoder().decode(String.self, from: data) == "closed"
+    }
+
+    /// Your request to close, taken back.
+    func takeBackClosing(_ membership: Membership) async throws {
+        try await withAuthRetry {
+            try await self.client.upsert(
+                into: "memberships",
+                rows: [WouldCloseRow(
+                    id: membership.id, roomId: membership.roomID, personId: membership.personID,
+                    joinedAt: membership.joinedAt, wouldClose: false)],
+                onConflict: "room_id,person_id")
+        }
+    }
+
     /// The room's one line, or none.
     func push(roomLine: String?, room: Room) async throws {
         try await withAuthRetry {
@@ -1013,6 +1057,18 @@ final class RemoteSync {
         }
     }
 
+    struct ClosedAtRow: Decodable {
+        var closedAt: Date?
+    }
+
+    struct WouldCloseRow: Encodable {
+        var id: UUID
+        var roomId: UUID
+        var personId: UUID
+        var joinedAt: Date
+        var wouldClose: Bool
+    }
+
     struct WouldOpenRow: Encodable {
         var id: UUID
         var roomId: UUID
@@ -1120,6 +1176,9 @@ final class RemoteSync {
         /// The room's line (A72). Read, never sent from here: see
         /// `push(roomLine:room:)`.
         var line: String? = nil
+        /// When the room closed (A73). Read, never sent: only `close_room`
+        /// closes a room.
+        var closedAt: Date? = nil
     }
 
     struct MembershipRow: Codable {
@@ -1131,6 +1190,9 @@ final class RemoteSync {
         /// This person's yes to the room being found (A72). Read, never
         /// sent from here: see `push(wouldOpen:membership:)`.
         var wouldOpen: Bool? = nil
+        /// This person's request to close the room (A73). Set by
+        /// `closeRoom`, cleared by `takeBackClosing`.
+        var wouldClose: Bool? = nil
     }
 
     struct InviteRow: Codable {

@@ -61,6 +61,8 @@ struct MenuScreen: View {
     /// A room just made, waiting for the naming sheet to finish going away
     /// before its invite is handed out.
     @State private var stagedRoom: Room?
+    /// A room's shelf, written to a file and being handed on (A73).
+    @State private var keeping: KeptShelf?
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -82,7 +84,8 @@ struct MenuScreen: View {
                             onStartARoom: { showNewRoom = true },
                             onJoinWithInvite: { path.append(MenuRoute.joinWithInvite) },
                             onFindARoom: { path.append(FindRoute.find) },
-                            onPerson: { face in path.append(FindRoute.person(face)) })
+                            onPerson: { face in path.append(FindRoute.person(face)) },
+                            onKeep: { closed in keep(closed) })
                     } else {
                         GrainBackground()
                     }
@@ -131,6 +134,15 @@ struct MenuScreen: View {
         }) {
             NewRoomSheet { room in stagedRoom = room }
         }
+        // The shelf, handed on: the moment a room closes on this phone, and
+        // whenever a closed room's shelf is asked for again (A73). With no
+        // room left open, the menu has nothing under it and goes too.
+        .sheet(item: $keeping, onDismiss: {
+            if model.currentRoom == nil { dismiss() }
+        }) { kept in
+            ActivitySheet(items: [kept.url])
+                .presentationDetents([.medium, .large])
+        }
         .sheet(item: $inviting, onDismiss: {
             if closeAfterInviting {
                 closeAfterInviting = false
@@ -140,6 +152,10 @@ struct MenuScreen: View {
             InviteSheet(room: target.room)
                 .presentationDetents([.medium])
         }
+    }
+
+    private func keep(_ room: Room) {
+        if let url = model.shelfFile(for: room) { keeping = KeptShelf(url: url) }
     }
 
     /// Being found (A72): finding, a found room, a found person, and your
@@ -240,6 +256,8 @@ private struct RoomMenuScreen: View {
     var onJoinWithInvite: () -> Void
     var onFindARoom: () -> Void
     var onPerson: (PublicFace) -> Void
+    /// A room's shelf to hand on: one that has just closed, or an older one.
+    var onKeep: (Room) -> Void
 
     var body: some View {
         RibbonScreen(
@@ -272,7 +290,7 @@ private struct RoomMenuScreen: View {
                     SettingRow(Copy.plan, subtitle: Copy.planSub, action: onPlan)
                 }
 
-                RoomControls(room: room, onLeft: onClose)
+                RoomControls(room: room, onLeft: onClose, onClosed: onKeep)
 
                 VStack(alignment: .leading, spacing: 10) {
                     SectionLabel(Copy.yourRooms)
@@ -296,6 +314,8 @@ private struct RoomMenuScreen: View {
                     }
                     .padding(.top, 6)
                 }
+
+                ClosedRoomsSection(onKeep: onKeep)
             }
             .animation(RibbonMotion.arrive, value: model.knocks(on: room).map(\.id))
         }
@@ -375,8 +395,12 @@ private struct RoomControls: View {
     @Environment(AppModel.self) private var model
     let room: Room
     var onLeft: () -> Void
+    /// The room closed on this request (A73): its shelf is handed on.
+    var onClosed: (Room) -> Void
 
     @State private var editingRoomName = false
+    @State private var closingQuestion: ConfirmState?
+    @State private var closingLine: String?
     @State private var roomName = ""
     @State private var editingRoomLine = false
     @State private var roomLine = ""
@@ -462,11 +486,71 @@ private struct RoomControls: View {
             // The way out is quiet, never emphasised, and never hidden.
             QuietControl(title: Copy.leaveThisRoom) { leaving = .confirm }
                 .padding(.horizontal, RibbonShape.textInset)
+
+            // Closing (§6.8, A73): as quiet as leaving, asked once, and
+            // never a retention offer. Who has not asked is never named.
+            if model.closingAvailable {
+                closing
+                    .padding(.horizontal, RibbonShape.textInset)
+                    .confirm($closingQuestion, dismissTitle: Copy.neverMind)
+            }
         }
         .sheet(isPresented: $showInkPicker) {
             InkPickerSheet(room: room)
         }
         .confirm(leaveDialog)
+    }
+
+    @ViewBuilder
+    private var closing: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            // A yes that is waiting is offered again once saying it closes
+            // the room: it went quiet, or the last one said yes or left.
+            if model.closing(of: room) == .waitingForOthers && !model.closesOnYourYes(room) {
+                Text(Copy.youAskedToClose)
+                    .font(RibbonType.ui(14))
+                    .foregroundStyle(Palette.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                QuietControl(title: Copy.takeItBack) { takeBackClosing() }
+            } else {
+                QuietControl(title: Copy.closeThisRoom) {
+                    closingQuestion = ConfirmState(
+                        question: model.closeQuestion(for: room),
+                        choices: [ConfirmChoice(Copy.closeThisRoom, destructive: true) { askToClose() }])
+                }
+            }
+            if let closingLine {
+                Text(closingLine)
+                    .font(RibbonType.ui(14))
+                    .foregroundStyle(Palette.muted)
+                    .transition(.opacity)
+            }
+        }
+        .animation(RibbonMotion.arrive, value: model.closing(of: room))
+    }
+
+    private func askToClose() {
+        closingQuestion = nil
+        closingLine = nil
+        let asked = room
+        Task {
+            do {
+                if try await model.askToClose(asked) { onClosed(asked) }
+            } catch {
+                closingLine = Copy.serverUnreachable
+            }
+        }
+    }
+
+    private func takeBackClosing() {
+        closingLine = nil
+        Task {
+            do {
+                try await model.takeBackClosing(room)
+            } catch {
+                closingLine = Copy.serverUnreachable
+            }
+        }
     }
 
     private var opennessLine: String {

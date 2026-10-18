@@ -872,6 +872,48 @@ class RemoteSync(
         }
     }
 
+    // MARK: - Closing a room (A73)
+
+    /** Whether the project can close rooms: the column, read with nothing asked for. Null when the network could not say. */
+    suspend fun closingIsThere(): Boolean? {
+        if (userID == null) return null
+        return try {
+            withAuthRetry {
+                client.select(table = "rooms", query = listOf("select" to "closed_at", "limit" to "1"))
+            }
+            true
+        } catch (e: SupabaseError.Http) {
+            if (e.status in 400..499) false else null
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            null
+        }
+    }
+
+    /** Your request to close the room. True when it closed — now, or already — and false while somebody has not asked yet. */
+    suspend fun closeRoom(room: Uuid): Boolean {
+        val data = withAuthRetry {
+            client.rpc("close_room", body = mapOf("target_room" to room.lowercased()))
+        }
+        return SupabaseClient.json.decodeFromString<String>(data) == "closed"
+    }
+
+    /** Your request to close, taken back. */
+    suspend fun takeBackClosing(membership: Membership) {
+        withAuthRetry {
+            client.upsert(
+                table = "memberships",
+                rowsJson = JsonArray(listOf(buildJsonObject {
+                    put("id", membership.id.lowercased())
+                    put("room_id", membership.roomID.lowercased())
+                    put("person_id", membership.personID.lowercased())
+                    put("joined_at", membership.joinedAt.toString())
+                    put("would_close", false)
+                })).toString(),
+                onConflict = "room_id,person_id")
+        }
+    }
+
     /** The room's one line, or none. */
     suspend fun push(roomLine: String?, room: Room) {
         withAuthRetry {
@@ -1302,6 +1344,8 @@ class RemoteSync(
         val translation: String? = null,
         /** The room's line (A72). Read, never sent from here: see [push] with a line. */
         val line: String? = null,
+        /** When the room closed (A73). Read, never sent: only `close_room` closes a room. */
+        val closedAt: Instant? = null,
     )
 
     @Serializable
@@ -1316,6 +1360,8 @@ class RemoteSync(
          * from here: see [push] with `wouldOpen`.
          */
         val wouldOpen: Boolean? = null,
+        /** This person's request to close the room (A73). Set by [closeRoom], cleared by [takeBackClosing]. */
+        val wouldClose: Boolean? = null,
     )
 
     @Serializable
