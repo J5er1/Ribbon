@@ -107,6 +107,12 @@ enum class WhatsNewItem {
 
     /** A room can close when everyone agrees, and everyone keeps the shelf as a file (A73). */
     closingARoom,
+
+    /**
+     * Anyone in a room may ask it a question of their own at a chapter's end,
+     * and cards open for everyone when the last answer is in (A74).
+     */
+    askTheRoom,
 }
 
 /**
@@ -128,6 +134,11 @@ object WhatsNew {
      * are simply how the app is now — there for the reading, from You.
      */
     val releases: List<WhatsNewRelease> = listOf(
+        WhatsNewRelease(
+            id = "2026-10-cards",
+            released = "2026-10-18",
+            items = listOf(WhatsNewItem.askTheRoom),
+        ),
         WhatsNewRelease(
             id = "2026-10-closing",
             released = "2026-10-18",

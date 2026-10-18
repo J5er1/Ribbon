@@ -249,6 +249,7 @@ private struct WhatsNewItemView: View {
         case .findARoom: FindARoomVignette(startsAfter: startsAfter)
         case .beingFound: BeingFoundVignette(startsAfter: startsAfter)
         case .closingARoom: ClosingARoomVignette(startsAfter: startsAfter)
+        case .askTheRoom: AskTheRoomVignette(startsAfter: startsAfter)
         }
     }
 
@@ -274,6 +275,7 @@ private struct WhatsNewItemView: View {
         case .findARoom: return Copy.whatsNewFindTitle
         case .beingFound: return Copy.whatsNewBeingFoundTitle
         case .closingARoom: return Copy.whatsNewClosingTitle
+        case .askTheRoom: return Copy.whatsNewAskTitle
         }
     }
 
@@ -299,6 +301,7 @@ private struct WhatsNewItemView: View {
         case .findARoom: return Copy.whatsNewFindBody
         case .beingFound: return Copy.whatsNewBeingFoundBody
         case .closingARoom: return Copy.whatsNewClosingBody
+        case .askTheRoom: return Copy.whatsNewAskBody
         }
     }
 }
@@ -2762,6 +2765,93 @@ private struct ClosingARoomVignette: View {
                 kept = false
             }
             guard await beat(RibbonMotion.settleDuration + Vignette.breath) else { return }
+        }
+    }
+}
+
+// MARK: 21. Ask the room
+
+/// The room's own card, as a chapter's end has it (A74): whose question it
+/// is, in their ink, and the question written in; then the card open — a
+/// hairline, and everyone's answer under it by face. After a while the
+/// answers go and the question fades: faded, not unwritten, as Being
+/// found's line is.
+private struct AskTheRoomVignette: View {
+    let startsAfter: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    @State private var written = 0.0
+    @State private var opened = false
+    /// The question as a whole, which fades at the end rather than being
+    /// unwritten.
+    @State private var said = 1.0
+
+    /// The answers on the open card: whose ink, and how long a line each
+    /// wrote.
+    private static let answers: [(ink: Ink, length: CGFloat)] = [(.teal, 0.82), (.ochre, 0.6)]
+    private static let width: CGFloat = 260
+    private static let face: CGFloat = 12
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            SmallCaps(Copy.questionFrom("Ruth"), size: 11, color: Ink.teal.color)
+            Text(Copy.whatsNewAskQuestion)
+                .font(RibbonType.scripture(16))
+                .foregroundStyle(Palette.text)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .textRenderer(WritesIn(written: written))
+                .opacity(said)
+            VStack(alignment: .leading, spacing: 6) {
+                HairlineRule()
+                    .padding(.bottom, 2)
+                ForEach(Array(Self.answers.enumerated()), id: \.offset) { _, answer in
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(Palette.ground)
+                            .overlay(Circle().strokeBorder(answer.ink.color, lineWidth: 1.5))
+                            .frame(width: Self.face, height: Self.face)
+                        Capsule()
+                            .fill(Palette.text.opacity(0.55))
+                            .frame(width: (Self.width - 28 - Self.face - 8) * 0.8 * answer.length, height: 2)
+                    }
+                }
+            }
+            .padding(.top, 4)
+            .opacity(opened ? 1 : 0)
+        }
+        .padding(14)
+        .frame(width: Self.width, alignment: .leading)
+        .paper(.card)
+        .frame(maxWidth: .infinity)
+        .accessibilityHidden(true)
+        .task(id: reduceMotion) { await play() }
+    }
+
+    private func play() async {
+        said = 1
+        // How it ends: asked, and the card open.
+        guard !reduceMotion else {
+            written = 1
+            opened = true
+            return
+        }
+        written = 0
+        opened = false
+        guard await beat(startsAfter) else { return }
+        while true {
+            withAnimation(RibbonMotion.open) { written = 1 }
+            guard await beat(RibbonMotion.openDuration + 0.2) else { return }
+            withAnimation(RibbonMotion.arrive) { opened = true }
+            guard await beat(RibbonMotion.arriveDuration + Vignette.rest) else { return }
+            withAnimation(RibbonMotion.settle) {
+                said = 0
+                opened = false
+            }
+            guard await beat(RibbonMotion.settleDuration) else { return }
+            written = 0
+            said = 1
+            guard await beat(Vignette.breath) else { return }
         }
     }
 }

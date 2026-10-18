@@ -23,22 +23,25 @@ class WhatsNewTest {
 
     @Test
     fun testTodaysRelease() {
-        assertEquals("2026-10-closing", WhatsNew.releases.firstOrNull()?.id)
-        assertEquals(listOf(WhatsNewItem.closingARoom), WhatsNew.releases.firstOrNull()?.items)
-        // Being found (A72) is the release before.
-        assertEquals("2026-10-found", WhatsNew.releases.getOrNull(1)?.id)
+        assertEquals("2026-10-cards", WhatsNew.releases.firstOrNull()?.id)
+        assertEquals(listOf(WhatsNewItem.askTheRoom), WhatsNew.releases.firstOrNull()?.items)
+        // Closing a room (A73) is the release before.
+        assertEquals("2026-10-closing", WhatsNew.releases.getOrNull(1)?.id)
+        assertEquals(listOf(WhatsNewItem.closingARoom), WhatsNew.releases.getOrNull(1)?.items)
+        // Being found (A72) the one before that.
+        assertEquals("2026-10-found", WhatsNew.releases.getOrNull(2)?.id)
         assertEquals(
             listOf(WhatsNewItem.findARoom, WhatsNewItem.beingFound),
-            WhatsNew.releases.getOrNull(1)?.items,
-        )
-        // A room of twelve (A70) is the one before that.
-        assertEquals("2026-10-twelve", WhatsNew.releases.getOrNull(2)?.id)
-        assertEquals(
-            listOf(WhatsNewItem.roomOfTwelve, WhatsNewItem.fourInks),
             WhatsNew.releases.getOrNull(2)?.items,
         )
+        // A room of twelve (A70) is the one before that.
+        assertEquals("2026-10-twelve", WhatsNew.releases.getOrNull(3)?.id)
+        assertEquals(
+            listOf(WhatsNewItem.roomOfTwelve, WhatsNewItem.fourInks),
+            WhatsNew.releases.getOrNull(3)?.items,
+        )
         // The front of the book (A67–A69) before that.
-        assertEquals("2026-10-flyleaf", WhatsNew.releases.getOrNull(3)?.id)
+        assertEquals("2026-10-flyleaf", WhatsNew.releases.getOrNull(4)?.id)
         assertEquals(
             listOf(
                 WhatsNewItem.flyleaf,
@@ -49,10 +52,10 @@ class WhatsNewTest {
                 WhatsNewItem.notificationsByName,
                 WhatsNewItem.quietHoursNight,
             ),
-            WhatsNew.releases.getOrNull(3)?.items,
+            WhatsNew.releases.getOrNull(4)?.items,
         )
         // The Hebrew made easy to read (A66) belongs to the release before that.
-        assertEquals("2026-10-following", WhatsNew.releases.getOrNull(4)?.id)
+        assertEquals("2026-10-following", WhatsNew.releases.getOrNull(5)?.id)
         assertEquals(
             listOf(
                 WhatsNewItem.followingStays,
@@ -61,7 +64,7 @@ class WhatsNewTest {
                 WhatsNewItem.lordReadsLord,
                 WhatsNewItem.originalReadable,
             ),
-            WhatsNew.releases.getOrNull(4)?.items,
+            WhatsNew.releases.getOrNull(5)?.items,
         )
     }
 
@@ -71,7 +74,7 @@ class WhatsNewTest {
     fun testTheListReadsNewestFirstAndTellsEachThingOnce() {
         val ids = WhatsNew.releases.map { it.id }
         assertEquals(
-            listOf("2026-10-closing", "2026-10-found", "2026-10-twelve", "2026-10-flyleaf", "2026-10-following", "2026-10-original"),
+            listOf("2026-10-cards", "2026-10-closing", "2026-10-found", "2026-10-twelve", "2026-10-flyleaf", "2026-10-following", "2026-10-original"),
             ids,
         )
         assertEquals(ids.size, ids.toSet().size)
@@ -88,18 +91,18 @@ class WhatsNewTest {
     @Test
     fun testAnUpdaterWhoSawAnEarlierOneSeesThisOne() {
         assertEquals(
-            "2026-10-closing",
+            "2026-10-cards",
             WhatsNew.toShow(lastSeen = "2026-10-found", hasHistory = true, plainLaunch = true)?.id,
         )
         assertEquals(
-            "2026-10-closing",
+            "2026-10-cards",
             WhatsNew.toShow(lastSeen = "2026-10-original", hasHistory = true, plainLaunch = true)?.id,
         )
         assertEquals(
-            "2026-10-closing",
+            "2026-10-cards",
             WhatsNew.seenAfter(lastSeen = "2026-10-found", hasHistory = true, plainLaunch = true, shown = true),
         )
-        assertNull(WhatsNew.toShow(lastSeen = "2026-10-closing", hasHistory = true, plainLaunch = true))
+        assertNull(WhatsNew.toShow(lastSeen = "2026-10-cards", hasHistory = true, plainLaunch = true))
     }
 
     @Test
@@ -124,6 +127,7 @@ class WhatsNewTest {
         assertEquals("findARoom", WhatsNewItem.findARoom.name)
         assertEquals("beingFound", WhatsNewItem.beingFound.name)
         assertEquals("closingARoom", WhatsNewItem.closingARoom.name)
+        assertEquals("askTheRoom", WhatsNewItem.askTheRoom.name)
         val json = Json.encodeToString(
             listOf(WhatsNewItem.original, WhatsNewItem.ownVersion, WhatsNewItem.followingWords),
         )

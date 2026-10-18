@@ -66,15 +66,33 @@ struct ReflectionCardView: View {
         }
     }
 
+    /// Whose question the room's own card is (A74), in their ink: said in
+    /// the open, as a banked fire is.
+    private var asker: (line: String, ink: Ink)? {
+        guard card.byTheRoom else { return nil }
+        if let writer = card.writtenBy, writer == model.me?.id {
+            return (Copy.yourQuestion, myInk)
+        }
+        let member = card.writtenBy.flatMap { writer in model.members(of: room).first { $0.personID == writer } }
+        let name = firstName(card.writtenBy.flatMap { model.person($0)?.name } ?? Copy.someone)
+        return (Copy.questionFrom(name), member?.ink ?? .ochre)
+    }
+
     private func face(open: Bool) -> some View {
         VStack(alignment: .leading, spacing: 18) {
+            if let asker {
+                SmallCaps(asker.line, size: 12, color: asker.ink.color)
+                    .accessibilityHidden(true)
+            }
             Text(card.question)
                 .font(RibbonType.scripture(19))
                 .foregroundStyle(Palette.text)
                 .lineSpacing(5)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
-                .accessibilityLabel(open ? Copy.cardOpenSpoken(card.question) : Copy.cardSealedSpoken(card.question))
+                .accessibilityLabel(
+                    (asker.map { "\($0.line). " } ?? "")
+                        + (open ? Copy.cardOpenSpoken(card.question) : Copy.cardSealedSpoken(card.question)))
             if open {
                 openContent
             } else {
@@ -209,6 +227,116 @@ struct ReflectionCardView: View {
                     .accessibilityLabel(Copy.answerFrom(name, answer))
                 }
             }
+        }
+    }
+}
+
+/// Asking the room its own question for a chapter (A74): a quiet control
+/// under the cards that opens into a question set as a card's is — your
+/// name over it, a hairline under it — with "Ask" and "Never mind". Once
+/// asked, it is a card like the others, and the control is gone until it is
+/// set down.
+struct AskTheRoomView: View {
+    @Environment(AppModel.self) private var model
+    let reading: Reading
+    let chapter: Int
+    let room: Room
+
+    @State private var asking = false
+    @State private var draft = ""
+    @State private var sending = false
+    @State private var line: String?
+    @FocusState private var focused: Bool
+
+    private var question: String? { RoomQuestion.cleaned(draft) }
+
+    private var myInk: Ink {
+        model.myMembership(in: room)?.ink ?? model.lastUsedInk
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if asking {
+                composer
+                    .transition(.opacity)
+            } else if model.roomMayAsk(reading, chapter: chapter) {
+                QuietControl(title: Copy.askTheRoom) {
+                    line = nil
+                    withAnimation(RibbonMotion.arrive) { asking = true }
+                    focused = true
+                }
+                .transition(.opacity)
+            }
+            if let line {
+                Text(line)
+                    .font(RibbonType.ui(14))
+                    .foregroundStyle(Palette.muted)
+                    .transition(.opacity)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var composer: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            SmallCaps(Copy.yourQuestion, size: 12, color: myInk.color)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 10) {
+                TextField("", text: $draft, axis: .vertical)
+                    .font(RibbonType.scripture(19))
+                    .foregroundStyle(Palette.text)
+                    .tint(myInk.color)
+                    .lineLimit(1...5)
+                    .focused($focused)
+                    .accessibilityLabel(Copy.askTheRoomField)
+                    .onChange(of: draft) { _, typed in
+                        if typed.count > RoomQuestion.maxLength {
+                            draft = String(typed.prefix(RoomQuestion.maxLength))
+                        }
+                    }
+                HairlineRule()
+            }
+            HStack(spacing: 18) {
+                Button(action: ask) {
+                    Text(Copy.ask)
+                        .font(RibbonType.uiMedium(14))
+                        .foregroundStyle(question != nil && !sending ? Palette.chartreuse : Palette.muted)
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(question == nil || sending)
+                QuietControl(title: Copy.neverMind) {
+                    withAnimation(RibbonMotion.arrive) {
+                        asking = false
+                        draft = ""
+                    }
+                    focused = false
+                }
+                Spacer()
+            }
+        }
+        .padding(22)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .paper(.card)
+    }
+
+    private func ask() {
+        guard let question else { return }
+        sending = true
+        Task {
+            do {
+                let outcome = try await model.askTheRoom(question, reading: reading, chapter: chapter)
+                withAnimation(RibbonMotion.arrive) {
+                    asking = false
+                    draft = ""
+                    line = outcome == .someoneAskedFirst ? Copy.someoneAskedFirst : nil
+                }
+                focused = false
+            } catch {
+                withAnimation(RibbonMotion.arrive) { line = Copy.serverUnreachable }
+            }
+            sending = false
         }
     }
 }

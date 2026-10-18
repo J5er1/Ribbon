@@ -4964,6 +4964,117 @@ A73. **Closing a room (2026-10-closing; builds §6.8, which had no way to
     **What's new**, "When a room is done": three faces in a row quieten
     together, and a sheet rises under them with the shelf's lines on it.
 
+A74. **Cards the room writes (2026-10-cards; settles §16.4, amends §4.6).**
+    Owner, asked what the social side should mean first: *"Cards the room
+    writes"*; and of what came next, *"work on what's next as you wish."*
+    §16.4 left open who writes the cards — Ribbon, chapter by chapter
+    (1,189 of them), the room, or a mix — and said it gated phase two. The
+    answer here is the mix: Ribbon still writes one card a chapter, and
+    anyone in the room may ask one more of their own beside it, which is
+    §4.6's "one or two per chapter".
+
+    **First, the cards could not open.** Building this found that in a room
+    of two or more no card had ever opened, on either phone. A phone
+    opened a card when it could see an answer from everyone, and
+    `card_answers_select` shows nobody a sealed answer but their own, as it
+    must; so every phone waited for answers it was not allowed to see. The
+    72 cards on the live project had no answers at all. Android had it
+    worse: its card row carried a `created_at` the table has never had and
+    its answer row named `answer` and `created_at` where the table says
+    `body` and `answered_at`, so the server refused every card and answer
+    it sent and it could not read one back. And on both phones a card set
+    down was written as `setDown` where the table says `set_down`, so it
+    was refused too and came back on the next pull. All of that is mended
+    here, and the server now opens the card:
+
+    - **The last answer opens the card.** A trigger on `card_answers` turns
+      the card over the moment everyone in the room has answered
+      (`open_card_if_answered`, run as its owner, saying nothing about the
+      answers but that the card is open), and "The cards are open" is
+      pushed from that as before. Someone leaving can leave everyone else
+      answered, and their cards open then (see below).
+    - **A card keeps its word** (`cards_keep_their_word`). A phone may set
+      a sealed card down and do nothing else to it: not open it, not seal it
+      again, not change its question or whose it is; a card arrives sealed.
+      Shipped builds push the whole card after every answer, sealed, so
+      this keeps what was there rather than refusing — refusing would have
+      refused the answer behind it.
+    - **An answer is yours until the card opens** (§4.6), and not after:
+      once it opens, a phone saying an answer again keeps the one that
+      opened it, quietly (`answers_until_it_opens`).
+    - **One card from Ribbon a chapter.** Each phone made Ribbon's card with
+      a random id the first time someone reached a chapter's end, so two
+      people arriving before either had synced made two cards whose answers
+      never met. The id is now made from the reading's and the chapter's
+      (`ChapterCards.ribbonCardID`, both cores, tested to the byte), so
+      every phone makes the same one; and the server keeps one a chapter
+      (`cards_one_from_ribbon`). A shipped build that makes its own a
+      moment after another phone has is refused the second card; its answer
+      goes to the card it has, and does not land, until it updates.
+
+    **The room's own question.**
+
+    - Under the cards at a chapter's end, quiet: "Ask the room a question".
+      It opens into a question set as a card's is — "Your question" over it
+      in your ink, a hairline under it — with "Ask" and "Never mind". A
+      question is its words run together, up to 200 characters
+      (`RoomQuestion`); the server holds 280.
+    - Asked, it is a card like Ribbon's: sealed, "This opens when everyone
+      has answered.", set down by anyone, opened by the last answer. Over
+      its question it says whose it is, "Ruth's question", in Ruth's ink —
+      asking is done in the open, as "Ruth banked the fire" is.
+    - **It is never edited.** Nobody's answer is ever under a question that
+      changed. It can be set down, and then someone may ask another.
+    - **One of the room's at a time** a chapter (`cards_one_from_the_room`).
+      Two people asking at once: one is first, and the other is told
+      "Someone in the room asked one here first." and sees it.
+    - It goes to the server before it is kept on the phone, so there is no
+      question only you can see; the control is there only once the phone
+      has seen the project knows the column (§6.1).
+    - **The shelf as a file** (A73) says whose a question was: "Chapter 3,
+      asked by Ruth: …", after Ribbon's for the same chapter.
+
+    **The server half** is `20261019120000_ribbon_cards_the_room_writes.sql`:
+    `cards.by_the_room` and `written_by` (an id and no more, so the question
+    says "Someone's" once a writer's profile is gone), a length check on
+    the question, the two unique indexes, `cards_insert` altered so a card
+    is Ribbon's (no name on it) or the writer's own, and the triggers above.
+
+    **On the live project** (18 October 2026), with the owner's standing
+    go-ahead for migrations (*"Yeah, you can apply the migrations."*),
+    recorded as `ribbon_cards_the_room_writes`, all but the last trigger.
+    Rehearsed first, the whole of it and its checks in one transaction that
+    rolled back, as three real profiles: a card sent open arrives sealed;
+    a second card from Ribbon at a chapter is refused; a card in someone
+    else's name is refused; a second of the room's at a chapter is refused;
+    a phone cannot open a card or change its question; one answer of two
+    is invisible to the other and leaves the card sealed; the second answer
+    opens it, both answers are there, and the push is queued; an answer
+    changed after opening is kept as it was, and the card cannot be sealed
+    again; a room question set down cannot be raised, and another can then
+    be asked; in a room of three, two answers wait for the third, and the
+    third opens it; a stranger cannot make a card. Thirteen of thirteen.
+    Afterwards the columns, indexes, triggers, check and policy were each
+    confirmed on the live project.
+
+    **Someone leaving** (`memberships_cards_after_someone_left`) is in the
+    file and not yet on the live project: the database tool holds anything
+    that names a delete for an approval this session cannot show (as with
+    `let_in`, A72). Until it is run, a card whose last missing answer was
+    someone who left stays sealed until someone still in the room answers
+    it again (changing an answer is enough). still-to-do §11 has it to run
+    in the dashboard's SQL editor.
+
+    **Older builds** gain the opening at once: they show an open card's
+    answers already, and a card now opens for them. They know one card a
+    chapter, the first they hold: Ribbon's, usually — but if the room's
+    question reached them before they had reached the chapter's end, the
+    room's, without its name over it. They never offer to ask one.
+
+    **What's new**, "A question of your own": the room's card, "Ruth's
+    question" over it in teal and the question written in, then the card
+    open on a hairline and two answers by face.
+
 ## iOS (phase four): the second pass
 
 Android took a design pass of its own (A18–A51) and the two platforms

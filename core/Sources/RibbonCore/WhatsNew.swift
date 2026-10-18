@@ -68,6 +68,9 @@ public enum WhatsNewItem: String, Codable, Hashable, Sendable, CaseIterable {
     /// A room can close when everyone agrees, and everyone keeps the shelf
     /// as a file (A73).
     case closingARoom
+    /// Anyone in a room may ask it a question of their own at a chapter's
+    /// end, and cards open for everyone when the last answer is in (A74).
+    case askTheRoom
 }
 
 /// A release worth telling someone about. The id is a name, not a version
@@ -92,6 +95,9 @@ public enum WhatsNew {
     /// skipped three releases hears about the one they are on, and the rest
     /// are simply how the app is now — there for the reading, from You.
     public static let releases: [WhatsNewRelease] = [
+        WhatsNewRelease(
+            id: "2026-10-cards", released: "2026-10-18",
+            items: [.askTheRoom]),
         WhatsNewRelease(
             id: "2026-10-closing", released: "2026-10-18",
             items: [.closingARoom]),

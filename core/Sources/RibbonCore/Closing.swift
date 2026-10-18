@@ -138,11 +138,13 @@ public enum ShelfExport {
             // nobody's to read until everyone has answered (§4.6).
             let theirCards = cards
                 .filter { $0.readingID == reading.id && $0.state == .open }
-                .sorted { $0.chapter < $1.chapter }
+                .sorted { ($0.chapter, $0.byTheRoom ? 1 : 0) < ($1.chapter, $1.byTheRoom ? 1 : 0) }
             if !theirCards.isEmpty {
                 lines += ["Cards", ""]
                 for card in theirCards {
-                    lines.append("Chapter \(card.chapter): \(card.question)")
+                    // A question the room asked says whose it was (A74).
+                    let asked = card.byTheRoom ? ", asked by \(card.writtenBy.map(name) ?? "someone")" : ""
+                    lines.append("Chapter \(card.chapter)\(asked): \(card.question)")
                     let answers = card.answers
                         .map { (who: name($0.key), id: $0.key.uuidString, body: $0.value) }
                         .sorted { ($0.who, $0.id) < ($1.who, $1.id) }

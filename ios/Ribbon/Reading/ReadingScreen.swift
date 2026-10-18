@@ -2487,14 +2487,17 @@ struct PassageEndView: View {
                 .padding(.trailing, 26 + margin)
 
             if let room = model.room(of: reading) {
-                let card = model.card(for: reading, chapter: chapter)
-                if card.state != .setDown {
+                // Ribbon's card, and the room's own question beside it
+                // when someone has asked one (A74).
+                ForEach(model.cards(for: reading, chapter: chapter)) { card in
                     ReflectionCardView(card: card, reading: reading, room: room)
                         .padding(.horizontal, 24)
                         // Set down, it leaves without ceremony — which is
                         // not the same as leaving between two frames.
                         .transition(.opacity)
                 }
+                AskTheRoomView(reading: reading, chapter: chapter, room: room)
+                    .padding(.horizontal, 24)
             }
 
             Button(action: onContinue) {

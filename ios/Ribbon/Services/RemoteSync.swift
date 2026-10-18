@@ -606,15 +606,43 @@ final class RemoteSync {
         try await withAuthRetry {
             try await self.client.upsert(
                 into: "cards",
-                rows: [CardRow(
-                    id: card.id,
-                    readingId: card.readingID,
-                    chapter: card.chapter,
-                    question: card.question,
-                    state: card.state.rawValue,
-                    openedAt: card.openedAt
-                )],
+                rows: [CardRow(card)],
                 onConflict: "id")
+        }
+    }
+
+    /// The room's own question (A74), asked. False when someone in the room
+    /// asked one at this chapter first: there is one of the room's at a
+    /// time, and the server keeps it so.
+    func ask(card: ReflectionCard) async throws -> Bool {
+        do {
+            try await withAuthRetry {
+                try await self.client.insert(into: "cards", rows: [CardRow(card)])
+            }
+            return true
+        } catch SupabaseError.http(409, let body) where body.contains("23505") {
+            return false
+        }
+    }
+
+    /// Whether the project knows cards the room writes, asked the way the
+    /// other new tables are, so the control is never there before it works.
+    func roomCardsAreThere() async -> Bool? {
+        guard userID != nil else { return nil }
+        do {
+            _ = try await withAuthRetry {
+                try await self.client.select(
+                    [ByTheRoomRow].self, from: "cards",
+                    query: [
+                        URLQueryItem(name: "select", value: "by_the_room"),
+                        URLQueryItem(name: "limit", value: "1"),
+                    ])
+            }
+            return true
+        } catch SupabaseError.http(let status, _) where (400..<500).contains(status) {
+            return false
+        } catch {
+            return nil
         }
     }
 
@@ -1305,6 +1333,14 @@ final class RemoteSync {
         var question: String
         var state: String
         var openedAt: Date?
+        /// Only ever sent for the room's own card (A74); a project without
+        /// the column never hears of it from a card of Ribbon's.
+        var byTheRoom: Bool? = nil
+        var writtenBy: UUID? = nil
+    }
+
+    struct ByTheRoomRow: Decodable {
+        var byTheRoom: Bool?
     }
 
     struct CardAnswerRow: Codable {
@@ -1359,5 +1395,16 @@ private enum SessionKeychain {
             kSecAttrAccount as String: account,
         ]
         SecItemDelete(query as CFDictionary)
+    }
+}
+
+extension RemoteSync.CardRow {
+    /// A card as the server keeps it: its state as the table spells it, and
+    /// whose it is when the room asked it (A74).
+    init(_ card: ReflectionCard) {
+        self.init(
+            id: card.id, readingId: card.readingID, chapter: card.chapter, question: card.question,
+            state: ChapterCards.stored(card.state), openedAt: card.openedAt,
+            byTheRoom: card.byTheRoom ? true : nil, writtenBy: card.byTheRoom ? card.writtenBy : nil)
     }
 }
