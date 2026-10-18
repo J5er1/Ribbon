@@ -67,17 +67,22 @@ public struct Room: Codable, Hashable, Identifiable, Sendable {
     /// One line about the room for people who find it (A72). Nil until
     /// somebody in it writes one.
     public var line: String?
+    /// When the room closed (§6.8, A73): everyone agreed, or it had been
+    /// quiet for thirty days and one person asked. Nil while it is open. A
+    /// closed room keeps everything, and its shelf can be kept as a file.
+    public var closedAt: Date?
 
-    public init(id: UUID = UUID(), name: String? = nil, createdAt: Date, isPaused: Bool = false, translation: TranslationID = .bsb, line: String? = nil) {
+    public init(id: UUID = UUID(), name: String? = nil, createdAt: Date, isPaused: Bool = false, translation: TranslationID = .bsb, line: String? = nil, closedAt: Date? = nil) {
         self.id = id
         self.name = name
         self.createdAt = createdAt
         self.isPaused = isPaused
         self.translation = translation
         self.line = line
+        self.closedAt = closedAt
     }
 
-    enum CodingKeys: String, CodingKey { case id, name, createdAt, isPaused, translation, line }
+    enum CodingKeys: String, CodingKey { case id, name, createdAt, isPaused, translation, line, closedAt }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -88,6 +93,7 @@ public struct Room: Codable, Hashable, Identifiable, Sendable {
         // A room saved before rooms had a version reads the default.
         translation = try c.decodeIfPresent(TranslationID.self, forKey: .translation) ?? .bsb
         line = try c.decodeIfPresent(String.self, forKey: .line)
+        closedAt = try c.decodeIfPresent(Date.self, forKey: .closedAt)
     }
 }
 
@@ -104,17 +110,21 @@ public struct Membership: Codable, Hashable, Identifiable, Sendable {
     /// Whether this person has said yes to the room being found (A72). The
     /// room is found only while everyone has (`RoomOpenness`).
     public var wouldOpen: Bool
+    /// Whether this person has asked for the room to close (§6.8, A73). It
+    /// closes once everyone has (`RoomClosing`).
+    public var wouldClose: Bool
 
-    public init(id: UUID = UUID(), roomID: UUID, personID: UUID, ink: Ink? = nil, joinedAt: Date, wouldOpen: Bool = false) {
+    public init(id: UUID = UUID(), roomID: UUID, personID: UUID, ink: Ink? = nil, joinedAt: Date, wouldOpen: Bool = false, wouldClose: Bool = false) {
         self.id = id
         self.roomID = roomID
         self.personID = personID
         self.ink = ink
         self.joinedAt = joinedAt
         self.wouldOpen = wouldOpen
+        self.wouldClose = wouldClose
     }
 
-    enum CodingKeys: String, CodingKey { case id, roomID, personID, ink, joinedAt, wouldOpen }
+    enum CodingKeys: String, CodingKey { case id, roomID, personID, ink, joinedAt, wouldOpen, wouldClose }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -125,6 +135,7 @@ public struct Membership: Codable, Hashable, Identifiable, Sendable {
         joinedAt = try c.decode(Date.self, forKey: .joinedAt)
         // A membership saved before rooms could be found has said nothing.
         wouldOpen = try c.decodeIfPresent(Bool.self, forKey: .wouldOpen) ?? false
+        wouldClose = try c.decodeIfPresent(Bool.self, forKey: .wouldClose) ?? false
     }
 }
 

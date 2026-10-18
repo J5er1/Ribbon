@@ -88,6 +88,12 @@ data class Room(
      * somebody in it writes one.
      */
     val line: String? = null,
+    /**
+     * When the room closed (§6.8, A73): everyone agreed, or it had been quiet
+     * for thirty days and one person asked. Null while it is open. A closed
+     * room keeps everything, and its shelf can be kept as a file.
+     */
+    val closedAt: Instant? = null,
 ) {
 
     companion object {
@@ -119,6 +125,11 @@ data class Membership(
      * room is found only while everyone has ([RoomOpenness]).
      */
     val wouldOpen: Boolean = false,
+    /**
+     * Whether this person has asked for the room to close (§6.8, A73). It
+     * closes once everyone has ([RoomClosing]).
+     */
+    val wouldClose: Boolean = false,
 )
 
 /** A book, in a room. The active unit. A room has one open reading at a time. */
