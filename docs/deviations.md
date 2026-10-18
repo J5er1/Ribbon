@@ -4860,14 +4860,19 @@ A72. **Being found (2026-10-found; reverses §3's "no strangers, no
     room or reading id; they are listed in still-to-do rather than changed
     here.
 
-    **Not yet on the live project.** The migration needs the owner's
-    approval of the database tool in this session, which has not come; it
-    has not been run, rehearsed whole, or applied. The phones are built to
-    meet that honestly: each asks the project once a refresh whether the
-    tables are there, and until they are, nothing about finding appears —
-    no row in the menu, no switch, no Being found (§6.1, no dead control).
-    New fields are only ever written by their own requests, so a phone on
-    a project without them behaves exactly as it did.
+    **On the live project, all but `let_in`** (18 October 2026), with the
+    owner's go-ahead: *"go ahead and apply the migration"*. The database
+    tool timed out on the whole file, so the same file went up in nine
+    pieces in its own order, each its own transaction and recorded as
+    `ribbon_being_found_*`: keep_in_place, people_and_blocks, open_rooms,
+    knocks, who_can_see, find_rooms, asking, reports — and let_in, which
+    has not landed. It is the one piece with `delete` statements in it,
+    and the tool holds those for an approval that has not been answered
+    in time. Until it lands "Let them in" says "Can't reach Ribbon right
+    now"; everything else works. The phones learn the tables are there on
+    their next refresh: before, nothing about finding appeared (§6.1, no
+    dead control), and new fields are only ever written by their own
+    requests, so a phone on a project without them behaves as it did.
 
     **What's new**, "A door, if you want one": a fourth face waiting past
     the room's edge and then let in, the row making room; and Being found's

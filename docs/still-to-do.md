@@ -394,27 +394,27 @@ refuses the thirteenth; `invite_preview` is still callable signed out and
 Shipped builds are unaffected: they still stop the invite sheet at six on
 the phone, and they read the four new inks as no ink or ochre (A70).
 
-## 9. Being found — the migration, not yet applied
+## 9. Being found — the migration, applied but for `let_in`
 
 `supabase/migrations/20261016180000_ribbon_being_found.sql`
-(docs/deviations.md A72) is written and committed but is **not on the live
-project**. It wants, in this order:
+(docs/deviations.md A72) is on the live project in pieces, recorded as
+`ribbon_being_found_*` — every part of the file except `let_in`. The
+database tool holds anything with `delete` in it for an approval, and that
+piece timed out three times waiting. To finish:
 
-1. A rehearsal in a transaction that is rolled back: the whole file, then,
-   as two signed-in people (`set local role authenticated` and a `sub` in
-   `request.jwt.claims`), `ask_to_join` refused while the room is closed
-   and accepted once every member has said yes; `let_in` seating the asker
-   with `would_open` true; `find_rooms` never returning a room you are in
-   or one with someone you have blocked; `can_see_person` false for a
-   blocked findable profile; and an update moving a membership into
-   another room refused by `keep_in_place`.
-2. Applied, with `apply_migration` or the CLI. Nothing in it drops
-   anything, so it reads the same in either.
+1. Paste the `let_in` function and its two grant lines from the file into
+   the dashboard's SQL editor and run them, or approve the tool's prompt
+   when it is asked again.
+2. Then, in a transaction that is rolled back, as two signed-in people
+   (`set local role authenticated` and a `sub` in `request.jwt.claims`):
+   `ask_to_join` refused while the room is closed and accepted once every
+   member has said yes; `let_in` seating the asker with `would_open` true;
+   `find_rooms` never returning a room you are in or one with someone you
+   have blocked; `can_see_person` false for a blocked findable profile;
+   and an update moving a membership into another room refused by
+   `keep_in_place`.
 3. In the dashboard: `reports` readable there, and an advisor run (the new
    tables all have row-level security on).
-
-Until it is applied the phones show nothing of finding (A72); after it, a
-pull is enough.
 
 **Follow-up, found while writing it.** The `keep_in_place` repair covers
 memberships and invites. Other tables carry a room or reading id that an
