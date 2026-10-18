@@ -4777,7 +4777,10 @@ A71. **Free, for now (amends §14 and S22).** Owner: *"Pricing will be
       asks". The paused room's two rows are kept, because a room can still
       be paused, and StoreKit is still not built (deviation 11).
     - **The site's pricing section** is one table of "Free, for now", and
-      youth ministry's "Quiet billing" says there is none yet.
+      youth ministry's "Quiet billing" says there is none yet. The line
+      under the hero's way in, which promised the first book free, says
+      the same as the pricing heading: "Free, for now. Every room, every
+      book."
     - **Nothing in §14 is thrown away.** The first free book, the price of
       a pair, the ask in exactly two places, a paused room keeping every
       word: those are what pricing will be built from when it comes, and
