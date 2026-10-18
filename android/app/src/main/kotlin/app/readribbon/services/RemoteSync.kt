@@ -4,6 +4,7 @@ package app.readribbon.services
 
 import android.content.Context
 import app.readribbon.core.BeingFound
+import app.readribbon.core.ChapterCards
 import app.readribbon.core.FireScale
 import app.readribbon.core.FireState
 import app.readribbon.core.FuelEvent
@@ -773,19 +774,41 @@ class RemoteSync(
         withAuthRetry {
             client.upsert(
                 table = "cards",
-                rowsJson = SupabaseClient.json.encodeToString(listOf(
-                    CardRow(
-                        id = card.id,
-                        readingId = card.readingID,
-                        chapter = card.chapter,
-                        question = card.question,
-                        state = card.state.name,
-                        openedAt = card.openedAt,
-                        createdAt = card.openedAt ?: kotlin.time.Clock.System.now(),
-                    )
-                )),
+                rowsJson = SupabaseClient.json.encodeToString(listOf(CardRow.of(card))),
                 onConflict = "id"
             )
+        }
+    }
+
+    /**
+     * The room's own question (A75), asked. False when someone in the room
+     * asked one at this chapter first: there is one of the room's at a time,
+     * and the server keeps it so.
+     */
+    suspend fun ask(card: ReflectionCard): Boolean {
+        return try {
+            withAuthRetry {
+                client.insert(table = "cards", rowsJson = SupabaseClient.json.encodeToString(listOf(CardRow.of(card))))
+            }
+            true
+        } catch (e: SupabaseError.Http) {
+            if (e.status == 409 && "23505" in e.body) false else throw e
+        }
+    }
+
+    /** Whether the project knows cards the room writes, asked the way the other new tables are. */
+    suspend fun roomCardsAreThere(): Boolean? {
+        if (userID == null) return null
+        return try {
+            withAuthRetry {
+                client.select(table = "cards", query = listOf("select" to "by_the_room", "limit" to "1"))
+            }
+            true
+        } catch (e: SupabaseError.Http) {
+            if (e.status in 400..499) false else null
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            null
         }
     }
 
@@ -1572,15 +1595,37 @@ class RemoteSync(
         val question: String,
         val state: String,
         val openedAt: Instant? = null,
-        val createdAt: Instant,
-    )
+        /** Only ever sent for the room's own card (A75). */
+        val byTheRoom: Boolean? = null,
+        val writtenBy: Uuid? = null,
+    ) {
+        companion object {
+            /**
+             * A card as the server keeps it: its state as the table spells
+             * it, and whose it is when the room asked it. It used to carry a
+             * `created_at` the table has never had, and the server refused
+             * every card this phone sent (A75).
+             */
+            fun of(card: ReflectionCard) = CardRow(
+                id = card.id,
+                readingId = card.readingID,
+                chapter = card.chapter,
+                question = card.question,
+                state = ChapterCards.stored(card.state),
+                openedAt = card.openedAt,
+                byTheRoom = if (card.byTheRoom) true else null,
+                writtenBy = if (card.byTheRoom) card.writtenBy else null,
+            )
+        }
+    }
 
     @Serializable
     data class CardAnswerRow(
         val cardId: Uuid,
         val personId: Uuid,
-        val answer: String,
-        val createdAt: Instant,
+        /** The table's names: an answer is `body`, given at `answered_at` (A75). */
+        val body: String,
+        val answeredAt: Instant,
     )
 
     companion object {

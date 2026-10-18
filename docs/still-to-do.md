@@ -494,3 +494,58 @@ as `ribbon_closing_*`, rehearsed beforehand in a rolled-back transaction
 - A quiet room: hard to make by hand; the rehearsal covered it on the
   server. If one exists, the question should read "…quiet for a month,
   so it closes now…".
+
+## 11. Cards the room writes — the migration, applied on 18 October
+
+`supabase/migrations/20261019120000_ribbon_cards_the_room_writes.sql`
+(docs/deviations.md A75) is on the live project as
+`ribbon_cards_the_room_writes`, rehearsed first (A75 lists the thirteen
+checks). The last piece — the trigger that opens the cards a person was
+holding up when they leave a room — the database tool would not take,
+because it names a delete, so the owner ran it in the dashboard's SQL
+editor on 18 October; it is confirmed there. It is the one part not
+rehearsed: seen on a phone, a room of three where two have answered and
+the third leaves should open the card for the two. For the record, what
+was run:
+
+```sql
+create or replace function public.cards_after_someone_left() returns trigger
+language plpgsql security definer
+set search_path = public
+as $$
+declare
+  waiting uuid;
+begin
+  for waiting in
+    select c.id from cards c join readings r on r.id = c.reading_id
+    where r.room_id = old.room_id and c.state = 'sealed'
+  loop
+    perform public.open_card_if_answered(waiting);
+  end loop;
+  return null;
+end;
+$$;
+
+revoke execute on function public.cards_after_someone_left() from public, anon, authenticated;
+
+create or replace trigger memberships_cards_after_someone_left after delete on public.memberships
+  for each row execute function public.cards_after_someone_left();
+```
+
+Seen on a phone, both platforms, in a room of two:
+
+- At a chapter's end, Ribbon's card, and under it "Ask the room a
+  question" (only once the phone has refreshed against the project). Ask
+  one: it appears as a card with "Your question" over it; on the other
+  phone, "Ruth's question" in her ink.
+- Answer Ribbon's card on one phone: it stays sealed. Answer it on the
+  other: it turns over on both (the first on its next refresh), with both
+  answers, and "The cards are open" arrives where notifications are on.
+- Set the room's question down: it leaves on both, and "Ask the room a
+  question" comes back.
+- Both ask at the same chapter at the same moment: one gets "Someone in
+  the room asked one here first." and sees the other's.
+- Android especially: answers and set-down cards now reach the server
+  (they never did); look for the answer on the other phone once the card
+  opens.
+

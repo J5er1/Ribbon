@@ -23,6 +23,8 @@ import app.readribbon.core.BeingFound
 import app.readribbon.core.Bible
 import app.readribbon.core.BookSearch
 import app.readribbon.core.CardState
+import app.readribbon.core.ChapterCards
+import app.readribbon.core.RoomQuestion
 import app.readribbon.core.FireScale
 import app.readribbon.core.FireState
 import app.readribbon.core.FireTuning
@@ -1876,12 +1878,20 @@ class AppModel(
 
     // MARK: - Reflection Cards (§4.6, S08, S09)
 
+    /**
+     * Ribbon's card for a chapter, made the first time anyone here reaches
+     * its end. Its id is the same on every phone (A75), so two people
+     * arriving at once make one card.
+     */
     fun card(reading: Reading, chapter: Int): ReflectionCard {
-        val existing = state.cards.firstOrNull { it.readingID == reading.id && it.chapter == chapter }
+        val existing = state.cards.firstOrNull {
+            it.readingID == reading.id && it.chapter == chapter && !it.byTheRoom
+        }
         if (existing != null) return existing
 
         val prompt = ReflectionPrompts.prompt(chapter)
         val newCard = ReflectionCard(
+            id = ChapterCards.ribbonCardID(reading.id, chapter),
             readingID = reading.id,
             chapter = chapter,
             question = prompt,
@@ -1896,6 +1906,58 @@ class AppModel(
             }
         }
         return newCard
+    }
+
+    /** Every card standing at a chapter's end: Ribbon's, and the room's own question if someone has asked one. */
+    fun cards(reading: Reading, chapter: Int): List<ReflectionCard> {
+        card(reading, chapter)
+        return ChapterCards.standing(state.cards, reading.id, chapter)
+    }
+
+    /**
+     * The room's own questions at a chapter, set down or standing, so one set
+     * down can leave on screen as a card does rather than vanish.
+     */
+    fun roomCards(reading: Reading, chapter: Int): List<ReflectionCard> =
+        state.cards
+            .filter { it.readingID == reading.id && it.chapter == chapter && it.byTheRoom }
+            .sortedBy { it.id.toString() }
+
+    /** Whether the project knows cards the room writes, asked on each refresh until the answer is yes. */
+    var serverCardsByTheRoom: Boolean by mutableStateOf(false)
+        private set
+
+    /**
+     * Whether you may ask the room a question at this chapter: signed in, on
+     * a project that has it, while no question of the room's stands here
+     * (§6.1: absent rather than dead).
+     */
+    fun roomMayAsk(reading: Reading, chapter: Int): Boolean =
+        remote != null && isSignedIn && serverCardsByTheRoom &&
+            ChapterCards.roomMayAsk(state.cards, reading.id, chapter)
+
+    enum class Asking { asked, someoneAskedFirst }
+
+    /**
+     * The room's own question for a chapter, asked (A75). It goes to the
+     * server first and is kept here only once it is there: there is one of
+     * the room's at a time, and the server is what says whose it is.
+     */
+    suspend fun askTheRoom(question: String, reading: Reading, chapter: Int): Asking {
+        val remote = this.remote ?: return Asking.someoneAskedFirst
+        val me = state.me ?: return Asking.someoneAskedFirst
+        val cleaned = RoomQuestion.cleaned(question) ?: return Asking.someoneAskedFirst
+        val card = ReflectionCard(
+            readingID = reading.id, chapter = chapter, question = cleaned, state = CardState.sealed,
+            byTheRoom = true, writtenBy = me.id,
+        )
+        if (!remote.ask(card)) {
+            refreshFromRemote()
+            return Asking.someoneAskedFirst
+        }
+        state = state.copy(cards = state.cards + card)
+        persist()
+        return Asking.asked
     }
 
     fun answerCard(card: ReflectionCard, answer: String, room: Room) {
@@ -1925,8 +1987,8 @@ class AppModel(
                 RemoteSync.CardAnswerRow(
                     cardId = updatedCard.id,
                     personId = me.id,
-                    answer = answer,
-                    createdAt = answeredAt,
+                    body = answer,
+                    answeredAt = answeredAt,
                 ),
             )
             remote.push(card = updatedCard)
@@ -3036,8 +3098,8 @@ class AppModel(
                                 RemoteSync.CardAnswerRow(
                                     cardId = card.id,
                                     personId = me.id,
-                                    answer = myAns,
-                                    createdAt = card.openedAt ?: Clock.System.now()
+                                    body = myAns,
+                                    answeredAt = card.openedAt ?: Clock.System.now()
                                 )
                             )
                         }
@@ -3127,6 +3189,7 @@ class AppModel(
         }
         if (!serverFinds) remote.findingIsThere()?.let { serverFinds = it }
         if (!serverCloses) remote.closingIsThere()?.let { serverCloses = it }
+        if (!serverCardsByTheRoom) remote.roomCardsAreThere()?.let { serverCardsByTheRoom = it }
         val graph = runCatching { remote.pullRooms() }.getOrNull() ?: return Arrivals.none
         val landed = merge(graph)
         announce(landed)
@@ -3808,8 +3871,8 @@ class AppModel(
         val cards = next.cards.toMutableList()
         val answersByCard = graph.cardAnswers.groupBy { it.cardId }
         for (row in graph.cards) {
-            val remoteAnswers = answersByCard[row.id]?.associate { it.personId to it.answer } ?: emptyMap()
-            val remoteState = CardState.entries.firstOrNull { it.name == row.state } ?: CardState.sealed
+            val remoteAnswers = answersByCard[row.id]?.associate { it.personId to it.body } ?: emptyMap()
+            val remoteState = ChapterCards.state(row.state) ?: CardState.sealed
             val i = cards.indexOfFirst { it.id == row.id }
             if (i >= 0) {
                 val mergedAnswers = cards[i].answers + remoteAnswers
@@ -3828,7 +3891,9 @@ class AppModel(
                         question = row.question,
                         answers = remoteAnswers,
                         state = remoteState,
-                        openedAt = row.openedAt
+                        openedAt = row.openedAt,
+                        byTheRoom = row.byTheRoom ?: false,
+                        writtenBy = row.writtenBy,
                     )
                 )
             }

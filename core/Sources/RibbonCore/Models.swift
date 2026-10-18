@@ -291,8 +291,15 @@ public struct ReflectionCard: Codable, Hashable, Identifiable, Sendable {
     public var answers: [UUID: String]
     public var state: CardState
     public var openedAt: Date?
+    /// Asked by someone in the room (A75), not written by Ribbon.
+    public var byTheRoom: Bool
+    /// Who asked it, when the room did.
+    public var writtenBy: UUID?
 
-    public init(id: UUID = UUID(), readingID: UUID, chapter: Int, question: String, answers: [UUID: String] = [:], state: CardState = .sealed, openedAt: Date? = nil) {
+    public init(
+        id: UUID = UUID(), readingID: UUID, chapter: Int, question: String, answers: [UUID: String] = [:],
+        state: CardState = .sealed, openedAt: Date? = nil, byTheRoom: Bool = false, writtenBy: UUID? = nil
+    ) {
         self.id = id
         self.readingID = readingID
         self.chapter = chapter
@@ -300,10 +307,12 @@ public struct ReflectionCard: Codable, Hashable, Identifiable, Sendable {
         self.answers = answers
         self.state = state
         self.openedAt = openedAt
+        self.byTheRoom = byTheRoom
+        self.writtenBy = writtenBy
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, readingID, chapter, question, answers, state, openedAt
+        case id, readingID, chapter, question, answers, state, openedAt, byTheRoom, writtenBy
     }
 
     public init(from decoder: Decoder) throws {
@@ -314,6 +323,8 @@ public struct ReflectionCard: Codable, Hashable, Identifiable, Sendable {
         question = try container.decode(String.self, forKey: .question)
         state = try container.decode(CardState.self, forKey: .state)
         openedAt = try container.decodeIfPresent(Date.self, forKey: .openedAt)
+        byTheRoom = try container.decodeIfPresent(Bool.self, forKey: .byTheRoom) ?? false
+        writtenBy = try container.decodeIfPresent(UUID.self, forKey: .writtenBy)
 
         if let stringDict = try? container.decode([String: String].self, forKey: .answers) {
             var map: [UUID: String] = [:]
@@ -346,6 +357,8 @@ public struct ReflectionCard: Codable, Hashable, Identifiable, Sendable {
         try container.encode(question, forKey: .question)
         try container.encode(state, forKey: .state)
         try container.encodeIfPresent(openedAt, forKey: .openedAt)
+        try container.encode(byTheRoom, forKey: .byTheRoom)
+        try container.encodeIfPresent(writtenBy, forKey: .writtenBy)
 
         var stringDict: [String: String] = [:]
         for (k, v) in answers {

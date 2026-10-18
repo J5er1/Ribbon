@@ -154,11 +154,13 @@ object ShelfExport {
             // nobody's to read until everyone has answered (§4.6).
             val theirCards = cards
                 .filter { it.readingID == reading.id && it.state == CardState.open }
-                .sortedBy { it.chapter }
+                .sortedWith(compareBy<ReflectionCard>({ it.chapter }, { it.byTheRoom }))
             if (theirCards.isNotEmpty()) {
                 lines += listOf("Cards", "")
                 for (card in theirCards) {
-                    lines += "Chapter ${card.chapter}: ${card.question}"
+                    // A question the room asked says whose it was (A75).
+                    val asked = if (card.byTheRoom) ", asked by ${card.writtenBy?.let(name) ?: "someone"}" else ""
+                    lines += "Chapter ${card.chapter}$asked: ${card.question}"
                     val answers = card.answers.entries
                         .map { Triple(name(it.key), it.key.toString().uppercase(), it.value) }
                         .sortedWith(compareBy({ it.first }, { it.second }))

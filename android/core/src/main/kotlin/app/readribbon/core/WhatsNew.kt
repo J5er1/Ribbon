@@ -129,6 +129,12 @@ enum class WhatsNewItem {
      * and a drag lands on the bar under the finger (A74).
      */
     wavesFill,
+
+    /**
+     * Anyone in a room may ask it a question of their own at a chapter's end,
+     * and cards open for everyone when the last answer is in (A75).
+     */
+    askTheRoom,
 }
 
 /**
@@ -150,6 +156,11 @@ object WhatsNew {
      * are simply how the app is now — there for the reading, from You.
      */
     val releases: List<WhatsNewRelease> = listOf(
+        WhatsNewRelease(
+            id = "2026-10-cards",
+            released = "2026-10-18",
+            items = listOf(WhatsNewItem.askTheRoom),
+        ),
         WhatsNewRelease(
             id = "2026-10-light",
             released = "2026-10-18",

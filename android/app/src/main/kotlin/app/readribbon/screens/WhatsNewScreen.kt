@@ -500,6 +500,7 @@ internal val WhatsNewItem.title: String
         WhatsNewItem.quotedMarks -> Copy.WHATS_NEW_QUOTED_MARKS_TITLE
         WhatsNewItem.numbersStay -> Copy.WHATS_NEW_NUMBERS_STAY_TITLE
         WhatsNewItem.wavesFill -> Copy.WHATS_NEW_WAVES_FILL_TITLE
+        WhatsNewItem.askTheRoom -> Copy.WHATS_NEW_ASK_TITLE
     }
 
 internal val WhatsNewItem.body: String
@@ -528,6 +529,7 @@ internal val WhatsNewItem.body: String
         WhatsNewItem.quotedMarks -> Copy.WHATS_NEW_QUOTED_MARKS_BODY
         WhatsNewItem.numbersStay -> Copy.WHATS_NEW_NUMBERS_STAY_BODY
         WhatsNewItem.wavesFill -> Copy.WHATS_NEW_WAVES_FILL_BODY
+        WhatsNewItem.askTheRoom -> Copy.WHATS_NEW_ASK_BODY
     }
 
 // MARK: - The clock
@@ -590,6 +592,7 @@ internal val WhatsNewItem.timeline: Timeline
         WhatsNewItem.closingARoom,
         WhatsNewItem.quotedMarks,
         WhatsNewItem.numbersStay,
+        WhatsNewItem.askTheRoom,
         -> Timeline(LOOP_MS, STILL_AT)
         WhatsNewItem.followingStays -> Timeline(LONG_LOOP_MS, STAYS_STILL_AT)
         WhatsNewItem.nativeSelection -> Timeline(LONG_LOOP_MS, SELECTION_STILL_AT)
@@ -1273,6 +1276,10 @@ private fun Vignette(item: WhatsNewItem, startAfter: Long, frozenAt: Long?, modi
         WhatsNewItem.wavesFill -> Modifier.drawWithCache {
             val page = layOutTheWave(measurer, inks)
             onDrawBehind { drawTheWave(page, inks, grain, wavesFrame(clock.longValue.toInt())) }
+        }
+        WhatsNewItem.askTheRoom -> Modifier.drawWithCache {
+            val page = layOutTheQuestion(measurer, inks, faces, smallCaps)
+            onDrawBehind { drawTheQuestion(page, inks, grain, askTheRoomFrame(clock.longValue.toInt())) }
         }
     }
     Box(modifier.then(drawing))
@@ -4099,6 +4106,122 @@ private fun DrawScope.drawTheWave(page: TheWave, inks: VignetteInks, grain: Brus
                 topLeft = Offset(lerp(was, now, frame.spread), strip.center.y - height / 2f),
                 size = Size(page.bar, height),
                 cornerRadius = CornerRadius(page.bar / 2f),
+            )
+        }
+    }
+}
+
+// MARK: - Ask the room (A75)
+
+/**
+ * The room's own card, as a chapter's end has it: whose question it is, in
+ * their ink, and the question written in ([written]); then the card open —
+ * a hairline, and everyone's answer under it by face ([opened]). After a
+ * while the answers go and the question fades ([said]): faded, not
+ * unwritten, as Being found's line is.
+ */
+internal data class AskFrame(val written: Float, val opened: Float, val said: Float)
+
+internal fun askTheRoomFrame(t: Int): AskFrame {
+    val back = beat(t, at = 3660, ms = 400)
+    return AskFrame(
+        written = beat(t, at = 400, ms = 480),
+        opened = beat(t, at = 1080, ms = 400) * (1f - back),
+        said = 1f - back,
+    )
+}
+
+private const val ASKER = "Ruth"
+/** The answers on the open card: whose ink, and how long a line each wrote. */
+private val ASK_ANSWERS = listOf(Ink.teal to 0.82f, Ink.ochre to 0.6f)
+private val ASK_CARD_WIDTH = 260.dp
+private val ASK_PADDING = 14.dp
+private val ASK_FACE = 12.dp
+private val ASK_ROW_GAP = 6.dp
+
+/** The card, its byline and question, and where the open card's hairline and answers go. */
+private class TheQuestion(
+    val shape: Path,
+    val byline: TextLayoutResult,
+    val bylineAt: Offset,
+    val question: TextLayoutResult,
+    val questionAt: Offset,
+    val rule: Rect,
+    val faces: List<Offset>,
+    val lines: List<Rect>,
+    val faceRadius: Float,
+    val ring: Float,
+    val edge: Float,
+    val nib: Float,
+)
+
+private fun CacheDrawScope.layOutTheQuestion(
+    measurer: TextMeasurer,
+    inks: VignetteInks,
+    faces: VignetteFaces,
+    smallCaps: TextStyle,
+): TheQuestion {
+    val width = minOf(ASK_CARD_WIDTH.toPx(), size.width - INSET.toPx() * 2)
+    val pad = ASK_PADDING.toPx()
+    val inner = (width - pad * 2).coerceAtLeast(1f)
+    val byline = fitted(measurer, AnnotatedString(Copy.questionFrom(ASKER)), smallCaps.copy(color = Ink.teal.color), inner)
+    val question = fitted(
+        measurer,
+        AnnotatedString(Copy.WHATS_NEW_ASK_QUESTION),
+        TextStyle(fontFamily = faces.scripture, fontSize = 16.sp, color = inks.text),
+        inner,
+    )
+    val face = ASK_FACE.toPx()
+    val rowGap = ASK_ROW_GAP.toPx()
+    val under = 8.dp.toPx()
+    val height = pad * 2 + byline.size.height + 6.dp.toPx() + question.size.height + 10.dp.toPx() +
+        1.dp.toPx() + under + face * 2 + rowGap
+    val left = (size.width - width) / 2f
+    val top = ((size.height - height) / 2f).coerceAtLeast(0f)
+    val x = left + pad
+    val bylineTop = top + pad
+    val questionTop = bylineTop + byline.size.height + 6.dp.toPx()
+    val ruleTop = questionTop + question.size.height + 10.dp.toPx()
+    val firstRow = ruleTop + 1.dp.toPx() + under + face / 2f
+    val rows = ASK_ANSWERS.indices.map { firstRow + it * (face + rowGap) }
+    val lineLeft = x + face + 8.dp.toPx()
+    val lineRoom = (x + inner - lineLeft) * 0.8f
+    val lineHeight = 2.dp.toPx()
+    return TheQuestion(
+        shape = rounded(Rect(left, top, left + width, top + height), RibbonShape.card.toPx()),
+        byline = byline,
+        bylineAt = Offset(x, bylineTop),
+        question = question,
+        questionAt = Offset(x, questionTop),
+        rule = Rect(x, ruleTop, x + inner, ruleTop + 1.dp.toPx()),
+        faces = rows.map { Offset(x + face / 2f, it) },
+        lines = ASK_ANSWERS.mapIndexed { i, (_, length) ->
+            Rect(lineLeft, rows[i] - lineHeight / 2f, lineLeft + lineRoom * length, rows[i] + lineHeight / 2f)
+        },
+        faceRadius = face / 2f,
+        ring = FACE_RING.toPx(),
+        edge = SHEET_EDGE.toPx(),
+        nib = NIB.toPx(),
+    )
+}
+
+private fun DrawScope.drawTheQuestion(page: TheQuestion, inks: VignetteInks, grain: Brush, frame: AskFrame) {
+    val edge = if (inks.sheetsNeedEdges) inks.rule else null
+    sheet(page.shape, inks.raised, grain, edge, page.edge)
+    drawText(page.byline, topLeft = page.bylineAt)
+    writtenIn(page.question, page.questionAt, written = frame.written, nib = page.nib, alpha = frame.said)
+    if (frame.opened <= 0f) return
+    faded(frame.opened) {
+        drawRect(inks.rule, topLeft = page.rule.topLeft, size = page.rule.size)
+        ASK_ANSWERS.forEachIndexed { i, (ink, _) ->
+            drawCircle(inks.ground, radius = page.faceRadius, center = page.faces[i])
+            drawCircle(ink.color, radius = page.faceRadius - page.ring / 2f, center = page.faces[i], style = Stroke(page.ring))
+            val line = page.lines[i]
+            drawRoundRect(
+                inks.text.copy(alpha = 0.55f),
+                topLeft = line.topLeft,
+                size = line.size,
+                cornerRadius = CornerRadius(line.height / 2f),
             )
         }
     }

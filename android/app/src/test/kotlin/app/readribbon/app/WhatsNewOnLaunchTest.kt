@@ -15,6 +15,7 @@ import app.readribbon.design.RibbonMotion
 import app.readribbon.screens.LONG_LOOP_MS
 import app.readribbon.screens.LOOP_MS
 import app.readribbon.screens.STILL_AT
+import app.readribbon.screens.askTheRoomFrame
 import app.readribbon.screens.beingFoundFrame
 import app.readribbon.screens.body
 import app.readribbon.screens.closingFrame
@@ -464,6 +465,31 @@ class WhatsNewOnLaunchTest {
         }
     }
 
+    // The eighth release's one (A75).
+
+    @Test fun reduceMotionHoldsTheQuestionAskedAndTheCardOpen() {
+        val ask = askTheRoomFrame(WhatsNewItem.askTheRoom.timeline.stillAt)
+        assertEquals("the question written", 1f, ask.written, 0f)
+        assertEquals("and said", 1f, ask.said, 0f)
+        assertEquals("the card open", 1f, ask.opened, 0f)
+    }
+
+    @Test fun eachAskLoopBeginsAndEndsWithNothingAsked() {
+        for (t in listOf(0, WhatsNewItem.askTheRoom.timeline.loopMs - 1)) {
+            val ask = askTheRoomFrame(t)
+            assertEquals("no question at $t", 0f, ask.written * ask.said, 0.001f)
+            assertEquals("no answers at $t", 0f, ask.opened, 0.001f)
+        }
+    }
+
+    /** The question is written before the card opens on it. */
+    @Test fun theQuestionIsAskedBeforeTheCardOpens() {
+        for (t in 0 until WhatsNewItem.askTheRoom.timeline.stillAt) {
+            val ask = askTheRoomFrame(t)
+            if (ask.opened > 0f) assertEquals("written before it opens, at $t", 1f, ask.written, 0f)
+        }
+    }
+
     /** Your rooms' ribbons, and the embers on the shelf, come one after another — never a later one ahead. */
     @Test fun theRibbonsAndTheEmbersComeInTurn() {
         for (t in 0 until LOOP_MS step 10) {
@@ -653,6 +679,7 @@ class WhatsNewOnLaunchTest {
             WhatsNewItem.quotedMarks to ::quotedFrame,
             WhatsNewItem.numbersStay to ::numbersFrame,
             WhatsNewItem.wavesFill to ::wavesFrame,
+            WhatsNewItem.askTheRoom to ::askTheRoomFrame,
         )) {
             val timeline = item.timeline
             val breath = stillFor(timeline.loopMs, timeline.stillAt, frame)
@@ -677,6 +704,7 @@ class WhatsNewOnLaunchTest {
         assertEquals("6 October 2026", Copy.whatsNewReleased("2026-10-06"))
         assertEquals("7 October 2026", Copy.whatsNewReleased("2026-10-07"))
         assertEquals("18 October 2026", Copy.whatsNewReleased("2026-10-18"))
+        assertEquals("A question of your own", Copy.whatsNewTitle("2026-10-cards"))
         assertEquals("Light, and the finer points", Copy.whatsNewTitle("2026-10-light"))
         assertEquals("When a room is done", Copy.whatsNewTitle("2026-10-closing"))
         assertEquals("A door, if you want one", Copy.whatsNewTitle("2026-10-found"))

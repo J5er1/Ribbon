@@ -589,6 +589,22 @@ object Copy {
      *  a thread, so there is nothing to timestamp. */
     fun answerFrom(name: String, answer: String) = "$name answered. $answer"
 
+    /** The room's own question (A75). Whose it is is said, as "Ruth banked
+     *  the fire" is: asking is done in the open. */
+    const val ASK_THE_ROOM = "Ask the room a question"
+
+    /** The question field, for a screen reader: like the answer's, it has
+     *  no visible prompt, only a hairline. */
+    const val ASK_THE_ROOM_FIELD = "Your question for the room"
+
+    const val YOUR_QUESTION = "Your question"
+
+    fun questionFrom(name: String) = "$name's question"
+
+    /** Two people asked at the same chapter at once; one of them was first,
+     *  and their card is there now. Not an error, and nobody is blamed. */
+    const val SOMEONE_ASKED_FIRST = "Someone in the room asked one here first."
+
     // The shelf and embers (S10/S11)
     const val START_ANOTHER = "Start another"
     const val ONE_DAY_THIS_IS_A_BOOK = "One day this is a book."
@@ -1573,6 +1589,7 @@ object Copy {
         "2026-10-original" -> "The words under the words"
         "2026-10-following" -> "Staying on the same page"
         "2026-10-flyleaf" -> "The front of the book"
+        "2026-10-cards" -> "A question of your own"
         "2026-10-light" -> "Light, and the finer points"
         "2026-10-closing" -> "When a room is done"
         "2026-10-found" -> "A door, if you want one"
@@ -1804,6 +1821,15 @@ object Copy {
     const val WHATS_NEW_WAVES_FILL_BODY =
         "However short a note is, its wave runs the whole width of the note, " +
             "and a drag along it lands on the bar under your finger."
+    /** What's new (A75): the room writes a card. */
+    const val WHATS_NEW_ASK_TITLE = "Ask the room"
+
+    /** What's new (A75): where, how it waits, and that it opens. */
+    const val WHATS_NEW_ASK_BODY =
+        "At the end of a chapter, under Ribbon's card, anyone in the room can ask a question of their own. It waits sealed like any card and says whose it is, and the cards open for everyone the moment the last answer is in."
+
+    /** What's new (A75): the question in the picture, as someone would ask it. */
+    const val WHATS_NEW_ASK_QUESTION = "What would you have said to him?"
 }
 
 /** First names only, everywhere a person is addressed in a line of copy. */

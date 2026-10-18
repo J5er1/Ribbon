@@ -25,6 +25,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -35,6 +36,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -48,6 +50,7 @@ import app.readribbon.app.firstName
 import app.readribbon.core.CardState
 import app.readribbon.core.Ink
 import app.readribbon.core.Reading
+import app.readribbon.core.RoomQuestion
 import app.readribbon.core.ReflectionCard
 import app.readribbon.core.Room
 import app.readribbon.design.HairlineRule
@@ -62,6 +65,7 @@ import app.readribbon.design.color
 import app.readribbon.design.paper
 import app.readribbon.design.rememberReduceMotion
 import kotlin.uuid.ExperimentalUuidApi
+import kotlinx.coroutines.launch
 
 // The cards (S08 / S09, §4.6) — a question everyone answers before anyone
 // reads the answers.
@@ -224,6 +228,18 @@ fun ReflectionCardView(
             .animateContentSize(animationSpec = RibbonMotion.settle(still)),
         verticalArrangement = Arrangement.spacedBy(Gap),
     ) {
+        // Whose question the room's own card is (A75), in their ink: said
+        // in the open, as a banked fire is. Said once, with the question.
+        val asker = askerOf(card, room, model, myInk)
+        if (asker != null) {
+            SmallCaps(
+                asker.first,
+                modifier = Modifier.clearAndSetSemantics {},
+                size = 12f,
+                color = asker.second.color,
+            )
+        }
+
         // The question in Literata, generously set (§4.6, S08/S09). It is the
         // card's heading, and says so: a screen reader can move between the
         // cards in a chapter by heading rather than by reading every answer
@@ -234,7 +250,7 @@ fun ReflectionCardView(
             color = Palette.text,
             modifier = Modifier.semantics {
                 heading()
-                contentDescription = if (showingOpen) {
+                contentDescription = (asker?.let { "${it.first}. " } ?: "") + if (showingOpen) {
                     Copy.cardOpenSpoken(card.question)
                 } else {
                     Copy.cardSealedSpoken(card.question)
@@ -276,6 +292,135 @@ fun ReflectionCardView(
                     onAnswered = { isEditing = false },
                 )
             }
+        }
+    }
+}
+
+/** Whose question the room's own card is, and their ink; null for one of Ribbon's. */
+private fun askerOf(card: ReflectionCard, room: Room, model: AppModel, myInk: Ink): Pair<String, Ink>? {
+    if (!card.byTheRoom) return null
+    val writer = card.writtenBy
+    if (writer != null && writer == model.state.me?.id) return Copy.YOUR_QUESTION to myInk
+    val member = writer?.let { w -> model.members(room).firstOrNull { it.personID == w } }
+    val name = firstName(writer?.let { model.person(it)?.name } ?: Copy.SOMEONE)
+    return Copy.questionFrom(name) to (member?.ink ?: Ink.ochre)
+}
+
+/**
+ * Asking the room its own question for a chapter (A75): a quiet control
+ * under the cards that opens into a question set as a card's is — your name
+ * over it, a hairline under it — with "Ask" and "Never mind". Once asked, it
+ * is a card like the others, and the control is gone until it is set down.
+ */
+@Composable
+fun AskTheRoomView(
+    reading: Reading,
+    chapter: Int,
+    room: Room,
+    model: AppModel,
+    modifier: Modifier = Modifier,
+) {
+    val still = rememberReduceMotion()
+    val scope = rememberCoroutineScope()
+    val myInk = model.myMembership(room)?.ink ?: model.lastUsedInk
+    var asking by rememberSaveable(reading.id, chapter) { mutableStateOf(false) }
+    var draft by rememberSaveable(reading.id, chapter) { mutableStateOf("") }
+    var sending by remember { mutableStateOf(false) }
+    var line by remember { mutableStateOf<String?>(null) }
+    val question = RoomQuestion.cleaned(draft)
+    val mayAsk = model.roomMayAsk(reading, chapter)
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        AnimatedVisibility(
+            visible = asking,
+            enter = fadeIn(RibbonMotion.arrive(still)) + expandVertically(RibbonMotion.arrive(still)),
+            exit = fadeOut(RibbonMotion.arrive(still)) + shrinkVertically(RibbonMotion.arrive(still)),
+            label = "a-question-for-the-room",
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .paper(RibbonShape.cardShape)
+                    .padding(CardPadding),
+                verticalArrangement = Arrangement.spacedBy(SealedGap),
+            ) {
+                SmallCaps(
+                    Copy.YOUR_QUESTION,
+                    modifier = Modifier.clearAndSetSemantics {},
+                    size = 12f,
+                    color = myInk.color,
+                )
+                val focus = remember { FocusRequester() }
+                LaunchedEffect(asking) {
+                    if (asking) runCatching { focus.requestFocus() }
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    BasicTextField(
+                        value = draft,
+                        onValueChange = { draft = it.take(RoomQuestion.maxLength) },
+                        textStyle = RibbonType.scripture(19f).copy(color = Palette.text),
+                        cursorBrush = SolidColor(myInk.color),
+                        keyboardOptions = KeyboardOptions(
+                            capitalization = KeyboardCapitalization.Sentences,
+                            imeAction = ImeAction.Default,
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = FieldLead)
+                            .focusRequester(focus)
+                            .semantics { contentDescription = Copy.ASK_THE_ROOM_FIELD },
+                    )
+                    HairlineRule()
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    QuietControl(
+                        title = Copy.ASK,
+                        modifier = Modifier.offset(x = QuietControlInset),
+                        size = 14f,
+                        color = if (question != null && !sending) Palette.accent else Palette.muted,
+                    ) {
+                        val asked = question ?: return@QuietControl
+                        if (sending) return@QuietControl
+                        sending = true
+                        scope.launch {
+                            try {
+                                val outcome = model.askTheRoom(asked, reading, chapter)
+                                asking = false
+                                draft = ""
+                                line = if (outcome == AppModel.Asking.someoneAskedFirst) Copy.SOMEONE_ASKED_FIRST else null
+                            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                                throw cancelled
+                            } catch (e: Exception) {
+                                line = Copy.SERVER_UNREACHABLE
+                            } finally {
+                                sending = false
+                            }
+                        }
+                    }
+                    QuietControl(title = Copy.NEVER_MIND) {
+                        asking = false
+                        draft = ""
+                    }
+                }
+            }
+        }
+        if (!asking && mayAsk) {
+            QuietControl(
+                title = Copy.ASK_THE_ROOM,
+                modifier = Modifier.offset(x = QuietControlInset),
+            ) {
+                line = null
+                asking = true
+            }
+        }
+        line?.let {
+            Text(text = it, style = RibbonType.ui(14f), color = Palette.muted)
         }
     }
 }

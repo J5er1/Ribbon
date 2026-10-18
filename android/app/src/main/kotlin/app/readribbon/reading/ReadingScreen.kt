@@ -52,6 +52,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -116,6 +117,7 @@ import app.readribbon.core.MarkedSpan
 import app.readribbon.core.Note
 import app.readribbon.core.OriginalWords
 import app.readribbon.core.Reading
+import app.readribbon.core.ReflectionCard
 import app.readribbon.core.ReadingEstimate
 import app.readribbon.core.ReadingPoint
 import app.readribbon.core.ReadingReport
@@ -3688,42 +3690,19 @@ fun PassageEnd(
         }
 
         if (room != null) {
-            val card = model.card(reading, chapter)
-            // Held across its own exit, the way every other leaving thing in
-            // this file is (`held`, `heldSlot`, `heldRange`) — and the cards
-            // were the one surface that was not. `ReflectionCardView` opens
-            // with a guard that returns on a set-down card, and the content
-            // lambda recomposes with the new state *during* the exit, so the
-            // question, the answers and the controls vanished on the frame the
-            // tap landed and an empty container shrank behind them. A retired
-            // card should leave looking like a card.
-            val held = remember(reading.id, chapter) { mutableStateOf(card) }
-            if (card.state != CardState.setDown) held.value = card
-            // Setting a card down used to take it out of the composition on
-            // the frame the tap landed, which is a cut — and §9.1 has no cuts
-            // in it. §4.6's "it leaves without ceremony" is about there being
-            // no dialog and no confirmation, not about the card vanishing
-            // from under the finger that retired it: it shrinks away on the
-            // settle token, the same way a note that has been taken back
-            // does, and the continue control comes up to meet the rule.
-            AnimatedVisibility(
-                visible = card.state != CardState.setDown,
-                // Nothing on the way in: a card that is simply there when you
-                // reach the end of a chapter has not arrived, it was always
-                // waiting. Only the leaving is an event.
-                enter = EnterTransition.None,
-                exit = fadeOut(RibbonMotion.settle<Float>(reduceMotion)) +
-                    shrinkVertically(RibbonMotion.settle<IntSize>(reduceMotion)),
-                label = "the-card-set-down",
-            ) {
-                ReflectionCardView(
-                    card = held.value,
-                    reading = reading,
-                    room = room,
-                    model = model,
-                    modifier = Modifier.padding(horizontal = 24.dp)
-                )
+            HeldCard(model.card(reading, chapter), reading, room, model, reduceMotion)
+            // The room's own question beside Ribbon's, when someone has asked
+            // one (A75), held across its exit the same way.
+            for (roomCard in model.roomCards(reading, chapter)) {
+                key(roomCard.id) { HeldCard(roomCard, reading, room, model, reduceMotion) }
             }
+            AskTheRoomView(
+                reading = reading,
+                chapter = chapter,
+                room = room,
+                model = model,
+                modifier = Modifier.padding(horizontal = 24.dp),
+            )
         }
 
         // The app's forward motion — the one control that carries you out of
@@ -3848,5 +3827,52 @@ private fun NotificationAsk(name: String, onAnswered: () -> Unit) {
             onClick = { ask.launch(Manifest.permission.POST_NOTIFICATIONS) },
         )
         ConfirmChoice(title = Copy.DONT_TELL_ME, onClick = onAnswered)
+    }
+}
+
+/**
+ * One card at a chapter's end, held across its own exit, the way every other
+ * leaving thing in this file is (`held`, `heldSlot`, `heldRange`) — and the
+ * cards were the one surface that was not. `ReflectionCardView` opens with a
+ * guard that returns on a set-down card, and the content lambda recomposes
+ * with the new state *during* the exit, so the question, the answers and the
+ * controls vanished on the frame the tap landed and an empty container
+ * shrank behind them. A retired card should leave looking like a card.
+ *
+ * Setting a card down used to take it out of the composition on the frame
+ * the tap landed, which is a cut — and §9.1 has no cuts in it. §4.6's "it
+ * leaves without ceremony" is about there being no dialog and no
+ * confirmation, not about the card vanishing from under the finger that
+ * retired it: it shrinks away on the settle token, the same way a note that
+ * has been taken back does, and the continue control comes up to meet the
+ * rule.
+ */
+@Composable
+private fun HeldCard(
+    card: ReflectionCard,
+    reading: Reading,
+    room: Room,
+    model: AppModel,
+    reduceMotion: Boolean,
+) {
+    val held = remember(card.id) { mutableStateOf(card) }
+    if (card.state != CardState.setDown) held.value = card
+    AnimatedVisibility(
+        visible = card.state != CardState.setDown,
+        // Nothing on the way in: a card that is simply there when you reach
+        // the end of a chapter has not arrived, it was always waiting. Only
+        // the leaving is an event.
+        enter = EnterTransition.None,
+        exit = fadeOut(RibbonMotion.settle<Float>(reduceMotion)) +
+            shrinkVertically(RibbonMotion.settle<IntSize>(reduceMotion)),
+        label = "the-card-set-down",
+    ) {
+        ReflectionCardView(
+            card = held.value,
+            reading = reading,
+            room = room,
+            model = model,
+            modifier = Modifier.padding(horizontal = 24.dp)
+        )
     }
 }

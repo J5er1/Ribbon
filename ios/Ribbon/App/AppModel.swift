@@ -1249,18 +1249,65 @@ final class AppModel {
 
     // MARK: - Reflection Cards (§4.6, S08, S09)
 
+    /// Ribbon's card for a chapter, made the first time anyone here reaches
+    /// its end. Its id is the same on every phone (A75), so two people
+    /// arriving at once make one card.
     func card(for reading: Reading, chapter: Int) -> ReflectionCard {
-        if let existing = state.cards.first(where: { $0.readingID == reading.id && $0.chapter == chapter }) {
+        if let existing = state.cards.first(where: {
+            $0.readingID == reading.id && $0.chapter == chapter && !$0.byTheRoom
+        }) {
             return existing
         }
         let prompt = ReflectionPrompts.prompt(for: chapter)
-        let newCard = ReflectionCard(readingID: reading.id, chapter: chapter, question: prompt, state: .sealed)
+        let newCard = ReflectionCard(
+            id: ChapterCards.ribbonCardID(readingID: reading.id, chapter: chapter),
+            readingID: reading.id, chapter: chapter, question: prompt, state: .sealed)
         state.cards.append(newCard)
         persist()
         if let remote, remote.isSignedIn {
             pushing { try? await remote.push(card: newCard) }
         }
         return newCard
+    }
+
+    /// Every card standing at a chapter's end: Ribbon's, and the room's own
+    /// question if someone has asked one.
+    func cards(for reading: Reading, chapter: Int) -> [ReflectionCard] {
+        _ = card(for: reading, chapter: chapter)
+        return ChapterCards.standing(state.cards, readingID: reading.id, chapter: chapter)
+    }
+
+    /// Whether the project knows cards the room writes, asked on each
+    /// refresh until the answer is yes.
+    private(set) var serverCardsByTheRoom = false
+
+    /// Whether you may ask the room a question at this chapter: signed in,
+    /// on a project that has it, while no question of the room's stands
+    /// here (§6.1: absent rather than dead).
+    func roomMayAsk(_ reading: Reading, chapter: Int) -> Bool {
+        remote != nil && isSignedIn && serverCardsByTheRoom
+            && ChapterCards.roomMayAsk(state.cards, readingID: reading.id, chapter: chapter)
+    }
+
+    enum Asking { case asked, someoneAskedFirst }
+
+    /// The room's own question for a chapter, asked (A75). It goes to the
+    /// server first and is kept here only once it is there: there is one of
+    /// the room's at a time, and the server is what says whose it is.
+    func askTheRoom(_ question: String, reading: Reading, chapter: Int) async throws -> Asking {
+        guard let remote, let me = state.me, let cleaned = RoomQuestion.cleaned(question) else {
+            return .someoneAskedFirst
+        }
+        let card = ReflectionCard(
+            readingID: reading.id, chapter: chapter, question: cleaned, state: .sealed,
+            byTheRoom: true, writtenBy: me.id)
+        guard try await remote.ask(card: card) else {
+            await refreshFromRemote()
+            return .someoneAskedFirst
+        }
+        state.cards.append(card)
+        persist()
+        return .asked
     }
 
     func answerCard(_ card: ReflectionCard, answer: String, in room: Room) {
@@ -2243,6 +2290,9 @@ final class AppModel {
         if !serverCloses, let there = await remote.closingIsThere() {
             serverCloses = there
         }
+        if !serverCardsByTheRoom, let there = await remote.roomCardsAreThere() {
+            serverCardsByTheRoom = there
+        }
         guard let graph = try? await remote.pullRooms() else { return .none }
         let landed = merge(graph)
         announce(landed)
@@ -2755,7 +2805,7 @@ final class AppModel {
                     answers[a.personId] = a.body
                 }
             }
-            let remoteState = CardState(rawValue: row.state) ?? .sealed
+            let remoteState = ChapterCards.state(stored: row.state) ?? .sealed
             if let i = state.cards.firstIndex(where: { $0.id == row.id }) {
                 for (author, ans) in answers {
                     state.cards[i].answers[author] = ans
@@ -2774,7 +2824,9 @@ final class AppModel {
                     question: row.question,
                     answers: answers,
                     state: remoteState,
-                    openedAt: row.openedAt
+                    openedAt: row.openedAt,
+                    byTheRoom: row.byTheRoom ?? false,
+                    writtenBy: row.writtenBy
                 ))
             }
         }

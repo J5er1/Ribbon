@@ -278,6 +278,14 @@ enum Copy {
     static func cardOpenSpoken(_ question: String) -> String { "\(question). The card is open." }
     static func answerFrom(_ name: String, _ answer: String) -> String { "\(name) answered. \(answer)" }
 
+    // The room's own question (A75). Whose it is is said, as "Ruth banked
+    // the fire" is: asking is done in the open.
+    static let askTheRoom = "Ask the room a question"
+    static let askTheRoomField = "Your question for the room"
+    static let yourQuestion = "Your question"
+    static func questionFrom(_ name: String) -> String { "\(name)'s question" }
+    static let someoneAskedFirst = "Someone in the room asked one here first."
+
     // MARK: The shelf and embers (S10/S11)
     static let startAnother = "Start another"
     static let oneDayThisIsABook = "One day this is a book."
@@ -809,6 +817,7 @@ enum Copy {
         case "2026-10-original": return "The words under the words"
         case "2026-10-following": return "Staying on the same page"
         case "2026-10-flyleaf": return "The front of the book"
+        case "2026-10-cards": return "A question of your own"
         case "2026-10-light": return "Light, and the finer points"
         case "2026-10-closing": return "When a room is done"
         case "2026-10-found": return "A door, if you want one"
@@ -970,6 +979,13 @@ enum Copy {
     /// What's new (A74): however short, and where a drag lands.
     static let whatsNewWavesFillBody =
         "However short a note is, its wave runs the whole width of the note, and a drag along it lands on the bar under your finger."
+    /// What's new (A75): the room writes a card.
+    static let whatsNewAskTitle = "Ask the room"
+    /// What's new (A75): where, how it waits, and that it opens.
+    static let whatsNewAskBody =
+        "At the end of a chapter, under Ribbon's card, anyone in the room can ask a question of their own. It waits sealed like any card and says whose it is, and the cards open for everyone the moment the last answer is in."
+    /// What's new (A75): the question in the picture, as someone would ask it.
+    static let whatsNewAskQuestion = "What would you have said to him?"
 }
 
 /// The first word of a name, for the places that say it in passing. Kept

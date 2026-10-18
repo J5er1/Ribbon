@@ -260,7 +260,11 @@ data class ReflectionCard(
      */
     val answers: Map<Uuid, String> = emptyMap(),
     val state: CardState = CardState.sealed,
-    val openedAt: Instant? = null
+    val openedAt: Instant? = null,
+    /** Asked by someone in the room (A75), not written by Ribbon. */
+    val byTheRoom: Boolean = false,
+    /** Who asked it, when the room did. */
+    val writtenBy: Uuid? = null,
 )
 
 /**
