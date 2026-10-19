@@ -714,18 +714,6 @@ private enum Vignette {
     /// whole of its canvas, and nowhere reaching an edge (A74).
     static let softEmber: CGFloat = 1.2
 
-    /// The husk as `EmberView.draw` sets it — centred, a little above the
-    /// middle of its canvas, 0.32 of the shorter side each way across and
-    /// 0.82 of that up and down — so that the ember can stay lit while only
-    /// the light it throws comes up. If the ember's hand moves its husk,
-    /// this moves with it.
-    static func emberHusk(in size: CGSize) -> CGRect {
-        let r = min(size.width, size.height) * 0.32
-        let cx = size.width / 2
-        let cy = size.height * 0.52
-        return CGRect(x: cx - r, y: cy - r * 0.82, width: r * 2, height: r * 1.64)
-    }
-
     // MARK: Your marks, quoted in your version
 
     /// John 1:5 as the Berean Standard has it, and the reference a finished
@@ -2022,27 +2010,12 @@ private struct VignetteEmber: View, Animatable {
         .frame(width: size * 1.7, height: size * 1.35)
     }
 
-    /// The ember's own drawing, whole when it is lit. On the way, twice:
-    /// once kept to the husk, so the ember itself is all there from the
-    /// first frame, and once everywhere else at `lit`, so what comes up is
-    /// the light it throws and nothing of the ember — one drawing of each
-    /// place, never two laid over each other.
+    /// The ember's own drawing, whole when it is lit. On the way, the ember
+    /// itself is all there from the first frame and what comes up is only
+    /// the light it throws, at `lit` — the ember's hand draws the two apart
+    /// (I46), so nothing has to be cut out of one to show the other.
     static func draw(in context: inout GraphicsContext, size: CGSize, time: Double, lit: Double) {
-        guard lit < 1 else {
-            EmberView.draw(in: &context, size: size, time: time)
-            return
-        }
-        let husk = Vignette.emberHusk(in: size)
-        var ember = context
-        ember.clip(to: Path(ellipseIn: husk))
-        EmberView.draw(in: &ember, size: size, time: time)
-        guard lit > 0 else { return }
-        var around = Path(CGRect(origin: .zero, size: size))
-        around.addEllipse(in: husk)
-        var light = context
-        light.clip(to: around, style: FillStyle(eoFill: true))
-        light.opacity = lit
-        EmberView.draw(in: &light, size: size, time: time)
+        EmberView.draw(in: &context, size: size, time: time, light: lit)
     }
 }
 

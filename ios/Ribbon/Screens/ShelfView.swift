@@ -1,9 +1,10 @@
 import SwiftUI
 import RibbonCore
 
-// S10 — the shelf: every book this room has read, as embers on a shared
-// baseline with a faint warm bloom beneath. No drawn shelf, no sorting, no
-// filtering, no list view — a shelf you can sort is a database.
+// S10 — the shelf: every book this room has read, kept as embers in the
+// room's alabaster jar (I46), where they used to stand on a shared baseline.
+// The jar opens onto each of them, the latest first. No sorting, no
+// filtering — a shelf you can sort is a database.
 
 struct ShelfView: View {
     @Environment(AppModel.self) private var model
@@ -15,8 +16,6 @@ struct ShelfView: View {
 
     @State private var query = ""
     @FocusState private var searchFocused: Bool
-
-    private let columns = [GridItem(.adaptive(minimum: 88), spacing: 18, alignment: .bottom)]
 
     private var trimmedQuery: String { query.trimmingCharacters(in: .whitespaces) }
     /// Two characters is where a search begins (S13, S23).
@@ -101,25 +100,20 @@ struct ShelfView: View {
         return "…" + said[start...]
     }
 
-    /// The embers, the keepsake line and the way to another book.
+    /// The jar, the keepsake line and the way to another book.
     private var shelf: some View {
         VStack(alignment: .leading, spacing: 20) {
-            LazyVGrid(columns: columns, alignment: .leading, spacing: 26) {
-                ForEach(readings) { reading in
-                    NavigationLink(value: reading.id) {
-                        VStack(spacing: 6) {
-                            EmberView(scale: reading.handiwork.scale)
-                                // Its record opens out of it (I45).
-                                .flowSource(.ember(reading.id))
-                            SmallCaps(Bible.book(id: reading.bookID)?.name ?? reading.bookID, size: 12)
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    // An ember takes a press the way a tile does.
-                    .buttonStyle(.pressable)
-                }
+            // One jar for the room (I46): every book it has finished is an
+            // ember in it, and it opens onto each of them.
+            NavigationLink(value: JarRoute(roomID: room.id)) {
+                JarView(embers: readings.map(JarEmber.init))
+                    .flowSource(.jar(room.id), cornerRadius: 18)
+                    .frame(maxWidth: .infinity)
+                    .contentShape(Rectangle())
             }
-            .padding(.horizontal, 24)
+            .buttonStyle(.pressable)
+            .accessibilityLabel(Copy.theJarSpoken(readings.map { Bible.book(id: $0.bookID)?.name ?? $0.bookID }))
+            .accessibilityHint(Copy.opensTheJar)
 
             if readings.count == 1 {
                 // The moment the keepsake idea first appears.
@@ -129,6 +123,50 @@ struct ShelfView: View {
 
             QuietControl(title: Copy.startAnother, action: onStartAnother)
                 .padding(.horizontal, 24)
+        }
+    }
+}
+
+/// The room's jar, opened (I46): the jar, and every book in it, the latest
+/// first — each its ember, its name and when it was read, and each opening
+/// its record out of its ember.
+struct JarScreen: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    let room: Room
+
+    var body: some View {
+        let kept = model.shelf(of: room)
+        RibbonScreen(title: Copy.theShelf, lede: Copy.theJarLede, onBack: { dismiss() }) {
+            VStack(alignment: .leading, spacing: 14) {
+                JarView(embers: kept.map(JarEmber.init), width: 150)
+                    .frame(maxWidth: .infinity)
+                    .padding(.bottom, 12)
+                ForEach(kept.reversed()) { reading in
+                    let name = Bible.book(id: reading.bookID)?.name ?? reading.bookID
+                    NavigationLink(value: reading.id) {
+                        HStack(spacing: 14) {
+                            EmberView(scale: .small, shape: EmberView.shape(of: reading.id))
+                                // Its record opens out of it (I45).
+                                .flowSource(.ember(reading.id))
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(name)
+                                    .font(RibbonType.display(20))
+                                    .foregroundStyle(Palette.text)
+                                SmallCaps(
+                                    RibbonClock.emberRange(
+                                        start: reading.startedAt,
+                                        end: reading.finishedAt ?? reading.startedAt),
+                                    size: 11)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.pressable)
+                    .accessibilityElement(children: .combine)
+                }
+            }
         }
     }
 }
@@ -206,7 +244,7 @@ struct EmberRecordScreen: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 VStack(spacing: 10) {
-                    EmberView(scale: reading.handiwork.scale)
+                    EmberView(scale: reading.handiwork.scale, shape: EmberView.shape(of: reading.id))
                         .scaleEffect(1.6)
                         .padding(.top, 30)
                         .padding(.bottom, 16)

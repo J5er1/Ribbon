@@ -876,7 +876,7 @@ private struct YourShelfSection: View {
             onEmber(reading.id)
         } label: {
             VStack(spacing: 6) {
-                EmberView(scale: reading.handiwork.scale)
+                EmberView(scale: reading.handiwork.scale, shape: EmberView.shape(of: reading.id))
                     // Its record opens out of it (I45).
                     .flowSource(.ember(reading.id))
                     .alignmentGuide(.emberFloor) { dimensions in

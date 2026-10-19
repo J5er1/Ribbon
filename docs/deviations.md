@@ -6477,6 +6477,117 @@ I45. **One screen into the next, on the iPhone (A16, A22).** Owner: *"a
     is the owner's, where opening a book moves a ribbon and feeds the fire.
     Reduce motion was not tried. None has run on a phone.
 
+    Since (I46): the chooser's hand-off has been seen, on a local test
+    person in a second simulator — the chooser goes, the new fire is lit,
+    then the book comes up.
+
+I46. **The book put on the shelf, glass, and the room's jar (amends §6.5,
+    §4.1, §4.8 and S10; iPhone only).** Made with the owner in one sitting,
+    each turn in their words.
+
+    - **A book is finished by putting it on the shelf.** *"the way to
+      complete a room is to hit the button at the bottom"* — the owner
+      meant a book. §6.5 had *"finishing means reaching the end"*: the
+      finishing section counted once it was inside the viewport, so a fling
+      past the last verse finished the book for the whole room, and the fire
+      burned down on its own while the reader was still arriving. Now the
+      end waits, its fire lit, until "Put it on the shelf" or "Start
+      another" is tapped; either finishes it, and closes the book once the
+      becoming has been seen. `finishReading` keeps the first finish: a book
+      someone else has already put away keeps their day.
+
+    - **Glass.** *"can we make everything related all hold the E3 design
+      language i love it"*, then *"make the flames look like it too"*. Five
+      ember directions were drawn; the owner chose the flame kept as glass,
+      lit from inside (E3). The ember is the fire's last flame gone still: a
+      piece of dark glass, warm at its rounded foot and dark at its tip, a
+      long soft light down one side and a glint near the top, each reading's
+      leaning and swelling its own way (`EmberView.shape(of:)`, from the
+      reading's id). The flames are the same glass (`FirePainter.drawGlass`)
+      and move as they always moved, a little smoother; the throw, the coal
+      bed, the banked ash, the sparks and the warm air are as they were, the
+      lumps now drawn in front of the flames' feet so the glass sits in the
+      bed. The painter is shared with the widgets, so the home screen's fire
+      is glass too. What's new's light picture draws the ember whole and
+      brings its light up, now that the ember's hand draws the two apart,
+      in place of clipping to the old oval.
+
+    - **The becoming is one drawing.** It was three drawings cross-fading
+      (steady, the last licks, the ember), and the ember appeared mid-frame
+      while the coals it came from were at the foot. Now one number carries
+      it: the flames calm and stop moving, the side flames fold into the
+      tallest, and the tallest is carried — shrinking, rising, its foot
+      rounding — to where the ember sits, while the light draws in and the
+      bed goes dark. Linear in time; each part eases on its own stretch,
+      because one curve over all of it crowded the flames' going into half a
+      second.
+
+    - **The room's jar.** *"maybe we make the ember drop into something as
+      like a storage maybe something bible related"*, *"after the
+      transition animation"*. Of a clay jar (2 Corinthians 4:7), an
+      alabaster jar (Mark 14:3) and an oil lamp (Psalm 119:105), the owner
+      chose the alabaster, and one jar for the room rather than one per
+      book. Then *"maybe a 3d jar or something"* and *"add physics that jar
+      should work"*. It is drawn turned (a lathe profile seen a little from
+      above: an open mouth with its rim, a shoulder, a foot), of a warm
+      translucent stone the embers show through, brightest where the wall
+      faces you; and what is in it is heavy (`JarPhysics`, a small Verlet
+      integrator): an ember dropped in falls, knocks against the others and
+      the inside of the wall, settles, and stands back up; tilt the phone
+      and they roll and slide (Core Motion's gravity, read only while a jar
+      is on screen). Each appearance settles its embers from their slots
+      before it is seen. Under reduce motion nothing moves in it.
+
+      At the finishing, after the becoming, the room's jar comes up under
+      the ember with what the room has read in it, the book's name fades,
+      and the ember drops — shrinking to its size in the jar, then under the
+      jar's own physics from the mouth down — and the jar's light swells as
+      it lands. Then the book closes. The jar is drawn below the fire's
+      frame, over where the name and the controls were, so the page is laid
+      out as before.
+
+      On the room, the shelf is the jar (S10's embers on a baseline are
+      gone): the note search above it, the keepsake line and "Start
+      another" under it. Tapping it opens the jar's page — the jar, and each
+      book in it, the latest first, its ember, its name and when it was
+      read — and each opens its record, the record growing out of its ember
+      (I45). The jar opens out of itself. You keeps its row of embers, now
+      glass. VoiceOver reads the jar by its books' names, never a count.
+
+    - **Home by a sweep up from the Wave.** *"when in the book swiping up
+      from ribbon icon at the bottom should bring you home almost instagram
+      reels style"*. Held and swept up from the Wave at the foot of the
+      page, the page follows the finger, its corners rounding like a card,
+      the room under it; a quarter of the way, or a flick, and it flies off
+      the top at the finger's speed and the room is there. Short of that it
+      settles back. A tap on the Wave still closes it downward as always.
+      The page is a scroll view, whose pan takes a vertical drag before a
+      SwiftUI gesture over it can, so the sweep is a UIKit pan of its own
+      (`UIGestureRecognizerRepresentable`) that the scrolling waits on, and
+      which begins only on a drag up from the Wave. Under reduce motion the
+      page does not travel: the sweep closes it with a fade. The rounding is
+      a mask the size of the screen: a clip to the page's frame cut its
+      ground away under the clock and the home bar even lying still.
+
+    **Android has none of it, and that now matters more than a look.** The
+    owner chose *"iPhone only for now"*. The glass and the jar are a
+    picture; the finishing is behaviour. In a room with an Android reader,
+    their phone still finishes the book when they reach the end, for
+    everyone. Bringing Android level is in still-to-do.
+
+    **Not in What's new.** The owner chose iPhone only, and the list is one
+    list for both phones (A61); the entry waits for Android.
+
+    The iPhone builds with all of it. Seen in simulators, recorded frame by
+    frame: the glass fire in each state, the embers, the becoming, the
+    ember dropping into a jar of three, the jar's physics with drops and a
+    swinging tilt (in a scratch screen since removed), the room's jar, its
+    page and a record from it, the sweep home, and the chooser's hand-off.
+    The test room was a local person on a second simulator, signed in to
+    nothing. Not seen: a tilt on a real phone, reduce motion, an iPad, the
+    widget's glass fire, VoiceOver on the jar, and how a full jar runs on an
+    older phone.
+
 ## Licensed translations (decided: API.Bible)
 
 Open question §16.8 is now part-decided: **NKJV plus two undecided

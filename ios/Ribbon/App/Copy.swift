@@ -88,6 +88,13 @@ enum Copy {
     }
     static let leftForYou = "Left for you"
     static let theShelf = "The shelf"
+    /// The room's jar (I46): every book it has finished, kept in one jar.
+    /// Said by name, never counted.
+    static func theJarSpoken(_ books: [String]) -> String {
+        books.isEmpty ? "The jar" : "The jar: " + books.joined(separator: ", ")
+    }
+    static let opensTheJar = "Opens every book this room has finished"
+    static let theJarLede = "Every book this room has finished, kept in one jar."
     /// The one gesture the front door teaches, said once until it has been
     /// done (ledger A48).
     static let pullTheFireUp = "Pull the fire up to open the book"

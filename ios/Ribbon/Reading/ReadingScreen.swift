@@ -37,6 +37,15 @@ struct ReadingScreen: View {
     /// "Start another" at the finishing (§6.5) — lands in the chooser
     /// (S13), not back on the room's way-in.
     var onStartAnother: () -> Void
+    /// The page held up from the Wave and following the finger home (I46):
+    /// how far it is up, in points.
+    var onLift: (CGFloat) -> Void = { _ in }
+    /// Let go short of home: the page goes back down, from the speed it
+    /// was going up at.
+    var onLiftCancelled: (CGFloat) -> Void = { _ in }
+    /// Let go past home, or flung: closed, and the page goes on up and
+    /// away at that speed, the room under it.
+    var onCloseUp: (CGFloat) -> Void = { _ in }
 
     // Composition state
     /// What the page has selected (A62). A reference the body never reads:
@@ -95,7 +104,19 @@ struct ReadingScreen: View {
     @State private var lastFuelRecord = Date.distantPast
     @State private var lastPositionSave = Date.distantPast
     @State private var highlightLabel: Highlight?
-    @State private var didReachEnd = false
+    /// The book has been put on the shelf, and where the reader goes once
+    /// its fire has become an ember (I46). Nil until one of the finishing's
+    /// two controls is tapped.
+    @State private var shelving: Shelving?
+    /// The room's jar as it was when this book was put on the shelf.
+    @State private var keptForJar: [JarEmber] = []
+
+    private enum Shelving {
+        /// "Put it on the shelf": back to the room.
+        case shelf
+        /// "Start another": back to the room, and into the chooser.
+        case another
+    }
     /// After a follow ends, the form quietly offers "back to where you
     /// were" for about two minutes from its end, then forgets (§4.2). The
     /// place is where you were when the follow began.
@@ -341,7 +362,7 @@ struct ReadingScreen: View {
                                     pageScroller.stop()
                                     withAnimation(RibbonMotion.settle(still: reduceMotion)) { proxy.scrollTo(n + 1, anchor: .top) }
                                 },
-                                onClose: close)
+                                onClose: { close() })
                             .id(PassageEndMark(chapter: n))
                         }
                     }
@@ -1043,7 +1064,7 @@ struct ReadingScreen: View {
                 // chapter list (A31). The glass capsules stay small; the
                 // touch targets don't (44 pt minimum).
                 ZStack {
-                    Button(action: close) {
+                    Button { close() } label: {
                         WaveMark(color: Palette.text.opacity(0.55))
                             .frame(width: 20, height: 20)
                             .padding(.horizontal, 26)
@@ -1053,6 +1074,24 @@ struct ReadingScreen: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    // Held and swept up, the page goes home with the finger,
+                    // as a reel does (I46): a quarter of the way up, or a
+                    // flick, and it is gone off the top with the room under
+                    // it; short of that, it settles back. A tap still closes
+                    // it the way it always has.
+                    .gesture(HomeSweep(
+                        onChanged: { up in
+                            guard !closing else { return }
+                            onLift(up)
+                        },
+                        onEnded: { up, speed in
+                            guard !closing else { return }
+                            if up > viewportHeight * 0.25 || (speed > 650 && up > 24) {
+                                close(upAt: max(0, speed))
+                            } else {
+                                onLiftCancelled(speed)
+                            }
+                        }))
                     .hoverEffect(.lift)
                     // Esc closes the book on a hardware keyboard.
                     .keyboardShortcut(.cancelAction)
@@ -1206,43 +1245,64 @@ struct ReadingScreen: View {
             EditionCopyright(text: chapterContent(book?.chapterCount ?? 1)?.copyright)
             FireBecomesEmber(
                 scale: reading.handiwork.scale, coalDepth: reading.handiwork.coalDepth,
-                begin: didReachEnd,
+                shape: EmberView.shape(of: reading.id),
+                jar: keptForJar,
+                begin: shelving != nil,
                 // `reading` is the book as it was opened: finished then
                 // means it has already been through this once.
-                alreadyAnEmber: reading.isFinished)
-            Text(book?.name ?? "")
-                .font(RibbonType.display(30))
-                .foregroundStyle(Palette.text)
-            SmallCaps(
-                RibbonClock.emberRange(start: reading.startedAt, end: reading.finishedAt ?? Date()),
-                size: 13)
+                alreadyAnEmber: reading.isFinished,
+                onSettled: { if let shelving { leave(shelving) } })
+            VStack(spacing: 18) {
+                Text(book?.name ?? "")
+                    .font(RibbonType.display(30))
+                    .foregroundStyle(Palette.text)
+                SmallCaps(
+                    RibbonClock.emberRange(start: reading.startedAt, end: reading.finishedAt ?? Date()),
+                    size: 13)
+            }
+            // The room's jar comes up where these were, as the ember forms.
+            .opacity(shelving == nil ? 1 : 0)
+            .animation(RibbonMotion.settle.delay(1.7), value: shelving == nil)
             VStack(spacing: 16) {
-                // Both close the book, and closing ends a follow.
-                WayInButton(title: Copy.putItOnTheShelf) {
-                    endFollow(telling: false)
-                    onFinished()
-                }
-                QuietControl(title: Copy.startAnother) {
-                    endFollow(telling: false)
-                    onStartAnother()
-                }
+                // Either one puts the book on the shelf, and closes it once
+                // the fire has become an ember; closing ends a follow.
+                WayInButton(title: Copy.putItOnTheShelf) { putOnTheShelf(.shelf) }
+                QuietControl(title: Copy.startAnother) { putOnTheShelf(.another) }
             }
             .padding(.horizontal, 60)
             .padding(.top, 16)
+            // Taken: they go while the fire settles, and cannot be taken
+            // twice.
+            .opacity(shelving == nil ? 1 : 0)
+            .allowsHitTesting(shelving == nil)
+            .animation(RibbonMotion.arrive, value: shelving == nil)
             Spacer().frame(height: 80)
         }
-        .onGeometryChange(for: Bool.self) { proxy in
-            // Finishing means reaching the end (§6.5), not a lazy stack
-            // prefetching it: the sequence counts only once it is actually
-            // inside the viewport.
-            let viewportHeight = proxy.bounds(of: .scrollView)?.height ?? 800
-            return proxy.frame(in: .scrollView).minY < viewportHeight * 0.85
-        } action: { visible in
-            guard visible, !didReachEnd else { return }
-            didReachEnd = true
-            if !reading.isFinished {
-                model.finishReading(reading)
-            }
+    }
+
+    /// The book is finished by being put on the shelf (I46, amending §6.5's
+    /// "finishing means reaching the end"). Reaching the end used to finish
+    /// it for the whole room — a fling past the last verse was enough — and
+    /// the fire burned down on its own while the reader was still arriving.
+    /// Now the end waits with its fire lit until somebody puts the book away.
+    private func putOnTheShelf(_ then: Shelving) {
+        guard shelving == nil else { return }
+        endFollow(telling: false)
+        guard !reading.isFinished else {
+            // Already an ember: there is nothing left to become.
+            leave(then)
+            return
+        }
+        // What the room's jar holds before this one goes in.
+        keptForJar = model.shelf(of: room).filter { $0.id != reading.id }.map(JarEmber.init)
+        shelving = then
+        model.finishReading(reading)
+    }
+
+    private func leave(_ how: Shelving) {
+        switch how {
+        case .shelf: onFinished()
+        case .another: onStartAnother()
         }
     }
 
@@ -2360,7 +2420,9 @@ struct ReadingScreen: View {
         return layout.verseFirstLineY.filter { $0.key < verse }.max { $0.key < $1.key }?.value
     }
 
-    private func close() {
+    /// `upAt`: closed by the sweep up from the Wave, going up at that
+    /// speed — the page leaves by the top, not the foot.
+    private func close(upAt speed: CGFloat? = nil) {
         guard !closing else { return }
         closing = true
         // Closing ends a follow. A page only ever carried by one was not
@@ -2387,7 +2449,7 @@ struct ReadingScreen: View {
         if let openedAt, openedAt != here, !reading.isFinished {
             model.leaveTheRibbon(in: reading, at: here)
         }
-        onClose()
+        if let speed { onCloseUp(speed) } else { onClose() }
     }
 
     private func trackReading(chapter: Int, frame: CGRect) {
@@ -2542,5 +2604,49 @@ extension PageEnds {
     /// A stored stretch, as the page counts it: the same verses and offsets.
     init(_ range: VerseRange) {
         self.init(startVerse: range.startVerse, startChar: range.startChar, endVerse: range.endVerse, endChar: range.endChar)
+    }
+}
+
+/// The sweep up from the Wave (I46): a pan of UIKit's own, because the page
+/// is a scroll view, and a scroll view's pan takes any vertical drag before
+/// a SwiftUI gesture over it can — the page scrolled under the finger and
+/// never lifted. This one begins only on a drag up from the Wave, and the
+/// page's scrolling waits for it to fail, so a tap still closes the book and
+/// a drag anywhere else still reads on.
+private struct HomeSweep: UIGestureRecognizerRepresentable {
+    /// How far up the finger has come, in points.
+    var onChanged: (CGFloat) -> Void
+    /// How far up, and how fast it was going up when it let go.
+    var onEnded: (CGFloat, CGFloat) -> Void
+
+    func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator { Coordinator() }
+
+    func makeUIGestureRecognizer(context: Context) -> UIPanGestureRecognizer {
+        let pan = UIPanGestureRecognizer()
+        pan.delegate = context.coordinator
+        return pan
+    }
+
+    func handleUIGestureRecognizerAction(_ pan: UIPanGestureRecognizer, context: Context) {
+        let up = max(0, -pan.translation(in: pan.view).y)
+        switch pan.state {
+        case .changed: onChanged(up)
+        case .ended, .cancelled, .failed: onEnded(up, -pan.velocity(in: pan.view).y)
+        default: break
+        }
+    }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
+            guard let pan = gesture as? UIPanGestureRecognizer else { return false }
+            let v = pan.velocity(in: pan.view)
+            return v.y < 0 && abs(v.y) > abs(v.x)
+        }
+
+        func gestureRecognizer(
+            _ gesture: UIGestureRecognizer, shouldBeRequiredToFailBy other: UIGestureRecognizer
+        ) -> Bool {
+            other.view is UIScrollView
+        }
     }
 }

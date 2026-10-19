@@ -459,6 +459,41 @@ because each opens or starts a book:
 - Android still runs each of those four hand-offs as two movements at
   once. The owner to say whether it should follow the iPhone.
 
+The book put on the shelf, glass, and the room's jar (I46), iPhone only.
+Seen in simulators; none of it on a phone:
+
+- Reach the end of a book and stop: the fire stays lit, nothing is
+  finished, and the other phones in the room still show it open. Tap "Put
+  it on the shelf": the flames calm and fold into one, it shrinks and rises
+  into the glass ember, the room's jar comes up under it, the ember drops
+  in and the jar brightens, and the book closes. "Start another" the same,
+  ending in the chooser.
+- Someone else puts the book away while you are at its end: tapping still
+  plays it for you, and the book keeps their day.
+- The room's jar on the shelf: the room's books show through the stone,
+  settled, none floating; tilt the phone and they roll to the low side and
+  stand up again as it comes back. Lying flat, they stay put. With a dozen
+  books, nothing pokes out of the neck. Watch it on the oldest phone to
+  hand for dropped frames, on the room and at the finishing.
+- Tap the jar: its page, the latest book first; a book opens its record
+  out of its ember; the edge swipe brings you back.
+- The fire everywhere it is drawn — the room, the tour's card, the
+  chooser's glyphs, the rooms in the menu, the home-screen widget and the
+  lock screen — is glass, still moving like fire, sitting in its coals.
+- In the book, hold the Wave and sweep up: the page follows, corners
+  rounding, the room under it; let go high or flick and it goes off the
+  top; let go low and it settles back. Scroll the page from anywhere else,
+  including just beside the Wave: it scrolls. Tap the Wave: it closes
+  downward as before.
+- Reduce motion: the fire still, the becoming three fades (fire, ember,
+  jar), nothing moving in the jar, and the sweep closing with a fade.
+- VoiceOver: the jar reads its books by name; the finishing reads the fire
+  settling into an ember.
+- Android: none of this is there. Until it is, a room with an Android
+  reader finishes its book when they reach its end. Bring the finishing
+  (the button), then the glass, the jar and the sweep; and What's new on
+  both phones once both have it.
+
 ## 7. The New King James's usage reporting, and its proxy
 
 API.Bible asks apps to report each chapter shown (FUMS) with the

@@ -8,6 +8,14 @@ import RibbonCore
 // reasoning about how it draws is in CampfireView.swift; what it needs is
 // only the palette and the core's fire types, which is what makes it
 // shareable.
+//
+// The flames are glass (I46): each tongue a piece of dark glass lit from
+// inside, warm at its foot and going dark toward its tip, with a long soft
+// light down one side and a glint near the top. They move as the fire
+// always moved — the same tongues, the same noise climbing them — a little
+// smoother, because glass is. The ember a book becomes is the same glass,
+// so the fire and what it leaves are one material, and the becoming is one
+// drawing from the first to the last.
 
 enum FirePainter {
     /// A smooth pseudo-noise: two incommensurate sines around the 3.4 s
@@ -21,10 +29,10 @@ enum FirePainter {
     }
 
     /// A deterministic hash → 0..<1. Everything "random" about the fire —
-    /// lump shapes, spark clocks, shed gates — comes through here, never
-    /// through a RNG, so the same (time, state, scale, coalDepth) always
-    /// draws the same frame. Reduce-motion holds one arbitrary instant
-    /// (§11), and that instant must be a fire, not a roll of the dice.
+    /// lump shapes, spark clocks — comes through here, never through a RNG,
+    /// so the same (time, state, scale, coalDepth) always draws the same
+    /// frame. Reduce-motion holds one arbitrary instant (§11), and that
+    /// instant must be a fire, not a roll of the dice.
     static func hash(_ n: Double) -> Double {
         let s = sin(n * 127.1 + 311.7) * 43758.5453123
         return s - s.rounded(.down)
@@ -43,7 +51,17 @@ enum FirePainter {
         return (a + (b - a) * u) * 2 - 1
     }
 
+    /// 0 at `a`, 1 at `b`, eased at both ends.
+    static func smoothstep(_ a: Double, _ b: Double, _ x: Double) -> Double {
+        let t = min(1, max(0, (x - a) / (b - a)))
+        return t * t * (3 - 2 * t)
+    }
+
     private static func fract(_ x: Double) -> Double { x - x.rounded(.down) }
+
+    private static func mix(_ a: CGFloat, _ b: CGFloat, _ t: Double) -> CGFloat {
+        a + (b - a) * CGFloat(t)
+    }
 
     /// Smooths a polyline into quad curves through segment midpoints —
     /// short segments in, one continuous organic edge out.
@@ -65,13 +83,15 @@ enum FirePainter {
     /// upward-travelling value noise — left and right sample different
     /// lanes, so the tongue is never symmetric — then smoothed. The base
     /// is planted (the noise envelope is zero at the coals) and the width
-    /// necks to nothing at the tip, with a slight belly low down.
+    /// necks to nothing at the tip, with a slight belly low down. `foot`
+    /// rounds the base under it: 0 is a flame standing on the coals, 1 the
+    /// ember, a piece of glass with a bottom of its own.
     private static func tonguePath(
         baseX: CGFloat, baseY: CGFloat, height: CGFloat, halfWidth: CGFloat,
         time: Double, phase: Double, agitation: Double, tempo: Double,
-        sway: CGFloat
+        sway: CGFloat, foot: CGFloat = 0
     ) -> Path {
-        let segments = 8
+        let segments = 10
         var left: [CGPoint] = []
         var right: [CGPoint] = []
         left.reserveCapacity(segments + 1)
@@ -98,6 +118,15 @@ enum FirePainter {
         var path = Path()
         path.move(to: outline[0])
         addSmoothSpine(&path, through: outline)
+        // Back along the foot: straight where it stands on the coals, round
+        // under it where it is a thing of its own — the sides carried on
+        // down into the curve, so the bottom has no corners.
+        let last = outline[outline.count - 1]
+        let sink = halfWidth * 0.75 * foot
+        path.addCurve(
+            to: outline[0],
+            control1: CGPoint(x: last.x, y: baseY + sink),
+            control2: CGPoint(x: outline[0].x, y: baseY + sink))
         path.closeSubpath()
         return path
     }
@@ -130,20 +159,179 @@ enum FirePainter {
         return path
     }
 
+    // MARK: Glass
+
+    /// The dark the glass goes to at its tip.
+    private static let glassDark = Color(hex: "1A0F09")
+
+    /// One piece of glass: its outline, the smaller shape of the light
+    /// inside it, and where it stands.
+    struct Glass {
+        var outline: Path
+        var heart: Path
+        var baseX: CGFloat
+        var baseY: CGFloat
+        var height: CGFloat
+        var halfWidth: CGFloat
+        var sway: CGFloat
+        var foot: CGFloat
+    }
+
+    /// Where an ember's glass stands and how large it is — what the
+    /// fire's last flame is carried to as it becomes one (I46).
+    struct EmberTarget {
+        var foot: CGPoint
+        var height: CGFloat
+        var halfWidth: CGFloat
+        /// The reading's own shape: `EmberView.shape(of:)`.
+        var shape: Double
+    }
+
+    private static func glass(
+        baseX: CGFloat, baseY: CGFloat, height: CGFloat, halfWidth: CGFloat,
+        time: Double, phase: Double, agitation: Double, tempo: Double,
+        sway: CGFloat, foot: CGFloat
+    ) -> Glass {
+        Glass(
+            outline: tonguePath(
+                baseX: baseX, baseY: baseY, height: height, halfWidth: halfWidth,
+                time: time, phase: phase, agitation: agitation, tempo: tempo,
+                sway: sway, foot: foot),
+            heart: tonguePath(
+                baseX: baseX, baseY: baseY, height: height * 0.55, halfWidth: halfWidth * 0.55,
+                time: time, phase: phase + 0.27, agitation: agitation * 0.6, tempo: tempo,
+                sway: sway * 0.55, foot: foot),
+            baseX: baseX, baseY: baseY, height: height, halfWidth: halfWidth,
+            sway: sway, foot: foot)
+    }
+
+    /// An ember's glass, held still: its own shape, a little irregular and
+    /// leaning its own way, with a rounded foot.
+    static func emberGlass(_ target: EmberTarget) -> Glass {
+        glass(
+            baseX: target.foot.x, baseY: target.foot.y,
+            height: target.height, halfWidth: target.halfWidth,
+            time: target.shape * 1.7, phase: target.shape, agitation: 0.3, tempo: 1,
+            sway: target.halfWidth * CGFloat(0.16 * (hash(target.shape + 0.5) - 0.5)),
+            foot: 1)
+    }
+
+    /// Draws pieces of glass, back to front: each body, then the light
+    /// inside all of them, then their polish. `glow` is how bright the
+    /// light inside is — a fire's a little more than an ember's.
+    static func drawGlass(_ pieces: [Glass], in context: inout GraphicsContext, glow: Double, detailed: Bool) {
+        guard !pieces.isEmpty else { return }
+        let widest = pieces.map(\.halfWidth).max() ?? 0
+
+        // The bodies: dark glass, warm at the foot.
+        for piece in pieces {
+            context.fill(
+                piece.outline,
+                with: .linearGradient(
+                    Gradient(stops: [
+                        .init(color: Palette.flameDeep.opacity(0.95), location: 0),
+                        .init(color: Palette.coal.opacity(0.95), location: 0.4),
+                        .init(color: glassDark, location: 1),
+                    ]),
+                    startPoint: CGPoint(x: piece.baseX, y: piece.baseY + piece.halfWidth * 0.9 * piece.foot),
+                    endPoint: CGPoint(x: piece.baseX + piece.sway, y: piece.baseY - piece.height)))
+        }
+        var all = Path()
+        for piece in pieces { all.addPath(piece.outline) }
+
+        // The light inside, held in the glass.
+        var inside = context
+        inside.clip(to: all)
+        inside.blendMode = .plusLighter
+        func hearts(_ layer: inout GraphicsContext) {
+            for piece in pieces {
+                layer.fill(
+                    piece.heart,
+                    with: .linearGradient(
+                        Gradient(colors: [
+                            Palette.flameBright.opacity(min(1, 0.85 * glow)),
+                            Palette.flameCore.opacity(min(1, 0.35 * glow)),
+                            .clear,
+                        ]),
+                        startPoint: CGPoint(x: piece.baseX, y: piece.baseY + piece.halfWidth * 0.5 * piece.foot),
+                        endPoint: CGPoint(x: piece.baseX + piece.sway * 0.55, y: piece.baseY - piece.height * 0.55)))
+            }
+        }
+        if detailed {
+            inside.drawLayer { layer in
+                layer.addFilter(.blur(radius: max(1.5, widest * 0.24)))
+                hearts(&layer)
+            }
+        } else {
+            hearts(&inside)
+        }
+        guard detailed else { return }
+
+        // The polish: a long soft light down the upper left of each, and a
+        // glint near its top.
+        var shine = context
+        shine.clip(to: all)
+        shine.blendMode = .plusLighter
+        shine.drawLayer { layer in
+            layer.addFilter(.blur(radius: max(0.8, widest * 0.07)))
+            for piece in pieces {
+                let x = piece.baseX
+                let lean = piece.sway * 0.6
+                var streak = Path()
+                streak.move(to: CGPoint(x: x - piece.halfWidth * 0.55, y: piece.baseY - piece.height * 0.05))
+                streak.addQuadCurve(
+                    to: CGPoint(x: x - piece.halfWidth * 0.05 + lean, y: piece.baseY - piece.height * 0.78),
+                    control: CGPoint(x: x - piece.halfWidth * 0.6 + lean * 0.6, y: piece.baseY - piece.height * 0.55))
+                layer.stroke(
+                    streak,
+                    with: .color(Palette.flameBright.opacity(0.35)),
+                    style: StrokeStyle(lineWidth: max(1, piece.halfWidth * 0.11), lineCap: .round))
+            }
+        }
+        // One glint, on the piece in front: one on each read as a face.
+        if let piece = pieces.last, piece.halfWidth > 4 {
+            let lean = piece.sway * 0.65
+            shine.fill(
+                Path(ellipseIn: CGRect(
+                    x: piece.baseX - piece.halfWidth * 0.38 + lean, y: piece.baseY - piece.height * 0.72,
+                    width: piece.halfWidth * 0.135, height: piece.halfWidth * 0.19)),
+                with: .color(Palette.text.opacity(0.35)))
+        }
+    }
+
+    // MARK: The fire
+
+    /// `settling` is the fire becoming an ember (§6.5, I46): 0 is the fire
+    /// as it is, and every other caller leaves it there. On the way to 1
+    /// the flames calm and stop moving, the side flames fold into the
+    /// tallest, and the tallest is carried to `ember` — shrinking, rising,
+    /// its foot rounding — while the light draws in and the bed goes dark
+    /// under it. At 1 it is the ember's glass, exactly. One drawing all the
+    /// way, so nothing is cross-faded with anything.
     static func draw(
         in context: inout GraphicsContext, size: CGSize, time: Double,
-        state: FireState, scale: FireScale, coalDepth: Double
+        state: FireState, scale: FireScale, coalDepth: Double,
+        settling: Double = 0, ember: EmberTarget? = nil
     ) {
         let w = size.width
         let h = size.height
         let baseY = h * 0.88
         let cx = w / 2
+        // As the fire settles: the flames calm first, the side flames fold
+        // in with them, and the last is carried to the ember; the bed and
+        // the coals go dark under it, and the light draws in.
+        let calm = smoothstep(0, 0.45, settling)
+        let fold = smoothstep(0, 0.5, settling)
+        let carry = smoothstep(0.35, 1, settling)
+        let bedLeft = 1 - smoothstep(0.05, 0.6, settling)
+        let coalsLeft = 1 - smoothstep(0.2, 0.65, settling)
+        let lightLeft = 1 - smoothstep(0.1, 0.8, settling)
 
         // The fire's footprint grows with the book's scale.
         let footprint = min(w * 0.6, h * 1.05)
 
         // Below this the fire is a glyph (S13/S14): skip blur passes,
-        // sparks, shed blobs and hot air so it stays a crisp, cheap mark.
+        // sparks and hot air so it stays a crisp, cheap mark.
         let detailed = h >= 48
         let banked = state == .banked
 
@@ -167,6 +355,7 @@ enum FirePainter {
             throwRadius = footprint * (0.42 + 0.2 * coalDepth)
             throwOpacity = 0.13
         }
+        let throwDrawnIn = 1 - 0.5 * CGFloat(settling)
         // The light dies to nothing at its own rim, on every side (A74). It
         // was a round gradient cut by a shorter ellipse — 0.62 of its radius
         // above the coals, 0.43 below — so the path ended while the light was
@@ -184,20 +373,20 @@ enum FirePainter {
         // edge was; the centre is as warm as it was.
         let glowBreath = CGFloat(1 + 0.05 * breath(time, 0.13))
         let fullest: CGFloat = 1.05   // breath() never passes 1
-        let across = min(throwRadius, cx / fullest) * glowBreath
-        let up = min(throwRadius * 0.62, baseY / fullest) * glowBreath
-        let down = min(throwRadius * 0.43, (h - baseY) / fullest) * glowBreath
+        let across = min(throwRadius, cx / fullest) * glowBreath * throwDrawnIn
+        let up = min(throwRadius * 0.62, baseY / fullest) * glowBreath * throwDrawnIn
+        let down = min(throwRadius * 0.43, (h - baseY) / fullest) * glowBreath * throwDrawnIn
         let throwLight = GraphicsContext.Shading.radialGradient(
             Gradient(colors: [
-                Palette.flameCore.opacity(throwOpacity),
-                Palette.flameDeep.opacity(throwOpacity * 0.4),
+                Palette.flameCore.opacity(throwOpacity * lightLeft),
+                Palette.flameDeep.opacity(throwOpacity * 0.4 * lightLeft),
                 .clear,
             ]),
             center: .zero,
             startRadius: 0,
             endRadius: across)
         context.blendMode = .plusLighter
-        if across > 0 {
+        if across > 0, lightLeft > 0 {
             for (reach, top) in [(up, -across), (down, 0)] {
                 // A copy carries the squash and leaves the context as it was.
                 var half = context
@@ -225,82 +414,89 @@ enum FirePainter {
         let bedGlow = banked
             ? 0.45 + 0.08 * breath(time / 2.6, 0.71)   // banked coals pulse, very slowly
             : 0.7 + 0.1 * breath(time, 0.44)
-        context.fill(
-            Path(ellipseIn: bedRect),
-            with: .radialGradient(
-                Gradient(colors: [
-                    Palette.coal.opacity(0.85 * bedGlow),
-                    Palette.coalDim.opacity(0.75 * bedGlow),
-                    Palette.coalDim.opacity(0),
-                ]),
-                center: CGPoint(x: cx, y: baseY),
-                startRadius: 0,
-                endRadius: bedWidth / 2))
-
-        for i in 0..<11 {
-            let fi = Double(i)
-            let hx = hash(fi * 12.99 + 4.1)
-            let hy = hash(fi * 78.23 + 9.7)
-            let hr = hash(fi * 39.43 + 2.3)
-            let px = cx + CGFloat(hx - 0.5) * bedWidth * 0.88
-            let py = baseY + CGFloat(hy - 0.5) * bedHeight * 0.5
-            let r = footprint * CGFloat(0.024 + 0.02 * hr) * CGFloat(0.85 + 0.3 * coalDepth)
-            // Lumps near the middle run hotter; each one's glow drifts on
-            // its own long period so the bed never beats in unison.
-            let centerBias = 1 - min(1, abs(Double(px - cx)) / Double(bedWidth / 2))
-            let pulse = 0.5 + 0.5 * breath(time / (2.1 + 2.3 * hash(fi + 31.7)), fi * 0.618)
-            var heat = (0.3 + 0.55 * centerBias) * (0.55 + 0.45 * pulse)
-            if banked { heat *= 0.5 }
+        if bedLeft > 0 {
             context.fill(
-                lumpPath(center: CGPoint(x: px, y: py), radius: r, seed: fi * 5.77),
+                Path(ellipseIn: bedRect),
                 with: .radialGradient(
                     Gradient(colors: [
-                        Palette.coal.opacity(0.55 + 0.4 * heat),
-                        Palette.coalDim.opacity(0.9),
+                        Palette.coal.opacity(0.85 * bedGlow * bedLeft),
+                        Palette.coalDim.opacity(0.75 * bedGlow * bedLeft),
+                        Palette.coalDim.opacity(0),
                     ]),
-                    center: CGPoint(x: px, y: py - r * 0.25),
+                    center: CGPoint(x: cx, y: baseY),
                     startRadius: 0,
-                    endRadius: r * 1.5))
+                    endRadius: bedWidth / 2))
         }
 
-        // Fissures — the heat that shows between coals. Additive, so where
-        // two cross, the bed brightens the way real embers do.
-        context.blendMode = .plusLighter
-        let fissureCount = detailed ? 7 : 4
-        for k in 0..<fissureCount {
-            let fk = Double(k)
-            let x0 = cx + CGFloat(hash(fk * 3.37 + 7.2) - 0.5) * bedWidth * 0.72
-            let y0 = baseY + CGFloat(hash(fk * 5.11 + 2.9) - 0.5) * bedHeight * 0.42
-            let len = bedWidth * CGFloat(0.07 + 0.09 * hash(fk * 9.23 + 1.1))
-            let angle = hash(fk * 4.71 + 6.6) * Double.pi
-            let dx = CGFloat(cos(angle)) * len
-            let dy = CGFloat(sin(angle)) * len * 0.3   // the bed is seen at an angle
-            var fissure = Path()
-            fissure.move(to: CGPoint(x: x0 - dx / 2, y: y0 - dy / 2))
-            fissure.addQuadCurve(
-                to: CGPoint(x: x0 + dx / 2, y: y0 + dy / 2),
-                control: CGPoint(x: x0 + dy * 0.8, y: y0 - dx * 0.15))
-            let flick = 0.5 + 0.5 * breath(time / 1.9, fk * 0.77 + 0.2)
-            let glow = banked ? 0.1 + 0.1 * flick : 0.22 + 0.3 * flick
-            context.stroke(
-                fissure,
-                with: .linearGradient(
-                    Gradient(colors: [
-                        Palette.flameDeep.opacity(glow),
-                        Palette.flameCore.opacity(glow * 0.85),
-                        Palette.flameDeep.opacity(glow * 0.5),
-                    ]),
-                    startPoint: CGPoint(x: x0 - dx / 2, y: y0),
-                    endPoint: CGPoint(x: x0 + dx / 2, y: y0)),
-                style: StrokeStyle(lineWidth: max(0.7, footprint * 0.012), lineCap: .round))
+        // The lumps and the fissures stand in front of the flames' feet,
+        // so the glass sits in the bed rather than on top of it.
+        func drawCoals(_ context: inout GraphicsContext) {
+            for i in 0..<11 where coalsLeft > 0 {
+                let fi = Double(i)
+                let hx = hash(fi * 12.99 + 4.1)
+                let hy = hash(fi * 78.23 + 9.7)
+                let hr = hash(fi * 39.43 + 2.3)
+                let px = cx + CGFloat(hx - 0.5) * bedWidth * 0.88
+                let py = baseY + CGFloat(hy - 0.5) * bedHeight * 0.5
+                let r = footprint * CGFloat(0.024 + 0.02 * hr) * CGFloat(0.85 + 0.3 * coalDepth)
+                // Lumps near the middle run hotter; each one's glow drifts on
+                // its own long period so the bed never beats in unison.
+                let centerBias = 1 - min(1, abs(Double(px - cx)) / Double(bedWidth / 2))
+                let pulse = 0.5 + 0.5 * breath(time / (2.1 + 2.3 * hash(fi + 31.7)), fi * 0.618)
+                var heat = (0.3 + 0.55 * centerBias) * (0.55 + 0.45 * pulse)
+                if banked { heat *= 0.5 }
+                context.fill(
+                    lumpPath(center: CGPoint(x: px, y: py), radius: r, seed: fi * 5.77),
+                    with: .radialGradient(
+                        Gradient(colors: [
+                            Palette.coal.opacity((0.55 + 0.4 * heat) * coalsLeft),
+                            Palette.coalDim.opacity(0.9 * coalsLeft),
+                        ]),
+                        center: CGPoint(x: px, y: py - r * 0.25),
+                        startRadius: 0,
+                        endRadius: r * 1.5))
+            }
+
+            // Fissures — the heat that shows between coals. Additive, so where
+            // two cross, the bed brightens the way real embers do.
+            context.blendMode = .plusLighter
+            let fissureCount = detailed ? 7 : 4
+            for k in 0..<fissureCount where bedLeft > 0 {
+                let fk = Double(k)
+                let x0 = cx + CGFloat(hash(fk * 3.37 + 7.2) - 0.5) * bedWidth * 0.72
+                let y0 = baseY + CGFloat(hash(fk * 5.11 + 2.9) - 0.5) * bedHeight * 0.42
+                let len = bedWidth * CGFloat(0.07 + 0.09 * hash(fk * 9.23 + 1.1))
+                let angle = hash(fk * 4.71 + 6.6) * Double.pi
+                let dx = CGFloat(cos(angle)) * len
+                let dy = CGFloat(sin(angle)) * len * 0.3   // the bed is seen at an angle
+                var fissure = Path()
+                fissure.move(to: CGPoint(x: x0 - dx / 2, y: y0 - dy / 2))
+                fissure.addQuadCurve(
+                    to: CGPoint(x: x0 + dx / 2, y: y0 + dy / 2),
+                    control: CGPoint(x: x0 + dy * 0.8, y: y0 - dx * 0.15))
+                let flick = 0.5 + 0.5 * breath(time / 1.9, fk * 0.77 + 0.2)
+                let glow = (banked ? 0.1 + 0.1 * flick : 0.22 + 0.3 * flick) * bedLeft
+                context.stroke(
+                    fissure,
+                    with: .linearGradient(
+                        Gradient(colors: [
+                            Palette.flameDeep.opacity(glow),
+                            Palette.flameCore.opacity(glow * 0.85),
+                            Palette.flameDeep.opacity(glow * 0.5),
+                        ]),
+                        startPoint: CGPoint(x: x0 - dx / 2, y: y0),
+                        endPoint: CGPoint(x: x0 + dx / 2, y: y0)),
+                    style: StrokeStyle(lineWidth: max(0.7, footprint * 0.012), lineCap: .round))
+            }
+            context.blendMode = .normal
         }
-        context.blendMode = .normal
 
         // --- Ash, when banked ----------------------------------------------
         // Banked is an act, never a lapse — and it must never be mistaken
         // for catching. So: nothing flame-shaped past this point, and the
         // ash blends normal so it genuinely occludes the glow it covers.
         if banked {
+            drawCoals(&context)
             let ashRect = bedRect.insetBy(dx: -bedWidth * 0.06, dy: -bedHeight * 0.14)
             context.fill(
                 Path(ellipseIn: ashRect),
@@ -354,129 +550,62 @@ enum FirePainter {
 
         // Character per state. Steady is the return for reading together
         // and the return is a mood: its turbulence is both damped and
-        // slowed, not merely shrunk. Shed is the chance a given cycle lets
-        // a tip go — burning sheds most, catching only the odd lick that
-        // lifts and dies.
-        let character: (liveliness: Double, agitation: Double, tempo: Double, shed: Double)
+        // slowed, not merely shrunk. Glass moves more smoothly than flame,
+        // so every state's turbulence is a little under what it was.
+        let character: (liveliness: Double, agitation: Double, tempo: Double)
         switch state {
-        case .catching: character = (0.8, 0.85, 1.0, 0.25)
-        case .burning: character = (1.0, 1.0, 1.2, 0.8)
-        case .steady: character = (0.35, 0.45, 0.6, 0.18)
-        case .banked: character = (0, 0, 0, 0)   // unreachable — returned above
+        case .catching: character = (0.8, 0.85 * 0.6, 1.0)
+        case .burning: character = (1.0, 1.0 * 0.6, 1.2)
+        case .steady: character = (0.35, 0.45 * 0.6, 0.6)
+        case .banked: character = (0, 0, 0)   // unreachable — returned above
         }
+        let liveliness = character.liveliness * (1 - calm)
+        let agitation = character.agitation * (1 - calm)
 
-        context.blendMode = .plusLighter
-
-        // Three nested bodies per tongue. The sheath is widest and most
-        // turbulent; the heart is short, calm, and hugs the coals. Every
-        // gradient puts its brightest stop at the base and dies into
-        // translucent deep orange at the tip — heat lives low. Additive
-        // blending is commutative, so the layers can be batched.
-        func drawFlameLayer(
-            _ ctx: inout GraphicsContext,
-            heightF: CGFloat, widthF: CGFloat, agitationF: Double,
-            swayF: CGFloat, phaseShift: Double, stops: [Gradient.Stop]
-        ) {
-            for tongue in tongues {
-                let phase = tongue.phase + phaseShift
-                let sway = CGFloat(breath(time, tongue.phase) * 0.055 * character.liveliness)
-                    * footprint * swayF
-                let rise = 1 + breath(time * 1.13, phase + 0.3) * 0.11 * character.liveliness
-                let height = tongue.height * footprint * CGFloat(rise) * heightF
-                let halfW = tongue.width * footprint / 2 * widthF
-                let baseX = cx + tongue.x * footprint
-                let path = tonguePath(
-                    baseX: baseX, baseY: baseY, height: height, halfWidth: halfW,
-                    time: time, phase: phase,
-                    agitation: character.agitation * agitationF,
-                    tempo: character.tempo, sway: sway)
-                ctx.fill(
-                    path,
-                    with: .linearGradient(
-                        Gradient(stops: stops),
-                        startPoint: CGPoint(x: baseX, y: baseY),
-                        endPoint: CGPoint(x: baseX + sway, y: baseY - height)))
+        // The tallest stands in front, and is the one a settling fire keeps.
+        let order = tongues.indices.sorted { tongues[$0].height < tongues[$1].height }
+        let kept = order.last
+        var pieces: [Glass] = []
+        for i in order {
+            let tongue = tongues[i]
+            let sway = CGFloat(breath(time, tongue.phase) * 0.055 * liveliness) * footprint
+            let rise = 1 + breath(time * 1.13, tongue.phase + 0.3) * 0.11 * liveliness
+            var height = tongue.height * footprint * CGFloat(rise)
+            var halfWidth = tongue.width * footprint / 2
+            var baseX = cx + tongue.x * footprint
+            if i != kept {
+                // Folding into the one that stays.
+                height *= CGFloat(1 - fold)
+                halfWidth *= CGFloat(1 - 0.5 * fold)
+                baseX = mix(baseX, cx, fold)
+                guard height > 0.5 else { continue }
+            } else if let ember, carry > 0 {
+                // Carried to the ember: its size, its place, its own shape.
+                let target = emberGlass(ember)
+                pieces.append(glass(
+                    baseX: mix(baseX, target.baseX, carry),
+                    baseY: mix(baseY, target.baseY, carry),
+                    height: mix(height, target.height, carry),
+                    halfWidth: mix(halfWidth, target.halfWidth, carry),
+                    time: ember.shape * 1.7, phase: ember.shape, agitation: 0.3 * carry, tempo: 1,
+                    sway: target.sway * CGFloat(carry), foot: mix(0.3, 1, carry)))
+                continue
             }
+            pieces.append(glass(
+                baseX: baseX, baseY: baseY, height: height, halfWidth: halfWidth,
+                time: time, phase: tongue.phase, agitation: agitation,
+                tempo: character.tempo, sway: sway, foot: 0.3))
         }
-
-        let sheathStops: [Gradient.Stop] = [
-            .init(color: Palette.flameDeep.opacity(0.55), location: 0),
-            .init(color: Palette.flameDeep.opacity(0.32), location: 0.45),
-            .init(color: Palette.flameDeep.opacity(0), location: 1),
-        ]
-        let bodyStops: [Gradient.Stop] = [
-            .init(color: Palette.flameCore.opacity(0.85), location: 0),
-            .init(color: Palette.flameCore.opacity(0.5), location: 0.5),
-            .init(color: Palette.flameDeep.opacity(0), location: 1),
-        ]
-        let heartStops: [Gradient.Stop] = [
-            .init(color: Palette.flameBright.opacity(0.95), location: 0),
-            .init(color: Palette.flameCore.opacity(0.55), location: 0.55),
-            .init(color: Palette.flameCore.opacity(0), location: 1),
-        ]
-
-        if detailed {
-            // Only the sheath is softened; the heart stays crisp. One
-            // shared layer keeps the blur to a single offscreen pass.
-            context.drawLayer { layer in
-                layer.addFilter(.blur(radius: 2.2))
-                layer.blendMode = .plusLighter
-                drawFlameLayer(
-                    &layer, heightF: 1, widthF: 1, agitationF: 1,
-                    swayF: 1, phaseShift: 0, stops: sheathStops)
-            }
-        } else {
-            drawFlameLayer(
-                &context, heightF: 1, widthF: 1, agitationF: 1,
-                swayF: 1, phaseShift: 0, stops: sheathStops)
-        }
-        drawFlameLayer(
-            &context, heightF: 0.72, widthF: 0.68, agitationF: 0.65,
-            swayF: 0.8, phaseShift: 0.14, stops: bodyStops)
-        drawFlameLayer(
-            &context, heightF: 0.42, widthF: 0.42, agitationF: 0.35,
-            swayF: 0.55, phaseShift: 0.27, stops: heartStops)
-
-        // --- Tip shedding ---------------------------------------------------
-        // Now and then a tongue lets a small body go: it lifts, shrinks and
-        // dissolves. Whether a given cycle sheds is a hash gate on the
-        // cycle number, and the blob's envelope is zero at both ends of its
-        // life — nothing pops, and a frozen frame (§11) can never catch a
-        // half-born artifact.
-        if detailed && character.shed > 0 {
-            for tongue in tongues {
-                let period = 3.6 + 2.9 * hash(tongue.phase * 71.3)
-                let cycle = (time + tongue.phase * 47.1) / period
-                let turn = cycle.rounded(.down)
-                guard hash(turn + tongue.phase * 91.7) < character.shed else { continue }
-                let age = cycle - turn
-                let lift = CGFloat(age) * footprint * 0.24
-                let blobX = cx + tongue.x * footprint
-                    + CGFloat(breath(time, tongue.phase) * 0.055 * character.liveliness) * footprint
-                    + CGFloat(breath(time * 0.9, tongue.phase + 2.4) * 0.02) * footprint
-                let blobY = baseY - tongue.height * footprint * 0.9 - lift
-                let r = footprint * CGFloat(0.022 + 0.04 * Double(tongue.width))
-                    * CGFloat(1 - 0.6 * age)
-                let fade = (1 - age) * min(1, age * 5)
-                context.fill(
-                    Path(ellipseIn: CGRect(
-                        x: blobX - r, y: blobY - r * 1.2, width: r * 2, height: r * 2.4)),
-                    with: .radialGradient(
-                        Gradient(colors: [
-                            Palette.flameCore.opacity(0.5 * fade),
-                            Palette.flameDeep.opacity(0.28 * fade),
-                            Palette.flameDeep.opacity(0),
-                        ]),
-                        center: CGPoint(x: blobX, y: blobY),
-                        startRadius: 0,
-                        endRadius: r * 1.4))
-            }
-        }
+        // A fire's light is a little brighter than an ember's, and breathes.
+        let fireGlow = 1.05 + 0.08 * breath(time * 0.8, 0.21)
+        drawGlass(pieces, in: &context, glow: fireGlow * (1 - 0.15 * carry), detailed: detailed)
+        drawCoals(&context)
 
         // --- Sparks ---------------------------------------------------------
         // A few motes born on the bed that rise, wander on the breath,
         // shrink and cool from bright to deep. Deterministic per (i, time);
-        // subtle by construction — never a fountain.
+        // subtle by construction — never a fountain. A settling fire lets
+        // its last ones go.
         let sparkCount: Int
         switch state {
         case .burning: sparkCount = 6
@@ -484,7 +613,8 @@ enum FirePainter {
         case .catching: sparkCount = 2
         case .banked: sparkCount = 0
         }
-        if detailed {
+        context.blendMode = .plusLighter
+        if detailed && calm < 1 {
             for i in 0..<sparkCount {
                 let fi = Double(i)
                 let period = 2.7 + 2.6 * hash(fi * 7.31 + 5.2)
@@ -494,7 +624,7 @@ enum FirePainter {
                 let x = born + CGFloat(breath(time * 0.7, fi * 0.83) * 0.05 * age) * footprint
                 let y = baseY - bedHeight * 0.2 - riseH * CGFloat(age)
                 let r = CGFloat(max(0.5, (0.9 + 0.7 * hash(fi * 17.3 + 3.4)) * (1 - 0.55 * age)))
-                let fade = (1 - age) * min(1, age * 7)
+                let fade = (1 - age) * min(1, age * 7) * (1 - calm)
                 context.fill(
                     Path(ellipseIn: CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2)),
                     with: .radialGradient(
@@ -514,7 +644,7 @@ enum FirePainter {
         // peak. The book title sits right below the fire, so this must
         // never read as smoke or distortion — only a suggestion that the
         // air up there is warm. Room-size fires only.
-        if detailed && h >= 120 {
+        if detailed && h >= 120 && calm < 1 {
             let crest = tongues.map { $0.height }.max() ?? 0.5
             context.drawLayer { layer in
                 layer.addFilter(.blur(radius: 3))
@@ -526,7 +656,7 @@ enum FirePainter {
                     let wy = baseY - crest * footprint - CGFloat(age) * footprint * 0.22
                     let ww = footprint * 0.3
                     let wh = footprint * 0.1
-                    let fade = 0.035 * sin(Double.pi * age)
+                    let fade = 0.035 * sin(Double.pi * age) * (1 - calm)
                     layer.fill(
                         Path(ellipseIn: CGRect(
                             x: wx - ww / 2, y: wy - wh / 2, width: ww, height: wh)),

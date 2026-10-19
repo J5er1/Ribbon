@@ -43,6 +43,8 @@ enum Flow: Hashable {
     case seat(room: UUID, person: UUID)
     /// A finished reading's ember: on a shelf, and on its own record.
     case ember(UUID)
+    /// A room's jar, and the page of what it holds (I46).
+    case jar(UUID)
 }
 
 private struct FlowSpaceKey: EnvironmentKey {

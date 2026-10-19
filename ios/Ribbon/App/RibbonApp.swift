@@ -211,6 +211,11 @@ struct PersonRoute: Hashable {
     var from: Flow? = nil
 }
 
+/// The room's jar, opened (I46).
+struct JarRoute: Hashable {
+    var roomID: UUID
+}
+
 struct RootView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -243,6 +248,9 @@ struct RootView: View {
     @State private var pullHold = 0
     /// What the room's pushed pages grow out of (I45): a seat, an ember.
     @Namespace private var flowSpace
+    /// How far the page is held up by the sweep from the Wave, in points
+    /// (I46): 0 where it lies, the screen's height when it has gone.
+    @State private var bookLift: CGFloat = 0
 
     var body: some View {
         Group {
@@ -337,6 +345,13 @@ struct RootView: View {
                         .flows(from: .ember(readingID))
                     }
                 }
+                .navigationDestination(for: JarRoute.self) { route in
+                    if let jarRoom = model.room(route.roomID) {
+                        // It opens out of the jar on the shelf.
+                        JarScreen(room: jarRoom)
+                            .flows(from: .jar(route.roomID))
+                    }
+                }
                 .navigationDestination(for: PersonRoute.self) { route in
                     if let personRoom = model.state.rooms.first(where: { $0.id == route.roomID }) {
                         PersonScreen(
@@ -380,13 +395,32 @@ struct RootView: View {
                                 // comes up (I45): never the one rising
                                 // through the other.
                                 closeBook { chooserRequested = true }
-                            })
+                            },
+                            onLift: { up in
+                                // Under reduce motion a page the size of the
+                                // screen does not travel (§11): it waits, and
+                                // fades when the sweep is far enough.
+                                if !reduceMotion { bookLift = up }
+                            },
+                            onLiftCancelled: { speed in
+                                withAnimation(RibbonMotion.handled(rate: speed, towards: -bookLift)) { bookLift = 0 }
+                            },
+                            onCloseUp: { speed in closeUp(speed, height: proxy.size.height) })
                         // One page per book. A notification can open another
                         // book over this one (S19), and without its own
                         // identity the new book would inherit this one's
                         // typeset chapters, its landing, and where it opened.
                         .id(reading.id)
-                        .offset(y: openReading == nil ? (1 - bookPull) * proxy.size.height : 0)
+                        .offset(y: (openReading == nil ? (1 - bookPull) * proxy.size.height : 0) - bookLift)
+                        // Lifted, it is a card: its corners round as it
+                        // leaves, and the room shows round them. A mask as
+                        // big as the screen, not a clip to the page's frame,
+                        // which would cut away its ground under the clock
+                        // and the home bar even lying still.
+                        .mask {
+                            RoundedRectangle(cornerRadius: min(1, bookLift / 80) * 44, style: .continuous)
+                                .ignoresSafeArea()
+                        }
                         // The page goes back down the way it came when the
                         // book closes. Under reduce motion a page the size
                         // of the screen does not travel: it fades in where
@@ -516,6 +550,30 @@ struct RootView: View {
             openReading = reading
         } completion: {
             then?()
+        }
+    }
+
+    /// The book closed by the sweep up from the Wave (I46): it goes on up
+    /// and off the top at the speed the finger let it go at, and the room is
+    /// there under it. Gone, it leaves the tree without the fall to the foot
+    /// the other ways out take. Under reduce motion, a fade.
+    private func closeUp(_ speed: CGFloat, height: CGFloat) {
+        guard !reduceMotion else {
+            bookLift = 0
+            closeBook()
+            return
+        }
+        let away = height * 1.05
+        withAnimation(RibbonMotion.cover(rate: speed, towards: away - bookLift)) {
+            bookLift = away
+        } completion: {
+            var quiet = Transaction()
+            quiet.disablesAnimations = true
+            withTransaction(quiet) {
+                openReading = nil
+                bookLift = 0
+            }
+            openTarget = nil
         }
     }
 

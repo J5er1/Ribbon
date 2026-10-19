@@ -1014,9 +1014,13 @@ final class AppModel {
         quietDays(for: room).first { $0.bankedInterval?.contains(now) == true }
     }
 
-    /// Finishing a book (§6.5): the handiwork becomes an ember.
+    /// Finishing a book (§6.5): the handiwork becomes an ember. Once: a
+    /// book somebody else in the room has already put on the shelf keeps
+    /// the day they did it, however late this phone puts it there (I46).
     func finishReading(_ reading: Reading) {
-        guard let index = state.readings.firstIndex(where: { $0.id == reading.id }) else { return }
+        guard let index = state.readings.firstIndex(where: { $0.id == reading.id }),
+              state.readings[index].finishedAt == nil
+        else { return }
         state.readings[index].finishedAt = Date()
         persist()
         pushReadingRemote(state.readings[index])
