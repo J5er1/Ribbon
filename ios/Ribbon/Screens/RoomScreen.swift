@@ -39,6 +39,9 @@ struct RoomScreen: View {
     var onAbandonOpening: (CGFloat) -> Void
 
     @State private var showChooser = false
+    /// The book just chosen, begun, and waiting for the chooser to have
+    /// gone before it opens (I45).
+    @State private var chosen: Reading?
     @State private var showInviteShare = false
     @State private var showInkPicker = false
 
@@ -120,11 +123,18 @@ struct RoomScreen: View {
                 showChooser = true
             }
         }
-        .sheet(isPresented: $showChooser) {
+        .sheet(isPresented: $showChooser, onDismiss: {
+            // The chooser goes down, the new fire is lit on the hearth it
+            // uncovers, and then the book comes up (I45): one movement and
+            // then the next, where the sheet used to go down through a page
+            // on its way up.
+            guard let started = chosen else { return }
+            chosen = nil
+            onOpenReading(started, nil)
+        }) {
             BookChooserSheet(room: room) { bookID in
+                chosen = model.startReading(bookID: bookID, in: room)
                 showChooser = false
-                let started = model.startReading(bookID: bookID, in: room)
-                onOpenReading(started, nil)
             }
         }
         .sheet(isPresented: $showInviteShare) {
@@ -551,7 +561,8 @@ private struct Seat: View {
             if present { return Copy.personIsReading(firstName(name.name)) }
             return name.name
         }
-        NavigationLink(value: PersonRoute(personID: personID, roomID: room.id)) {
+        let flow = Flow.seat(room: room.id, person: personID)
+        NavigationLink(value: PersonRoute(personID: personID, roomID: room.id, from: flow)) {
             ZStack {
                 PresenceRing(shown: present, half: idle)
                     .frame(width: face + (RoomMetrics.ring + RoomMetrics.ringGap) * 2,
@@ -566,6 +577,9 @@ private struct Seat: View {
                     size: face,
                     image: model.portrait(personID))
                 .accessibilityHidden(true)
+                // Their page opens out of their face, and goes back into it
+                // (I45).
+                .flowSource(flow, cornerRadius: face / 2)
             }
             .frame(width: touch, height: touch)
             .contentShape(Circle())

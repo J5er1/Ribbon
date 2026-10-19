@@ -6385,6 +6385,98 @@ I44. **The visual pass, on the iPhone (A74).** What only the iPhone had
     card and the chapters' muted numbers only in code. None has run on a
     phone.
 
+I45. **One screen into the next, on the iPhone (A16, A22).** Owner: *"a
+    smaller polish update for continuity between screens on ios"*. A look
+    at every way the iPhone goes from one screen to another found four
+    seams, and the owner took all four.
+
+    - **The way back by the edge.** Every page the room or the menu pushes
+      draws its own bar and hides the system's (A29), and a navigation
+      controller with its bar hidden refuses its edge swipe. No pushed page
+      on the iPhone could be swiped back from — a person, a record, Text,
+      What's new, the finding pages — only tapped back from by the chevron.
+      Seen in the simulator: on Angela's page a swipe from the edge and one
+      across the middle both did nothing. `EdgeSwipeBack` (Flow.swift),
+      drawn once behind each stack's first screen, gives the swipe a
+      delegate that lets it begin wherever there is a page to go back to
+      and nothing is already moving, and never on a stack's first screen,
+      where a swipe back takes hold of nothing and leaves the stack deaf to
+      taps. The delegate is held by the navigation controller itself: a
+      gesture holds its delegate weakly, and one that went first would
+      leave the swipe free to begin on the room. The edge only. The
+      full-width swipe newer iPhones offer is left as the hidden bar leaves
+      it, so a slider held sideways in Text is never taken for a way back.
+
+    - **A face opens into its person, and an ember into its record.** A16
+      says the iPhone "gets it from a zoom navigation transition tied to
+      the tapped view". It never did: no zoom was ever built, and every push
+      was the system's slide from the right, so A22's flow was Android's
+      alone. A seat at the hearth now opens that person's page out of their
+      face, which starts as a circle, and the page goes back into it; an
+      ember on the room's shelf, and one on your shelf in You, opens its
+      record out of itself. It is the system's zoom, which §12.1 allows — a
+      navigation morph is the system behaving as the system — and the way
+      back comes with it: the chevron, the edge, or a drag down shrinks
+      the page into where it came from. Android carries the face alone as a
+      shared element; the iPhone grows the whole page from it, the
+      platform's way of saying the same thing. The names are in one place
+      (`Flow`), for A22's reason.
+
+      Only from where it was tapped. A person's page opened from the
+      presence line, from the faces on a record or from finding is pushed
+      as before: `PersonRoute` carries its seat only when a seat was
+      tapped, because a page grown from a seat hidden under a record would
+      come out of nowhere anyone can see. A22's third flow, a settings
+      row's words rising into the heading, is not carried: a row growing
+      into a whole screen is a heavier movement than a heading rising out
+      of a row, and the zoom is the only cross-push morph the system has.
+      Under reduce motion nothing grows, and the push is the push it was
+      (§11). For a frame or two the zoom starts as the record's own ground,
+      a faint rectangle round the oval of the ember; left.
+
+    - **One movement at a time where the book changes hands.** Four
+      hand-offs ran two movements at once, in opposite directions:
+      - A verse opened from inside the menu (a note on a person's page, a
+        quote on a record from your shelf), or a notification tapped with
+        the menu open: the menu went down while the page came up behind
+        it. The book now opens under the menu, where nothing can see it
+        move, and the menu's leaving is the one movement — it goes, and the
+        page is there.
+      - "Read it again" on a record: the record slid away to the right as
+        the page came up. The page comes up over the record now, and the
+        record goes from under it, without a movement, once the page is all
+        there is to see; closing the book is the room, as before.
+      - "Start another" at a finishing: the page went down while the
+        chooser came up through it. The page settles, then the chooser
+        comes.
+      - A book chosen in the chooser: the sheet went down through the page
+        on its way up. The sheet goes, the new fire is lit on the hearth it
+        uncovers, and then the book comes up.
+
+      These are the iPhone's alone: Android still runs each pair at once.
+      Whether it should follow is the owner's call (still-to-do §6).
+
+    - **A short page keeps its column.** `RibbonScreen`'s column was as
+      wide as its longest line and centred in the readable width, so a page
+      with little on it — a person who has left nothing yet — stood a third
+      of the way across, its title and face 135 points in, where every
+      other page starts at the margin. The column is the readable width
+      now, whatever is in it. Seen on Angela's page.
+
+    **Not in What's new, on the owner's word** ("Leave it out, like I44").
+    I44's argument holds: the list is one list for both phones, and three
+    of these bring the iPhone level with what Android already does — its
+    back gesture, its flows, its columns — so told on both phones each
+    would be news on one and untrue on the other. The fourth is new on the
+    iPhone and only there.
+
+    The iPhone builds with all of it. The way back, the faces, the embers
+    and the column were seen in the simulator on iOS 27 — the zooms
+    recorded both ways, frame by frame. None of the four hand-offs was
+    seen: each opens or starts a book, and the only room on the simulator
+    is the owner's, where opening a book moves a ribbon and feeds the fire.
+    Reduce motion was not tried. None has run on a phone.
+
 ## Licensed translations (decided: API.Bible)
 
 Open question §16.8 is now part-decided: **NKJV plus two undecided

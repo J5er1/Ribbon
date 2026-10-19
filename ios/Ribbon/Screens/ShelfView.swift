@@ -109,6 +109,8 @@ struct ShelfView: View {
                     NavigationLink(value: reading.id) {
                         VStack(spacing: 6) {
                             EmberView(scale: reading.handiwork.scale)
+                                // Its record opens out of it (I45).
+                                .flowSource(.ember(reading.id))
                             SmallCaps(Bible.book(id: reading.bookID)?.name ?? reading.bookID, size: 12)
                         }
                         .contentShape(Rectangle())

@@ -429,6 +429,36 @@ Being found (A72), on both phones (the migration is on the live project):
 - What's new: "A door, if you want one", the fourth face let in and the
   switch with its line; reduce motion holds both at their ends.
 
+One screen into the next (I45), iPhone only. The way back, the faces, the
+embers and the column were seen in a simulator; the hand-offs were not,
+because each opens or starts a book:
+
+- Swipe back from the edge on every pushed page: a person, a record, Text,
+  Notifications, What's new from You, the finding pages, a join. On the
+  room, and on You or the room's menu, a swipe from the edge does nothing,
+  and the next tap still lands. Hold a slider in Text near the edge: it
+  moves, the page stays.
+- Tap a face at the hearth: their page grows out of the face; the
+  chevron, the edge or a drag down puts it back. The presence line and a
+  record's faces open the same page with the plain push.
+- Tap an ember on the room's shelf, and one on your shelf in You: the
+  record grows out of it, and goes back into it.
+- From the menu, open a note on a person's page, or a quote on a record
+  from your shelf: the menu goes down and the page is already there at
+  the verse, its mark breathing — nothing coming up behind the menu. The
+  same with a notification tapped while the menu is open.
+- "Read it again" on a record: the book comes up over the record, and
+  closing it is the room, not the record.
+- Finish a book and "Start another": the page settles, then the chooser
+  comes up. Choose: the chooser goes, the new fire is on the hearth, then
+  the book comes up.
+- Reduce motion: nothing grows — a face or an ember opens its page with
+  the plain push — and the hand-offs fade in the same order.
+- A person who has left nothing in a room: their name and face at the
+  margin, like every other page.
+- Android still runs each of those four hand-offs as two movements at
+  once. The owner to say whether it should follow the iPhone.
+
 ## 7. The New King James's usage reporting, and its proxy
 
 API.Bible asks apps to report each chapter shown (FUMS) with the

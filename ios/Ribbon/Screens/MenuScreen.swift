@@ -63,6 +63,8 @@ struct MenuScreen: View {
     @State private var stagedRoom: Room?
     /// A room's shelf, written to a file and being handed on (A73).
     @State private var keeping: KeptShelf?
+    /// What the menu's pushed pages grow out of (I45): an ember on You.
+    @Namespace private var flowSpace
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -99,6 +101,7 @@ struct MenuScreen: View {
                         onEmber: { readingID in path.append(MenuRoute.ember(readingID)) })
                 }
             }
+            .background(EdgeSwipeBack())
             .navigationDestination(for: MenuRoute.self) { route in
                 destination(route)
             }
@@ -120,6 +123,7 @@ struct MenuScreen: View {
                 }
             }
         }
+        .environment(\.flowSpace, flowSpace)
         .sheet(isPresented: $showNewRoom, onDismiss: {
             // Naming and inviting are two steps that should feel like one
             // (S15) — the invite follows the naming, both over the menu, and
@@ -223,8 +227,8 @@ struct MenuScreen: View {
                 // left off: reading the book again belongs to the room it
                 // was read in, not to you (A67). A quoted verse opens the
                 // book over its own room, the way a tapped notification
-                // does — the menu goes, the room comes, the page opens.
-                // A room you have left keeps its books on your shelf
+                // does — the book opens under the menu, and the menu goes
+                // (I45). A room you have left keeps its books on your shelf
                 // (§6.8), but there is no room any more to open them in,
                 // and a page opened over another room would be read and
                 // written as that room's: its verses are quoted, not
@@ -237,6 +241,8 @@ struct MenuScreen: View {
                             model.pendingDestination = .verse(roomID: reading.roomID, readingID: reading.id, verse: verse)
                         }
                         : nil)
+                // The record grows out of its ember on your shelf (I45).
+                .flows(from: .ember(readingID))
             }
         }
     }
@@ -871,6 +877,8 @@ private struct YourShelfSection: View {
         } label: {
             VStack(spacing: 6) {
                 EmberView(scale: reading.handiwork.scale)
+                    // Its record opens out of it (I45).
+                    .flowSource(.ember(reading.id))
                     .alignmentGuide(.emberFloor) { dimensions in
                         dimensions[VerticalAlignment.bottom]
                     }

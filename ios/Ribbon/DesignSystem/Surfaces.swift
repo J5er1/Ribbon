@@ -530,6 +530,12 @@ struct RibbonScreen<Content: View, Actions: View>: View {
                 content
                     .padding(.top, 24)
             }
+            // As wide as the column whatever is in it. A page with little on
+            // it — a person who has left nothing yet — was as narrow as its
+            // longest line, and the column centred it: its title and face
+            // stood a third of the way across, where every other page starts
+            // at the margin (I45).
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, RibbonShape.screenMargin)
             .padding(.bottom, 40)
             .readableColumn()

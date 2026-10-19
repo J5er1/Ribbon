@@ -206,6 +206,9 @@ struct RibbonApp: App {
 struct PersonRoute: Hashable {
     var personID: UUID
     var roomID: UUID
+    /// What the page grows out of (I45): the seat that was tapped. Nil
+    /// for a page opened from a line, a record or a search, which pushes.
+    var from: Flow? = nil
 }
 
 struct RootView: View {
@@ -238,6 +241,8 @@ struct RootView: View {
     /// pull is not taken out from under the next one: a quick re-grab
     /// lands while the last release is still settling.
     @State private var pullHold = 0
+    /// What the room's pushed pages grow out of (I45): a seat, an ember.
+    @Namespace private var flowSpace
 
     var body: some View {
         Group {
@@ -304,6 +309,7 @@ struct RootView: View {
                             if openReading == nil, pullHold == hold { pulling = nil }
                         }
                     })
+                .background(EdgeSwipeBack())
                 .navigationDestination(for: UUID.self) { readingID in
                     if let reading = model.state.readings.first(where: { $0.id == readingID }) {
                         EmberRecordScreen(
@@ -315,10 +321,20 @@ struct RootView: View {
                                 openBook(reading, at: .verse(verse))
                             },
                             onReadAgain: { bookID in
-                                navigationPath = NavigationPath()
                                 let new = model.startReading(bookID: bookID, in: room)
-                                openBook(new, at: nil)
+                                // The book comes up over the record, and the
+                                // record goes from under it once the page is
+                                // all there is to see (I45). Popping it as the
+                                // page rose sent one screen right while the
+                                // other came up.
+                                openBook(new, at: nil) {
+                                    var quiet = Transaction()
+                                    quiet.disablesAnimations = true
+                                    withTransaction(quiet) { navigationPath = NavigationPath() }
+                                }
                             })
+                        // The record grows out of its ember on the shelf.
+                        .flows(from: .ember(readingID))
                     }
                 }
                 .navigationDestination(for: PersonRoute.self) { route in
@@ -334,10 +350,12 @@ struct RootView: View {
                                     openBook(reading, at: .verse(verse))
                                 }
                             })
+                        .flows(from: route.from)
                     }
                 }
                 .toolbarVisibility(.hidden, for: .navigationBar)
             }
+            .environment(\.flowSpace, flowSpace)
             .overlay {
                 // The reading is a full-screen cover in spirit, but drawn
                 // in-tree so the closing drag settles like a book (S02) —
@@ -355,11 +373,13 @@ struct RootView: View {
                             // still rising under a pull neither follows
                             // anyone nor tells anyone where it is.
                             isOpen: openReading != nil,
-                            onClose: closeBook,
-                            onFinished: closeBook,
+                            onClose: { closeBook() },
+                            onFinished: { closeBook() },
                             onStartAnother: {
-                                closeBook()
-                                chooserRequested = true
+                                // The page goes down, and then the chooser
+                                // comes up (I45): never the one rising
+                                // through the other.
+                                closeBook { chooserRequested = true }
                             })
                         // One page per book. A notification can open another
                         // book over this one (S19), and without its own
@@ -424,6 +444,11 @@ struct RootView: View {
                 // way; a book open over another room closes.
                 guard let destination else { return }
                 model.pendingDestination = nil
+                // With the menu over the room, the book opens under it where
+                // nothing can see it move, and the menu going is the one
+                // movement: it leaves, and the page is there (I45). It used
+                // to go down while the page came up behind it.
+                let underTheMenu = menu != nil
                 menu = nil
                 if destination.roomID != model.currentRoom?.id {
                     openReading = nil
@@ -433,13 +458,13 @@ struct RootView: View {
                 switch destination {
                 case .verse(_, let readingID, let verse):
                     if let reading = model.state.readings.first(where: { $0.id == readingID }) {
-                        openBook(reading, at: .verse(verse))
+                        openBook(reading, at: .verse(verse), still: underTheMenu)
                     }
                 case .cards(_, let readingID, let chapter):
                     if let reading = model.state.readings.first(where: { $0.id == readingID }) {
                         // The card itself, at the foot of its chapter — not
                         // the chapter's head, a whole chapter above it.
-                        openBook(reading, at: .card(chapter: chapter))
+                        openBook(reading, at: .card(chapter: chapter), still: underTheMenu)
                     }
                 case .room:
                     break
@@ -472,14 +497,36 @@ struct RootView: View {
     /// comes up from the foot of the room on the cover spring, the same
     /// movement from every door (a pushed screen used to send it up on a
     /// quicker curve than the room did); under reduce motion it fades in.
-    private func openBook(_ reading: Reading, at target: ReadingPlace?) {
+    ///
+    /// `still` is a book opened under something that covers the room — the
+    /// menu — whose leaving shows it. `then` runs once the page is up.
+    private func openBook(
+        _ reading: Reading, at target: ReadingPlace?, still: Bool = false,
+        then: (() -> Void)? = nil
+    ) {
         openTarget = target
-        withAnimation(reduceMotion ? RibbonMotion.settle : RibbonMotion.cover) { openReading = reading }
+        guard !still else {
+            var quiet = Transaction()
+            quiet.disablesAnimations = true
+            withTransaction(quiet) { openReading = reading }
+            then?()
+            return
+        }
+        withAnimation(reduceMotion ? RibbonMotion.settle : RibbonMotion.cover) {
+            openReading = reading
+        } completion: {
+            then?()
+        }
     }
 
     /// The book closing, whichever way it was closed: settling like a book.
-    private func closeBook() {
-        withAnimation(RibbonMotion.settle) { openReading = nil }
+    /// `then` runs once it has settled.
+    private func closeBook(then: (() -> Void)? = nil) {
+        withAnimation(RibbonMotion.settle) {
+            openReading = nil
+        } completion: {
+            then?()
+        }
         openTarget = nil
     }
 
