@@ -43,9 +43,22 @@ private struct TileModifier: ViewModifier {
     var recessed: Bool
     var edge: Bool
     @Environment(\.tileShape) private var tile
+    /// Paper, or on a page of settings the redesign's glass (I47).
+    @Environment(\.tileFinish) private var finish
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     func body(content: Content) -> some View {
         let shape = tile.shape
+        if finish == .glass, !recessed, !reduceTransparency {
+            content
+                .clipShape(shape)
+                .background { GlassTile(shape: shape) }
+        } else {
+            paper(content, shape: shape)
+        }
+    }
+
+    private func paper(_ content: Content, shape: some InsettableShape) -> some View {
         content
             .clipShape(shape)
             .background {
@@ -564,6 +577,8 @@ struct RibbonScreen<Content: View, Actions: View>: View {
             // reach a tile passing under it half seen.
             .contentShape(Rectangle())
         }
+        // A page's tiles are glass (I47), as the foot of the room is.
+        .environment(\.tileFinish, .glass)
         .room()
         .toolbar(.hidden, for: .navigationBar)
     }

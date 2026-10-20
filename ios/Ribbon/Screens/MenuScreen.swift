@@ -36,9 +36,6 @@ private enum MenuRoute: Hashable {
     case whatsNew
     case joinWithInvite
     case join(UUID)
-    /// One ember on your shelf (A67), by its reading: the book's record,
-    /// inside You rather than over the room.
-    case ember(UUID)
 }
 
 /// A room whose invite is being handed out.
@@ -96,9 +93,9 @@ struct MenuScreen: View {
                         onClose: { dismiss() },
                         onText: { path.append(MenuRoute.text) },
                         onDownloads: { path.append(MenuRoute.downloads) },
+                        onNotifications: { path.append(MenuRoute.notifications) },
                         onWhatsNew: { path.append(MenuRoute.whatsNew) },
-                        onBeingFound: { path.append(FindRoute.beingFound) },
-                        onEmber: { readingID in path.append(MenuRoute.ember(readingID)) })
+                        onBeingFound: { path.append(FindRoute.beingFound) })
                 }
             }
             .background(EdgeSwipeBack())
@@ -221,29 +218,6 @@ struct MenuScreen: View {
                 wayOut: Copy.back)
             .id(token)
             .toolbar(.hidden, for: .navigationBar)
-        case .ember(let readingID):
-            if let reading = model.state.readings.first(where: { $0.id == readingID }) {
-                // The record the room's shelf opens (S11), with one thing
-                // left off: reading the book again belongs to the room it
-                // was read in, not to you (A67). A quoted verse opens the
-                // book over its own room, the way a tapped notification
-                // does — the book opens under the menu, and the menu goes
-                // (I45). A room you have left keeps its books on your shelf
-                // (§6.8), but there is no room any more to open them in,
-                // and a page opened over another room would be read and
-                // written as that room's: its verses are quoted, not
-                // offered.
-                let opensVerses = model.room(reading.roomID) != nil
-                EmberRecordScreen(
-                    reading: reading,
-                    onOpenVerse: opensVerses
-                        ? { verse in
-                            model.pendingDestination = .verse(roomID: reading.roomID, readingID: reading.id, verse: verse)
-                        }
-                        : nil)
-                // The record grows out of its ember on your shelf (I45).
-                .flows(from: .ember(readingID))
-            }
         }
     }
 }
@@ -265,138 +239,272 @@ private struct RoomMenuScreen: View {
     /// A room's shelf to hand on: one that has just closed, or an older one.
     var onKeep: (Room) -> Void
 
+    @State private var showInkPicker = false
+
+    /// The room, as a page of its own (I47), set as You is: your rooms'
+    /// ribbons hanging from the top of the screen, each one a room to go to;
+    /// the room's title page, its name and its people; what it asks of you;
+    /// how it is set, as sentences; its own controls; and the way to other
+    /// rooms. The invite and the way out are at the foot, on the glass.
     var body: some View {
-        RibbonScreen(
-            title: model.displayName(of: room), lede: Copy.roomLede,
-            actions: {
-                QuietControl(title: Copy.close, action: onClose)
-                    .keyboardShortcut(.cancelAction)
-                    .padding(.trailing, 8)
-            }
-        ) {
-            VStack(alignment: .leading, spacing: 28) {
-                // Asks into this room (A72), first: somebody is waiting at
-                // the door, and every answer is here.
-                ForEach(model.knocks(on: room)) { knock in
-                    KnockTile(knock: knock, onPerson: onPerson)
-                        .transition(.opacity)
-                }
+        GeometryReader { outer in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    YourRibbonsSection(hungFrom: outer.safeAreaInsets.top, onRoom: onSwitch)
 
-                if model.isFull(room) {
-                    // S15's full state, said where the invite would have been.
-                    SettingNote(Copy.roomHoldsTwelve)
-                } else if model.remote != nil {
-                    // The link resolves through the backend, so without one
-                    // there is nothing to hand out and no row for it.
-                    SettingRow(Copy.inviteSomeone, subtitle: Copy.inviteSend, action: onInvite)
-                }
-
-                SettingsGroup {
-                    SettingRow(Copy.notifications, subtitle: Copy.notificationsSub, action: onNotifications)
-                    SettingRow(Copy.plan, subtitle: Copy.planSub, action: onPlan)
-                }
-
-                RoomControls(room: room, onLeft: onClose, onClosed: onKeep)
-
-                VStack(alignment: .leading, spacing: 10) {
-                    SectionLabel(Copy.yourRooms)
+                    RoomTitlePage(room: room)
                         .padding(.horizontal, RibbonShape.textInset)
-                    VStack(spacing: RibbonShape.seam) {
-                        ForEach(model.state.rooms) { other in
-                            RoomTile(room: other) { onSwitch(other.id) }
-                        }
-                    }
-                    SettingsGroup {
-                        SettingRow(Copy.startARoomControl, action: onStartARoom)
-                        // A join goes through the backend and cannot happen
-                        // without one. No dead control (§6.1).
-                        if model.remote != nil {
-                            SettingRow(Copy.joinWithAnInvite, action: onJoinWithInvite)
-                        }
-                        // Finding needs an account to ask with (A72).
-                        if model.discoveryAvailable {
-                            SettingRow(Copy.findARoom, action: onFindARoom)
-                        }
-                    }
-                    .padding(.top, 6)
-                }
+                        .padding(.top, 36)
 
-                ClosedRoomsSection(onKeep: onKeep)
+                    // Asks into this room (A72), first: somebody is waiting
+                    // at the door, and every answer is here.
+                    VStack(spacing: 12) {
+                        ForEach(model.knocks(on: room)) { knock in
+                            KnockTile(knock: knock, onPerson: onPerson)
+                                .transition(.opacity)
+                        }
+                        if model.isFull(room) {
+                            // S15's full state, said where the invite was.
+                            SettingNote(Copy.roomHoldsTwelve)
+                        }
+                    }
+                    .padding(.top, 28)
+
+                    RoomSettingsLines(
+                        room: room,
+                        onNotifications: onNotifications, onPlan: onPlan,
+                        onInk: { showInkPicker = true })
+                        .padding(.horizontal, RibbonShape.textInset)
+                        .padding(.top, 8)
+
+                    RoomControls(room: room, onLeft: onClose, onClosed: onKeep)
+                        .padding(.top, 32)
+
+                    // Other rooms: the ribbons above are the ones you are
+                    // in; these are the ways to more.
+                    // On one line where they fit, one under another where
+                    // they do not.
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 18) { moreRooms }
+                        VStack(alignment: .leading, spacing: 0) { moreRooms }
+                    }
+                    .padding(.horizontal, RibbonShape.textInset)
+                    .padding(.top, 20)
+
+                    ClosedRoomsSection(onKeep: onKeep)
+                        .padding(.top, 28)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, RibbonShape.screenMargin)
+                .padding(.bottom, 40)
+                .readableColumn()
+                .animation(RibbonMotion.arrive, value: model.knocks(on: room).map(\.id))
             }
-            .animation(RibbonMotion.arrive, value: model.knocks(on: room).map(\.id))
+            .ignoresSafeArea(edges: .top)
+            // What scrolls up goes softly under the clock, where the page
+            // runs on under it for the ribbons to hang from.
+            .overlay(alignment: .top) {
+                LinearGradient(
+                    colors: [Palette.ground, Palette.ground.opacity(0.85), .clear],
+                    startPoint: .top, endPoint: .bottom)
+                    .frame(height: outer.safeAreaInsets.top + 18)
+                    .ignoresSafeArea(edges: .top)
+                    .allowsHitTesting(false)
+            }
+            .scrollEdgeEffectStyle(.soft, for: .top)
+            .scrollIndicators(.hidden)
+            .scrollDismissesKeyboard(.interactively)
+            .safeAreaInset(edge: .bottom, spacing: 0) { foot }
         }
+        .environment(\.tileFinish, .glass)
+        .room()
+        .toolbar(.hidden, for: .navigationBar)
+        .sheet(isPresented: $showInkPicker) {
+            InkPickerSheet(room: room)
+        }
+    }
+
+    /// The ways to more rooms than these.
+    @ViewBuilder
+    private var moreRooms: some View {
+        QuietControl(title: Copy.startARoomControl, action: onStartARoom)
+        // A join goes through the backend and cannot happen without one. No
+        // dead control (§6.1).
+        if model.remote != nil {
+            QuietControl(title: Copy.joinWithAnInvite, action: onJoinWithInvite)
+        }
+        // Finding needs an account to ask with (A72).
+        if model.discoveryAvailable {
+            QuietControl(title: Copy.findARoom, action: onFindARoom)
+        }
+    }
+
+    /// The foot: the room's one invitation, and the way out, where the thumb
+    /// is.
+    private var foot: some View {
+        HStack {
+            // The link resolves through the backend, so without one there
+            // is nothing to hand out and no control for it; a full room says
+            // so on the page.
+            if model.remote != nil && !model.isFull(room) {
+                FootButton(title: Copy.inviteSomeone, accent: true, action: onInvite)
+            }
+            Spacer()
+            FootButton(title: Copy.close, action: onClose)
+                .keyboardShortcut(.cancelAction)
+        }
+        .padding(.horizontal, RibbonShape.screenMargin)
+        .padding(.top, 20)
+        .padding(.bottom, 6)
+        .background(alignment: .top) { LeatherPlate() }
     }
 }
 
-/// One room: its name, who is in it, what it is reading, and its fire. The
-/// current one has a ribbon laid into it from the tile's top edge, as the
-/// chosen version has (A67) — a shape, where it was a 2-point line of the
-/// accent — and, because colour is never the only signal (§11), it is said
-/// as selected too.
-private struct RoomTile: View {
-    @Environment(AppModel.self) private var model
-    let room: Room
+/// A control on the leather foot (I47): its words in letterpress small caps
+/// on a panel pressed into the cover; the accent for the one thing the page
+/// asks of you.
+private struct FootButton: View {
+    var title: String
+    var accent = false
     var action: () -> Void
 
     var body: some View {
-        let isCurrent = room.id == model.currentRoom?.id
-        let reading = model.openReading(in: room)
         Button(action: action) {
-            HStack(spacing: 12) {
-                // Where the hairline was, kept as clear space, so the
-                // room's name has not moved from where it was read.
-                Color.clear
-                    .frame(width: 2, height: 34)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(model.displayName(of: room))
-                        .font(RibbonType.ui(17))
-                        .foregroundStyle(Palette.text)
-                    HStack(spacing: 8) {
-                        HStack(spacing: -5) {
-                            ForEach(model.members(of: room)) { membership in
-                                PortraitView(
-                                    person: model.person(membership.personID),
-                                    ink: membership.ink,
-                                    size: 18,
-                                    image: model.portrait(membership.personID))
-                            }
-                        }
-                        if let reading, let book = Bible.book(id: reading.bookID) {
-                            SmallCaps(book.name, size: 11)
-                        }
-                    }
-                }
-                Spacer()
-                if room.isPaused {
-                    SmallCaps(Copy.paused, size: 11)
-                }
-                if let reading {
-                    // A paused room's fire is drawn in whatever state it
-                    // actually holds — never banked by a lapse (S14).
-                    let state = model.fireState(of: reading)
-                    CampfireGlyph(state: state, scale: reading.handiwork.scale, height: 22)
-                        .accessibilityRepresentation { Text(Copy.fireIs(state.displayName)) }
-                }
-            }
-            .padding(.horizontal, RibbonShape.textInset - 6)
-            .padding(.vertical, 12)
-            .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
-            // Hung at the leading side, clear of the name: twelve in from
-            // the tile's edge, over the space the hairline left.
-            .overlay(alignment: .topLeading) {
-                ChoiceRibbon(laid: isCurrent, width: 8, length: 20)
-                    .padding(.leading, 12)
-            }
-            .contentShape(Rectangle())
-            .paper(.row)
+            SmallCaps(title, size: 13, color: accent ? Palette.chartreuse : Palette.text.opacity(0.88))
+                .shadow(color: .black.opacity(0.7), radius: 0, y: -1)
+                .padding(.horizontal, 22)
+                .frame(height: 44)
+                .background(Pressed(shape: Capsule()))
+                .contentShape(Capsule())
         }
         .buttonStyle(.pressable)
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(isCurrent ? [.isSelected] : [])
     }
 }
 
-/// The current room's own controls: its name, your ink, the way out.
+/// Deleting your account (I47): the owner asked for *"a dim red button with
+/// a icon"*. Red, but dim — the one red on the page, and never loud; the
+/// question it asks is still asked before anything happens (§6.8).
+private struct DeleteAccountButton: View {
+    var action: () -> Void
+    private static let red = Color(hex: "C4574B")
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: "trash")
+                    .font(.system(size: 14, weight: .medium))
+                SmallCaps(Copy.deleteAccount, size: 13, color: Self.red.opacity(0.9))
+            }
+            .foregroundStyle(Self.red.opacity(0.9))
+            .shadow(color: .black.opacity(0.6), radius: 0, y: -1)
+            .padding(.horizontal, 18)
+            .frame(height: 44)
+            .background(Capsule().fill(Self.red.opacity(0.11)))
+            .overlay(Capsule().strokeBorder(Self.red.opacity(0.35), lineWidth: 1))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.pressable)
+    }
+}
+
+/// The room's title page (I47): its name as a book's title is set, and
+/// under it its people — faces you can go to, and their names in italic,
+/// with what the room is reading. Names, never a count.
+private struct RoomTitlePage: View {
+    @Environment(AppModel.self) private var model
+    let room: Room
+
+    var body: some View {
+        let members = model.members(of: room)
+        let present = room.isPaused ? Set<UUID>() : Set(model.presentPeople.filter { !$0.isIdle }.map(\.id))
+        let names = members.compactMap { membership -> String? in
+            membership.personID == model.me?.id ? Copy.you : model.person(membership.personID).map { firstName($0.name) }
+        }
+        let book = model.openReading(in: room).flatMap { Bible.book(id: $0.bookID)?.name }
+        VStack(alignment: .leading, spacing: 14) {
+            Text(model.displayName(of: room))
+                .font(RibbonType.display(36))
+                .foregroundStyle(Palette.text)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+            HStack(spacing: 12) {
+                HStack(spacing: -8) {
+                    ForEach(members) { membership in
+                        NavigationLink(value: PersonRoute(personID: membership.personID, roomID: room.id)) {
+                            PortraitView(
+                                person: model.person(membership.personID),
+                                ink: membership.ink, size: 34,
+                                image: model.portrait(membership.personID))
+                            .overlay(Circle().stroke(Palette.ground, lineWidth: 1.5))
+                            .background(
+                                Circle()
+                                    .stroke(Palette.chartreuse, lineWidth: 1.5)
+                                    .padding(-3)
+                                    .opacity(present.contains(membership.personID) ? 1 : 0))
+                        }
+                        .buttonStyle(.pressable)
+                        .accessibilityLabel(model.person(membership.personID)?.name ?? "")
+                    }
+                }
+                if let line = Copy.roomTitleLine(names, reading: book) {
+                    Text(line)
+                        .font(RibbonType.scriptureItalic(15))
+                        .foregroundStyle(Palette.text.opacity(0.66))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+}
+
+/// How the room is set, said as You's colophon says your pages (I47): each
+/// setting a word underlined in the accent, opening where it is set.
+private struct RoomSettingsLines: View {
+    @Environment(AppModel.self) private var model
+    let room: Room
+    var onNotifications: () -> Void
+    var onPlan: () -> Void
+    var onInk: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sentence(Copy.roomTold)
+            sentence(Copy.roomPlan)
+            // Ink is who you are from three people up (§4.5); below that
+            // the room draws from the whole palette and there is nothing to
+            // choose.
+            if model.inkIsIdentity(in: room), let ink = model.myMembership(in: room)?.ink {
+                sentence(Copy.roomInk(ink.displayName))
+            }
+        }
+        .environment(\.openURL, OpenURLAction { url in
+            switch url.host() {
+            case "notifications": onNotifications()
+            case "plan": onPlan()
+            case "ink": onInk()
+            default: return .discarded
+            }
+            return .handled
+        })
+    }
+
+    private func sentence(_ markdown: String) -> some View {
+        var text = (try? AttributedString(markdown: markdown)) ?? AttributedString(markdown)
+        for run in text.runs where run.link != nil {
+            text[run.range].underlineStyle = Text.LineStyle(pattern: .solid, color: Palette.chartreuse.opacity(0.6))
+            text[run.range].foregroundColor = Palette.text
+        }
+        return Text(text)
+            .font(RibbonType.scripture(17))
+            .foregroundStyle(Palette.text.opacity(0.8))
+            .lineSpacing(5)
+            .tint(Palette.text)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// The current room's own controls: its name, being found, the way out.
+/// Your ink is a word in the room's sentences (I47).
 private struct RoomControls: View {
     @Environment(AppModel.self) private var model
     let room: Room
@@ -411,7 +519,6 @@ private struct RoomControls: View {
     @State private var editingRoomLine = false
     @State private var roomLine = ""
     @FocusState private var roomLineFocused: Bool
-    @State private var showInkPicker = false
     private enum Leaving { case confirm, notes }
     @State private var leaving: Leaving?
     @FocusState private var roomNameFocused: Bool
@@ -442,14 +549,6 @@ private struct RoomControls: View {
                         editingRoomName = true
                     }
                     .transition(.opacity)
-                }
-                // Ink is identity from three people up (§4.5); below that
-                // the room draws from the whole palette freely and there is
-                // nothing to choose.
-                if model.inkIsIdentity(in: room) {
-                    SettingRow(Copy.changeYourInk, value: model.myMembership(in: room)?.ink?.displayName, chevron: false) {
-                        showInkPicker = true
-                    }
                 }
             }
             .animation(RibbonMotion.settle, value: editingRoomName)
@@ -500,9 +599,6 @@ private struct RoomControls: View {
                     .padding(.horizontal, RibbonShape.textInset)
                     .confirm($closingQuestion, dismissTitle: Copy.neverMind)
             }
-        }
-        .sheet(isPresented: $showInkPicker) {
-            InkPickerSheet(room: room)
         }
         .confirm(leaveDialog)
     }
@@ -607,102 +703,178 @@ private struct RoomControls: View {
 
 // MARK: - You (S18)
 
-/// You, set as the front of a Bible (A67): your name on the flyleaf, a
-/// ribbon for each room you read in, the books you have finished, then the
-/// settings, and at the very end a colophon — what the book is, what it is
-/// set in, and where its words come from.
+/// You, set as the front of a Bible (A67), and since I47 as a page of its
+/// own in the redesign's glass. Your ribbons hang from the top of the
+/// screen, one for each room, as a Bible's hang from its binding; under
+/// them a title page, your name and face; your shelf; and the colophon —
+/// how your pages are set, said as sentences, each setting a word in them
+/// to tap. The account, and the small print, after it. The way out is at
+/// the foot, on the glass, where the thumb is.
 private struct YouScreen: View {
     @Environment(AppModel.self) private var model
     var onClose: () -> Void
     var onText: () -> Void
     var onDownloads: () -> Void
+    var onNotifications: () -> Void
     var onWhatsNew: () -> Void
     var onBeingFound: () -> Void
-    /// An ember on your shelf, by its reading.
-    var onEmber: (UUID) -> Void
-
     @State private var deleting: ConfirmState?
 
     var body: some View {
-        RibbonScreen(
-            title: Copy.you,
-            actions: {
-                QuietControl(title: Copy.close, action: onClose)
-                    .keyboardShortcut(.cancelAction)
-                    .padding(.trailing, 8)
-            }
-        ) {
-            VStack(alignment: .leading, spacing: 28) {
-                YouIdentity()
+        GeometryReader { _ in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    // Your rooms' ribbons hang over your rooms now, on the
+                    // rooms page (I47); this page begins with you.
+                    YouIdentity()
+                        .padding(.horizontal, RibbonShape.textInset)
+                        .padding(.top, 40)
 
-                YourRibbonsSection()
 
-                // The shelf is there once there is something on it: an
-                // empty shelf on the front page would be a space waiting
-                // to be filled, and nothing here asks for anything.
-                let embers = YourShelf.embers(readings: model.state.readings)
-                if !embers.isEmpty {
-                    YourShelfSection(embers: embers, onEmber: onEmber)
-                }
+                    YourColophon(
+                        version: buildNumber,
+                        onText: onText, onDownloads: onDownloads,
+                        onNotifications: onNotifications, onBeingFound: onBeingFound,
+                        onWhatsNew: onWhatsNew)
+                        .padding(.horizontal, RibbonShape.textInset)
+                        .padding(.top, 44)
 
-                SettingsGroup(title: Copy.howYouRead) {
-                    SettingRow(Copy.textAndTranslation, subtitle: Copy.textSub, action: onText)
-                }
+                    AccountSection()
+                        .padding(.top, 40)
 
-                // Being found (A72): off unless you turn it on, and only
-                // there at all where there is an account to be found by.
-                if model.discoveryAvailable {
-                    SettingsGroup {
-                        SettingRow(
-                            Copy.beingFound, subtitle: Copy.beingFoundSub,
-                            value: model.beingFound.findable ? Copy.on : Copy.off,
-                            action: onBeingFound)
+                    if model.remote != nil {
+                        DeleteAccountButton {
+                            // §6.8: the "leave your notes behind?" question,
+                            // asked once, at deletion. Neither answer is the
+                            // quiet one.
+                            deleting = ConfirmState(question: Copy.leaveNotesQuestion, choices: [
+                                ConfirmChoice(Copy.deleteAndLeaveThem, destructive: true) {
+                                    onClose()
+                                    model.deleteAccount(keepNotesBehind: true)
+                                },
+                                ConfirmChoice(Copy.deleteAndTakeThemBack, destructive: true) {
+                                    onClose()
+                                    model.deleteAccount(keepNotesBehind: false)
+                                },
+                            ])
+                        }
+                        .padding(.horizontal, RibbonShape.textInset)
+                        .padding(.top, 16)
                     }
+
+                    Colophon()
+                        .padding(.top, 36)
                 }
-
-                SettingsGroup(title: Copy.thisPhone) {
-                    SettingRow(Copy.downloads, subtitle: Copy.downloadsSub, action: onDownloads)
-                    // Every release's pictures and words, read again (A65):
-                    // about this phone's build, so with what it holds.
-                    SettingRow(Copy.whatsNewRow, subtitle: Copy.whatsNewRowSub, action: onWhatsNew)
-                }
-
-                AccountSection()
-
-                if model.remote != nil {
-                    QuietControl(title: Copy.deleteAccount) {
-                        // §6.8: the "leave your notes behind?" question,
-                        // asked once, at deletion. Neither answer is the
-                        // quiet one.
-                        deleting = ConfirmState(question: Copy.leaveNotesQuestion, choices: [
-                            ConfirmChoice(Copy.deleteAndLeaveThem, destructive: true) {
-                                onClose()
-                                model.deleteAccount(keepNotesBehind: true)
-                            },
-                            ConfirmChoice(Copy.deleteAndTakeThemBack, destructive: true) {
-                                onClose()
-                                model.deleteAccount(keepNotesBehind: false)
-                            },
-                        ])
-                    }
-                    .padding(.horizontal, RibbonShape.textInset)
-                    .padding(.top, 8)
-                }
-
-                Colophon(version: appVersion)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, RibbonShape.screenMargin)
+                .padding(.bottom, 40)
+                .readableColumn()
             }
+            .scrollEdgeEffectStyle(.soft, for: .top)
+            .scrollIndicators(.hidden)
+            .scrollDismissesKeyboard(.interactively)
+            .safeAreaInset(edge: .bottom, spacing: 0) { foot }
         }
+        .environment(\.tileFinish, .glass)
+        .room()
+        .toolbar(.hidden, for: .navigationBar)
         .confirm($deleting, dismissTitle: Copy.neverMind)
+    }
+
+    /// The foot: the version this phone has, and the way out.
+    private var foot: some View {
+        HStack {
+            SmallCaps(appVersion, size: 11, color: Color(hex: "C9B48E").opacity(0.7))
+                .shadow(color: .black.opacity(0.7), radius: 0, y: -1)
+            Spacer()
+            FootButton(title: Copy.close, action: onClose)
+                .keyboardShortcut(.cancelAction)
+        }
+        .padding(.leading, RibbonShape.screenMargin + RibbonShape.textInset)
+        .padding(.trailing, RibbonShape.screenMargin)
+        .padding(.top, 20)
+        .padding(.bottom, 6)
+        .background(alignment: .top) { LeatherPlate() }
     }
 
     /// The version and its build. Every build of a version says the same
     /// version, and which build a phone has is the first thing a test on
     /// two phones needs to know.
-    private var appVersion: String {
+    private var appVersion: String { Copy.versionLine(buildNumber) }
+
+    private var buildNumber: String {
         let info = Bundle.main.infoDictionary
         let version = info?["CFBundleShortVersionString"] as? String ?? ""
         let build = info?["CFBundleVersion"] as? String ?? ""
-        return Copy.versionLine(build.isEmpty ? version : "\(version) (\(build))")
+        return build.isEmpty ? version : "\(version) (\(build))"
+    }
+}
+
+/// The colophon (I47): how your pages are set, as a book's last page says
+/// how it was made — but yours to change. Each setting is a word in the
+/// sentence, underlined in the accent, and tapping it opens where it is
+/// set.
+private struct YourColophon: View {
+    @Environment(AppModel.self) private var model
+    var version: String
+    var onText: () -> Void
+    var onDownloads: () -> Void
+    var onNotifications: () -> Void
+    var onBeingFound: () -> Void
+    var onWhatsNew: () -> Void
+
+    var body: some View {
+        let words = model.words(room: model.currentRoom)
+        let version = TranslationRegistry.translation(for: words)?.fullName ?? words.displayName
+        let size = Int(model.settings.scriptureSize.rounded())
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                SatinRibbon()
+                    .frame(width: 8, height: 14)
+                SmallCaps(Copy.colophon, size: 12)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
+            // What a colophon is, for anybody who has not met one.
+            Text(Copy.colophonLede)
+                .font(RibbonType.ui(14))
+                .foregroundStyle(Palette.text.opacity(0.62))
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, 4)
+            sentence(Copy.colophonPages(face: model.settings.face.name, size: size, version: version))
+            sentence(Copy.colophonKept)
+            sentence(Copy.colophonTold)
+            if model.discoveryAvailable {
+                sentence(Copy.colophonFound(model.beingFound.findable))
+            }
+            sentence(Copy.colophonNew(self.version))
+        }
+        .environment(\.openURL, OpenURLAction { url in
+            switch url.host() {
+            case "text": onText()
+            case "downloads": onDownloads()
+            case "notifications": onNotifications()
+            case "found": onBeingFound()
+            case "new": onWhatsNew()
+            default: return .discarded
+            }
+            return .handled
+        })
+    }
+
+    /// A sentence of the colophon, its links underlined in the accent.
+    private func sentence(_ markdown: String) -> some View {
+        var text = (try? AttributedString(markdown: markdown)) ?? AttributedString(markdown)
+        for run in text.runs where run.link != nil {
+            text[run.range].underlineStyle = Text.LineStyle(pattern: .solid, color: Palette.chartreuse.opacity(0.6))
+            text[run.range].foregroundColor = Palette.text
+        }
+        return Text(text)
+            .font(RibbonType.scripture(17))
+            .foregroundStyle(Palette.text.opacity(0.8))
+            .lineSpacing(5)
+            .tint(Palette.text)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -715,7 +887,13 @@ private struct YouScreen: View {
 /// which closes the menu and closes any book open over another room.
 private struct YourRibbonsSection: View {
     @Environment(AppModel.self) private var model
-    /// Whether the ribbons have been laid in. Once each time You is opened —
+    /// How far above the page the screen's top edge is: the ribbons hang
+    /// from it, under the clock (I47), rather than from a rule on the page.
+    var hungFrom: CGFloat = 0
+    /// A ribbon touched: that room (I47 — they hang over your rooms now,
+    /// where they used to hang over You).
+    var onRoom: (UUID) -> Void
+    /// Whether the ribbons have been laid in. Once each time the page opens —
     /// not again on the way back from a page it pushed, which it never left.
     @State private var laid = false
 
@@ -734,32 +912,17 @@ private struct YourRibbonsSection: View {
 
     var body: some View {
         let rooms = model.state.rooms
-        VStack(alignment: .leading, spacing: 10) {
-            SectionLabel(Copy.yourRibbons)
-                .padding(.horizontal, RibbonShape.textInset)
-            ScrollView(.horizontal) {
-                HStack(alignment: .top, spacing: 0) {
-                    ForEach(Array(rooms.enumerated()), id: \.element.id) { index, room in
-                        ribbon(room, index: index)
-                    }
+        ScrollView(.horizontal) {
+            HStack(alignment: .top, spacing: 0) {
+                ForEach(Array(rooms.enumerated()), id: \.element.id) { index, room in
+                    ribbon(room, index: index)
                 }
-                .padding(.horizontal, RibbonShape.textInset)
             }
-            .scrollIndicators(.hidden)
-            // The binding: the full width of the row, still while the
-            // ribbons scroll under it, and drawn over their top edges so
-            // each reads as tucked into it.
-            .overlay(alignment: .top) {
-                HairlineRule()
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-            }
-            Text(Copy.yourRibbonsFootnote)
-                .font(RibbonType.ui(14))
-                .foregroundStyle(Palette.muted)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, RibbonShape.textInset)
+            .padding(.horizontal, RibbonShape.textInset)
         }
+        .scrollIndicators(.hidden)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(Copy.yourRibbons)
         .onAppear { laid = true }
     }
 
@@ -771,8 +934,9 @@ private struct YourRibbonsSection: View {
         let lies = place(of: room)
         let ink = model.myMembership(in: room)?.ink
         let delay = Double(index) * Self.stagger
+        let here = room.id == model.currentRoom?.id
         return Button {
-            model.pendingDestination = .room(roomID: room.id)
+            onRoom(room.id)
         } label: {
             VStack(alignment: .leading, spacing: 8) {
                 // Laid in from the binding one after another, on the curve
@@ -781,17 +945,26 @@ private struct YourRibbonsSection: View {
                 HangingRibbon(
                     color: ink?.color ?? Palette.chartreuse,
                     width: Self.ribbonWidth,
-                    length: Self.lengths[index % Self.lengths.count],
+                    length: hungFrom + Self.lengths[index % Self.lengths.count] + 40,
                     laid: laid,
                     delay: delay,
                     motion: RibbonMotion.settle)
+                    // The room you are in hangs in full; the others a
+                    // little back, and say so with their names too.
+                    .opacity(here ? 1 : 0.55)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(name)
                         .font(RibbonType.ui(14))
-                        .foregroundStyle(Palette.text)
+                        .foregroundStyle(here ? Palette.text : Palette.text.opacity(0.7))
                         .lineLimit(2)
-                    SmallCaps(lies, size: 11)
-                        .lineLimit(2)
+                    HStack(spacing: 5) {
+                        if let reading = model.openReading(in: room) {
+                            CampfireGlyph(state: model.fireState(of: reading), scale: reading.handiwork.scale, height: 12)
+                                .accessibilityHidden(true)
+                        }
+                        SmallCaps(lies, size: 11, color: Palette.text.opacity(here ? 0.7 : 0.55))
+                            .lineLimit(2)
+                    }
                 }
                 .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
@@ -810,7 +983,7 @@ private struct YourRibbonsSection: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Copy.ribbonSpoken(name, lies, ink: ink?.displayName))
         .accessibilityHint(Copy.goesToThatRoom)
-        .accessibilityAddTraits(.isButton)
+        .accessibilityAddTraits(here ? [.isButton, .isSelected] : .isButton)
     }
 
     /// Where the room's ribbon lies (A30) as a chapter — "Mark 4" — or,
@@ -825,120 +998,16 @@ private struct YourRibbonsSection: View {
     }
 }
 
-/// The line every ember on your shelf sits on: the foot of the ember
-/// itself, not of the words under it, so a book read alone (no second line)
-/// sits level with one read in company (S10's shared baseline).
-private enum EmberFloor: AlignmentID {
-    static func defaultValue(in context: ViewDimensions) -> CGFloat {
-        context[VerticalAlignment.bottom]
-    }
-}
-
-private extension VerticalAlignment {
-    static let emberFloor = VerticalAlignment(EmberFloor.self)
-}
-
-/// Your shelf (A67): every book you have finished, in every room you have
-/// read in — the books of a room you have left among them, as leaving
-/// promises (§6.8) — first finished first. Embers on one baseline with no
-/// shelf drawn (S10), each with its book and who it was read with. Never a
-/// count: a row of objects, not a tally.
-private struct YourShelfSection: View {
-    @Environment(AppModel.self) private var model
-    var embers: [Reading]
-    var onEmber: (UUID) -> Void
-
-    /// Wide enough for "with the Thursday study" over two lines under the
-    /// smallest ember; narrower than the largest, which it sits under.
-    /// Grows with the reader's type, as the ribbons' words do.
-    @ScaledMetric(relativeTo: .footnote) private var words: CGFloat = 104
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            SectionLabel(Copy.yourShelf)
-                .padding(.horizontal, RibbonShape.textInset)
-            ScrollView(.horizontal) {
-                HStack(alignment: .emberFloor, spacing: 18) {
-                    ForEach(embers) { reading in
-                        ember(reading)
-                    }
-                }
-                .padding(.horizontal, RibbonShape.textInset)
-            }
-            .scrollIndicators(.hidden)
-        }
-    }
-
-    private func ember(_ reading: Reading) -> some View {
-        let book = Bible.book(id: reading.bookID)?.name ?? reading.bookID
-        let company = companyLine(of: reading)
-        return Button {
-            onEmber(reading.id)
-        } label: {
-            VStack(spacing: 6) {
-                EmberView(scale: reading.handiwork.scale, shape: EmberView.shape(of: reading.id))
-                    // Its record opens out of it (I45).
-                    .flowSource(.ember(reading.id))
-                    .alignmentGuide(.emberFloor) { dimensions in
-                        dimensions[VerticalAlignment.bottom]
-                    }
-                VStack(spacing: 2) {
-                    SmallCaps(book, size: 12, color: Palette.text.opacity(0.8))
-                    if let company {
-                        SmallCaps(company, size: 11)
-                    }
-                }
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(width: words)
-            }
-            .contentShape(Rectangle())
-        }
-        // An ember takes a press the way a tile does, as on the room's
-        // shelf.
-        .buttonStyle(.pressable)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Copy.emberSpoken(book, company))
-        .accessibilityAddTraits(.isButton)
-    }
-
-    /// Who the book was read with: first names, "and others" for the rest,
-    /// or a named room of three or more by its name. A book read alone, or
-    /// in a room you have since left, is said by nothing.
-    private func companyLine(of reading: Reading) -> String? {
-        let company = YourShelf.company(
-            of: reading,
-            rooms: model.state.rooms,
-            memberships: model.state.memberships,
-            me: model.me?.id)
-        switch company {
-        case .alone:
-            return nil
-        case .people(let ids, let andOthers):
-            let names = ids.compactMap { model.person($0)?.name }.map { firstName($0) }
-            if names.isEmpty && !andOthers { return nil }
-            return Copy.shelfWith(names, andOthers: andOthers)
-        case .room(let name):
-            return Copy.shelfWithRoom(name)
-        }
-    }
-}
-
-/// The colophon (A67): the book's last page, where a book says what it is,
-/// what it is set in, and whose words it borrows — the Wave, the version,
-/// the typefaces, and the credit owed for the original words (A60). Set
-/// small and centred, as a colophon is, after the last thing that can be
-/// done here.
+/// The small print (A67): what the book is set in, and the credit owed for
+/// the original words (A60). Set small and centred, after the last thing
+/// that can be done here; the version is in the foot (I47).
 private struct Colophon: View {
     @Environment(AppModel.self) private var model
-    var version: String
 
     var body: some View {
         VStack(spacing: 10) {
             WaveMark(color: Palette.muted.opacity(0.6))
                 .frame(width: 22, height: 22)
-            SmallCaps(version, size: 11, color: Palette.muted.opacity(0.7))
             // Sentences, so set as sentences rather than in small caps.
             Group {
                 Text(Copy.colophonSetIn(model.settings.face.name))
@@ -972,10 +1041,14 @@ private struct YouIdentity: View {
         let me = model.me
         let face = me.flatMap { model.portrait($0.id) }
         let hasFace = face != nil
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .center, spacing: 18) {
+        // A title page (I47): your face in a double rule, and your name
+        // as a book's title is set, the reason under it in italic.
+        HStack(alignment: .center, spacing: 18) {
                 PhotosPicker(selection: $portraitItem, matching: .images) {
-                    PortraitView(person: me, ink: nil, size: 88, image: face)
+                    PortraitView(person: me, ink: nil, size: 72, image: face)
+                        .overlay(Circle().stroke(Palette.text.opacity(0.22), lineWidth: 1))
+                        .padding(6)
+                        .overlay(Circle().stroke(Palette.text.opacity(0.10), lineWidth: 1))
                         .accessibilityHidden(true)
                 }
                 .buttonStyle(.pressable)
@@ -991,8 +1064,9 @@ private struct YouIdentity: View {
                         }
                     }
                 }
+            VStack(alignment: .leading, spacing: 6) {
                 TextField("", text: $name, prompt: Text(Copy.yourName).foregroundStyle(Palette.muted))
-                    .font(RibbonType.display(26))
+                    .font(RibbonType.display(36))
                     .foregroundStyle(Palette.text)
                     .focused($nameFocused)
                     .submitLabel(.done)
@@ -1021,11 +1095,11 @@ private struct YouIdentity: View {
                     }
                     .accessibilityLabel(Copy.yourName)
                     .accessibilityHint(Copy.editsYourName)
+                Text(hasFace ? Copy.yourFaceReason : Copy.addAPortraitReason)
+                    .font(RibbonType.scriptureItalic(14))
+                    .foregroundStyle(Palette.muted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            Text(hasFace ? Copy.yourFaceReason : Copy.addAPortraitReason)
-                .font(RibbonType.ui(14))
-                .foregroundStyle(Palette.muted)
-                .fixedSize(horizontal: false, vertical: true)
         }
         .onAppear { name = model.me?.name ?? "" }
         .onChange(of: model.me?.name) { _, now in

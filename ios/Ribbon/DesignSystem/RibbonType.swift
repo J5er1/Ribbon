@@ -67,6 +67,14 @@ enum RibbonType {
         .custom(literata, size: size, relativeTo: .largeTitle)
     }
 
+    /// Display at Medium (I47), for the titles that stand on the room —
+    /// the greeting, what is on the hearth, the way in. Regular read thin
+    /// there: the owner, *"the font needs to be more bold ... maybe
+    /// medium"*. A point on Literata's weight axis, not a second file.
+    static func displayMedium(_ size: CGFloat) -> Font {
+        .custom(literata, size: size, relativeTo: .largeTitle).weight(.medium)
+    }
+
     /// Interface text.
     static func ui(_ size: CGFloat = 17) -> Font {
         .custom(sans, size: size, relativeTo: .body)

@@ -6588,6 +6588,303 @@ I46. **The book put on the shelf, glass, and the room's jar (amends §6.5,
     widget's glass fire, VoiceOver on the jar, and how a full jar runs on an
     older phone.
 
+I47. **The room's foot: the ribbon, your rooms and you, in reach (amends
+    S01, S14, S18 and A48; iPhone only).** *"make the entire app feel
+    coheasive with that new glass and maybe make it feel more dense but
+    still keeping what we need close"*. Mockups first; the owner turned
+    down the first row as *"too chilfish"*, said of the top corners
+    *"reaching up here sucks"*, of a fuller foot *"the bottom bar is too
+    dense and just looks off"*, and asked that the way from the foot into
+    the book be one thing with the ribbon (*"the ribbon should like fully
+    animate"*). The quieter row, with real portraits and a gear, is what
+    was built; then, seen on a phone, a second pass: *"theres a ton of dim
+    text on the main page"*, *"we just need to tidy everything"*; and a
+    third: *"The home screen is super plain"*, *"hide stuff under the
+    fold"*, and *"take inspiration for the app from 2010s apps with the skew
+    morphism but blend it with what we have"*.
+
+    - **The chrome moved to the foot.** The room's name top-left and your
+      face top-right are gone. At the foot, on a plate of frosted glass the
+      room scrolls under, lit along its top and warm with the fire: the
+      book's satin ribbon hanging from a slot, its title ("Continue in
+      Jude", "Begin Jude", or "Pick a book"), and under it the chapter; at
+      the right, a pill of the room's faces (the present ringed) that opens
+      the rooms page, and your face with a gear that opens You. *pull the
+      ribbon* is said under the title until the way in has been used once.
+      The titles that stand on the room — the greeting, what is on the
+      hearth, the way in — are Literata at Medium (*"the font needs to be
+      more bold ... maybe medium"*). The ribbon is wider, 18 points in the
+      foot and 12 on the page (*"the ribbon needs to be wider"*), and the
+      foot is shorter, with less empty cover under its title. The foot is
+      the foot of the book: a leather cover, its grain, a line
+      of stitching a few points in, and the pages' gilt edge along the top,
+      the ribbon coming out over it; the title set into it in letterpress.
+      (It was frosted glass; the glass is for the things that lie on it —
+      the fire, the embers, the jar — and the cover is what they lie on.)
+      The ribbon used to tug up now and then; the owner: *"the animation
+      that guestures the user to pull the ribbon sucks"*. Now a glint of
+      light runs up it every few seconds, the way it is pulled; still under
+      reduce motion.
+
+    - **The room says itself in sentences.** The greeting — a title card,
+      since *"make the good evening and the fire is burning more cinimatic
+      and in the background"*: set large and centred over the fire, lit
+      from below by it, ivory at the top of the letters and warm at their
+      feet, coming up out of a blur when the room does — then the room in
+      a few sentences in the book's own italic, centred — who is
+      here or who was last, how the fire is or who banked it, a note left
+      for you, where the ribbon was left — where there were four lines of
+      small grey type in four places (the presence line, the fire's state,
+      the ribbon offer, who banked the fire). A name in them goes to that
+      person; a place opens the book there. Alone, with nothing to say,
+      nothing (§08).
+
+    - **The first screen is the fire.** Above the fold there is the
+      greeting, those sentences, and the fire, in the middle of what is
+      left of the screen; everything else is under it. The fire stands on a
+      hearthstone, a slab seen from a little above, lit where it stands,
+      and its light is the room's background — a wide warm throw that
+      breathes on the fire's own period, low when it is banked (*"we need a
+      background for the home screen again"*). No card, no well, no seats,
+      no way-in capsule: the faces are in the foot's pill and the way in is
+      the ribbon. Pulling the fire up still opens the book (A48), and down
+      still opens your rooms. The room's tiles are glass.
+
+    - **The jar stands on the hearth, and the stone turns.** *"maybe we add
+      the jar as a object to the right of the fire and we rotate it ...
+      that way we can add more things later"*. Once a book has been put on
+      the shelf, the room's jar stands on the hearthstone beside the fire,
+      a little round the stone and a little back — smaller, higher up it,
+      in its shadow. Swipe sideways and the stone turns, bringing the jar to
+      the front, where a tap opens it; swipe back, or touch the fire, for
+      the fire, where the pull opens the book. The name under the stone is
+      what is in front: the book, or the shelf. The light and the stone
+      stay; what stands on it turns, and there is room on it for more.
+      Then *"the jar to the side needs to be hidden untill swipe we prolly
+      just need it to be a full swipe"*, and of the turn that followed,
+      *"jarring with the pedastel mobing and being cut off on a side"*: the
+      jar is out of sight until it is asked for, and a full swipe, either
+      way, exchanges the two on a still stone — the fire slides a little
+      with the finger and fades, the jar slides in from the other side and
+      comes up — on a stage of one height, so nothing shifts when the
+      taller jar comes in. Two small marks under the name say there is
+      another.
+      The shelf has no section of its own any more; before a book is
+      finished there is no jar (*"the shelf needs to be hidden untill it
+      has something to show"*). Something someone said is searched from
+      the jar's page, once somebody has said something (*"hide the shelf
+      untill someone says something"*). *One day this is a book.* is gone
+      (*"one day in this book is weird"*), and so are the page's "Start
+      another" and "Mark a quiet day".
+
+    - **A drawer in the foot.** *"we need a gesture or a button on the
+      bottom bar to mark quiet day and start another"*, then *"maybe we make
+      swiping down on the bottom bar the way to access those additional
+      settings"*: a swipe down on the cover (up is the ribbon's, into the
+      book) raises a drawer out of the leather, the room dimming under it;
+      another swipe down, a touch on the room, or the tab at the cover's top
+      edge puts it away. In it: Mark a quiet day — set apart, *"marking a
+      quiet day needs different presence then the others"*: raised and
+      warm, lit from within, its title in the fire's colour beside a mound
+      of banked coals, and said as marked once it is — then Start another
+      book, and What is behind the ribbon, pressed into the leather.
+
+    - **The ribbon carries you in, stays, and takes you out.** Pull it up,
+      or tap its title: one movement, on the page's own spring — the page
+      comes up from the foot and the ribbon is drawn up with it, out of its
+      slot, its top to the top of the screen and its tail to the reading
+      line. (It first went up alone and came back down; the owner did not
+      like *"going up to the text"*.) There it is the page's own ribbon,
+      the same whichever door opened the book: from the top of the screen,
+      in the gutter between the notes' marks and the words, its tail
+      beside the verse you are at (*"the ribbon should stay"*). *"pulling
+      the ribbon on the side brings you back to the home screen"*: pull
+      its tail down and the page comes down with it, its corners rounding,
+      the room over it; far enough, or flicked, and it falls away and the
+      ribbon comes back out of its slot in the foot. Short of that it
+      settles back. Under reduce motion the page fades, either way.
+
+    - **What is behind the ribbon.** *"maybe we could add the highlights
+      and things too the ribbon"*; asked what that meant, the owner chose a
+      list behind it. Tap the ribbon's tail in the book, or hold the
+      ribbon in the room's foot, and a sheet opens with the ribbon down its
+      side: where everyone in the room is (and the room's ribbon, and who
+      left it), then every note and highlight in the book, this chapter's
+      first, each tied to the ribbon by a knot in its ink. A highlight
+      shows its words in its ink; a note its words, unless it was left for
+      you and is not yet found, which keeps them for the verse (§6.3).
+      Each goes there: in the book the page lands on it, from the room the
+      book opens at it.
+
+    - **The Wave is the original words.** *"the logo can be additional info
+      like the hebrew"*: a tap on the Wave at the foot of the page selects
+      the verse at the ribbon's tail and opens the panel of its Hebrew,
+      Aramaic or Greek, as "The Greek" does on a selection (A60). Where
+      there are no original words for the page, the selection's toolbar.
+      The sweep up from the Wave still goes home (I46), Esc still closes
+      the book, and VoiceOver has "Close the book" on the Wave and the
+      ribbon both.
+
+    - **The faces stay at the foot.** Asked whether the faces should come
+      back above the fire, the owner first said *"bring faces back"*, then
+      *"wait i didnt realise what you weere asking lets keep it where you
+      had it in that new design below"*. A face no longer opens that
+      person's page from the room: a name in the room's sentences does,
+      and the rooms page.
+
+    - **You is a colophon.** *"the settings need to be redesigned and more
+      coheasive with the new redesign"*; the owner chose the colophon drawn
+      earlier. You is a page of its own: a title page, your face in a
+      double rule beside your name set large, the reason under it in
+      italic; and the colophon — *"we might need to explain what the
+      colophon [is]"*, so a line says what one is — how your pages are set,
+      as sentences: the typeface, the size and the version, what is kept
+      on this phone, what Ribbon tells you, whether you can be found, and
+      what is new; each setting a word underlined in the accent that opens
+      where it is set. The account, and the small print after. Deleting
+      the account is *"a dim red button with a icon"*, the owner's words —
+      the one red on the page and the one icon, a deviation from A29's no
+      icons, asked for; its question is still asked first (§6.8). The
+      version and Close are at the foot, on the leather.
+
+      Your shelf is gone from You (*"the jar doesnt need to be in your
+      profile either"*), and with it the one place the books of a room you
+      have left could be opened (A67, §6.8 — leaving promised you would keep
+      them). Asked, the owner wanted them *"somewhere to open, but not on
+      the You page"*, and of the rooms page, a room's jar page and the book
+      chooser chose the chooser: there, once there are any, *Read before,
+      elsewhere* opens their jar — the books finished in rooms you have
+      left or that have closed — and each its record, its verses quoted and
+      not offered, with *Read it again*, which begins it in the room the
+      chooser is for.
+
+    - **The rooms page is set like You.** *"The room screen needs a redesign
+      like your profile and personal settings"* — the page with the
+      invite, the notifications, the plan, the name and your rooms. Your
+      rooms' ribbons hang from the top of the screen, one for each room,
+      with its name, its fire and where its ribbon lies; the room you are
+      in in full and the others a little back; touching one goes there.
+      (They hung over You, and *"we might need a different place to store
+      ribbons for rooms"*.) Then the room's title page, its name and its
+      people — faces that open their pages, and their names in italic with
+      what the room is reading, never a count; any knocks; how the room is
+      set, as sentences, its notifications, its plan and your ink each a
+      word that opens it; its name, being found, leaving and closing; the
+      ways to more rooms on one quiet line; the rooms that have closed. The
+      invite and Close are at the foot, on the leather.
+
+    - **Glass, everywhere a page is.** Every page's tiles (`RibbonScreen`,
+      You, the rooms page, the room) are the room's glass in small, dark
+      and warm, its edge lit along the top. Every hanging ribbon — a chosen
+      setting's, a room's — is satin. Under Reduce Transparency the tiles
+      are paper again.
+
+    - **Fewer gradients, less orange, a softer ribbon.** *"we have too many
+      gradients the bottom bar is too ai gradient"*, then *"maybe just make
+      the bottom bar gradient dimmer instead of getting rid of it"* and
+      *"theres too much orange"*: the panels pressed into the cover, the
+      quiet day's panel, the pages' glass tiles, the faces' pill, the
+      delete button and the greeting are each one colour now; the cover
+      keeps a dim fall of light down it, its grain, its stitching and a
+      plain gilt line; the fire's light on the room, its pool, its glow
+      behind the greeting and the stone are all turned well down. The
+      ribbon (*"the ribbon dual side is weird and too harsh"*) is one satin
+      colour with a soft band of sheen and the faint weave, with no dark
+      selvedges, bright stripe or darkened fold — the hanging ribbons too.
+
+    - **The quiet day is held.** *"marking a quiet day needs to be a press
+      and hold"*: held a second, its warmth fills across the panel from
+      the coals and the day is marked; let go early and it drains back.
+      VoiceOver marks it with an action.
+
+    - **Hints that say where things are.** *"add micro animations that show
+      where things are but not just to look pretty"*. Each once since the
+      app opened, never on a loop, none under reduce motion: the stone
+      turns a little and back, showing that it turns and that something
+      stands round the back; the cover's tab dips twice, showing it swipes
+      down; the page's ribbon dips at its tail, showing it pulls down; and
+      the quiet day, tapped rather than held, warms a little and drains,
+      showing it is a thing to hold. The glint up the foot's ribbon was
+      already one.
+
+    - **Your name in your portrait's colour.** *"Make the Name of the
+      person on the homescreen based off their profile picture"*: the
+      greeting's name is in the colour that stands out in your portrait —
+      not its average, which on a face is the face (*"the photo highlight
+      on my pfp is green"*, and it came out tan). Skin is left out where
+      anything else is really there, greys and blacks always, and the
+      strongest of what is left is held to a lightness and a strength that
+      read on the dark. The owner's green shirt makes a soft teal-green.
+      With no portrait, the greeting's ivory.
+
+    - **The cover is rounded, gilt down its edges, dark at its foot.**
+      *"maybe we should round the bottom bar"*, *"make it almost a half
+      pill shape"*: its top corners are rounded almost to a half pill, the
+      stitching following them, and the ribbon is in from the corner so it
+      still comes out over the straight of the edge. Then *"do the yellow
+      wrapping the phone edge on the bottom bar add a deep dark gradient on
+      the bottom"*: the gilt runs along the top, round the corners and on
+      down the phone's edges, going into the dark with the cover, which
+      deepens almost to black at the foot of the phone.
+
+    - **Taking an ember off the shelf, and putting one on, each asked.**
+      *"we need a way to remove embers because the old ones were messed up
+      and add them with a comfermation"*. Of taking it off for this phone
+      or for the room, the owner chose the room: an ember's record ends
+      with *Take it off the shelf*, which asks — "Take Philemon off the
+      shelf? It goes from the jar for everyone in the room, with every note
+      and mark left in it." — and takes it, and everything left in it, off
+      this phone at once. The backend is asked to delete the reading, whose
+      fire, fuel, notes, marks, places, ribbon and cards go with it by the
+      cascade already there; the phone keeps it off, and asks again on
+      every pull, until a pull comes back without it; the other phones
+      drop it when theirs does. Only a finished book can go
+      (`readings_delete`, migration `20261020120000`, applied to the live
+      project on 20 October at the owner's word and recorded there as
+      `20261020023611`; every table that names a reading — fires, fuel,
+      notes, highlights, cards, places, ribbons, the push outbox — was
+      checked to cascade). And putting a book on the shelf
+      asks first — "Put Jude on the shelf? Its fire becomes an ember in the
+      room's jar, for everyone." — which the end of a book used to do on a
+      tap. A voice note's recording stays in storage when its book is
+      taken off; nothing reaches it any more.
+
+    - **Shaken, the jar and the fire move.** *"literally shaking the phone
+      should shake the embers in the jar and effect the fire"*, *"like if
+      the phone upsidedown it moves the embers"*. The jar's embers already
+      fell the way the phone is turned, upside down included; now the
+      phone's own movement pushes them too, the other way, as a jar moved
+      by a hand leaves what is in it behind, and the system's shake throws
+      them about. The fire, shaken, flares up and sways from its foot and
+      settles over a second and a half. Nothing under reduce motion.
+
+    - **Dimming moves.** *"add a animation for dimminh"*: the room dims
+      under the foot's drawer and comes back on the settle curve, where it
+      cut; and a fire banked dims its light on the room over a moment and
+      a half, as a fire does — and comes up again the same way.
+
+    **Android has none of it**, and What's new waits for it (A61), as with
+    I45 and I46. The new words are in `Copy.swift` only for now.
+
+    Seen in a simulator on a local test person (a note and a highlight
+    written into its saved state for the purpose): the room in sentences,
+    the first screen with the fire on its stone and the shelf under the
+    fold, the leather foot and its drawer, the way in in one movement frame
+    by frame, the ribbon's hand-off to the page, pulling it down home frame
+    by frame and the ribbon coming back out over the gilt, the Wave's Greek
+    for Jude 1:3, the ribbon's list from the book and from the room, You
+    with its colophon and its red button, the Text page from its words, the
+    rooms page; the stone's exchange frame by frame and its first-time
+    hint, the drawer by a swipe down, a quiet day held and the fire banking
+    (marked on the test person and taken back out of its saved state
+    after), the rounded cover, the question before an ember is taken off
+    (answered "Keep it"), and a shake — sent by a hook added for the
+    recording and taken out after, since this Xcode has no Simulator app to
+    shake — flaring the fire and throwing the jar's ember about. The
+    portrait's colour was looked at on the owner's room, without touching
+    it. Not seen: the question before a book goes on the shelf, an ember
+    actually taken off, and a real phone's tilt and shake.
+
 ## Licensed translations (decided: API.Bible)
 
 Open question §16.8 is now part-decided: **NKJV plus two undecided

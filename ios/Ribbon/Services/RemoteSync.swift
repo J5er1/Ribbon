@@ -545,6 +545,18 @@ final class RemoteSync {
         }
     }
 
+    /// An ember taken off the room's shelf (I47): the finished reading, and
+    /// with it, by the database's cascade, its fire, its notes, its marks,
+    /// its places and its cards. Only a finished book can go
+    /// (`readings_delete`); an open one is refused.
+    func deleteReading(id: UUID) async throws {
+        try await withAuthRetry {
+            try await self.client.delete(
+                from: "readings",
+                query: [URLQueryItem(name: "id", value: "eq.\(id.uuidString.lowercased())")])
+        }
+    }
+
     func deleteHighlight(id: UUID) async throws {
         try await withAuthRetry {
             try await self.client.delete(

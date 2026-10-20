@@ -105,6 +105,34 @@ enum Copy {
     static let inviteStillOut = "The invite is still out."
     static let sendItAgain = "Send it again"
     static let markAQuietDay = "Mark a quiet day"
+    // The foot's drawer (I47).
+    static let moreForThisBook = "More for this book"
+    static let open = "open"
+    static let quietDayDetail = "The fire is banked for the room today."
+    static let quietDayHold = "Hold to bank the fire for the room today."
+    static let quietDayMarked = "You marked today quiet."
+    static let startAnotherBook = "Start another book"
+    // The chooser's way to the books of rooms you are no longer in (I47).
+    static let readBeforeElsewhere = "Read before, elsewhere"
+    // Putting a book on the shelf, and taking it off (I47), each asked.
+    static func putOnTheShelfQuestion(_ book: String) -> String {
+        "Put \(book) on the shelf? Its fire becomes an ember in the room's jar, for everyone."
+    }
+    static let takeOffTheShelf = "Take it off the shelf"
+    static func takeOffTheShelfQuestion(_ book: String) -> String {
+        "Take \(book) off the shelf? It goes from the jar for everyone in the room, with every note and mark left in it."
+    }
+    static let takeItOff = "Take it off"
+    static let keepIt = "Keep it"
+    static let notYet = "Not yet"
+    static let readBeforeElsewhereLede = "Books you finished in rooms you have left. Each keeps its record here, and any of them can be read again in this room."
+    static let startAnotherDetail = "Choose the room's next book."
+    static let whatIsBehindTheRibbon = "What is behind the ribbon"
+    static let whatIsBehindTheRibbonDetail = "Where everyone is, and what has been left."
+    static func leftYouNotes(_ names: [String]) -> String {
+        let who = names.count <= 1 ? (names.first ?? "") : names.dropLast().joined(separator: ", ") + " and " + (names.last ?? "")
+        return "\(who) left you notes."
+    }
     static let roomPaused = "The room is paused. It can be started again any time."
     static func readRecently(_ name: String, _ phrase: String) -> String { "\(name) read \(phrase)" }
     static func leftYouANote(_ name: String, _ verse: String) -> String { "\(name) left you a note at \(verse)" }
@@ -116,6 +144,13 @@ enum Copy {
     /// action. Same fact, each platform's grammar.
     static let opensYourRooms = "Opens your rooms"
     static let opensYourAccount = "Opens your account and settings"
+    // The room's foot (I47): the book's ribbon, your rooms, and you.
+    static let pullTheRibbon = "pull the ribbon"
+    static let pullTheRibbonHint = "Or pull the ribbon up"
+    static let roomIsPausedShort = "Paused"
+    static func chapterLine(_ chapter: Int) -> String { "Chapter \(chapter)" }
+    static func yourRoomsSpoken(_ room: String) -> String { "\(room). Your rooms" }
+    static let youAndYourSettings = "You, and your settings"
 
     // MARK: Reading (S02–S06)
 
@@ -137,6 +172,10 @@ enum Copy {
     static let openWhatsHere = "open what's here"
     static let leaveSomethingHere = "leave something here"
     static let closeTheBook = "Close the book"
+    /// The Wave, since I47: the original words of the verse you are at.
+    static func theOriginalHere(_ language: OriginalLanguage) -> String {
+        "The \(language.rawValue.capitalized) of the verse you are at"
+    }
     /// The reading surface's own small controls, kept here for the same
     /// reason as everything else: one file, both platforms.
     static let transcript = "transcript"
@@ -479,6 +518,24 @@ enum Copy {
         return "\(who) left the ribbon at \(reference)."
     }
     static func youLeftTheRibbonAt(_ reference: String) -> String { "You left the ribbon at \(reference)." }
+    // What is behind the ribbon (I47).
+    static let theRibbonSpoken = "The ribbon: where everyone is, and what the room has left"
+    static let ribbonListLede = "Where everyone is, and what the room has left in the book."
+    static let whereEveryoneIs = "Where everyone is"
+    static func inThis(_ heading: String) -> String { "In \(heading)" }
+    static func elsewhereIn(_ book: String) -> String { "Elsewhere in \(book)" }
+    static let nothingLeftInThisChapterYet = "Nothing has been left in this chapter yet."
+    static let readingNow = "reading now"
+    static let notStartedYet = "not started yet"
+    static func whereItWasLeft(by who: String?) -> String {
+        guard let who else { return "where you left it" }
+        return "where \(who) left it"
+    }
+    static func noteBy(_ who: String, voice: Bool) -> String {
+        who == you ? (voice ? "Your voice note" : "Your note") : (voice ? "A voice note from \(who)" : "A note from \(who)")
+    }
+    static let waitingAtTheVerse = "waiting for you at the verse"
+    static func highlightedBy(_ who: String) -> String { who == you ? "You marked it" : "Marked by \(who)" }
     static func chapterYouAreHere(_ heading: String) -> String { "\(heading), where you are" }
     static func chapterHasRibbon(_ heading: String) -> String { "\(heading), where the ribbon is" }
     static func chapterYouAreHereWithRibbon(_ heading: String) -> String { "\(heading), where you are and where the ribbon is" }
@@ -706,6 +763,36 @@ enum Copy {
     /// The colophon (A67): what the book is set in, the way a book's last
     /// page says it — your page's typeface (A69).
     static func colophonSetIn(_ face: String) -> String { "Set in \(face) and Alegreya Sans." }
+    // You's colophon (I47): how your pages are set, each setting a word to
+    // tap. Markdown, its links the places each is set.
+    static let colophon = "Colophon"
+    // The rooms page (I47): who is in the room, and how it is set.
+    static func roomTitleLine(_ names: [String], reading book: String?) -> String? {
+        guard names.count > 1 else { return book.map { "Reading \($0)." } }
+        let people = names.count == 2
+            ? "\(names[0]) and \(names[1])"
+            : names.dropLast().joined(separator: ", ") + ", and " + (names.last ?? "")
+        guard let book else { return people + "." }
+        return "\(people), reading \(book)."
+    }
+    static let roomTold = "[What this room tells you](ribbon-room-menu://notifications), and when, is yours to say."
+    static let roomPlan = "[What the room has](ribbon-room-menu://plan), and what it could, is on a page of its own."
+    static func roomInk(_ ink: String) -> String { "In this room you write in [\(ink)](ribbon-room-menu://ink)." }
+    static let colophonLede = "The last page of a book says how it was made. This is how yours is: tap an underlined word to change it."
+    static let yourJarLede = "Every book you have finished, in every room."
+    static func colophonPages(face: String, size: Int, version: String) -> String {
+        "Your pages are set in [\(face)](ribbon-you://text) at [\(size) point](ribbon-you://text), from the [\(version)](ribbon-you://text)."
+    }
+    static let colophonKept = "Some versions are [kept on this phone](ribbon-you://downloads), to read without a connection."
+    static let colophonTold = "[What Ribbon tells you](ribbon-you://notifications), and when, is yours to say."
+    static func colophonFound(_ findable: Bool) -> String {
+        findable
+            ? "[Others can find you](ribbon-you://found) by your name."
+            : "[No one can find you](ribbon-you://found) by your name."
+    }
+    static func colophonNew(_ version: String) -> String {
+        "This is version \(version), and [what is new](ribbon-you://new) in it is a page of its own."
+    }
     /// Text (A67): the verse every version is shown at.
     static func specimenAt(_ reference: String) -> String { "Each one shows \(reference) in its own words." }
     /// Text (A69): the verse every typeface is shown at.

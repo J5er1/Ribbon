@@ -87,6 +87,18 @@ struct HangingRibbon: View {
     private func tail(_ length: CGFloat) -> some View {
         RibbonTail()
             .fill(color)
+            // Satin (I47), as the room's ribbon is: one colour and a soft
+            // band of sheen down it.
+            .overlay(alignment: .leading) {
+                GeometryReader { proxy in
+                    Rectangle()
+                        .fill(.white.opacity(0.13))
+                        .frame(width: proxy.size.width * 0.36)
+                        .offset(x: proxy.size.width * 0.22)
+                }
+                .clipShape(RibbonTail())
+            }
+            .shadow(color: .black.opacity(0.4), radius: 1.5, x: 1, y: 2)
             .frame(width: width, height: length)
     }
 }

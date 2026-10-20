@@ -494,6 +494,88 @@ Seen in simulators; none of it on a phone:
   (the button), then the glass, the jar and the sweep; and What's new on
   both phones once both have it.
 
+The room's foot (I47), iPhone only. Seen in a simulator; none of it on a
+phone:
+
+- The foot: the leather, its stitching and gilt edge, the ribbon over the
+  gilt with its glint, the title, the faces' pill (the present ringed) and
+  your face with its gear, all reachable one-handed; *pull the ribbon*
+  gone once it has been pulled; the room scrolling under the cover, the
+  cover down over the home bar.
+- The foot's drawer: a swipe down on the cover, and the tab; the room
+  dimming under it; a quiet day held a second (and said as marked), let
+  go early and draining; another book begun; the ribbon's list; put away
+  by a swipe down, a touch on the room, or the tab. A swipe up on the
+  ribbon still opens the book, never the drawer. VoiceOver on the tab and
+  the quiet day's action.
+- The first-time hints, once each per launch and never under reduce
+  motion: the stone's turn, the tab's dip, the page ribbon's dip.
+- The greeting's name in the portrait's colour, across portraits of every
+  colour: never too loud or too dark to read; ivory with none.
+- A fire banking, and catching again, dimming and brightening its light
+  over a moment.
+- The first screen on the smallest phone and at the largest text size:
+  the fire and its name above the fold, nothing clipped; the hearthstone
+  and the room's light in each fire state, banked low.
+- The room's sentences with people in it: someone reading, someone idle,
+  two at once, someone who read this morning, a quiet day banked by
+  someone, the ribbon left by someone else; each name and place going
+  where it says. Alone with nothing to say: no sentence at all.
+- The hearth's stone turning: a sideways swipe brings the jar to the
+  front and back, a flick carries it; up and down on the fire are still
+  the pull (A48), never the turn; a tap on whatever is round the side
+  brings it in front; the jar in front opens its page. No jar before a
+  book is finished. VoiceOver on both. Reduce motion: no turning, a cut.
+- The jar's page: the note search, absent until somebody has left a note;
+  a note found opens its book at it.
+- Pull the ribbon up, or tap its title: one movement, the ribbon landing
+  on the page's own with no jump. A short drag that is not a pull does
+  nothing; scrolling the room past the foot still scrolls.
+- In the book: the ribbon in the gutter clear of the notes' marks and the
+  words, at every text size and margin, and on an iPad's centred column.
+  Tap its tail: the list. Pull it down: home, the ribbon back out of its
+  slot; a short pull settles back. A note's mark level with the tail can
+  still be tapped (the tail's target overlaps the gutter there).
+- The Wave: the original words of the verse you are at, in a Hebrew book
+  and an Aramaic passage too; in a version with no original words, the
+  toolbar. The sweep up from it still goes home; Esc closes the book.
+- Hold the ribbon in the room: the list; choose a row and the book opens
+  there once the list has gone. A note left for you and not yet found
+  shows no words in the list.
+- You: the title page, the name editable in place, each underlined word
+  in the colophon opening its page, the dim red delete button and its
+  question, Close at the foot.
+- The chooser's *Read before, elsewhere*: absent with no books from rooms
+  you have left; with some, their jar, each record, and *Read it again*
+  beginning the book in this room. A closed room's books there too.
+- The title card: the greeting coming up out of its blur, each hour's
+  greeting on two lines at every text size, the sentences under it.
+- The rooms page: several rooms' ribbons, the current one in full,
+  switching by a ribbon; a room of three or more (your ink as a word);
+  knocks; a full room; the closed rooms; Invite and Close at the foot.
+- Glass tiles everywhere a page is, and paper again under Reduce
+  Transparency.
+- A paused room: its sentence, and the way in still opening the book.
+- Long book names at large text sizes in the foot's title.
+- Reduce motion: no glint, no flight, the page fading in and out.
+- VoiceOver: the foot reads its title with the pull as a hint; the pill
+  and your face read as your rooms and your settings; "Close the book" on
+  the Wave and the ribbon.
+- `readings_delete` is on the live project (applied 20 October, recorded
+  as `20261020023611`). Take an ember off on one phone; see it go from the
+  other on its next pull, and its notes and marks with it. A build from
+  before I47 does not drop it until it is updated.
+- An open book cannot be taken off (only finished ones); the policy says
+  so too.
+- The question before a book goes on the shelf, at the end of a book;
+  "Not yet" leaves the fire lit.
+- On a phone: tilt and turn the phone upside down with the jar in front —
+  the embers fall that way; shake it — they are thrown about, and the
+  fire flares and settles. Lying still on a table, nothing moves.
+- Android: none of it; Copy.kt gets the new words when it comes, and
+  Android's pull must drop readings the backend no longer has, or an
+  ember taken off on an iPhone stays on an Android phone.
+
 ## 7. The New King James's usage reporting, and its proxy
 
 API.Bible asks apps to report each chapter shown (FUMS) with the

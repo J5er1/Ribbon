@@ -38,9 +38,6 @@ import UIKit
 /// ways in two files (A22's `Flows`): a key that does not match is not an
 /// error, it is a screen that silently stops growing out of anything.
 enum Flow: Hashable {
-    /// A seat at the hearth, and that person's own page. Keyed by the room
-    /// too, because you have a seat in every room you are in.
-    case seat(room: UUID, person: UUID)
     /// A finished reading's ember: on a shelf, and on its own record.
     case ember(UUID)
     /// A room's jar, and the page of what it holds (I46).

@@ -89,6 +89,8 @@ final class AppModel {
 
     /// Portraits cache (person id → image).
     private var portraits: [UUID: UIImage] = [:]
+    /// Each portrait's colour, worked out once per image (I47).
+    @ObservationIgnored private var portraitTints: [UUID: (image: ObjectIdentifier, tint: Color)] = [:]
 
     init(state: AppState, store: LocalStore, presence: PresenceService) {
         self.state = state
@@ -464,6 +466,18 @@ final class AppModel {
 
     func portrait(_ id: UUID) -> UIImage? { portraits[id] }
 
+    /// The colour of someone's portrait (I47): its average, lifted and
+    /// quietened until it reads on the dark room — light, never loud. The
+    /// room says their name in it. Nil with no portrait.
+    func portraitTint(_ id: UUID) -> Color? {
+        guard let image = portraits[id] else { return nil }
+        let key = ObjectIdentifier(image)
+        if let cached = portraitTints[id], cached.image == key { return cached.tint }
+        guard let tint = PortraitTint.of(image) else { return nil }
+        portraitTints[id] = (key, tint)
+        return tint
+    }
+
     func room(_ id: UUID) -> Room? {
         state.rooms.first { $0.id == id }
     }
@@ -687,6 +701,11 @@ final class AppModel {
         get { state.pendingNotePushes }
         set { state.pendingNotePushes = newValue; persist() }
     }
+    private var pendingReadingDeletes: Set<UUID> {
+        get { state.pendingReadingDeletes }
+        set { state.pendingReadingDeletes = newValue; persist() }
+    }
+
     private var pendingHighlightDeletes: Set<UUID> {
         get { state.pendingHighlightDeletes }
         set { state.pendingHighlightDeletes = newValue; persist() }
@@ -870,6 +889,14 @@ final class AppModel {
             .sorted { ($0.finishedAt ?? .distantPast) < ($1.finishedAt ?? .distantPast) }
     }
 
+    /// The books you finished in rooms you are no longer in — left, or
+    /// closed (§6.8: leaving keeps them). First finished first, as a shelf
+    /// is (I47).
+    var booksFromElsewhere: [Reading] {
+        let rooms = Set(state.rooms.map(\.id))
+        return YourShelf.embers(readings: state.readings.filter { !rooms.contains($0.roomID) })
+    }
+
     @discardableResult
     func startReading(bookID: String, in room: Room) -> Reading {
         let scale = Bible.book(id: bookID)?.scale ?? .medium
@@ -1010,6 +1037,39 @@ final class AppModel {
         sayItAgainIfNeeded(day.id, .quietDay(day.id))
     }
 
+    /// Takes a finished book off the room's shelf (I47) — for the whole
+    /// room, after a question that says so. Its ember goes from the jar,
+    /// and with it everything that was left in the book: notes, marks,
+    /// places, the ribbon, the cards. Gone here at once; the backend is
+    /// asked now and on every pull after until it has let it go, and the
+    /// other phones drop it when they next pull.
+    func takeOffTheShelf(_ reading: Reading) {
+        guard reading.isFinished else { return }
+        let id = reading.id
+        forget(readings: [id])
+        persist()
+        guard let remote, remote.isSignedIn else { return }
+        pendingReadingDeletes.insert(id)
+        Task { try? await remote.deleteReading(id: id) }
+    }
+
+    /// Everything this phone holds for some readings, gone.
+    private func forget(readings ids: Set<UUID>) {
+        state.readings.removeAll { ids.contains($0.id) }
+        state.notes.removeAll { ids.contains($0.readingID) }
+        state.highlights.removeAll { ids.contains($0.readingID) }
+        state.positions.removeAll { ids.contains($0.readingID) }
+        state.ribbons.removeAll { ids.contains($0.readingID) }
+        state.cards.removeAll { ids.contains($0.readingID) }
+    }
+
+    /// Whether you have marked today quiet in this room already (I47).
+    func markedQuietDayToday(in room: Room) -> Bool {
+        guard let me = state.me else { return false }
+        let today = QuietDay(roomID: room.id, personID: me.id, markedAt: Date(), timeZone: .current).localDate
+        return state.quietDays.contains { $0.roomID == room.id && $0.personID == me.id && $0.localDate == today }
+    }
+
     func activeQuietDay(in room: Room, at now: Date = Date()) -> QuietDay? {
         quietDays(for: room).first { $0.bankedInterval?.contains(now) == true }
     }
@@ -1036,6 +1096,13 @@ final class AppModel {
 
     func notes(in reading: Reading, chapter: Int) -> [Note] {
         notes(in: reading).filter { $0.verse.chapter == chapter }
+    }
+
+    /// Whether anybody has left a note in any book this room has read
+    /// (I47): the shelf waits for it.
+    func somethingSaid(in room: Room) -> Bool {
+        let readings = Set(state.readings.filter { $0.roomID == room.id }.map(\.id))
+        return state.notes.contains { readings.contains($0.readingID) }
     }
 
     /// What someone said, found (S23): every note the room has left, in
@@ -2256,6 +2323,12 @@ final class AppModel {
                 pendingNoteDeletes.removeValue(forKey: noteID)
             }
         }
+        // Embers taken off the shelf, asked again (I47). Kept as owed until
+        // a pull is seen without them: a delete the backend's rules refuse
+        // still answers as if it had gone.
+        for readingID in pendingReadingDeletes {
+            try? await remote.deleteReading(id: readingID)
+        }
         for noteID in Array(pendingNotePushes) {
             guard let note = state.notes.first(where: { $0.id == noteID }) else {
                 pendingNotePushes.remove(noteID)
@@ -2654,6 +2727,21 @@ final class AppModel {
             }
         }
 
+        // Embers off the shelf (I47). One this phone took off stays off,
+        // whatever the pull says, until the pull no longer has it; one the
+        // backend no longer has — taken off on another phone — goes here
+        // too. Only finished books, and only in rooms this pull answered
+        // for: readings come down whole or not at all.
+        let pulledReadingIDs = Set(graph.readings.map(\.id))
+        let takingOff = pendingReadingDeletes
+        let takenOffElsewhere = Set(state.readings.filter { reading in
+            reading.isFinished && pulledRooms.contains(reading.roomID) && !pulledReadingIDs.contains(reading.id)
+        }.map(\.id))
+        let off = takingOff.union(takenOffElsewhere)
+        if !off.isEmpty { forget(readings: off) }
+        let letGo = takingOff.subtracting(pulledReadingIDs)
+        if !letGo.isEmpty { pendingReadingDeletes.subtract(letGo) }
+
         // Notes. A note this phone is still deleting is not brought back;
         // one it is still editing keeps the local body (A36).
         for row in graph.notes {
@@ -2953,5 +3041,63 @@ final class AppModel {
             persist()
             pushProfileRemote(portraitData: data)
         }
+    }
+}
+
+/// The colour of a portrait (I47): the colour that stands out in it, not
+/// its average — an average of a face is the face, and the owner's green
+/// came out tan (*"the photo highlight on my pfp is green"*). Skin is left
+/// out wherever anything else has a real presence, the greys and the
+/// blacks always; what is left is binned by hue, weighted by how strong
+/// and how lit each pixel is, and the strongest bin's colour is held to a
+/// lightness and a strength that read as a name on the room's dark.
+enum PortraitTint {
+    private static let side = 48
+    private static let bins = 24
+
+    static func of(_ image: UIImage) -> Color? {
+        guard let cgImage = image.cgImage else { return nil }
+        var pixels = [UInt8](repeating: 0, count: side * side * 4)
+        guard let context = CGContext(
+            data: &pixels, width: side, height: side, bitsPerComponent: 8, bytesPerRow: side * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return nil }
+        context.interpolationQuality = .medium
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: side, height: side))
+
+        var weight = [Double](repeating: 0, count: bins)
+        var skin = [Bool](repeating: false, count: bins)
+        var sumX = weight, sumY = weight, sumS = weight, sumB = weight
+        for index in stride(from: 0, to: pixels.count, by: 4) {
+            let colour = UIColor(
+                red: CGFloat(pixels[index]) / 255, green: CGFloat(pixels[index + 1]) / 255,
+                blue: CGFloat(pixels[index + 2]) / 255, alpha: 1)
+            var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+            colour.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
+            guard s > 0.18, b > 0.12, b < 0.98 else { continue }
+            let w = Double(s) * (0.35 + Double(b))
+            let bin = min(Int(h * CGFloat(bins)), bins - 1)
+            weight[bin] += w
+            if h > 0.02 && h < 0.13 && s < 0.75 { skin[bin] = true }
+            let angle = Double(h) * 2 * .pi
+            sumX[bin] += cos(angle) * w
+            sumY[bin] += sin(angle) * w
+            sumS[bin] += Double(s) * w
+            sumB[bin] += Double(b) * w
+        }
+        // Not skin, where something else is really there; skin otherwise.
+        let others = weight.indices.filter { !skin[$0] && weight[$0] >= 3 }
+        let candidates = others.isEmpty ? Array(weight.indices) : others
+        guard let best = candidates.max(by: { weight[$0] < weight[$1] }), weight[best] > 0 else { return nil }
+        var hue = atan2(sumY[best], sumX[best]) / (2 * .pi)
+        if hue < 0 { hue += 1 }
+        let saturation = sumS[best] / weight[best]
+        let brightness = sumB[best] / weight[best]
+        return Color(UIColor(
+            hue: hue,
+            saturation: min(max(saturation * 1.25, 0.38), 0.62),
+            brightness: min(max(brightness * 1.5, 0.8), 0.92),
+            alpha: 1))
     }
 }

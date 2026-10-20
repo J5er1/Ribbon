@@ -99,6 +99,10 @@ struct AppState: Codable {
     var pendingNoteDeletes: [UUID: PendingNoteDelete] = [:]
     var pendingNotePushes: Set<UUID> = []
     var pendingHighlightDeletes: Set<UUID> = []
+    /// Embers this phone has taken off the room's shelf (I47) and the
+    /// backend has not yet been seen without: kept off this phone, asked
+    /// again, until a pull comes back without them.
+    var pendingReadingDeletes: Set<UUID> = []
     /// Keyed, so saying the same thing twice replaces rather than repeats.
     var unsaid: [UUID: PendingWrite] = [:]
     /// Whether you can be found, and your line (A72). Kept here and pushed
@@ -116,6 +120,7 @@ struct AppState: Codable {
     enum CodingKeys: String, CodingKey {
         case me, people, rooms, memberships, readings, notes, highlights, quietDays, positions, ribbons, cards, invites, currentRoomID, settings, hasSeenMarginHint, hasPulledTheFire, hasAskedAboutNotifications, portraitETags, notifiedThrough, invitesNotYetPushed, invitesHandedOut
         case pendingRoomPushes, pendingNoteDeletes, pendingNotePushes, pendingHighlightDeletes, unsaid
+        case pendingReadingDeletes
         case whatsNewSeen
         case beingFound, blockedNames, closedRooms
     }
@@ -153,6 +158,7 @@ struct AppState: Codable {
         pendingNotePushes = try container.decodeIfPresent(Set<UUID>.self, forKey: .pendingNotePushes) ?? []
         pendingHighlightDeletes = try container.decodeIfPresent(Set<UUID>.self, forKey: .pendingHighlightDeletes) ?? []
         unsaid = try container.decodeIfPresent([UUID: PendingWrite].self, forKey: .unsaid) ?? [:]
+        pendingReadingDeletes = try container.decodeIfPresent(Set<UUID>.self, forKey: .pendingReadingDeletes) ?? []
         beingFound = try container.decodeIfPresent(BeingFound.self, forKey: .beingFound) ?? BeingFound()
         blockedNames = try container.decodeIfPresent([UUID: String].self, forKey: .blockedNames) ?? [:]
         closedRooms = try container.decodeIfPresent([Room].self, forKey: .closedRooms) ?? []

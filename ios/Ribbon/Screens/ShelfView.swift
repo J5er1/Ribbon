@@ -2,15 +2,16 @@ import SwiftUI
 import RibbonCore
 
 // S10 — the shelf: every book this room has read, kept as embers in the
-// room's alabaster jar (I46), where they used to stand on a shared baseline.
-// The jar opens onto each of them, the latest first. No sorting, no
+// room's alabaster jar (I46), which stands on the hearth beside the fire
+// (I47). The jar opens onto each of them, the latest first. No sorting, no
 // filtering — a shelf you can sort is a database.
+//
+// Something someone said (S23) is searched from the jar's page, where what
+// it searches lives, once anybody has said something (I47).
 
-struct ShelfView: View {
+struct NoteSearch: View {
     @Environment(AppModel.self) private var model
     let room: Room
-    let readings: [Reading]
-    var onStartAnother: () -> Void
     /// A note found, opened where it was left — in its own book (S23).
     var onOpenNote: (Reading, VerseAddress) -> Void
 
@@ -23,14 +24,11 @@ struct ShelfView: View {
 
     var body: some View {
         let found = searching ? model.notes(in: room, matching: query) : []
-        VStack(alignment: .leading, spacing: 20) {
-            // Note search lives here, where what it searches lives (S23): not
-            // a bar across the front door, but a field on the room's memory.
+        VStack(alignment: .leading, spacing: 16) {
             CentredTextField(
                 text: $query, prompt: Copy.findSomethingSaid, submitLabel: .search,
                 centred: false, focus: $searchFocused)
                 .autocorrectionDisabled()
-                .padding(.horizontal, 24)
 
             if !found.isEmpty {
                 VStack(alignment: .leading, spacing: 14) {
@@ -38,19 +36,13 @@ struct ShelfView: View {
                         foundRow(note)
                     }
                 }
-                .padding(.horizontal, 24)
+                .padding(.horizontal, RibbonShape.textInset)
                 .transition(.opacity)
-            } else {
-                // Finding nothing says so over the shelf, which stays
-                // beneath, as the chooser's list does (S13).
-                if searching {
-                    Text(Copy.nothingMatches)
-                        .font(RibbonType.ui(15))
-                        .foregroundStyle(Palette.muted)
-                        .padding(.horizontal, 24)
-                        .transition(.opacity)
-                }
-                shelf
+            } else if searching {
+                Text(Copy.nothingMatches)
+                    .font(RibbonType.ui(15))
+                    .foregroundStyle(Palette.muted)
+                    .padding(.horizontal, RibbonShape.textInset)
                     .transition(.opacity)
             }
         }
@@ -64,7 +56,6 @@ struct ShelfView: View {
         let said = note.body ?? note.transcript ?? ""
         let name = note.authorID == model.me?.id ? Copy.you : firstName(model.person(note.authorID)?.name ?? "")
         return Button {
-            // The keyboard goes with the room: the book comes up over it.
             searchFocused = false
             if let reading = model.state.readings.first(where: { $0.id == note.readingID }) {
                 onOpenNote(reading, note.verse)
@@ -74,7 +65,7 @@ struct ShelfView: View {
                 SmallCaps("\(note.verse.formatted) · \(name)", size: 12, color: Palette.text.opacity(0.8))
                 Text(excerpt(said, around: trimmedQuery))
                     .font(RibbonType.ui(15))
-                    .foregroundStyle(Palette.muted)
+                    .foregroundStyle(Palette.text.opacity(0.7))
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
             }
@@ -99,32 +90,6 @@ struct ShelfView: View {
         }
         return "…" + said[start...]
     }
-
-    /// The jar, the keepsake line and the way to another book.
-    private var shelf: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            // One jar for the room (I46): every book it has finished is an
-            // ember in it, and it opens onto each of them.
-            NavigationLink(value: JarRoute(roomID: room.id)) {
-                JarView(embers: readings.map(JarEmber.init))
-                    .flowSource(.jar(room.id), cornerRadius: 18)
-                    .frame(maxWidth: .infinity)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.pressable)
-            .accessibilityLabel(Copy.theJarSpoken(readings.map { Bible.book(id: $0.bookID)?.name ?? $0.bookID }))
-            .accessibilityHint(Copy.opensTheJar)
-
-            if readings.count == 1 {
-                // The moment the keepsake idea first appears.
-                SmallCaps(Copy.oneDayThisIsABook, size: 12)
-                    .padding(.horizontal, 24)
-            }
-
-            QuietControl(title: Copy.startAnother, action: onStartAnother)
-                .padding(.horizontal, 24)
-        }
-    }
 }
 
 /// The room's jar, opened (I46): the jar, and every book in it, the latest
@@ -139,6 +104,14 @@ struct JarScreen: View {
         let kept = model.shelf(of: room)
         RibbonScreen(title: Copy.theShelf, lede: Copy.theJarLede, onBack: { dismiss() }) {
             VStack(alignment: .leading, spacing: 14) {
+                if model.somethingSaid(in: room) {
+                    NoteSearch(room: room) { reading, verse in
+                        // The book opens over the room at the note, as a
+                        // tapped notification opens it.
+                        model.pendingDestination = .verse(roomID: reading.roomID, readingID: reading.id, verse: verse)
+                    }
+                    .padding(.bottom, 12)
+                }
                 JarView(embers: kept.map(JarEmber.init), width: 150)
                     .frame(maxWidth: .infinity)
                     .padding(.bottom, 12)
@@ -193,6 +166,8 @@ struct EmberRecordScreen: View {
     /// The chapters that would not come — no copy here, and no connection
     /// or no answer. Their quotes say so rather than standing empty.
     @State private var wouldNotCome: Set<LicensedChapter> = []
+    /// Taking it off the shelf, asked first (I47).
+    @State private var takingOff: ConfirmState?
 
     private struct LicensedChapter: Hashable {
         var translation: TranslationID
@@ -322,6 +297,22 @@ struct EmberRecordScreen: View {
                     }
                     // "Make this a book" arrives with the printed keepsake
                     // (§15 horizon).
+
+                    // Off the shelf (I47): the owner's *"we need a way to
+                    // remove embers ... with a comfermation"*. For the whole
+                    // room, and said so before it happens.
+                    if model.room(reading.roomID) != nil {
+                        QuietControl(title: Copy.takeOffTheShelf) {
+                            let book = Bible.book(id: reading.bookID)?.name ?? reading.bookID
+                            takingOff = ConfirmState(question: Copy.takeOffTheShelfQuestion(book), choices: [
+                                ConfirmChoice(Copy.takeItOff, destructive: true) {
+                                    model.takeOffTheShelf(reading)
+                                    dismiss()
+                                },
+                            ])
+                        }
+                        .padding(.top, 18)
+                    }
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 30)
@@ -329,6 +320,7 @@ struct EmberRecordScreen: View {
             .readableColumn()
         }
         .scrollIndicators(.hidden)
+        .confirm($takingOff, dismissTitle: Copy.keepIt)
     }
 
     // MARK: A licensed version's verses

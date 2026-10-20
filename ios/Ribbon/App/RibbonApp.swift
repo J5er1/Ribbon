@@ -251,6 +251,18 @@ struct RootView: View {
     /// How far the page is held up by the sweep from the Wave, in points
     /// (I46): 0 where it lies, the screen's height when it has gone.
     @State private var bookLift: CGFloat = 0
+    /// The foot's ribbon on its way up into the page (I47), and how far
+    /// along: 0 in the foot, 1 on the page, on the page's own spring.
+    @State private var ribbonFlight: RibbonFlightStart?
+    @State private var ribbonRise: CGFloat = 0
+    /// How far the page has been pulled down by its ribbon (I47), in
+    /// points: 0 where it lies, the screen's height when it has gone.
+    @State private var bookDrop: CGFloat = 0
+
+    private struct RibbonFlightStart: Identifiable {
+        let id = UUID()
+        let from: CGRect
+    }
 
     var body: some View {
         Group {
@@ -316,6 +328,13 @@ struct RootView: View {
                         } completion: {
                             if openReading == nil, pullHold == hold { pulling = nil }
                         }
+                    },
+                    onPullRibbon: { reading, frame in openFromTheRibbon(reading, from: frame) },
+                    // In the book while the book is open; back out of its
+                    // slot when it closes.
+                    ribbonAway: ribbonFlight != nil || openReading != nil,
+                    onOpenPerson: { personID in
+                        navigationPath.append(PersonRoute(personID: personID, roomID: room.id))
                     })
                 .background(EdgeSwipeBack())
                 .navigationDestination(for: UUID.self) { readingID in
@@ -405,20 +424,26 @@ struct RootView: View {
                             onLiftCancelled: { speed in
                                 withAnimation(RibbonMotion.handled(rate: speed, towards: -bookLift)) { bookLift = 0 }
                             },
-                            onCloseUp: { speed in closeUp(speed, height: proxy.size.height) })
+                            onCloseUp: { speed in closeUp(speed, height: proxy.size.height) },
+                            ribbonArriving: ribbonFlight != nil,
+                            onDrop: { down in bookDrop = down },
+                            onDropCancelled: { speed in
+                                withAnimation(RibbonMotion.handled(rate: speed, towards: -bookDrop)) { bookDrop = 0 }
+                            },
+                            onCloseDown: { speed in closeDown(speed, height: proxy.size.height) })
                         // One page per book. A notification can open another
                         // book over this one (S19), and without its own
                         // identity the new book would inherit this one's
                         // typeset chapters, its landing, and where it opened.
                         .id(reading.id)
-                        .offset(y: (openReading == nil ? (1 - bookPull) * proxy.size.height : 0) - bookLift)
+                        .offset(y: (openReading == nil ? (1 - bookPull) * proxy.size.height : 0) - bookLift + bookDrop)
                         // Lifted, it is a card: its corners round as it
                         // leaves, and the room shows round them. A mask as
                         // big as the screen, not a clip to the page's frame,
                         // which would cut away its ground under the clock
                         // and the home bar even lying still.
                         .mask {
-                            RoundedRectangle(cornerRadius: min(1, bookLift / 80) * 44, style: .continuous)
+                            RoundedRectangle(cornerRadius: min(1, max(bookLift, bookDrop) / 80) * 44, style: .continuous)
                                 .ignoresSafeArea()
                         }
                         // The page goes back down the way it came when the
@@ -431,6 +456,14 @@ struct RootView: View {
                                 insertion: .move(edge: .bottom),
                                 removal: .move(edge: .bottom).combined(with: .opacity)))
                     }
+                }
+            }
+            .overlay {
+                // The ribbon pulled from the foot, over the page coming up
+                // under it.
+                if let flight = ribbonFlight {
+                    RibbonFlight(from: flight.from, rise: ribbonRise)
+                        .id(flight.id)
                 }
             }
             // The menu, full screen. It is one screen rather than the
@@ -550,6 +583,62 @@ struct RootView: View {
             openReading = reading
         } completion: {
             then?()
+        }
+    }
+
+    /// The book opened by its ribbon in the room's foot (I47): one
+    /// movement. The page comes up on the cover spring and the ribbon is
+    /// drawn up with it on the same spring, out of its slot and onto the
+    /// page, where the page's own ribbon takes over. Under reduce motion the
+    /// ribbon stays, and the page fades in.
+    private func openFromTheRibbon(_ reading: Reading, from frame: CGRect) {
+        model.markFirePulled()
+        guard !reduceMotion, frame.height > 0 else {
+            openBook(reading, at: nil)
+            return
+        }
+        let flight = RibbonFlightStart(from: frame)
+        var quiet = Transaction()
+        quiet.disablesAnimations = true
+        withTransaction(quiet) {
+            ribbonRise = 0
+            ribbonFlight = flight
+        }
+        openTarget = nil
+        withAnimation(RibbonMotion.cover) {
+            openReading = reading
+            ribbonRise = 1
+        } completion: {
+            guard ribbonFlight?.id == flight.id else { return }
+            withTransaction(quiet) {
+                ribbonFlight = nil
+                ribbonRise = 0
+            }
+        }
+    }
+
+    /// The book closed by its ribbon, pulled down (I47): the page goes on
+    /// down at the speed the finger let it go at, and the room is there
+    /// over it; the ribbon comes back out of its slot in the foot. Gone, it
+    /// leaves the tree without a second movement. Under reduce motion, a
+    /// fade.
+    private func closeDown(_ speed: CGFloat, height: CGFloat) {
+        guard !reduceMotion else {
+            bookDrop = 0
+            closeBook()
+            return
+        }
+        let away = height * 1.05
+        withAnimation(RibbonMotion.cover(rate: speed, towards: away - bookDrop)) {
+            bookDrop = away
+        } completion: {
+            var quiet = Transaction()
+            quiet.disablesAnimations = true
+            withTransaction(quiet) {
+                openReading = nil
+                bookDrop = 0
+            }
+            openTarget = nil
         }
     }
 

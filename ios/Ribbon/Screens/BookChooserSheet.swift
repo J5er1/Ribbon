@@ -40,6 +40,7 @@ struct BookChooserSheet: View {
                     if hasQuery {
                         searchResults
                     } else {
+                        elsewhereRow
                         starterRow
                         allBooks
                     }
@@ -77,6 +78,48 @@ struct BookChooserSheet: View {
     private var searchField: some View {
         CentredTextField(text: $query, prompt: Copy.search, submitLabel: .search, centred: false)
             .autocorrectionDisabled()
+    }
+
+    /// The books you finished in rooms you are no longer in (I47): there
+    /// is nowhere else to open them, and here, where the next book is
+    /// chosen, any of them can be read again in this room. Only once there
+    /// are some.
+    @ViewBuilder
+    private var elsewhereRow: some View {
+        let books = model.booksFromElsewhere
+        if !books.isEmpty {
+            NavigationLink {
+                ElsewhereShelfScreen(onReadAgain: onChoose)
+            } label: {
+                HStack(spacing: 14) {
+                    HStack(spacing: -6) {
+                        ForEach(books.suffix(3).reversed()) { reading in
+                            EmberView(scale: .small, shape: EmberView.shape(of: reading.id))
+                                .scaleEffect(0.6)
+                                .frame(width: 22, height: 30)
+                        }
+                    }
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(Copy.readBeforeElsewhere)
+                            .font(RibbonType.ui(16))
+                            .foregroundStyle(Palette.text)
+                        Text(ListFormatter.localizedString(byJoining: books.reversed().map { Bible.book(id: $0.bookID)?.name ?? $0.bookID }))
+                            .font(RibbonType.ui(13))
+                            .foregroundStyle(Palette.text.opacity(0.6))
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 8)
+                    Chevron()
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity, minHeight: 60, alignment: .leading)
+                .contentShape(Rectangle())
+                .tile()
+            }
+            .buttonStyle(.pressable)
+            .environment(\.tileFinish, .glass)
+        }
     }
 
     private var starterRow: some View {
@@ -196,6 +239,53 @@ struct BookChooserSheet: View {
                             bookRow(book)
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+/// The books of rooms you are no longer in (I47), from the chooser: their
+/// jar, and each book in it, the latest first — its ember, its name and
+/// when it was read — opening its record. Its verses are quoted, not
+/// offered: there is no room to open them in. Reading it again begins it
+/// in the room the chooser is for.
+private struct ElsewhereShelfScreen: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    var onReadAgain: (String) -> Void
+
+    var body: some View {
+        let books = model.booksFromElsewhere
+        RibbonScreen(title: Copy.readBeforeElsewhere, lede: Copy.readBeforeElsewhereLede, onBack: { dismiss() }) {
+            VStack(alignment: .leading, spacing: 14) {
+                JarView(embers: books.map(JarEmber.init), width: 140)
+                    .frame(maxWidth: .infinity)
+                    .padding(.bottom, 12)
+                ForEach(books.reversed()) { reading in
+                    let name = Bible.book(id: reading.bookID)?.name ?? reading.bookID
+                    NavigationLink {
+                        EmberRecordScreen(reading: reading, onOpenVerse: nil, onReadAgain: onReadAgain)
+                    } label: {
+                        HStack(spacing: 14) {
+                            EmberView(scale: .small, shape: EmberView.shape(of: reading.id))
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(name)
+                                    .font(RibbonType.display(20))
+                                    .foregroundStyle(Palette.text)
+                                SmallCaps(
+                                    RibbonClock.emberRange(
+                                        start: reading.startedAt,
+                                        end: reading.finishedAt ?? reading.startedAt),
+                                    size: 11)
+                            }
+                            Spacer(minLength: 0)
+                            Chevron()
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.pressable)
+                    .accessibilityElement(children: .combine)
                 }
             }
         }

@@ -448,11 +448,25 @@ final class JarPhysics {
     }
 
     /// Moves everything on to `now`, under `gravity` — which way is down
-    /// on the screen, as long as it is when the phone stands upright.
-    func step(to now: TimeInterval, gravity down: CGVector) {
+    /// on the screen, as long as it is when the phone stands upright — and
+    /// `shove`, the phone's own movement (I47: *"shaking the phone should
+    /// shake the embers in the jar"*): the jar goes with the hand and what
+    /// is in it is left behind, so it is pushed the other way.
+    func step(to now: TimeInterval, gravity down: CGVector, shove: CGVector = .zero) {
         let turned = abs(down.dx - gravity.dx) + abs(down.dy - gravity.dy)
         gravity = down
         if turned > 0.02 { still = 0 }
+        if abs(shove.dx) + abs(shove.dy) > 0.05 {
+            still = 0
+            let g = JarPainter.geometry(in: size)
+            let kick = g.height * 0.012
+            for i in bodies.indices where !bodies[i].falling {
+                // A kick to its velocity: Verlet keeps velocity in the
+                // distance from where it was.
+                bodies[i].prev.x += shove.dx * kick
+                bodies[i].prev.y += shove.dy * kick
+            }
+        }
         let elapsed = min(now - (last ?? now), 1.0 / 15)
         last = now
         // Asleep: nothing has moved for a second and a half.
@@ -576,11 +590,54 @@ final class JarMotion {
     }
 
     /// Down, on the screen of a phone held upright: (0, 1) when it is, and
-    /// tipping as it does. Lying flat, very little — what is in the jar
-    /// stays where it is.
+    /// tipping as it does; upside down, up the screen. Lying flat, very
+    /// little — what is in the jar stays where it is.
     var down: CGVector {
         guard let g = manager.deviceMotion?.gravity else { return CGVector(dx: 0, dy: 1) }
         return CGVector(dx: g.x, dy: -g.y)
+    }
+
+    /// The phone's own movement, on the screen, in g, past a small
+    /// threshold so a hand's tremor is not a shake (I47); and any jolt the
+    /// phone's shake gesture has given since it was last asked.
+    var shove: CGVector {
+        var push = CGVector.zero
+        if let a = manager.deviceMotion?.userAcceleration {
+            let x = CGFloat(a.x), y = CGFloat(-a.y)
+            if abs(x) + abs(y) > 0.35 { push = CGVector(dx: x, dy: y) }
+        }
+        if let jolt = pendingJolt {
+            pendingJolt = nil
+            push.dx += jolt.dx
+            push.dy += jolt.dy
+        }
+        return push
+    }
+
+    /// A shake the system recognised (I47) — the one way a simulator can be
+    /// shaken — given to the jar as a jolt this way and that.
+    private var pendingJolt: CGVector?
+    func jolt() {
+        let angle = Double.random(in: 0..<(2 * .pi))
+        pendingJolt = CGVector(dx: 2.2 * cos(angle), dy: -1.6 - abs(1.2 * sin(angle)))
+    }
+}
+
+extension Notification.Name {
+    /// The phone was shaken (I47): the jar's embers jolt and the fire flares.
+    static let ribbonShaken = Notification.Name("RibbonShaken")
+}
+
+/// The shake gesture, from the window, where UIKit delivers it. A real
+/// phone's shake moves the jar by its own motion as well; this is the
+/// gesture as the system recognises it, and the simulator's Shake.
+extension UIWindow {
+    open override func motionEnded(_ motion: UIEvent.EventSubtype, with event: UIEvent?) {
+        if motion == .motionShake {
+            JarMotion.shared.jolt()
+            NotificationCenter.default.post(name: .ribbonShaken, object: nil)
+        }
+        super.motionEnded(motion, with: event)
     }
 }
 
@@ -605,7 +662,7 @@ struct JarView: View {
                     Canvas { context, size in
                         let now = timeline.date.timeIntervalSinceReferenceDate
                         physics.prepare(embers: embers, size: size)
-                        physics.step(to: now, gravity: JarMotion.shared.down)
+                        physics.step(to: now, gravity: JarMotion.shared.down, shove: JarMotion.shared.shove)
                         JarPainter.draw(
                             in: &context, size: size, time: now * 0.25 + seed,
                             placed: physics.placed, front: physics.front)

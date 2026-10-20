@@ -46,6 +46,18 @@ struct ReadingScreen: View {
     /// Let go past home, or flung: closed, and the page goes on up and
     /// away at that speed, the room under it.
     var onCloseUp: (CGFloat) -> Void = { _ in }
+    /// The room's ribbon on its way up from the foot (I47), drawn by the
+    /// root: the page's own is drawn once it has landed.
+    var ribbonArriving = false
+    /// The page's ribbon pulled down (I47): how far, in points. The page
+    /// follows it.
+    var onDrop: (CGFloat) -> Void = { _ in }
+    /// Let go short of home: the page goes back up, from the speed it was
+    /// coming down at.
+    var onDropCancelled: (CGFloat) -> Void = { _ in }
+    /// Let go past home, or flung: closed, and the page goes on down at
+    /// that speed, the room over it.
+    var onCloseDown: (CGFloat) -> Void = { _ in }
 
     // Composition state
     /// What the page has selected (A62). A reference the body never reads:
@@ -67,6 +79,8 @@ struct ReadingScreen: View {
     @State private var pages: [Int: ChapterPageHandle] = [:]
     /// The chapter list (A31), from the running-head pill at the foot.
     @State private var showChapters = false
+    /// What is behind the ribbon (I47), from its tail.
+    @State private var showRibbonList = false
     /// The one question about notifications (§6.1), raised from the two
     /// moments the build book names — a note left, and a note found.
     @State private var askAboutNotifications = false
@@ -110,6 +124,9 @@ struct ReadingScreen: View {
     @State private var shelving: Shelving?
     /// The room's jar as it was when this book was put on the shelf.
     @State private var keptForJar: [JarEmber] = []
+    /// Putting the book on the shelf, asked first (I47): it finishes the
+    /// book for the whole room.
+    @State private var shelvingQuestion: ConfirmState?
 
     private enum Shelving {
         /// "Put it on the shelf": back to the room.
@@ -610,6 +627,31 @@ struct ReadingScreen: View {
                 }.value
             }
         }
+        .overlay {
+            // The ribbon, down the page to where you are (I47). Not over
+            // the finishing, where the fire becomes its ember.
+            PageRibbon(
+                hidden: ribbonArriving || shelving != nil,
+                columnWidth: columnWidth, margin: pageMargin,
+                onOpen: { showRibbonList = true },
+                onPull: { down in
+                    guard !closing else { return }
+                    // Under reduce motion a page the size of the screen
+                    // does not travel (§11): it waits, and fades when the
+                    // pull is far enough.
+                    if !reduceMotion { onDrop(down) }
+                },
+                onLetGo: { down, speed in
+                    guard !closing else { return }
+                    if down > viewportHeight * 0.2 || (speed > 600 && down > 24) {
+                        close(downAt: max(0, speed))
+                    } else {
+                        onDropCancelled(-speed)
+                    }
+                },
+                onClose: { close() })
+            .animation(RibbonMotion.settle, value: shelving != nil)
+        }
         .overlay(alignment: .trailing) {
             if !room.isPaused {
                 PresenceForm(
@@ -649,7 +691,19 @@ struct ReadingScreen: View {
                 scrollCommand = chapter
             }
         }
+        .sheet(isPresented: $showRibbonList) {
+            RibbonListSheet(
+                room: room, reading: reading, chapter: currentChapter,
+                translation: translation
+            ) { address in
+                showRibbonList = false
+                // Going there is your own move: a follow ends first.
+                endFollow()
+                land(at: address, animated: true)
+            }
+        }
         .confirm(askDialog, dismissTitle: Copy.dontTellMe)
+        .confirm($shelvingQuestion, dismissTitle: Copy.notYet)
         .onChange(of: model.isOnline) { _, online in
             // Connectivity back: the chapters that would not come are
             // asked for again, once, without a tap.
@@ -1058,13 +1112,19 @@ struct ReadingScreen: View {
                         withAnimation(RibbonMotion.arrive) { followBackOffer = nil }
                     }
                 }
-                // The way out: the Wave, ~20 pt, muted ivory, centred at
-                // the bottom edge. Beside it, at the leading edge, the
-                // running head as a pill: where you are, and the way to the
-                // chapter list (A31). The glass capsules stay small; the
+                // The Wave, ~20 pt, muted ivory, centred at the bottom
+                // edge: the original words of the verse you are at (I47),
+                // where it used to be the way out — the way out is the
+                // ribbon now, pulled down. Beside it, at the leading edge,
+                // the running head as a pill: where you are, and the way to
+                // the chapter list (A31). The glass capsules stay small; the
                 // touch targets don't (44 pt minimum).
                 ZStack {
-                    Button { close() } label: {
+                    // Esc still closes the book on a hardware keyboard.
+                    Button { close() } label: { EmptyView() }
+                        .keyboardShortcut(.cancelAction)
+                        .accessibilityHidden(true)
+                    Button { originalHere() } label: {
                         WaveMark(color: Palette.text.opacity(0.55))
                             .frame(width: 20, height: 20)
                             .padding(.horizontal, 26)
@@ -1093,9 +1153,8 @@ struct ReadingScreen: View {
                             }
                         }))
                     .hoverEffect(.lift)
-                    // Esc closes the book on a hardware keyboard.
-                    .keyboardShortcut(.cancelAction)
-                    .accessibilityLabel(Copy.closeTheBook)
+                    .accessibilityLabel(Copy.theOriginalHere(OriginalWords.language(of: reading.bookID)))
+                    .accessibilityAction(named: Copy.closeTheBook) { close() }
                     HStack {
                         Button { showChapters = true } label: {
                             SmallCaps(book?.chapterHeading(currentChapter) ?? "", size: 12, color: Palette.text.opacity(0.7))
@@ -1266,8 +1325,8 @@ struct ReadingScreen: View {
             VStack(spacing: 16) {
                 // Either one puts the book on the shelf, and closes it once
                 // the fire has become an ember; closing ends a follow.
-                WayInButton(title: Copy.putItOnTheShelf) { putOnTheShelf(.shelf) }
-                QuietControl(title: Copy.startAnother) { putOnTheShelf(.another) }
+                WayInButton(title: Copy.putItOnTheShelf) { askToShelve(.shelf) }
+                QuietControl(title: Copy.startAnother) { askToShelve(.another) }
             }
             .padding(.horizontal, 60)
             .padding(.top, 16)
@@ -1285,6 +1344,21 @@ struct ReadingScreen: View {
     /// it for the whole room — a fling past the last verse was enough — and
     /// the fire burned down on its own while the reader was still arriving.
     /// Now the end waits with its fire lit until somebody puts the book away.
+    /// The question first (I47: *"add them with a comfermation"*): putting
+    /// a book on the shelf finishes it for everyone, and a stray tap at the
+    /// end of a book should not. A book already an ember is not asked about.
+    private func askToShelve(_ then: Shelving) {
+        guard shelving == nil else { return }
+        guard !reading.isFinished else {
+            putOnTheShelf(then)
+            return
+        }
+        let book = Bible.book(id: reading.bookID)?.name ?? reading.bookID
+        shelvingQuestion = ConfirmState(question: Copy.putOnTheShelfQuestion(book), choices: [
+            ConfirmChoice(Copy.putItOnTheShelf) { putOnTheShelf(then) },
+        ])
+    }
+
     private func putOnTheShelf(_ then: Shelving) {
         guard shelving == nil else { return }
         endFollow(telling: false)
@@ -1355,6 +1429,17 @@ struct ReadingScreen: View {
             composer = opening
         }
         pages[chapter]?.select(ends)
+    }
+
+    /// The original words of the verse you are at (I47), from the Wave: the
+    /// verse selected whole, and the panel open on it, as "The Greek" opens
+    /// it on a selection. Where this page has no original words to give,
+    /// the selection's own toolbar instead.
+    private func originalHere() {
+        let here = latestAddress ?? model.myPosition(in: reading)
+        let range = VerseRange(bookID: here.bookID, chapter: here.chapter, startVerse: here.verse, endVerse: here.verse)
+        let hasWords = originalContext(chapter: here.chapter).selection(range) != nil
+        select(.whole(here.verse), chapter: here.chapter, opening: hasWords ? .original(nil) : .toolbar)
     }
 
     /// One selection on the screen: a chapter that held it lets go when the
@@ -2422,7 +2507,7 @@ struct ReadingScreen: View {
 
     /// `upAt`: closed by the sweep up from the Wave, going up at that
     /// speed — the page leaves by the top, not the foot.
-    private func close(upAt speed: CGFloat? = nil) {
+    private func close(upAt speed: CGFloat? = nil, downAt fall: CGFloat? = nil) {
         guard !closing else { return }
         closing = true
         // Closing ends a follow. A page only ever carried by one was not
@@ -2449,7 +2534,13 @@ struct ReadingScreen: View {
         if let openedAt, openedAt != here, !reading.isFinished {
             model.leaveTheRibbon(in: reading, at: here)
         }
-        if let speed { onCloseUp(speed) } else { onClose() }
+        if let speed {
+            onCloseUp(speed)
+        } else if let fall {
+            onCloseDown(fall)
+        } else {
+            onClose()
+        }
     }
 
     private func trackReading(chapter: Int, frame: CGRect) {
