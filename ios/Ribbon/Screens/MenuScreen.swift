@@ -719,6 +719,7 @@ private struct YouScreen: View {
     var onWhatsNew: () -> Void
     var onBeingFound: () -> Void
     @State private var deleting: ConfirmState?
+    @State private var choosingNameColour = false
 
     var body: some View {
         GeometryReader { _ in
@@ -735,7 +736,8 @@ private struct YouScreen: View {
                         version: buildNumber,
                         onText: onText, onDownloads: onDownloads,
                         onNotifications: onNotifications, onBeingFound: onBeingFound,
-                        onWhatsNew: onWhatsNew)
+                        onWhatsNew: onWhatsNew,
+                        onName: { choosingNameColour = true })
                         .padding(.horizontal, RibbonShape.textInset)
                         .padding(.top, 44)
 
@@ -779,6 +781,7 @@ private struct YouScreen: View {
         .room()
         .toolbar(.hidden, for: .navigationBar)
         .confirm($deleting, dismissTitle: Copy.neverMind)
+        .sheet(isPresented: $choosingNameColour) { NameColourSheet() }
     }
 
     /// The foot: the version this phone has, and the way out.
@@ -822,6 +825,7 @@ private struct YourColophon: View {
     var onNotifications: () -> Void
     var onBeingFound: () -> Void
     var onWhatsNew: () -> Void
+    var onName: () -> Void
 
     var body: some View {
         let words = model.words(room: model.currentRoom)
@@ -847,6 +851,7 @@ private struct YourColophon: View {
             if model.discoveryAvailable {
                 sentence(Copy.colophonFound(model.beingFound.findable))
             }
+            sentence(Copy.colophonName(nameColourWords))
             sentence(Copy.colophonNew(self.version))
         }
         .environment(\.openURL, OpenURLAction { url in
@@ -856,10 +861,21 @@ private struct YourColophon: View {
             case "notifications": onNotifications()
             case "found": onBeingFound()
             case "new": onWhatsNew()
+            case "name": onName()
             default: return .discarded
             }
             return .handled
         })
+    }
+
+    /// Your name's colour, as the sentence says it: ivory, until there is
+    /// a picture to take one from.
+    private var nameColourWords: String {
+        switch model.nameColour {
+        case .picture: model.nameTint == nil ? Copy.ivory : Copy.yourPicturesColour
+        case .ivory: Copy.ivory
+        case .ink(let ink): ink.displayName
+        }
     }
 
     /// A sentence of the colophon, its links underlined in the accent.
@@ -875,6 +891,111 @@ private struct YourColophon: View {
             .lineSpacing(5)
             .tint(Palette.text)
             .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// Your name's colour (I47): the room's greeting took it from your
+/// picture, and the owner asked for *"customizing the color of your name"*.
+/// The choices hang as the inks do (`InkPickerSheet`): ribbons from two
+/// rules, the one that is yours pulled further down — your picture's own
+/// colour and the page's ivory first, then the twelve inks round the wheel.
+/// Your name is set above them in what you choose, as the room will set
+/// it, and the sheet stays to let you try another.
+private struct NameColourSheet: View {
+    @Environment(AppModel.self) private var model
+
+    private static let yours: CGFloat = 60
+    private static let free: CGFloat = 44
+    private static let between: CGFloat = 18
+
+    var body: some View {
+        let picture = model.me.flatMap { model.portraitTint($0.id) }
+        // Your picture's colour, with no picture to take it from, is the
+        // page's ivory, and hangs as that.
+        let chosen = model.nameColour == .picture && picture == nil ? .ivory : model.nameColour
+        // Seven to a rule: still the 44 points a finger is owed in every
+        // column on the narrowest phone.
+        let choices: [NameColour] = (picture == nil ? [] : [.picture]) + [.ivory] + Ink.allCases.map { .ink($0) }
+        let rows = stride(from: 0, to: choices.count, by: 7).map {
+            Array(choices[$0..<min($0 + 7, choices.count)])
+        }
+        VStack(spacing: 24) {
+            SmallCaps(Copy.yourNameColour, size: 13)
+                .padding(.top, 30)
+                .accessibilityAddTraits(.isHeader)
+            VStack(spacing: 6) {
+                Text(firstName(model.me?.name ?? Copy.yourName))
+                    .font(RibbonType.displayMedium(40))
+                    .foregroundStyle(model.nameTint ?? Palette.text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                Text(caption(chosen, picture: picture))
+                    .font(RibbonType.scriptureItalic(14))
+                    .foregroundStyle(Palette.muted)
+                    .contentTransition(.opacity)
+            }
+            .animation(RibbonMotion.arrive, value: chosen)
+            .accessibilityElement(children: .combine)
+            VStack(spacing: Self.between) {
+                ForEach(rows, id: \.self) { row in
+                    HStack(spacing: 0) {
+                        ForEach(row, id: \.self) { colour in
+                            Button {
+                                model.chooseNameColour(colour)
+                            } label: {
+                                HangingRibbon(
+                                    color: tint(colour, picture: picture),
+                                    width: 18,
+                                    length: colour == chosen ? Self.yours : Self.free)
+                                .frame(width: 44, height: Self.yours, alignment: .top)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.pressable)
+                            .accessibilityLabel(Copy.nameColourSpoken(spoken(colour), yours: colour == chosen))
+                            .accessibilityAddTraits(colour == chosen ? [.isSelected] : [])
+                        }
+                    }
+                    .overlay(alignment: .top) {
+                        HairlineRule()
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 12)
+            .padding(.bottom, 34)
+        }
+        .frame(maxWidth: .infinity)
+        .room()
+        .presentationBackground(Palette.ground)
+        .presentationDetents([.height(230 + Self.yours * 2 + Self.between)])
+        .presentationDragIndicator(.visible)
+        .presentationSizing(.fitted)
+    }
+
+    private func tint(_ colour: NameColour, picture: Color?) -> Color {
+        switch colour {
+        case .picture: picture ?? Palette.text
+        case .ivory: Palette.text
+        case .ink(let ink): ink.color
+        }
+    }
+
+    private func spoken(_ colour: NameColour) -> String {
+        switch colour {
+        case .picture: Copy.yourPicturesColour
+        case .ivory: Copy.ivory
+        case .ink(let ink): ink.displayName
+        }
+    }
+
+    private func caption(_ colour: NameColour, picture: Color?) -> String {
+        switch colour {
+        case .picture: Copy.nameFromYourPicture
+        case .ivory: model.nameColour == .picture ? Copy.nameIvoryUntilAPicture : Copy.nameInIvory
+        case .ink(let ink): ink.displayName.capitalized
+        }
     }
 }
 
@@ -1067,7 +1188,9 @@ private struct YouIdentity: View {
             VStack(alignment: .leading, spacing: 6) {
                 TextField("", text: $name, prompt: Text(Copy.yourName).foregroundStyle(Palette.muted))
                     .font(RibbonType.display(36))
-                    .foregroundStyle(Palette.text)
+                    // In its colour, as the room greets you with it.
+                    .foregroundStyle(model.nameTint ?? Palette.text)
+                    .animation(RibbonMotion.arrive, value: model.nameColour)
                     .focused($nameFocused)
                     .submitLabel(.done)
                     .textInputAutocapitalization(.words)

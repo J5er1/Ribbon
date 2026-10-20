@@ -8,17 +8,17 @@ import RibbonCore
 // The way in is the book's own ribbon, hanging from its title. Pull it up
 // and the book opens where it lies; the ribbon goes up with the page (the
 // root draws that flight, `RibbonFlight`) and stays on it. A tap does the
-// same; held, it opens what is behind it (`RibbonListSheet`). Beside it,
-// the room's people in a pill that switches rooms, and your face with the
-// gear that is your settings.
+// same. Beside it, the room's people in a pill that switches rooms, and
+// your face with the gear that is your settings.
 //
 // It is the foot of the book itself (I47, after the owner's *"take
 // inspiration ... from 2010s apps with the skew morphism but blend it with
 // what we have"*): a leather cover, stitched, its pages' gilt edge along
-// the top, and the ribbon coming out over the gilt. Swiped down — up is
-// the ribbon's, into the book — a drawer rises out of it: a quiet day,
-// another book, and what is behind the ribbon. The tab at its top edge
-// says so, and takes a tap too.
+// the top, and the ribbon coming out over the gilt. Held — anywhere on it
+// but your rooms and your face, after a tester reached for that first — a
+// drawer rises out of it: a quiet day, another book, and what is behind the
+// ribbon. Swiped down it rises too (up is the ribbon's, into the book), and
+// the tab at its top edge says so, and takes a tap.
 struct RoomFoot: View {
     @Environment(AppModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -32,7 +32,7 @@ struct RoomFoot: View {
     /// The drawer is up.
     @Binding var drawerOpen: Bool
     var onOpen: (Reading, CGRect) -> Void
-    /// The ribbon held: what is behind it (I47).
+    /// What is behind the ribbon (I47), from the drawer.
     var onHold: (Reading) -> Void
     /// "Start another book", from the drawer.
     var onStartAnother: () -> Void
@@ -47,6 +47,8 @@ struct RoomFoot: View {
     @MainActor private static var dipped = false
     /// The ribbon is out of its slot, hanging in the foot.
     @State private var ribbonOut = true
+    /// Each time it drops back out of its slot, counted: it swings to rest.
+    @State private var ribbonDrops = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -66,6 +68,13 @@ struct RoomFoot: View {
             .padding(.leading, 32)
             .padding(.trailing, 18)
             .frame(height: 66, alignment: .top)
+            // Held on the bare leather, between the things on it: the
+            // drawer. The ribbon's own press says the same when held.
+            .background {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onLongPressGesture(minimumDuration: Self.hold) { heldForTheDrawer() }
+            }
         }
         .background(alignment: .top) { plate }
         // Down on the cover, anywhere: the drawer, or the drawer away.
@@ -172,15 +181,24 @@ struct RoomFoot: View {
                 .frame(width: 18, height: 78)
                 .opacity(reading == nil ? 0.35 : 1)
                 .scaleEffect(x: 1, y: ribbonOut || reduceMotion ? 1 : 0.001, anchor: .top)
-                .opacity(ribbonOut ? 1 : 0)
-                .onChange(of: ribbonAway, initial: true) { _, away in
+                // Faded only under reduce motion, where it does not drop:
+                // on the drop's spring a fade passed 1 and came back under
+                // it, and the ribbon flickered as it came out.
+                .opacity(ribbonOut || !reduceMotion ? 1 : 0)
+                // Dropped back out, it swings from the gilt and comes to
+                // rest.
+                .ribbonSwing(ribbonDrops, amplitude: 5.5, delay: 0.16)
+                .onChange(of: ribbonAway, initial: true) { was, away in
                     // Gone at once, under the ribbon taking its place; back
-                    // on the settle curve once the page has gone, whatever
-                    // closed it.
+                    // once the page has gone, whatever closed it — dropping
+                    // out of its slot a little past its length, and back.
                     if away {
                         ribbonOut = false
                     } else {
-                        withAnimation(RibbonMotion.settle.delay(0.12)) { ribbonOut = true }
+                        withAnimation((reduceMotion ? RibbonMotion.settle : RibbonMotion.dropped).delay(0.12)) {
+                            ribbonOut = true
+                        }
+                        if was { ribbonDrops += 1 }
                     }
                 }
                 .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { ribbonFrame = $0 }
@@ -235,10 +253,20 @@ struct RoomFoot: View {
         !reduceMotion && reading != nil && !ribbonAway && !room.isPaused
     }
 
+    /// How long the cover is held for its drawer.
+    private static let hold = 0.45
+
+    /// Held: the drawer rises, or goes, and the hand feels it.
+    private func heldForTheDrawer() {
+        Haptics.shared.footHeld()
+        drawerOpen.toggle()
+    }
+
     /// One gesture for the three things a finger does here: up from the
     /// ribbon or its title opens the book (a third of the way to the top of
-    /// the foot, or a flick); a tap does the same; held still, it opens
-    /// what is behind the ribbon, as soon as it has been held.
+    /// the foot, or a flick); a tap does the same; held still, it raises
+    /// the drawer, as the rest of the cover does, as soon as it has been
+    /// held.
     private var press: some Gesture {
         DragGesture(minimumDistance: 0)
             .onChanged { value in
@@ -246,10 +274,10 @@ struct RoomFoot: View {
                     pressedAt = .now
                     held = false
                     holding = Task { @MainActor in
-                        try? await Task.sleep(for: .seconds(0.45))
-                        guard !Task.isCancelled, pressedAt != nil, let reading else { return }
+                        try? await Task.sleep(for: .seconds(Self.hold))
+                        guard !Task.isCancelled, pressedAt != nil else { return }
                         held = true
-                        onHold(reading)
+                        heldForTheDrawer()
                     }
                 }
                 if hypot(value.translation.width, value.translation.height) > 10 { holding?.cancel() }
@@ -566,7 +594,7 @@ struct SatinRibbon: View {
 
 /// The foot's ribbon, carried up into the book (I47): one movement, on the
 /// page's own spring. As the page comes up from the foot, the ribbon is
-/// drawn up with it out of its slot — its top to the top of the screen,
+/// drawn up with it out of its slot — its top to the book's leather head,
 /// its tail to the reading line — and lands where the page's own ribbon
 /// hangs (`PageRibbon`), which takes over from it there. The root draws it
 /// over everything, and moves `rise` from 0 to 1 with the page.
@@ -595,7 +623,7 @@ struct RibbonFlight: View {
                     .modifier(RibbonFlightPlacement(
                         rise: rise,
                         from: from.offsetBy(dx: -origin.x, dy: -origin.y),
-                        toX: page.x, toTail: page.tail))
+                        toX: page.x, toTop: page.top, toTail: page.tail))
             }
             .ignoresSafeArea()
         }
@@ -610,6 +638,7 @@ private struct RibbonFlightPlacement: ViewModifier, Animatable {
     var rise: CGFloat
     let from: CGRect
     let toX: CGFloat
+    let toTop: CGFloat
     let toTail: CGFloat
 
     var animatableData: CGFloat {
@@ -619,7 +648,7 @@ private struct RibbonFlightPlacement: ViewModifier, Animatable {
 
     func body(content: Content) -> some View {
         let p = min(max(rise, 0), 1)
-        let top = from.minY * (1 - p)
+        let top = from.minY + (toTop - from.minY) * p
         let tail = from.maxY + (toTail - from.maxY) * p
         let length = max(from.height, tail - top)
         let width = from.width + (PageRibbon.width - from.width) * p

@@ -52,6 +52,9 @@ struct ReadingScreen: View {
     /// The page's ribbon pulled down (I47): how far, in points. The page
     /// follows it.
     var onDrop: (CGFloat) -> Void = { _ in }
+    /// The same pull, across: how far the finger has strayed sideways, and
+    /// where on the screen it took hold. The page hangs from it.
+    var onDropSway: (CGFloat, CGPoint) -> Void = { _, _ in }
     /// Let go short of home: the page goes back up, from the speed it was
     /// coming down at.
     var onDropCancelled: (CGFloat) -> Void = { _ in }
@@ -115,6 +118,12 @@ struct ReadingScreen: View {
     /// screen's third, not a phone's (a hardcoded 240 misplaces the
     /// position by half a screen on a 13" iPad).
     @State private var viewportHeight: CGFloat = 800
+    /// The ribbon pulled far enough down to take the page home (I47).
+    @State private var ribbonFarEnough = false
+    /// How far that is, of the page's height, once the ribbon's own slack
+    /// is taken up: less than the Wave's sweep asks, after the owner found
+    /// the ribbon *"very difficult to pull"*.
+    private static let ribbonHome: CGFloat = 0.12
     @State private var lastFuelRecord = Date.distantPast
     @State private var lastPositionSave = Date.distantPast
     @State private var highlightLabel: Highlight?
@@ -640,13 +649,25 @@ struct ReadingScreen: View {
                     // does not travel (§11): it waits, and fades when the
                     // pull is far enough.
                     if !reduceMotion { onDrop(down) }
+                    // Far enough to go home, felt as it is passed — and
+                    // again if it is taken back.
+                    let far = down > viewportHeight * Self.ribbonHome
+                    if far != ribbonFarEnough {
+                        ribbonFarEnough = far
+                        Haptics.shared.ribbonFarEnough()
+                    }
+                },
+                onSway: { across, at in
+                    guard !closing, !reduceMotion else { return }
+                    onDropSway(across, at)
                 },
                 onLetGo: { down, speed in
+                    ribbonFarEnough = false
                     guard !closing else { return }
-                    if down > viewportHeight * 0.2 || (speed > 600 && down > 24) {
+                    if down > viewportHeight * Self.ribbonHome || (speed > 450 && down > 20) {
                         close(downAt: max(0, speed))
                     } else {
-                        onDropCancelled(-speed)
+                        onDropCancelled(speed)
                     }
                 },
                 onClose: { close() })
@@ -1112,19 +1133,15 @@ struct ReadingScreen: View {
                         withAnimation(RibbonMotion.arrive) { followBackOffer = nil }
                     }
                 }
-                // The Wave, ~20 pt, muted ivory, centred at the bottom
-                // edge: the original words of the verse you are at (I47),
-                // where it used to be the way out — the way out is the
-                // ribbon now, pulled down. Beside it, at the leading edge,
+                // The way out: the Wave, ~20 pt, muted ivory, centred at
+                // the bottom edge — the way out again, since I47 made it
+                // the original words and the owner found a tap on it *"just
+                // selects a random verse"*. Beside it, at the leading edge,
                 // the running head as a pill: where you are, and the way to
                 // the chapter list (A31). The glass capsules stay small; the
                 // touch targets don't (44 pt minimum).
                 ZStack {
-                    // Esc still closes the book on a hardware keyboard.
-                    Button { close() } label: { EmptyView() }
-                        .keyboardShortcut(.cancelAction)
-                        .accessibilityHidden(true)
-                    Button { originalHere() } label: {
+                    Button { close() } label: {
                         WaveMark(color: Palette.text.opacity(0.55))
                             .frame(width: 20, height: 20)
                             .padding(.horizontal, 26)
@@ -1153,8 +1170,9 @@ struct ReadingScreen: View {
                             }
                         }))
                     .hoverEffect(.lift)
-                    .accessibilityLabel(Copy.theOriginalHere(OriginalWords.language(of: reading.bookID)))
-                    .accessibilityAction(named: Copy.closeTheBook) { close() }
+                    // Esc closes the book on a hardware keyboard.
+                    .keyboardShortcut(.cancelAction)
+                    .accessibilityLabel(Copy.closeTheBook)
                     HStack {
                         Button { showChapters = true } label: {
                             SmallCaps(book?.chapterHeading(currentChapter) ?? "", size: 12, color: Palette.text.opacity(0.7))
@@ -1429,17 +1447,6 @@ struct ReadingScreen: View {
             composer = opening
         }
         pages[chapter]?.select(ends)
-    }
-
-    /// The original words of the verse you are at (I47), from the Wave: the
-    /// verse selected whole, and the panel open on it, as "The Greek" opens
-    /// it on a selection. Where this page has no original words to give,
-    /// the selection's own toolbar instead.
-    private func originalHere() {
-        let here = latestAddress ?? model.myPosition(in: reading)
-        let range = VerseRange(bookID: here.bookID, chapter: here.chapter, startVerse: here.verse, endVerse: here.verse)
-        let hasWords = originalContext(chapter: here.chapter).selection(range) != nil
-        select(.whole(here.verse), chapter: here.chapter, opening: hasWords ? .original(nil) : .toolbar)
     }
 
     /// One selection on the screen: a chapter that held it lets go when the
@@ -2698,19 +2705,30 @@ extension PageEnds {
     }
 }
 
-/// The sweep up from the Wave (I46): a pan of UIKit's own, because the page
-/// is a scroll view, and a scroll view's pan takes any vertical drag before
-/// a SwiftUI gesture over it can — the page scrolled under the finger and
-/// never lifted. This one begins only on a drag up from the Wave, and the
-/// page's scrolling waits for it to fail, so a tap still closes the book and
-/// a drag anywhere else still reads on.
-private struct HomeSweep: UIGestureRecognizerRepresentable {
-    /// How far up the finger has come, in points.
+/// The sweep up from the Wave (I46), and the pull down the ribbon (I47): a
+/// pan of UIKit's own, because the page is a scroll view, and a scroll
+/// view's pan takes any vertical drag before a SwiftUI gesture over it can —
+/// the page scrolled under the finger and never lifted. This one begins only
+/// on a drag the way home, and the page's scrolling waits for it to fail, so
+/// a tap still does what it does and a drag anywhere else still reads on.
+/// Measured on the window, not on the page, which moves under the finger.
+struct HomeSweep: UIGestureRecognizerRepresentable {
+    /// The way home: up from the Wave, or down with the ribbon.
+    var downward = false
+    /// Whether it begins on a drag across, as well as on one the way home:
+    /// the ribbon is taken hold of and moved about before it is pulled.
+    var takesSideways = false
+    /// How far the finger has come that way, in points.
     var onChanged: (CGFloat) -> Void
-    /// How far up, and how fast it was going up when it let go.
+    /// How far, and how fast it was going that way when it let go.
     var onEnded: (CGFloat, CGFloat) -> Void
+    /// How far the finger has come across, and where on the screen it took
+    /// hold — said just before each `onChanged`.
+    var onAcross: (CGFloat, CGPoint) -> Void = { _, _ in }
 
-    func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator { Coordinator() }
+    func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator {
+        Coordinator(downward: downward, sideways: takesSideways)
+    }
 
     func makeUIGestureRecognizer(context: Context) -> UIPanGestureRecognizer {
         let pan = UIPanGestureRecognizer()
@@ -2719,19 +2737,34 @@ private struct HomeSweep: UIGestureRecognizerRepresentable {
     }
 
     func handleUIGestureRecognizerAction(_ pan: UIPanGestureRecognizer, context: Context) {
-        let up = max(0, -pan.translation(in: pan.view).y)
+        let way: CGFloat = downward ? 1 : -1
+        let moved = pan.translation(in: nil)
+        let along = max(0, way * moved.y)
         switch pan.state {
-        case .changed: onChanged(up)
-        case .ended, .cancelled, .failed: onEnded(up, -pan.velocity(in: pan.view).y)
+        case .changed:
+            let at = pan.location(in: nil)
+            onAcross(moved.x, CGPoint(x: at.x - moved.x, y: at.y - moved.y))
+            onChanged(along)
+        case .ended, .cancelled, .failed: onEnded(along, way * pan.velocity(in: nil).y)
         default: break
         }
     }
 
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        let downward: Bool
+        let sideways: Bool
+
+        init(downward: Bool, sideways: Bool) {
+            self.downward = downward
+            self.sideways = sideways
+        }
+
         func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
             guard let pan = gesture as? UIPanGestureRecognizer else { return false }
-            let v = pan.velocity(in: pan.view)
-            return v.y < 0 && abs(v.y) > abs(v.x)
+            let v = pan.velocity(in: nil)
+            let homeward = downward ? v.y : -v.y
+            if sideways, abs(v.x) > abs(v.y) { return true }
+            return homeward > 0 && abs(v.y) > abs(v.x)
         }
 
         func gestureRecognizer(

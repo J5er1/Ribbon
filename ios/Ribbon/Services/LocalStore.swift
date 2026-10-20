@@ -116,6 +116,8 @@ struct AppState: Codable {
     /// still here to be kept as a file. Their readings, notes and marks stay
     /// in the lists above, as a room you have left keeps its books.
     var closedRooms: [Room] = []
+    /// What your name is written in, in your room's greeting (I47).
+    var nameColour = NameColour.picture
 
     enum CodingKeys: String, CodingKey {
         case me, people, rooms, memberships, readings, notes, highlights, quietDays, positions, ribbons, cards, invites, currentRoomID, settings, hasSeenMarginHint, hasPulledTheFire, hasAskedAboutNotifications, portraitETags, notifiedThrough, invitesNotYetPushed, invitesHandedOut
@@ -123,6 +125,7 @@ struct AppState: Codable {
         case pendingReadingDeletes
         case whatsNewSeen
         case beingFound, blockedNames, closedRooms
+        case nameColour
     }
 
     init() {}
@@ -162,6 +165,7 @@ struct AppState: Codable {
         beingFound = try container.decodeIfPresent(BeingFound.self, forKey: .beingFound) ?? BeingFound()
         blockedNames = try container.decodeIfPresent([UUID: String].self, forKey: .blockedNames) ?? [:]
         closedRooms = try container.decodeIfPresent([Room].self, forKey: .closedRooms) ?? []
+        nameColour = (try? container.decodeIfPresent(NameColour.self, forKey: .nameColour)) ?? .picture
     }
 }
 

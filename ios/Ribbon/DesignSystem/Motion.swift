@@ -105,6 +105,35 @@ enum RibbonMotion {
             initialVelocity: min(limit, max(-limit, relative)))
     }
 
+    // MARK: The ribbon's bounce (I47)
+
+    // The book's ribbon, and the page it carries in and out: the one place
+    // in Ribbon a spring crosses its mark. The owner asked for it — *"can
+    // you make the animation more fun"*, of the way into the book and the
+    // pull home — and §9.1 stands everywhere else.
+
+    /// The page carried up by the ribbon: a little past where it lies, and
+    /// back.
+    static let carried = Animation.interpolatingSpring(
+        mass: 1, stiffness: 180, damping: 2 * (180.0).squareRoot() * 0.82)
+    /// The ribbon dropping back out of its slot: past its length, and back.
+    static let dropped = Animation.interpolatingSpring(
+        mass: 1, stiffness: 320, damping: 2 * (320.0).squareRoot() * 0.5)
+
+    /// The page's ribbon let go of before the page came with it: back to
+    /// where it hangs, through it, and back.
+    static let letGo = Animation.interpolatingSpring(
+        mass: 1, stiffness: 240, damping: 2 * (240.0).squareRoot() * 0.42)
+    /// A page let go short of home, handed the finger's speed: back up, a
+    /// little past, and down again.
+    static func sprung(rate: CGFloat, towards distance: CGFloat) -> Animation {
+        let stiffness = 260.0
+        let relative = abs(distance) < 0.001 ? 0 : Double(rate / distance)
+        return .interpolatingSpring(
+            mass: 1, stiffness: stiffness, damping: 2 * stiffness.squareRoot() * 0.62,
+            initialVelocity: min(30, max(-30, relative)))
+    }
+
     // MARK: The hearth gesture (S01 → S02, ledger A48)
 
     /// How far up the fire has to be pulled before letting go opens the
@@ -116,4 +145,37 @@ enum RibbonMotion {
     static let openFling: CGFloat = 480
     /// How much of the room's height one full pull is worth.
     static let openTravel: CGFloat = 0.55
+}
+
+/// A ribbon swinging from its top and coming to rest (I47): a few swings,
+/// each smaller, whenever `trigger` changes, after `delay`. Held still
+/// under reduce motion.
+struct RibbonSwing<Trigger: Equatable>: ViewModifier {
+    let trigger: Trigger
+    /// The first swing, in degrees; the sign is the way it goes first.
+    let amplitude: Double
+    var delay: Double = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content.keyframeAnimator(initialValue: 0.0, trigger: trigger) { view, angle in
+            view.rotationEffect(.degrees(reduceMotion ? 0 : angle), anchor: .top)
+        } keyframes: { _ in
+            KeyframeTrack {
+                LinearKeyframe(0, duration: max(0.001, delay))
+                CubicKeyframe(amplitude, duration: 0.2)
+                CubicKeyframe(-amplitude * 0.55, duration: 0.26)
+                CubicKeyframe(amplitude * 0.28, duration: 0.24)
+                CubicKeyframe(-amplitude * 0.12, duration: 0.22)
+                CubicKeyframe(0, duration: 0.24)
+            }
+        }
+    }
+}
+
+extension View {
+    /// Swings from its top and comes to rest whenever `trigger` changes.
+    func ribbonSwing<T: Equatable>(_ trigger: T, amplitude: Double, delay: Double = 0) -> some View {
+        modifier(RibbonSwing(trigger: trigger, amplitude: amplitude, delay: delay))
+    }
 }

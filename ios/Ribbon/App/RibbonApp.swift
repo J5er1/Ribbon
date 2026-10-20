@@ -258,6 +258,12 @@ struct RootView: View {
     /// How far the page has been pulled down by its ribbon (I47), in
     /// points: 0 where it lies, the screen's height when it has gone.
     @State private var bookDrop: CGFloat = 0
+    /// The page hanging from the finger that pulls its ribbon (I47): how
+    /// far it has tipped, in degrees, and round where the finger holds it.
+    @State private var bookTilt: Double = 0
+    @State private var tiltAnchor = UnitPoint.top
+    /// How far that finger has strayed across, in points.
+    @State private var dropAcross: CGFloat = 0
 
     private struct RibbonFlightStart: Identifiable {
         let id = UUID()
@@ -426,9 +432,26 @@ struct RootView: View {
                             },
                             onCloseUp: { speed in closeUp(speed, height: proxy.size.height) },
                             ribbonArriving: ribbonFlight != nil,
-                            onDrop: { down in bookDrop = down },
+                            onDrop: { down in
+                                bookDrop = down
+                                bookTilt = Self.tilt(down: down, across: dropAcross)
+                            },
+                            onDropSway: { across, at in
+                                dropAcross = across
+                                tiltAnchor = UnitPoint(
+                                    x: at.x / max(1, proxy.size.width),
+                                    y: at.y / max(1, proxy.size.height))
+                            },
                             onDropCancelled: { speed in
-                                withAnimation(RibbonMotion.handled(rate: speed, towards: -bookDrop)) { bookDrop = 0 }
+                                // Back up, a little past, and down again;
+                                // straightened without swinging through,
+                                // which would open a sliver of the room
+                                // down its side.
+                                dropAcross = 0
+                                withAnimation(RibbonMotion.sprung(rate: speed, towards: -bookDrop)) {
+                                    bookDrop = 0
+                                }
+                                withAnimation(RibbonMotion.handled) { bookTilt = 0 }
                             },
                             onCloseDown: { speed in closeDown(speed, height: proxy.size.height) })
                         // One page per book. A notification can open another
@@ -436,6 +459,18 @@ struct RootView: View {
                         // identity the new book would inherit this one's
                         // typeset chapters, its landing, and where it opened.
                         .id(reading.id)
+                        // Ground to spare under the page's foot: come up a
+                        // little past its place, or springing back, it
+                        // showed the room's foot under it for a moment — a
+                        // flicker (I47).
+                        .background(alignment: .bottom) {
+                            GrainBackground()
+                                .frame(height: 160)
+                                .offset(y: 159)
+                                .allowsHitTesting(false)
+                                .accessibilityHidden(true)
+                        }
+                        .rotationEffect(.degrees(bookTilt), anchor: tiltAnchor)
                         .offset(y: (openReading == nil ? (1 - bookPull) * proxy.size.height : 0) - bookLift + bookDrop)
                         // Lifted, it is a card: its corners round as it
                         // leaves, and the room shows round them. A mask as
@@ -587,10 +622,10 @@ struct RootView: View {
     }
 
     /// The book opened by its ribbon in the room's foot (I47): one
-    /// movement. The page comes up on the cover spring and the ribbon is
-    /// drawn up with it on the same spring, out of its slot and onto the
-    /// page, where the page's own ribbon takes over. Under reduce motion the
-    /// ribbon stays, and the page fades in.
+    /// movement. The page comes up, a little past its place and back, and
+    /// the ribbon is drawn up with it on the same spring, out of its slot
+    /// and onto the page, where the page's own ribbon takes over and swings
+    /// to rest. Under reduce motion the ribbon stays, and the page fades in.
     private func openFromTheRibbon(_ reading: Reading, from frame: CGRect) {
         model.markFirePulled()
         guard !reduceMotion, frame.height > 0 else {
@@ -605,7 +640,10 @@ struct RootView: View {
             ribbonFlight = flight
         }
         openTarget = nil
-        withAnimation(RibbonMotion.cover) {
+        // Handed over once the page is quite still: while it is still
+        // settling from coming up past its place, the page's own ribbon
+        // would take over a few points from where this one is.
+        withAnimation(RibbonMotion.carried, completionCriteria: .removed) {
             openReading = reading
             ribbonRise = 1
         } completion: {
@@ -618,28 +656,44 @@ struct RootView: View {
     }
 
     /// The book closed by its ribbon, pulled down (I47): the page goes on
-    /// down at the speed the finger let it go at, and the room is there
-    /// over it; the ribbon comes back out of its slot in the foot. Gone, it
-    /// leaves the tree without a second movement. Under reduce motion, a
-    /// fade.
+    /// down at the speed the finger let it go at, tipping as it falls, and
+    /// the room is there over it; the ribbon comes back out of its slot in
+    /// the foot. Gone, it leaves the tree without a second movement. Under
+    /// reduce motion, a fade.
     private func closeDown(_ speed: CGFloat, height: CGFloat) {
+        dropAcross = 0
         guard !reduceMotion else {
             bookDrop = 0
+            bookTilt = 0
             closeBook()
             return
         }
         let away = height * 1.05
+        // It goes on tipping the way it leans, as a page let fall does.
+        let fallen = bookTilt + (bookTilt < 0 ? -7 : 7)
         withAnimation(RibbonMotion.cover(rate: speed, towards: away - bookDrop)) {
             bookDrop = away
+            bookTilt = fallen
         } completion: {
             var quiet = Transaction()
             quiet.disablesAnimations = true
             withTransaction(quiet) {
                 openReading = nil
                 bookDrop = 0
+                bookTilt = 0
             }
             openTarget = nil
         }
+    }
+
+    /// How far the page tips, hanging from the finger that pulls its ribbon
+    /// down (I47): a little the further it is pulled, its far side heavier
+    /// than the ribbon's, and more the further the finger strays across —
+    /// once the page has come with it, not while the ribbon alone is moved.
+    private static func tilt(down: CGFloat, across: CGFloat) -> Double {
+        let hanging = min(Double(down) * 0.016, 2.5)
+        let strayed = Double(across) * 0.04 * min(1, Double(down) / 40)
+        return min(6, max(-6, hanging + strayed))
     }
 
     /// The book closed by the sweep up from the Wave (I46): it goes on up

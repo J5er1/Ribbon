@@ -97,6 +97,51 @@ struct LeatherPlate: View {
     }
 }
 
+/// The head of the book (I47): the same leather across the top of the page,
+/// behind the clock, stitched, with the pages' gilt along its foot — where
+/// the ribbon comes out, as it comes out of the foot in the room. The owner
+/// found the page's ribbon, hanging from nothing, *"doenst match the
+/// style"*.
+struct LeatherHead: View {
+    /// As tall as the status bar, and a few points more for the gilt.
+    static func height(safeTop: CGFloat) -> CGFloat { max(safeTop, 20) + 6 }
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            // Darkest at the very top, where it goes over the edge of the
+            // book; a shade lighter where the light falls, at its foot.
+            LinearGradient(
+                colors: [Color(hex: "120C08"), Color(hex: "241911")],
+                startPoint: .top, endPoint: .bottom)
+            Image("PaperGrain")
+                .resizable(resizingMode: .tile)
+                .opacity(0.30)
+                .blendMode(.overlay)
+            Image("PaperGrain")
+                .resizable(resizingMode: .tile)
+                .scaleEffect(1.9, anchor: .topLeading)
+                .opacity(0.14)
+                .blendMode(.multiply)
+            Canvas { context, size in
+                var path = Path()
+                let y = size.height - 8
+                path.move(to: CGPoint(x: 10, y: y))
+                path.addLine(to: CGPoint(x: size.width - 10, y: y))
+                let dash = StrokeStyle(lineWidth: 1.4, lineCap: .round, dash: [5, 4])
+                context.stroke(path.offsetBy(dx: 0, dy: 1), with: .color(.black.opacity(0.6)), style: dash)
+                context.stroke(path, with: .color(Color(hex: "C9A86A").opacity(0.45)), style: dash)
+            }
+            // The gilt, along its foot.
+            Rectangle()
+                .fill(Color(hex: "C9A24A"))
+                .frame(height: 1.5)
+        }
+        .shadow(color: .black.opacity(0.55), radius: 8, y: 3)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
 /// A line of stitching round the cover, a few points in, round its corners:
 /// the thread, and the shadow each stitch leaves in the leather.
 private struct Stitching: View {

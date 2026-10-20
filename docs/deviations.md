@@ -6863,6 +6863,103 @@ I47. **The room's foot: the ribbon, your rooms and you, in reach (amends
       cut; and a fire banked dims its light on the room over a moment and
       a half, as a fire does — and comes up again the same way.
 
+    - **The book's ribbon, easy to take hold of, and in the room's
+      style.** *"the ribbon on the book is very difficult to pull and
+      doenst match the style"*. It was a thin strip hanging from nothing,
+      taken hold of only by a small patch at its tail, by a gesture the
+      page's scrolling could take first. Now it comes out from under the
+      book's leather head — the foot's leather, stitched, across the top of
+      the page behind the clock, with the pages' gilt along its foot — as
+      the room's ribbon comes out of the foot; and it is near the room's
+      width, 16 points, as wide as the gap between the notes' marks and the
+      words allows (the room's is 18). All of it takes hold: anywhere down
+      its length, and wider at its tail. The pull is a pan of UIKit's own,
+      as the Wave's sweep is (I46), which the page's scrolling waits for.
+      It is home at 15% of the page's height, where it was 20%, or a flick;
+      the hand feels the moment it is far enough, and again if it is taken
+      back. A tap anywhere on it opens what is behind it. The ribbon flying
+      up from the foot lands under the head, where the page's own takes
+      over.
+
+    - **The Wave is the way out again.** *"pressing the ribbon at the
+      bottom just selects a random verse or something honestly we may not
+      need it or make it so it brings you home"* — the ribbon at the
+      bottom being the owner's name for the Wave. A tap on it closes the
+      book, as it did before I47; the original words are where they always
+      were, on a selection. This reverses "The Wave is the original words"
+      above.
+
+    - **The foot is held for its drawer.** *"maybe make pressing and
+      holding on the bottom bar the way to show that menu when you swipe
+      down just real user feedback"*: a tester reached to hold it. Held
+      for under half a second — the ribbon, its title, or the bare leather
+      between the things on the cover — the drawer rises, and the hand
+      feels it; held again, it goes. Your rooms and your face are buttons,
+      and keep their taps. The swipe down and the tab still raise it.
+      Holding the ribbon used to open what is behind it; that is a row in
+      the drawer now.
+
+    - **Your name in a colour you choose.** *"also customizing the color
+      of your name"*. The colophon on You says it — "The room greets you
+      with your name in *your picture's colour*." — and the underlined
+      words open a sheet where the choices hang as the inks do (A67, A70):
+      your picture's colour and the page's ivory, then the twelve inks
+      round the wheel, seven to a rule, the one that is yours pulled
+      further down. Your name is set above them in what you choose, and the
+      sheet stays open to try another. Your name on You's title page wears
+      it too. Kept on this phone, not on your profile: it is how your room
+      greets you, and nobody else sees it. With no picture, your picture's
+      colour is ivory, said and hung as that.
+
+    - **The ribbon's movements, with some play (deviates from §9.1).**
+      *"can you make the animation more fun"*; asked which, the owner
+      chose the way into the book and the pull home. §9.1 asks for no
+      bounce and no overshoot, and these two now have both, alone in the
+      product. Pulled up from the foot, the page comes up a little past
+      its place and back, the ribbon's tail with it, and the page's ribbon,
+      landed, swings from the head and comes to rest. Pulled down, the page
+      hangs from the finger: it tips a little the further it is pulled, its
+      far side heavier than the ribbon's, and more as the finger strays
+      across, round where the finger holds it. Let go short, it springs up
+      a little past its place and down again; let go far enough, it tips on
+      as it falls, and the room's ribbon drops back out of its slot a little
+      past its length and swings from the gilt to rest. None of it under
+      reduce motion. (`RibbonMotion.carried`, `.dropped`, `.sprung`, and
+      `ribbonSwing`.) On the way, the speed a short pull hands back to the
+      page was the wrong way round, hidden until now by a spring that never
+      overshoots; it is put right.
+
+      Then *"it flickers and tone it down a tiny bit not a lot"*. Three
+      flickers, each found frame by frame. Coming up past its place, and
+      springing back from a short pull, the page showed the room's foot
+      under its own for a moment: it has ground to spare under it now.
+      The page's safe area changes as the page moves, and the leather head
+      and the ribbon were measured from it: they shrank as the page came up
+      past its place and jumped back as it came to rest; they are measured
+      from the window now, and move with the page as one. And the ribbon
+      flying up was handed to the page's own while the page was still
+      settling, a few points apart; it waits until the page is still. The
+      room's ribbon faded on its bouncing spring, dipping as it came out; it
+      no longer fades, but under reduce motion. Toned down a little: the
+      page comes up past its place by about 1%, where it was 1.5%; the
+      ribbon drops out of its slot 16% past its length, where it was 23%;
+      a short pull springs back 8% past, where it was 13%, and is
+      straightened without swinging through; the swings are a fifth
+      smaller, and the page hangs and tips a little less.
+
+    - **The ribbon has slack.** *"make it so you can drag the ribbon a
+      little and move it before pulling it"*. Taken hold of anywhere down
+      its length, the page's ribbon follows the finger before the page
+      does: it swings from the head toward it, either way, as far as 14
+      degrees, and gives a little to a pull — 34 points of the finger's
+      travel, a quarter of that in its length — before it is taut and the
+      page comes with it. A drag across takes hold of it now, as well as
+      one down; one up is still the page's, to scroll. Let go of, it swings
+      back through where it hangs and comes to rest. The page tips with
+      the finger only once it has come with it, and is home at 12% of its
+      height past the slack, where it was 15% with none, so the whole pull
+      is about as long as before. None of it under reduce motion.
+
     **Android has none of it**, and What's new waits for it (A61), as with
     I45 and I46. The new words are in `Copy.swift` only for now.
 
@@ -6882,8 +6979,16 @@ I47. **The room's foot: the ribbon, your rooms and you, in reach (amends
     recording and taken out after, since this Xcode has no Simulator app to
     shake — flaring the fire and throwing the jar's ember about. The
     portrait's colour was looked at on the owner's room, without touching
-    it. Not seen: the question before a book goes on the shelf, an ember
-    actually taken off, and a real phone's tilt and shake.
+    it. Then, after the last four: the book's ribbon under its head,
+    pulled home from halfway down its length and a short pull settling
+    back, a tap on it for the list; the Wave's tap home; the foot held on
+    its title and on its bare leather, the drawer up and away; the name's
+    sheet, moss chosen, and the greeting in moss after a relaunch; and,
+    frame by frame, the page's bounce in and its ribbon's swing, the page
+    hanging from the finger, springing back from a short pull and tipping
+    as it falls, and the room's ribbon swinging back out. Not seen: the question before a book goes on the shelf, an ember actually
+    taken off, a real phone's tilt and shake, and the two new touches of
+    the hand (a simulator has no haptics).
 
 ## Licensed translations (decided: API.Bible)
 

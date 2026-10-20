@@ -531,17 +531,34 @@ phone:
 - Pull the ribbon up, or tap its title: one movement, the ribbon landing
   on the page's own with no jump. A short drag that is not a pull does
   nothing; scrolling the room past the foot still scrolls.
-- In the book: the ribbon in the gutter clear of the notes' marks and the
-  words, at every text size and margin, and on an iPad's centred column.
-  Tap its tail: the list. Pull it down: home, the ribbon back out of its
-  slot; a short pull settles back. A note's mark level with the tail can
-  still be tapped (the tail's target overlaps the gutter there).
-- The Wave: the original words of the verse you are at, in a Hebrew book
-  and an Aramaic passage too; in a version with no original words, the
-  toolbar. The sweep up from it still goes home; Esc closes the book.
-- Hold the ribbon in the room: the list; choose a row and the book opens
-  there once the list has gone. A note left for you and not yet found
-  shows no words in the list.
+- In the book: the ribbon out from under the leather head, in the gutter
+  clear of the notes' marks and the words, at every text size and margin,
+  and on an iPad's centred column; the head behind the clock on a phone
+  with a notch, an island, and neither. Tap the ribbon anywhere: the list.
+  Pull it down from anywhere along it: home, the ribbon back out of its
+  slot, the hand feeling the point of no return; a short pull settles
+  back. Scrolling beside it still scrolls. A note's mark level with the
+  tail can still be tapped (the tail's target overlaps the gutter there).
+- The Wave: a tap goes home; the sweep up from it still goes home; Esc
+  closes the book.
+- What is behind the ribbon, from the drawer: choose a row and the book
+  opens there once the list has gone. A note left for you and not yet
+  found shows no words in the list.
+- The foot held: on the ribbon, its title, and the bare leather, the
+  drawer rises and the hand feels it; held again, it goes. Holding your
+  rooms or your face does nothing but their taps.
+- The ribbon's slack: taken hold of and moved across, it follows and
+  swings back when let go; pulled, the page comes once the slack is taken
+  up; a drag up from it still scrolls the page; a note's mark beside it
+  still opens.
+- The ribbon's play, on a phone at its full frame rate: the page's bounce
+  coming in, the ribbon's swings, the page hanging from the finger and
+  tipping as it falls, the spring back from a short pull — lively, never
+  in the way of reading the first verse; none of it under reduce motion.
+- Your name's colour: the colophon's sentence and its sheet; your
+  picture's colour, ivory and each ink on the greeting and on You's title
+  page; with no picture, ivory said and hung as chosen; kept across a
+  relaunch.
 - You: the title page, the name editable in place, each underlined word
   in the colophon opening its page, the dim red delete button and its
   question, Close at the foot.
@@ -560,7 +577,8 @@ phone:
 - Reduce motion: no glint, no flight, the page fading in and out.
 - VoiceOver: the foot reads its title with the pull as a hint; the pill
   and your face read as your rooms and your settings; "Close the book" on
-  the Wave and the ribbon.
+  the Wave and the ribbon; the name's sheet reads each colour and which is
+  yours.
 - `readings_delete` is on the live project (applied 20 October, recorded
   as `20261020023611`). Take an ember off on one phone; see it go from the
   other on its next pull, and its notes and marks with it. A build from

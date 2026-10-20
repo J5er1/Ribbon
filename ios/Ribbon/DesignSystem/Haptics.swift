@@ -61,6 +61,33 @@ final class Haptics {
         ])
     }
 
+    /// The book's ribbon pulled far enough down to go home (I47), or taken
+    /// back from it: one light transient, as it passes.
+    func ribbonFarEnough() {
+        play([
+            CHHapticEvent(
+                eventType: .hapticTransient,
+                parameters: [
+                    CHHapticEventParameter(parameterID: .hapticIntensity, value: 0.4),
+                    CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.35),
+                ],
+                relativeTime: 0)
+        ])
+    }
+
+    /// The room's foot held long enough (I47): its drawer rises, or goes.
+    func footHeld() {
+        play([
+            CHHapticEvent(
+                eventType: .hapticTransient,
+                parameters: [
+                    CHHapticEventParameter(parameterID: .hapticIntensity, value: 0.45),
+                    CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.25),
+                ],
+                relativeTime: 0)
+        ])
+    }
+
     /// The verse lifts on long-press — the moment it lifts, not on
     /// touch-down.
     func verseLifts() {

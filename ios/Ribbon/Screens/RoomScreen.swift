@@ -274,11 +274,12 @@ private struct Greeting: View {
 }
 
 extension Greeting {
-    /// "Good evening," and, under it, your name in your portrait's colour.
+    /// "Good evening," and, under it, your name in its colour: your
+    /// portrait's, or the one you chose on You.
     fileprivate func greeting(hour: Int) -> AttributedString {
         var text = AttributedString(
             Copy.greeting(model.me?.name, hour: hour).replacingOccurrences(of: ", ", with: ",\n"))
-        if let me = model.me, let tint = model.portraitTint(me.id),
+        if let me = model.me, let tint = model.nameTint,
            let name = text.range(of: firstName(me.name)) {
             text[name].foregroundColor = tint
         }

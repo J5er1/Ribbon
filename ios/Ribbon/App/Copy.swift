@@ -172,10 +172,6 @@ enum Copy {
     static let openWhatsHere = "open what's here"
     static let leaveSomethingHere = "leave something here"
     static let closeTheBook = "Close the book"
-    /// The Wave, since I47: the original words of the verse you are at.
-    static func theOriginalHere(_ language: OriginalLanguage) -> String {
-        "The \(language.rawValue.capitalized) of the verse you are at"
-    }
     /// The reading surface's own small controls, kept here for the same
     /// reason as everything else: one file, both platforms.
     static let transcript = "transcript"
@@ -789,6 +785,19 @@ enum Copy {
         findable
             ? "[Others can find you](ribbon-you://found) by your name."
             : "[No one can find you](ribbon-you://found) by your name."
+    }
+    /// Your name's colour (I47), in the colophon and its chooser.
+    static func colophonName(_ colour: String) -> String {
+        "The room greets you with your name in [\(colour)](ribbon-you://name)."
+    }
+    static let yourPicturesColour = "your picture's colour"
+    static let ivory = "ivory"
+    static let yourNameColour = "your name"
+    static let nameFromYourPicture = "From your picture"
+    static let nameIvoryUntilAPicture = "Ivory, until you have a picture"
+    static let nameInIvory = "Ivory, as the page is written"
+    static func nameColourSpoken(_ colour: String, yours: Bool) -> String {
+        colour + (yours ? ", yours" : "")
     }
     static func colophonNew(_ version: String) -> String {
         "This is version \(version), and [what is new](ribbon-you://new) in it is a page of its own."

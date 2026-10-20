@@ -466,9 +466,9 @@ final class AppModel {
 
     func portrait(_ id: UUID) -> UIImage? { portraits[id] }
 
-    /// The colour of someone's portrait (I47): its average, lifted and
-    /// quietened until it reads on the dark room — light, never loud. The
-    /// room says their name in it. Nil with no portrait.
+    /// The colour of someone's portrait (I47): the one that stands out in
+    /// it, lifted and quietened until it reads on the dark room — light,
+    /// never loud. Nil with no portrait.
     func portraitTint(_ id: UUID) -> Color? {
         guard let image = portraits[id] else { return nil }
         let key = ObjectIdentifier(image)
@@ -476,6 +476,25 @@ final class AppModel {
         guard let tint = PortraitTint.of(image) else { return nil }
         portraitTints[id] = (key, tint)
         return tint
+    }
+
+    /// What your name is written in (I47), as you chose it.
+    var nameColour: NameColour { state.nameColour }
+
+    /// Your name's colour in the room's greeting and on You: your picture's
+    /// own, unless you chose another. Nil is the page's ivory — chosen, or
+    /// your picture's with no picture to take it from.
+    var nameTint: Color? {
+        switch state.nameColour {
+        case .picture: state.me.flatMap { portraitTint($0.id) }
+        case .ivory: nil
+        case .ink(let ink): ink.color
+        }
+    }
+
+    func chooseNameColour(_ colour: NameColour) {
+        state.nameColour = colour
+        persist()
     }
 
     func room(_ id: UUID) -> Room? {
@@ -3042,6 +3061,17 @@ final class AppModel {
             pushProfileRemote(portraitData: data)
         }
     }
+}
+
+/// The colour your name is written in (I47): your picture's own, unless you
+/// choose another — the page's ivory, or one of the inks. The owner asked
+/// for *"customizing the color of your name"* once the room took it from
+/// the picture. Kept on this phone: it is how your room greets you, and
+/// nobody else sees it.
+enum NameColour: Codable, Hashable {
+    case picture
+    case ivory
+    case ink(Ink)
 }
 
 /// The colour of a portrait (I47): the colour that stands out in it, not
